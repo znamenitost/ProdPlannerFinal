@@ -1,0 +1,46 @@
+name: Build and Deploy to SmarterASP.NET
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Build Frontend
+      run: |
+        cd frontend
+        npm install
+        npm run build
+        cd ..
+        
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+        
+    - name: Publish Backend
+      run: dotnet publish ProductionPlanner/ProductionPlanner.csproj -c Release --self-contained true --runtime win-x86 -o ./publish
+      
+    - name: Copy Frontend to Publish
+      run: |
+        mkdir -p publish/wwwroot
+        cp -r frontend/dist/* publish/wwwroot/
+      
+    - name: Deploy to SmarterASP.NET via FTP
+      uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      with:
+        server: ${{ secrets.FTP_SERVER }}
+        username: ${{ secrets.FTP_USERNAME }}
+        password: ${{ secrets.FTP_PASSWORD }}
+        local-dir: ./publish/
+        server-dir: /site/
