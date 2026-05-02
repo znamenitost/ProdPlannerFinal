@@ -1,0 +1,2735 @@
+=== ./frontend/src/components/DebugPanel.jsx ===
+import { useState, useEffect } from 'react';
+import { 
+  Paper, 
+  Stack, 
+  Typography, 
+  TextField, 
+  Button, 
+  Box, 
+  Alert,
+  IconButton,
+  Collapse,
+  Chip
+} from '@mui/material';
+import { 
+  BugReport, 
+  Schedule, 
+  PlayArrow, 
+  Stop, 
+  Refresh,
+  Close,
+  Warning
+} from '@mui/icons-material';
+
+export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
+  const [open, setOpen] = useState(false);
+  const [mockDate, setMockDate] = useState('2026-04-27T10:00');
+  const [isDebugMode, setIsDebugMode] = useState(false);
+  const [activeTasks, setActiveTasks] = useState([]);
+  const [message, setMessage] = useState(null);
+
+  // Загружаем активные задачи для отладки
+  const loadTasks = async () => {
+    try {
+      const res = await fetch(`/api/tasks/active?employee=${encodeURIComponent(employee)}`);
+      const data = await res.json();
+      setActiveTasks(data);
+    } catch (err) {
+      console.error('Ошибка загрузки задач:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (open) loadTasks();
+  }, [open, employee]);
+
+  // Установить моковое время в бэкенде
+  const setMockTime = async () => {
+    try {
+      const res = await fetch('/api/debug/set-time', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mockDateTime: mockDate })
+      });
+      const data = await res.json();
+      setMessage({ type: 'success', text: `Время установлено: ${mockDate}` });
+      setIsDebugMode(true);
+      if (onTimeChange) onTimeChange();
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Ошибка установки времени' });
+    }
+  };
+
+  // Сбросить время на реальное
+  const resetTime = async () => {
+    try {
+      await fetch('/api/debug/reset-time', { method: 'POST' });
+      setMessage({ type: 'success', text: 'Время сброшено на реальное' });
+      setIsDebugMode(false);
+      if (onTimeChange) onTimeChange();
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Ошибка сброса времени' });
+    }
+  };
+
+  // Принудительно закрыть интервал задачи
+  const closeInterval = async (taskId) => {
+    try {
+      await fetch(`/api/debug/close-interval/${taskId}`, { method: 'POST' });
+      setMessage({ type: 'success', text: `Интервал задачи ${taskId} закрыт` });
+      loadTasks();
+      if (onRefresh) onRefresh();
+      setTimeout(() => setMessage(null), 2000);
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Ошибка закрытия интервала' });
+    }
+  };
+
+  // Создать новый интервал для задачи
+  const createInterval = async (taskId) => {
+    try {
+      await fetch(`/api/debug/create-interval/${taskId}`, { method: 'POST' });
+      setMessage({ type: 'success', text: `Интервал для задачи ${taskId} создан` });
+      loadTasks();
+      if (onRefresh) onRefresh();
+      setTimeout(() => setMessage(null), 2000);
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Ошибка создания интервала' });
+    }
+  };
+
+  return (
+    <>
+      {/* Кнопка открытия панели отладки */}
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<BugReport />}
+        onClick={() => setOpen(!open)}
+        sx={{ 
+          position: 'fixed', 
+          bottom: 16, 
+          right: 16, 
+          zIndex: 1000,
+          bgcolor: 'background.paper',
+          boxShadow: 2
+        }}
+      >
+        {open ? 'Скрыть отладку' : 'Отладка'}
+      </Button>
+
+      <Collapse in={open}>
+        <Paper 
+          elevation={3} 
+          sx={{ 
+            position: 'fixed', 
+            bottom: 70, 
+            right: 16, 
+            width: 400, 
+            maxWidth: 'calc(100vw - 32px)',
+            zIndex: 999,
+            p: 2,
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}
+        >
+          <Stack spacing={2}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography variant="h6">
+                <BugReport fontSize="small" sx={{ mr: 1, verticalAlign: 'middle' }} />
+                Панель отладки
+              </Typography>
+              <IconButton size="small" onClick={() => setOpen(false)}>
+                <Close fontSize="small" />
+              </IconButton>
+            </Stack>
+
+            {isDebugMode && (
+              <Chip 
+                icon={<Warning />} 
+                label="Режим отладки включён" 
+                color="warning" 
+                size="small" 
+                variant="outlined"
+              />
+            )}
+
+            {message && (
+              <Alert severity={message.type} onClose={() => setMessage(null)}>
+                {message.text}
+              </Alert>
+            )}
+
+            {/* Управление временем */}
+            <Typography variant="subtitle2">Управление временем</Typography>
+            <Stack direction="row" spacing={1}>
+              <TextField
+                type="datetime-local"
+                size="small"
+                value={mockDate}
+                onChange={(e) => setMockDate(e.target.value)}
+                sx={{ flex: 1 }}
+              />
+              <Button variant="contained" size="small" onClick={setMockTime}>
+                Установить
+              </Button>
+              <Button variant="outlined" size="small" onClick={resetTime}>
+                Сброс
+              </Button>
+            </Stack>
+
+            {/* Управление интервалами */}
+            <Typography variant="subtitle2">Активные задачи</Typography>
+            <Stack spacing={1} sx={{ maxHeight: 300, overflow: 'auto' }}>
+              {activeTasks.map(task => (
+                <Paper key={task.id} variant="outlined" sx={{ p: 1 }}>
+                  <Typography variant="body2" fontWeight={500} noWrap>
+                    {task.title.substring(0, 40)}...
+                  </Typography>
+                  <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+                    <Chip 
+                      size="small" 
+                      label={task.status === 1 ? 'InProgress' : 'Assigned'}
+                      color={task.status === 1 ? 'success' : 'default'}
+                    />
+                    <Chip 
+                      size="small" 
+                      icon={<Schedule />} 
+                      label={`${task.progress * 100}%`}
+                    />
+                  </Stack>
+                  <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                    <Button 
+                      size="small" 
+                      variant="outlined" 
+                      onClick={() => createInterval(task.id)}
+                    >
+                      Создать интервал
+                    </Button>
+                    <Button 
+                      size="small" 
+                      variant="outlined" 
+                      color="error"
+                      onClick={() => closeInterval(task.id)}
+                    >
+                      Закрыть интервал
+                    </Button>
+                  </Stack>
+                </Paper>
+              ))}
+              {activeTasks.length === 0 && (
+                <Typography variant="body2" color="text.secondary">
+                  Нет активных задач
+                </Typography>
+              )}
+            </Stack>
+
+            <Button 
+              variant="outlined" 
+              size="small" 
+              startIcon={<Refresh />}
+              onClick={() => { loadTasks(); if (onRefresh) onRefresh(); }}
+            >
+              Обновить
+            </Button>
+          </Stack>
+        </Paper>
+      </Collapse>
+    </>
+  );
+}=== ./frontend/src/components/Timeline.jsx ===
+export default function Timeline({ segments }) {
+  return (
+    <div className="timeline-container">
+      {segments.map((segment, idx) => (
+        <div
+          key={idx}
+          className={`timeline-segment ${segment.type}`}
+          style={{
+            left: `${getLeft(segment.start)}%`,
+            width: `${getWidth(segment.start, segment.end)}%`
+          }}
+          title={segment.type === 'work' ? `Задача #${segment.taskId}` : 'Простой'}
+        />
+      ))}
+    </div>
+  );
+}
+
+function getLeft(dateTime) {
+  const d = new Date(dateTime);
+  const hours = d.getHours() + d.getMinutes() / 60;
+  return ((hours - 10) / 9) * 100;
+}
+
+function getWidth(start, end) {
+  const s = new Date(start);
+  const e = new Date(end);
+  const duration = (e - s) / (1000 * 60 * 60);
+  return (duration / 9) * 100;
+}=== ./frontend/src/components/TaskTable.jsx ===
+import React, { useState, useEffect, Fragment } from 'react';
+import {
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Button,
+  IconButton,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Stack,
+  Typography,
+  Tooltip,
+  Chip,
+  Box,
+  Collapse,
+  LinearProgress
+} from '@mui/material';
+import {
+  Add,
+  Delete,
+  PlayArrow,
+  Pause,
+  CheckCircle,
+  Edit,
+  Save,
+  Cancel,
+  Error,
+  FolderOpen,
+  ExpandMore,
+  ChevronRight,
+  CallSplit,
+  Person,
+  Build,
+  Print
+} from '@mui/icons-material';
+import SplitTaskModal from './SplitTaskModal';
+
+export default function TaskTable({ refreshTrigger, onTaskUpdate }) {
+  const [rows, setRows] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [newRow, setNewRow] = useState(null);
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [splitModalOpen, setSplitModalOpen] = useState(false);
+  const [selectedTaskForSplit, setSelectedTaskForSplit] = useState(null);
+  const [employees] = useState(['Дима', 'Яромир', 'Павел']);
+  const [taskTypes] = useState(['Резка', 'УФ печать', 'Монтаж', 'Дизайн']);
+
+  useEffect(() => {
+    loadRows();
+  }, [refreshTrigger]);
+
+  const loadRows = async () => {
+    try {
+      const response = await fetch('/api/table/rows');
+      const data = await response.json();
+      const grouped = groupTasksByParent(data);
+      setRows(grouped);
+    } catch (err) {
+      console.error('Ошибка загрузки:', err);
+    }
+  };
+
+  const groupTasksByParent = (tasks) => {
+    const parents = tasks.filter(t => !t.parentRowNumber || t.parentRowNumber === 0 || t.parentRowNumber === null);
+    const children = tasks.filter(t => t.parentRowNumber && t.parentRowNumber > 0);
+    
+    return parents.map(parent => ({
+      ...parent,
+      children: children.filter(c => c.parentRowNumber === parent.id)
+    }));
+  };
+
+  const getUniqueEmployees = (children) => {
+    const uniqueEmployees = new Set();
+    children.forEach(child => {
+      if (child.employeeName) {
+        uniqueEmployees.add(child.employeeName);
+      }
+    });
+    return Array.from(uniqueEmployees);
+  };
+
+  const toggleExpand = (rowId) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(rowId)) {
+      newExpanded.delete(rowId);
+    } else {
+      newExpanded.add(rowId);
+    }
+    setExpandedRows(newExpanded);
+  };
+
+  const openFile = async (row) => {
+    const fullPath = row.folderPath 
+      ? `${row.folderPath}/${row.fileName}`
+      : row.fileName;
+    
+    if (!fullPath) {
+      alert('Путь к файлу не указан');
+      return;
+    }
+    
+    try {
+      const response = await fetch('/api/files/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath: fullPath })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.message || 'Ошибка открытия файла');
+      }
+    } catch (err) {
+      console.error('Ошибка открытия файла:', err);
+      alert('Не удалось открыть файл');
+    }
+  };
+
+  const handleAddNewRow = () => {
+    setNewRow({
+      folderPath: '',
+      fileName: '',
+      comment: '',
+      statusText: '',
+      deadline: new Date().toISOString().slice(0, 16),
+      estimateHours: 1,
+      type: taskTypes[0],
+      employeeName: employees[0],
+      parentRowNumber: null
+    });
+  };
+
+  const handleSaveNewRow = async () => {
+    try {
+      const response = await fetch('/api/table/row', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newRow,
+          parentRowNumber: null
+        })
+      });
+      if (response.ok) {
+        setNewRow(null);
+        await loadRows();
+        if (onTaskUpdate) onTaskUpdate();
+      } else {
+        const error = await response.json();
+        console.error('Ошибка сохранения:', error);
+        alert('Ошибка сохранения задачи');
+      }
+    } catch (err) {
+      console.error('Ошибка сохранения:', err);
+      alert('Ошибка сохранения задачи');
+    }
+  };
+
+  const handleStartTask = async (row) => {
+    try {
+      await fetch(`/api/table/row/${row.id}/start`, { method: 'POST' });
+      await loadRows();
+      if (onTaskUpdate) onTaskUpdate();
+    } catch (err) {
+      console.error('Ошибка:', err);
+    }
+  };
+
+  const handlePauseTask = async (row) => {
+    try {
+      await fetch(`/api/table/row/${row.id}/pause`, { method: 'POST' });
+      await loadRows();
+      if (onTaskUpdate) onTaskUpdate();
+    } catch (err) {
+      console.error('Ошибка:', err);
+    }
+  };
+
+  const handleResumeTask = async (row) => {
+    try {
+      await fetch(`/api/table/row/${row.id}/resume`, { method: 'POST' });
+      await loadRows();
+      if (onTaskUpdate) onTaskUpdate();
+    } catch (err) {
+      console.error('Ошибка:', err);
+    }
+  };
+
+  const handleCompleteTask = async (row) => {
+    try {
+      await fetch(`/api/table/row/${row.id}/complete`, { method: 'POST' });
+      await loadRows();
+      if (onTaskUpdate) onTaskUpdate();
+    } catch (err) {
+      console.error('Ошибка:', err);
+    }
+  };
+
+  const handleDeleteRow = async (id) => {
+    if (window.confirm('Удалить задачу?')) {
+      try {
+        await fetch(`/api/table/row/${id}`, { method: 'DELETE' });
+        await loadRows();
+        if (onTaskUpdate) onTaskUpdate();
+      } catch (err) {
+        console.error('Ошибка удаления:', err);
+      }
+    }
+  };
+
+  const handleDeleteRowWithChildren = async (parentRow) => {
+    if (window.confirm(`Удалить задачу "${parentRow.fileName}" и все её части?`)) {
+      try {
+        for (const child of parentRow.children) {
+          await fetch(`/api/table/row/${child.id}`, { method: 'DELETE' });
+        }
+        await fetch(`/api/table/row/${parentRow.id}`, { method: 'DELETE' });
+        await loadRows();
+        if (onTaskUpdate) onTaskUpdate();
+      } catch (err) {
+        console.error('Ошибка удаления:', err);
+        alert('Ошибка удаления задачи');
+      }
+    }
+  };
+
+  const handleUpdateRow = async (row) => {
+    try {
+      const response = await fetch(`/api/table/row/${row.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(row)
+      });
+      if (response.ok) {
+        setEditingId(null);
+        await loadRows();
+        if (onTaskUpdate) onTaskUpdate();
+      }
+    } catch (err) {
+      console.error('Ошибка обновления:', err);
+    }
+  };
+
+  const handleSplitTask = (row) => {
+    const fetchTaskForSplit = async () => {
+      try {
+        const response = await fetch(`/api/tasks/active?employee=${encodeURIComponent(row.employeeName)}`);
+        const tasks = await response.json();
+        const task = tasks.find(t => t.rowNumber === row.id);
+        if (task) {
+          setSelectedTaskForSplit(task);
+          setSplitModalOpen(true);
+        } else {
+          alert('Не удалось найти задачу для разделения');
+        }
+      } catch (err) {
+        console.error('Ошибка:', err);
+        alert('Ошибка при подготовке к разделению');
+      }
+    };
+    fetchTaskForSplit();
+  };
+
+  const handleSplitSuccess = () => {
+    loadRows();
+    if (onTaskUpdate) onTaskUpdate();
+  };
+
+  const getStatusColor = (status) => {
+    if (status === 'Готово') return '#22c55e';
+    if (status === 'Начал') return '#3b82f6';
+    if (status === 'Пауза') return '#f59e0b';
+    return '#64748b';
+  };
+
+  const getStatusIcon = (status) => {
+    if (status === 'Готово') return <CheckCircle sx={{ fontSize: 16 }} />;
+    if (status === 'Начал') return <PlayArrow sx={{ fontSize: 16 }} />;
+    if (status === 'Пауза') return <Pause sx={{ fontSize: 16 }} />;
+    return null;
+  };
+
+  const getTypeIcon = (type) => {
+    if (type === 'Резка') return <Build sx={{ fontSize: 14 }} />;
+    if (type === 'УФ печать') return <Print sx={{ fontSize: 14 }} />;
+    return null;
+  };
+
+  const isOverdue = (deadline, status) => {
+    if (status === 'Готово') return false;
+    return new Date(deadline) < new Date();
+  };
+
+  const getParentProgress = (parent) => {
+    if (!parent.children || parent.children.length === 0) return 0;
+    const completed = parent.children.filter(c => c.statusText === 'Готово').length;
+    return (completed / parent.children.length) * 100;
+  };
+
+  const renderTaskRow = (task, isChild = false) => {
+    const overdue = isOverdue(task.deadline, task.statusText);
+    const isEditing = editingId === task.id;
+    const hasChildren = task.children && task.children.length > 0;
+    const isExpanded = expandedRows.has(task.id);
+    const progress = hasChildren ? getParentProgress(task) : (task.statusText === 'Готово' ? 100 : 0);
+    
+    return (
+      <Fragment key={task.id}>
+        <TableRow 
+          sx={{
+            '&:hover': { bgcolor: '#f8fafc' },
+            bgcolor: overdue && task.statusText !== 'Готово' ? '#fef2f2' : 'inherit',
+            borderLeft: isChild ? '2px solid #e2e8f0' : 'none'
+          }}
+        >
+          <TableCell>
+            <Stack direction="row" alignItems="center" spacing={0.5}>
+              {hasChildren && (
+                <IconButton size="small" onClick={() => toggleExpand(task.id)}>
+                  {isExpanded ? <ExpandMore fontSize="small" /> : <ChevronRight fontSize="small" />}
+                </IconButton>
+              )}
+              {!hasChildren && !isChild && <Box sx={{ width: 28 }} />}
+              <Tooltip title={`Открыть файл: ${task.folderPath}/${task.fileName}`} arrow>
+                <IconButton 
+                  size="small" 
+                  onClick={() => openFile(task)}
+                  sx={{ color: '#7c9ebf' }}
+                >
+                  <FolderOpen fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </TableCell>
+          
+          {isEditing ? (
+            <TableCell colSpan={8}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <TextField
+                  size="small"
+                  value={task.fileName}
+                  onChange={(e) => setRows(rows.map(r => r.id === task.id ? { ...r, fileName: e.target.value } : r))}
+                  placeholder="Имя файла"
+                />
+                <TextField
+                  size="small"
+                  value={task.estimateHours}
+                  onChange={(e) => setRows(rows.map(r => r.id === task.id ? { ...r, estimateHours: parseFloat(e.target.value) } : r))}
+                  type="number"
+                  sx={{ width: 80 }}
+                />
+                <IconButton size="small" color="primary" onClick={() => handleUpdateRow(task)}>
+                  <Save fontSize="small" />
+                </IconButton>
+                <IconButton size="small" color="error" onClick={() => setEditingId(null)}>
+                  <Cancel fontSize="small" />
+                </IconButton>
+              </Stack>
+            </TableCell>
+          ) : (
+            <>
+              <TableCell>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  {isChild && <Box sx={{ width: 24 }} />}
+                  <Typography variant="body2" sx={{ fontWeight: isChild ? 400 : 600 }}>
+                    {isChild ? `└─ ` : ''}{task.fileName}
+                  </Typography>
+                  {hasChildren && (
+                    <Chip 
+                      size="small" 
+                      label={`Разделена на ${task.children.length}`}
+                      icon={<CallSplit sx={{ fontSize: 12 }} />}
+                      sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#e0e7ff' }}
+                    />
+                  )}
+                </Stack>
+              </TableCell>
+              <TableCell sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
+                {task.comment}
+              </TableCell>
+              <TableCell sx={{ color: overdue ? '#dc2626' : 'inherit', fontSize: '0.8rem' }}>
+                {new Date(task.deadline).toLocaleDateString()}
+              </TableCell>
+              <TableCell sx={{ fontSize: '0.8rem' }}>
+                {task.estimateHours} ч
+              </TableCell>
+              <TableCell>
+                <Chip 
+                  icon={getTypeIcon(task.type)}
+                  label={task.type} 
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontSize: '0.7rem' }}
+                />
+              </TableCell>
+              <TableCell>
+                {hasChildren ? (
+                  <Tooltip title={getUniqueEmployees(task.children).join(' / ')} arrow>
+                    <Chip 
+                      icon={<Person sx={{ fontSize: 14 }} />}
+                      label={getUniqueEmployees(task.children).join(' / ')} 
+                      size="small"
+                      variant="outlined"
+                      sx={{ fontSize: '0.7rem', bgcolor: '#f1f5f9', maxWidth: '120px' }}
+                    />
+                  </Tooltip>
+                ) : (
+                  <Chip 
+                    icon={<Person sx={{ fontSize: 14 }} />}
+                    label={task.employeeName} 
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontSize: '0.7rem' }}
+                  />
+                )}
+              </TableCell>
+              <TableCell>
+                {hasChildren ? (
+                  progress >= 99.9 ? (
+                    <Chip 
+                      icon={<CheckCircle sx={{ fontSize: 16 }} />}
+                      label="Готово" 
+                      size="small"
+                      sx={{ bgcolor: '#22c55e', color: 'white', fontSize: '0.7rem' }}
+                    />
+                  ) : (
+                    <Box sx={{ width: 100 }}>
+                      <LinearProgress 
+                        variant="determinate" 
+                        value={progress} 
+                        sx={{ height: 6, borderRadius: 3 }}
+                      />
+                      <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                        {Math.round(progress)}%
+                      </Typography>
+                    </Box>
+                  )
+                ) : (
+                  <Chip 
+                    icon={getStatusIcon(task.statusText)}
+                    label={task.statusText || "Назначена"} 
+                    size="small"
+                    sx={{ bgcolor: getStatusColor(task.statusText), color: 'white', fontSize: '0.7rem' }}
+                  />
+                )}
+              </TableCell>
+              <TableCell>
+                <Stack direction="row" spacing={0.5}>
+                  {task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && !hasChildren && (
+                    <Tooltip title="Начать">
+                      <IconButton size="small" onClick={() => handleStartTask(task)} sx={{ color: '#22c55e' }}>
+                        <PlayArrow fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  
+                  {task.statusText === 'Начал' && !hasChildren && (
+                    <>
+                      <Tooltip title="Пауза">
+                        <IconButton size="small" onClick={() => handlePauseTask(task)} sx={{ color: '#f59e0b' }}>
+                          <Pause fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Завершить">
+                        <IconButton size="small" onClick={() => handleCompleteTask(task)} sx={{ color: '#3b82f6' }}>
+                          <CheckCircle fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </>
+                  )}
+                  
+                  {task.statusText === 'Пауза' && !hasChildren && (
+                    <>
+                      <Tooltip title="Продолжить">
+                        <IconButton size="small" onClick={() => handleResumeTask(task)} sx={{ color: '#22c55e' }}>
+                          <PlayArrow fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Завершить">
+                        <IconButton size="small" onClick={() => handleCompleteTask(task)} sx={{ color: '#3b82f6' }}>
+                          <CheckCircle fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </>
+                  )}
+                  
+                  {task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && !hasChildren && (
+                    <Tooltip title="Завершить (без времени)">
+                      <IconButton size="small" onClick={() => handleCompleteTask(task)} sx={{ color: '#ef4444' }}>
+                        <CheckCircle fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  
+                  {/* Кнопка разделения - ТОЛЬКО для обычных задач (не дочерних и не родительских) */}
+                  {!hasChildren && !isChild && task.statusText !== 'Готово' && (
+                    <Tooltip title="Разделить задачу">
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleSplitTask(task)} 
+                        sx={{ color: '#8b5cf6' }}
+                      >
+                        <CallSplit fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  
+                  <Tooltip title="Редактировать">
+                    <IconButton size="small" onClick={() => setEditingId(task.id)}>
+                      <Edit fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  
+                  <Tooltip title="Удалить">
+                    <IconButton size="small" color="error" onClick={() => handleDeleteRow(task.id)}>
+                      <Delete fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+              </TableCell>
+            </>
+          )}
+        </TableRow>
+        
+        {hasChildren && isExpanded && (
+          <TableRow>
+            <TableCell colSpan={9} sx={{ p: 0 }}>
+              <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                <Box sx={{ pl: 6 }}>
+                  {task.children.map(child => renderTaskRow(child, true))}
+                </Box>
+              </Collapse>
+            </TableCell>
+          </TableRow>
+        )}
+      </Fragment>
+    );
+  };
+
+  return (
+    <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+        <Typography variant="h2" fontWeight={600}>
+          📋 Таблица задач
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<Add />}
+          onClick={handleAddNewRow}
+          sx={{
+            bgcolor: '#22c55e',
+            '&:hover': { bgcolor: '#16a34a' }
+          }}
+        >
+          Новая задача
+        </Button>
+      </Stack>
+
+      <TableContainer sx={{ maxHeight: '70vh', overflow: 'auto' }}>
+        <Table stickyHeader size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: '#f8fafc' }}>
+              <TableCell sx={{ fontWeight: 600, width: 60 }}></TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Задача</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Комментарий</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 90 }}>Дедлайн</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 70 }}>Часы</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 100 }}>Тип</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 110 }}>Сотрудник</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 120 }}>Статус</TableCell>
+              <TableCell sx={{ fontWeight: 600, width: 220 }}>Действия</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {newRow && (
+              <TableRow sx={{ bgcolor: '#fef3c7' }}>
+                <TableCell>✨</TableCell>
+                <TableCell>
+                  <TextField
+                    size="small"
+                    placeholder="Имя файла"
+                    value={newRow.fileName}
+                    onChange={(e) => setNewRow({ ...newRow, fileName: e.target.value })}
+                    fullWidth
+                  />
+                </TableCell>
+                <TableCell>
+                  <TextField
+                    size="small"
+                    placeholder="Комментарий"
+                    value={newRow.comment}
+                    onChange={(e) => setNewRow({ ...newRow, comment: e.target.value })}
+                    fullWidth
+                  />
+                </TableCell>
+                <TableCell>
+                  <TextField
+                    type="datetime-local"
+                    size="small"
+                    value={newRow.deadline}
+                    onChange={(e) => setNewRow({ ...newRow, deadline: e.target.value })}
+                    fullWidth
+                  />
+                </TableCell>
+                <TableCell>
+                  <TextField
+                    type="number"
+                    size="small"
+                    value={newRow.estimateHours}
+                    onChange={(e) => setNewRow({ ...newRow, estimateHours: parseFloat(e.target.value) })}
+                    inputProps={{ step: 0.5 }}
+                    fullWidth
+                  />
+                </TableCell>
+                <TableCell>
+                  <FormControl size="small" fullWidth>
+                    <Select
+                      value={newRow.type}
+                      onChange={(e) => setNewRow({ ...newRow, type: e.target.value })}
+                    >
+                      {taskTypes.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                </TableCell>
+                <TableCell>
+                  <FormControl size="small" fullWidth>
+                    <Select
+                      value={newRow.employeeName}
+                      onChange={(e) => setNewRow({ ...newRow, employeeName: e.target.value })}
+                    >
+                      {employees.map(e => <MenuItem key={e} value={e}>{e}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                </TableCell>
+                <TableCell>
+                  <Chip label="Новая" size="small" color="warning" />
+                </TableCell>
+                <TableCell>
+                  <Stack direction="row" spacing={1}>
+                    <Tooltip title="Сохранить">
+                      <IconButton size="small" color="primary" onClick={handleSaveNewRow}>
+                        <Save fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Отмена">
+                      <IconButton size="small" color="error" onClick={() => setNewRow(null)}>
+                        <Cancel fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                </TableCell>
+              </TableRow>
+            )}
+
+            {rows.map(task => renderTaskRow(task))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      
+      {rows.length === 0 && !newRow && (
+        <Box sx={{ textAlign: 'center', py: 6 }}>
+          <Typography color="text.secondary">
+            Нет задач. Нажмите "Новая задача" чтобы добавить первую задачу
+          </Typography>
+        </Box>
+      )}
+
+      <SplitTaskModal
+        open={splitModalOpen}
+        task={selectedTaskForSplit}
+        onClose={() => setSplitModalOpen(false)}
+        onSuccess={handleSplitSuccess}
+      />
+    </Paper>
+  );
+}=== ./frontend/src/components/CompletedTasksList.jsx ===
+import { useState, useEffect } from 'react';
+import { 
+  Paper, 
+  Typography, 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableContainer, 
+  TableHead, 
+  TableRow,
+  Chip,
+  Box,
+  Stack,
+  Card,
+  CardContent,
+  Grid,
+  LinearProgress,
+  Tooltip
+} from '@mui/material';
+import { 
+  CheckCircle, 
+  AccessTime, 
+  TrendingUp, 
+  TrendingDown,
+  Assessment,
+  TaskAlt,
+  HourglassEmpty,
+  Schedule,
+  PlayArrow,
+  Stop
+} from '@mui/icons-material';
+import { getCompletedTasks } from '../services/api';
+
+export default function CompletedTasksList({ employee, refresh }) {
+  const [completed, setCompleted] = useState([]);
+  const [stats, setStats] = useState({ totalTasks: 0, totalEstimate: 0, totalActual: 0 });
+
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        const data = await getCompletedTasks(employee);
+        setCompleted(data.tasks || []);
+        setStats(data.stats || { totalTasks: 0, totalEstimate: 0, totalActual: 0 });
+      } catch (err) {
+        console.error('Ошибка загрузки выполненных задач:', err);
+      }
+    };
+    fetch();
+  }, [employee, refresh]);
+
+  const totalDifference = stats.totalEstimate - stats.totalActual;
+  const efficiencyPercent = stats.totalEstimate > 0 
+    ? (stats.totalActual / stats.totalEstimate) * 100 
+    : 0;
+
+  // Форматирование интервала выполнения
+  const formatWorkPeriod = (intervals) => {
+    if (!intervals || intervals.length === 0) return '—';
+    
+    const periods = intervals.map(interval => {
+      const start = new Date(interval.startTime);
+      const end = interval.endTime ? new Date(interval.endTime) : null;
+      if (!end) return `${start.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} - ...`;
+      return `${start.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+    });
+    
+    return periods.join(', ');
+  };
+
+  // Вычисление общей длительности работы
+  const getTotalWorkTime = (intervals) => {
+    if (!intervals || intervals.length === 0) return 0;
+    let total = 0;
+    intervals.forEach(interval => {
+      if (interval.endTime) {
+        total += (new Date(interval.endTime) - new Date(interval.startTime)) / (1000 * 60 * 60);
+      }
+    });
+    return total;
+  };
+
+  return (
+    <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
+        <Assessment color="primary" />
+        <Typography variant="h2" fontWeight={600}>
+          Выполненные задачи
+        </Typography>
+      </Stack>
+
+      {/* Статистика в виде карточек */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ bgcolor: '#f0fdf4', border: '1px solid #dcfce7' }}>
+            <CardContent>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">Всего задач</Typography>
+                <TaskAlt sx={{ color: '#22c55e' }} />
+              </Stack>
+              <Typography variant="h4" fontWeight={700} sx={{ mt: 1 }}>
+                {stats.totalTasks}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ bgcolor: '#eff6ff', border: '1px solid #dbeafe' }}>
+            <CardContent>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">Выделено часов</Typography>
+                <AccessTime sx={{ color: '#3b82f6' }} />
+              </Stack>
+              <Typography variant="h4" fontWeight={700} sx={{ mt: 1 }}>
+                {stats.totalEstimate.toFixed(1)} ч
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ bgcolor: '#fef3c7', border: '1px solid #fde68a' }}>
+            <CardContent>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">Реально часов</Typography>
+                <HourglassEmpty sx={{ color: '#f59e0b' }} />
+              </Stack>
+              <Typography variant="h4" fontWeight={700} sx={{ mt: 1 }}>
+                {stats.totalActual.toFixed(1)} ч
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ 
+            bgcolor: totalDifference >= 0 ? '#f0fdf4' : '#fef2f2', 
+            border: '1px solid',
+            borderColor: totalDifference >= 0 ? '#dcfce7' : '#fee2e2'
+          }}>
+            <CardContent>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">Экономия</Typography>
+                {totalDifference >= 0 ? <TrendingUp sx={{ color: '#22c55e' }} /> : <TrendingDown sx={{ color: '#ef4444' }} />}
+              </Stack>
+              <Typography 
+                variant="h4" 
+                fontWeight={700} 
+                sx={{ mt: 1, color: totalDifference >= 0 ? '#22c55e' : '#ef4444' }}
+              >
+                {totalDifference >= 0 ? '+' : ''}{totalDifference.toFixed(1)} ч
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Прогресс эффективности */}
+      <Box sx={{ mb: 3 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+          <Typography variant="body2" color="text.secondary">Эффективность</Typography>
+          <Typography variant="body2" fontWeight={500}>
+            {efficiencyPercent.toFixed(1)}% от плана
+          </Typography>
+        </Stack>
+        <LinearProgress 
+          variant="determinate" 
+          value={Math.min(efficiencyPercent, 100)} 
+          sx={{ 
+            height: 8, 
+            borderRadius: 4,
+            bgcolor: '#e2e8f0',
+            '& .MuiLinearProgress-bar': {
+              bgcolor: efficiencyPercent <= 100 ? '#22c55e' : '#ef4444',
+              borderRadius: 4
+            }
+          }}
+        />
+      </Box>
+
+      {/* Таблица выполненных задач с периодами выполнения */}
+      <TableContainer>
+        <Table sx={{ minWidth: 800 }}>
+          <TableHead>
+            <TableRow sx={{ bgcolor: '#f8fafc' }}>
+              <TableCell sx={{ fontWeight: 600 }}>Задача</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Тип</TableCell>
+              <TableCell align="center" sx={{ fontWeight: 600 }}>Период выполнения</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 600 }}>Выделено</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 600 }}>Реально</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 600 }}>Разница</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {completed.map((task) => {
+              const diff = task.estimateHours - task.actualHours;
+              const isPositive = diff >= 0;
+              const workPeriod = formatWorkPeriod(task.workIntervals);
+              const totalWorkTime = getTotalWorkTime(task.workIntervals);
+              
+              return (
+                <TableRow key={task.id} hover>
+                  <TableCell>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} />
+                      <Typography variant="body2" fontWeight={500}>
+                        {task.title}
+                      </Typography>
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={task.type || 'Без типа'} 
+                      size="small" 
+                      sx={{ bgcolor: '#f1f5f9', fontSize: 12 }}
+                    />
+                  </TableCell>
+                  <TableCell align="center">
+                    <Tooltip title={workPeriod} arrow placement="top">
+                      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ cursor: 'pointer' }}>
+                        <PlayArrow sx={{ fontSize: 12, color: '#4caf50' }} />
+                        <Typography variant="caption" color="text.secondary">
+                          {workPeriod !== '—' ? workPeriod.substring(0, 20) + (workPeriod.length > 20 ? '...' : '') : '—'}
+                        </Typography>
+                        <Stop sx={{ fontSize: 12, color: '#f44336' }} />
+                      </Stack>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="body2" fontWeight={500}>
+                      {task.estimateHours.toFixed(1)} ч
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="body2" color="text.secondary">
+                      {task.actualHours.toFixed(1)} ч
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Chip
+                      size="small"
+                      icon={isPositive ? <TrendingUp /> : <TrendingDown />}
+                      label={`${isPositive ? '+' : ''}${diff.toFixed(1)} ч`}
+                      sx={{
+                        bgcolor: isPositive ? '#dcfce7' : '#fee2e2',
+                        color: isPositive ? '#166534' : '#991b1b',
+                        fontWeight: 500,
+                        '& .MuiChip-icon': { color: isPositive ? '#22c55e' : '#ef4444' }
+                      }}
+                    />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {completed.length === 0 && (
+        <Box sx={{ textAlign: 'center', py: 6 }}>
+          <Typography variant="body1" color="text.secondary">
+            Нет выполненных задач
+          </Typography>
+        </Box>
+      )}
+    </Paper>
+  );
+}=== ./frontend/src/components/SplitTaskDialog.jsx ===
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Stack, Select, MenuItem, TextField, IconButton, Typography, Alert } from '@mui/material';
+import { Add, Remove } from '@mui/icons-material';
+import { useState } from 'react';
+import { splitTask } from '../services/api';
+
+const SPLIT_TYPES = ['резка', 'УФ печать']; // можно вынести в отдельный API, но для теста хватит
+const EMPLOYEES = ['Дима', 'Яромир', 'Павел'];
+
+export default function SplitTaskDialog({ open, task, onClose, onSplit }) {
+  const [blocks, setBlocks] = useState([
+    { employeeName: EMPLOYEES[0], type: SPLIT_TYPES[0], hours: 0 }
+  ]);
+  const [error, setError] = useState('');
+
+  const addBlock = () => setBlocks([...blocks, { employeeName: EMPLOYEES[0], type: SPLIT_TYPES[0], hours: 0 }]);
+  const removeBlock = (idx) => setBlocks(blocks.filter((_, i) => i !== idx));
+  const updateBlock = (idx, field, value) => {
+    const newBlocks = [...blocks];
+    newBlocks[idx][field] = value;
+    setBlocks(newBlocks);
+  };
+
+  const totalHours = blocks.reduce((sum, b) => sum + (b.hours || 0), 0);
+  const isValid = Math.abs(totalHours - (task?.estimateHours || 0)) < 0.01 && blocks.every(b => b.hours > 0 && b.employeeName && b.type);
+
+  const handleSubmit = async () => {
+    setError('');
+    try {
+      await splitTask(task.id, blocks);
+      onSplit();
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Ошибка разбиения задачи');
+    }
+  };
+
+  if (!task) return null;
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Разбить задачу: {task.title}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          {blocks.map((block, idx) => (
+            <Stack key={idx} direction="row" spacing={1} alignItems="center">
+              <Select
+                size="small"
+                value={block.employeeName}
+                onChange={(e) => updateBlock(idx, 'employeeName', e.target.value)}
+                sx={{ width: 120 }}
+              >
+                {EMPLOYEES.map(emp => <MenuItem key={emp} value={emp}>{emp}</MenuItem>)}
+              </Select>
+              <Select
+                size="small"
+                value={block.type}
+                onChange={(e) => updateBlock(idx, 'type', e.target.value)}
+                sx={{ width: 120 }}
+              >
+                {SPLIT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+              </Select>
+              <TextField
+                size="small"
+                type="number"
+                label="Часы"
+                value={block.hours}
+                onChange={(e) => updateBlock(idx, 'hours', parseFloat(e.target.value) || 0)}
+                sx={{ width: 100 }}
+                inputProps={{ step: 0.5, min: 0 }}
+              />
+              {blocks.length > 1 && (
+                <IconButton size="small" onClick={() => removeBlock(idx)}><Remove /></IconButton>
+              )}
+            </Stack>
+          ))}
+          <Button startIcon={<Add />} onClick={addBlock}>Добавить блок</Button>
+          <Typography variant="body2" color={Math.abs(totalHours - task.estimateHours) < 0.01 ? 'green' : 'error'}>
+            Сумма часов: {totalHours.toFixed(1)} / {task.estimateHours}
+          </Typography>
+          {error && <Alert severity="error">{error}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Отмена</Button>
+        <Button variant="contained" onClick={handleSubmit} disabled={!isValid}>Разбить</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}=== ./frontend/src/components/DeadlineWarnings.jsx ===
+import { useState, useEffect } from 'react';
+import { Alert, AlertTitle, Stack, Collapse, IconButton } from '@mui/material';
+import { Warning, Error, Close, Schedule, AccessTime, Flag, Event } from '@mui/icons-material';
+
+export default function DeadlineWarnings({ employee, refresh }) {
+  const [risks, setRisks] = useState([]);
+  const [open, setOpen] = useState(true);
+
+  useEffect(() => {
+    const fetchRisks = async () => {
+      try {
+        const res = await fetch(`/api/tasks/deadline-risks?employee=${encodeURIComponent(employee)}`);
+        const data = await res.json();
+        setRisks(data.filter(r => r.riskLevel !== 'ok'));
+      } catch (err) {
+        console.error('Ошибка загрузки рисков:', err);
+      }
+    };
+    fetchRisks();
+  }, [employee, refresh]);
+
+  if (risks.length === 0) return null;
+
+  return (
+    <Collapse in={open}>
+      <Stack sx={{ mb: 3 }} spacing={1}>
+        {risks.map(risk => {
+          let severity = 'warning';
+          let icon = <Warning sx={{ color: '#f39c12' }} />;
+          let title = 'Дедлайн приближается';
+          
+          if (risk.riskLevel === 'overdue') {
+            severity = 'error';
+            icon = <Flag sx={{ color: '#e74c3c' }} />;
+            title = 'Дедлайн сорван';
+          } else if (risk.riskLevel === 'critical') {
+            severity = 'error';
+            icon = <Error sx={{ color: '#e74c3c' }} />;
+            title = 'Критично';
+          }
+          
+          // Короткое сообщение
+          let shortMessage = '';
+          if (risk.riskLevel === 'overdue') {
+            shortMessage = 'Задача просрочена';
+          } else if (risk.riskLevel === 'critical') {
+            shortMessage = `Не хватает ${Math.round(risk.requiredHours - risk.availableHoursBeforeDeadline)} ч`;
+          } else {
+            shortMessage = `Осталось ${Math.round(risk.availableHoursBeforeDeadline)} из ${Math.round(risk.requiredHours)} ч`;
+          }
+          
+          // Сокращаем название (только последняя папка)
+          const shortTitle = risk.taskTitle.split('\\').pop().split('/').pop();
+          
+          return (
+            <Alert 
+              key={risk.taskId}
+              severity={severity}
+              icon={icon}
+              sx={{ 
+                borderRadius: 2,
+                '& .MuiAlert-icon': { alignItems: 'center' }
+              }}
+              action={
+                <IconButton size="small" onClick={() => setOpen(false)}>
+                  <Close fontSize="small" />
+                </IconButton>
+              }
+            >
+              <AlertTitle sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.5 }}>
+                {title}
+              </AlertTitle>
+              
+              <strong>{shortTitle}</strong>
+              
+              <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 1, fontSize: '0.8rem', color: 'text.secondary' }}>
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <AccessTime sx={{ fontSize: 14 }} />
+                  <span>{shortMessage}</span>
+                </Stack>
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Event sx={{ fontSize: 14 }} />
+                  <span>{new Date(risk.deadline).toLocaleDateString()} {new Date(risk.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </Stack>
+              </Stack>
+            </Alert>
+          );
+        })}
+      </Stack>
+    </Collapse>
+  );
+}=== ./frontend/src/components/WeekCalendar.jsx ===
+import { useState, useEffect } from 'react';
+import { Box, Paper, IconButton, Typography, Stack, alpha, Button } from '@mui/material';
+import { ChevronLeft, ChevronRight, CalendarMonth, Weekend } from '@mui/icons-material';
+import { getWeekCalendar } from '../services/api';
+import DayColumn from './DayColumn';
+
+export default function WeekCalendar({ employee, refresh }) {
+  const [weekData, setWeekData] = useState(null);
+  const [currentMonday, setCurrentMonday] = useState(() => getMonday(new Date()));
+  const [highlightedTaskId, setHighlightedTaskId] = useState(null);
+  const [showWeekend, setShowWeekend] = useState(false);
+
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        const data = await getWeekCalendar(employee, currentMonday);
+        setWeekData(data);
+        if (data && data.start) {
+          const serverMonday = new Date(data.start);
+          if (serverMonday.toDateString() !== currentMonday.toDateString()) {
+            setCurrentMonday(serverMonday);
+          }
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки календаря:', err);
+        setWeekData(null);
+      }
+    };
+    fetch();
+  }, [employee, refresh, currentMonday]);
+
+  const prevWeek = () => {
+    const newMonday = new Date(currentMonday);
+    newMonday.setDate(currentMonday.getDate() - 7);
+    setCurrentMonday(newMonday);
+  };
+
+  const nextWeek = () => {
+    const newMonday = new Date(currentMonday);
+    newMonday.setDate(currentMonday.getDate() + 7);
+    setCurrentMonday(newMonday);
+  };
+
+  if (!weekData) return <Box sx={{ textAlign: 'center', py: 4 }}>Загрузка календаря...</Box>;
+
+  const start = new Date(weekData.start);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const weekRange = `${start.toLocaleDateString('ru-RU')} - ${end.toLocaleDateString('ru-RU')}`;
+
+  // Фильтруем дни: показываем только ПН-ПТ или все дни
+  const daysToShow = showWeekend 
+    ? weekData.days 
+    : weekData.days.filter((_, index) => index < 5);
+
+  return (
+    <Paper elevation={0} sx={{ p: 3, mb: 3, background: 'rgba(255,255,255,0.9)' }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 6 }}>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <IconButton 
+            onClick={prevWeek} 
+            sx={{ bgcolor: alpha('#6366f1', 0.1), '&:hover': { bgcolor: alpha('#6366f1', 0.2) } }}
+          >
+            <ChevronLeft />
+          </IconButton>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <CalendarMonth sx={{ color: '#6366f1' }} />
+            <Typography variant="body1" fontWeight={600}>{weekRange}</Typography>
+          </Stack>
+          <IconButton 
+            onClick={nextWeek}
+            sx={{ bgcolor: alpha('#6366f1', 0.1), '&:hover': { bgcolor: alpha('#6366f1', 0.2) } }}
+          >
+            <ChevronRight />
+          </IconButton>
+        </Stack>
+        
+        <Button
+          size="small"
+          variant={showWeekend ? 'contained' : 'outlined'}
+          startIcon={<Weekend />}
+          onClick={() => setShowWeekend(!showWeekend)}
+          sx={{ 
+            borderRadius: 2,
+            textTransform: 'none',
+            fontSize: '0.75rem',
+            ...(showWeekend ? {
+              bgcolor: '#6366f1',
+              '&:hover': { bgcolor: '#4f46e5' }
+            } : {
+              borderColor: '#cbd5e1',
+              color: '#64748b'
+            })
+          }}
+        >
+          {showWeekend ? 'Скрыть выходные' : 'Показать выходные'}
+        </Button>
+      </Stack>
+      
+      <Box sx={{ 
+        display: 'grid', 
+        gridTemplateColumns: showWeekend ? 'repeat(7, 1fr)' : 'repeat(5, 1fr)', 
+        gap: 2 
+      }}>
+        {daysToShow.map(day => (
+          <DayColumn 
+            key={day.date} 
+            day={day} 
+            allDays={weekData.days} 
+            highlightedTaskId={highlightedTaskId}
+            onTaskHover={setHighlightedTaskId}
+          />
+        ))}
+      </Box>
+    </Paper>
+  );
+}
+
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = (day === 0 ? 6 : day - 1);
+  d.setDate(d.getDate() - diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}=== ./frontend/src/components/DayColumn.jsx ===
+import { useState } from 'react';
+import { Paper, Typography, Box, Tooltip, alpha } from '@mui/material';
+import { CheckCircle, Warning, Restaurant, PlayArrow, Schedule, Pause, Assignment, DoneAll } from '@mui/icons-material';
+
+export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover }) {
+  const date = new Date(day.date);
+  const netSaved = day.netSaved;
+  const savedClass = netSaved >= 0 ? 'green' : 'red';
+  const savedText = netSaved >= 0 ? `🌱 +${netSaved.toFixed(1)} ч` : `🔴 ${netSaved.toFixed(1)} ч`;
+
+  // Проверка: рабочий ли день (пн-пт)
+  const isWorkingDay = date.getDay() >= 1 && date.getDay() <= 5;
+
+  // Функция генерации цвета для задачи (разные оттенки для разных задач)
+  const getWorkColor = (taskId, completed) => {
+    if (completed) return '#86b386';
+    const colors = ['#7c9ebf', '#9bb5d4', '#a8c4e0', '#b8d0e8', '#8aadc9', '#6b8fae'];
+    return colors[taskId % colors.length];
+  };
+
+  // Форматирование времени для подсказки
+  const formatTime = (dateTime) => {
+    return new Date(dateTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Функция для получения всех сегментов таймлайна с учётом обеда
+  const getTimelineSegments = () => {
+    if (!day.timeline || day.timeline.length === 0) return [];
+    
+    const segments = [];
+    const lunchStart = new Date(date);
+    lunchStart.setHours(14, 0, 0, 0);
+    const lunchEnd = new Date(date);
+    lunchEnd.setHours(15, 0, 0, 0);
+    
+    day.timeline.forEach(segment => {
+      const start = new Date(segment.start);
+      const end = new Date(segment.end);
+      
+      if (segment.type === 'work') {
+        // Проверяем, пересекается ли интервал с обедом
+        if (start < lunchEnd && end > lunchStart) {
+          // Сегмент до обеда
+          if (start < lunchStart) {
+            const beforeLunchEnd = end < lunchStart ? end : lunchStart;
+            if (beforeLunchEnd > start) {
+              segments.push({
+                ...segment,
+                start: start,
+                end: beforeLunchEnd
+              });
+            }
+          }
+          // Сегмент после обеда
+          if (end > lunchEnd) {
+            const afterLunchStart = start > lunchEnd ? start : lunchEnd;
+            if (end > afterLunchStart) {
+              segments.push({
+                ...segment,
+                start: afterLunchStart,
+                end: end
+              });
+            }
+          }
+        } else {
+          // Интервал не пересекается с обедом
+          segments.push(segment);
+        }
+      } else {
+        // Для простоев - не показываем обед как простой
+        const isLunchTime = (start >= lunchStart && start < lunchEnd) || 
+                           (end > lunchStart && end <= lunchEnd) ||
+                           (start <= lunchStart && end >= lunchEnd);
+        
+        if (!isLunchTime) {
+          segments.push(segment);
+        }
+      }
+    });
+    
+    return segments.sort((a, b) => new Date(a.start) - new Date(b.start));
+  };
+
+  // Создаём карту taskId -> все блоки этой задачи во всех днях
+  const taskBlocksMap = new Map();
+  allDays?.forEach(d => {
+    d.taskBlocks?.forEach(block => {
+      if (block.taskId) {
+        if (!taskBlocksMap.has(block.taskId)) {
+          taskBlocksMap.set(block.taskId, []);
+        }
+        taskBlocksMap.get(block.taskId).push({ ...block, dayDate: d.date });
+      }
+    });
+  });
+
+  const getTaskInfoForDeadline = (deadlineTaskId, deadlineTaskTitle, deadlineStatus) => {
+    if (deadlineStatus === 'Completed') {
+        return {
+            title: deadlineTaskTitle,
+            totalHours: 0,
+            blocksCount: 0,
+            blocks: [],
+            hasBlocks: false,
+            isCompleted: true
+        };
+    }
+    
+    const blocks = taskBlocksMap.get(deadlineTaskId);
+    
+    if (blocks && blocks.length > 0) {
+        const firstBlock = blocks[0];
+        let totalHours = 0;
+        blocks.forEach(b => { totalHours += b.hours; });
+        return {
+            title: firstBlock.fullTitle || firstBlock.title,
+            totalHours: totalHours,
+            blocksCount: blocks.length,
+            blocks: blocks,
+            hasBlocks: true,
+            isCompleted: false
+        };
+    }
+    
+    if (deadlineTaskTitle) {
+        return {
+            title: deadlineTaskTitle,
+            totalHours: 0,
+            blocksCount: 0,
+            blocks: [],
+            hasBlocks: false,
+            isCompleted: false
+        };
+    }
+    
+    return null;
+  };
+
+  const isHighlighted = (block) => highlightedTaskId === block.taskId;
+  
+  // Получаем сегменты таймлайна
+  const timelineSegments = getTimelineSegments();
+
+  return (
+    <Paper elevation={0} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.95)', borderRadius: 3 }}>
+      <Typography variant="subtitle1" fontWeight={600} textAlign="center" sx={{ mb: 2, color: '#1e293b' }}>
+        {date.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric' })}
+      </Typography>
+
+      {/* БЛОКИ ПЛАНОВОЙ ЗАГРУЗКИ (taskBlocks) С ОБЕДОМ */}
+      <Box sx={{ position: 'relative', bgcolor: '#f1f5f9', height: 32, borderRadius: 2, mb: 3, overflow: 'hidden', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
+        {/* Блоки задач */}
+        {day.taskBlocks?.map((block, idx) => {
+          const isFirst = idx === 0;
+          const isLast = idx === day.taskBlocks.length - 1;
+          
+          return (
+            <Tooltip
+              key={idx}
+              title={`${block.fullTitle || block.title}: ${block.hours.toFixed(1)} ч (${block.percentage}% дня)`}
+              arrow
+              placement="top"
+            >
+              <Box
+                sx={{
+                  position: 'absolute',
+                  left: `${block.leftPercent}%`,
+                  width: `${block.widthPercent}%`,
+                  height: '100%',
+                  top: 0,
+                  backgroundColor: isHighlighted(block) ? '#f59e0b' : '#7c9ebf',
+                  opacity: isHighlighted(block) ? 0.95 : 0.85,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  borderRight: idx !== day.taskBlocks?.length - 1 ? '1px solid rgba(255,255,255,0.3)' : 'none',
+                  borderTopLeftRadius: isFirst ? 2 : 0,
+                  borderBottomLeftRadius: isFirst ? 2 : 0,
+                  borderTopRightRadius: isLast ? 2 : 0,
+                  borderBottomRightRadius: isLast ? 2 : 0,
+                  boxShadow: isHighlighted(block) ? '0 0 8px rgba(245,158,11,0.5)' : 'none',
+                  '&:hover': { opacity: 1, filter: 'brightness(0.95)' }
+                }}
+              />
+            </Tooltip>
+          );
+        })}
+        
+        {/* Блок ОБЕДА в календаре */}
+        {isWorkingDay && (
+          <Tooltip title="🍽 Обед (14:00–15:00)" arrow placement="top">
+            <Box
+              sx={{
+                position: 'absolute',
+                left: '44.444%',
+                width: '11.111%',
+                height: '100%',
+                top: 0,
+                backgroundColor: '#fef3c7',
+                opacity: 0.8,
+                zIndex: 1,
+                cursor: 'pointer',
+                borderRight: '1px solid rgba(0,0,0,0.05)',
+                '&:hover': { opacity: 1 }
+              }}
+            />
+          </Tooltip>
+        )}
+        
+        {/* Сноски с часами задач */}
+        {day.taskBlocks?.map((block, idx) => (
+          <Box
+            key={`label-${idx}`}
+            sx={{
+              position: 'absolute',
+              left: `${block.leftPercent + block.widthPercent / 2}%`,
+              top: -22,
+              transform: 'translateX(-50%)',
+              backgroundColor: isHighlighted(block) ? '#f59e0b' : '#1e293b',
+              color: 'white',
+              fontSize: '10px',
+              fontWeight: 500,
+              padding: '2px 6px',
+              borderRadius: '12px',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+              zIndex: 15,
+              pointerEvents: 'none',
+              opacity: 0.9,
+              transition: 'all 0.2s ease',
+              '&:hover': { opacity: 1 }
+            }}
+          >
+            {block.hours.toFixed(1)}ч
+          </Box>
+        ))}
+      </Box>
+
+      {/* ДЕДЛАЙНЫ */}
+      <Box sx={{ position: 'relative', height: 20, mb: 2 }}>
+        {day.deadlines?.map((dl, idx) => {
+          const leftPos = getLeft(dl.deadline);
+          if (leftPos < 0 || leftPos > 100) return null;
+          
+          const taskInfoObj = getTaskInfoForDeadline(dl.taskId, dl.taskTitle, dl.status);
+          let tooltipContent = <></>;
+          
+          if (dl.status === 'Completed') {
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <DoneAll sx={{ fontSize: 16, color: '#10b981', flexShrink: 0 }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ fontSize: 12, mt: 0.5 }}>✅ Выполнена</Box>
+                <Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box>
+              </Box>
+            );
+          } else if (dl.status === 'InProgress') {
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <PlayArrow sx={{ fontSize: 16, color: '#3b82f6', flexShrink: 0 }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ fontSize: 12, mt: 0.5 }}>⏱ В процессе выполнения</Box>
+                <Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box>
+              </Box>
+            );
+          } else if (dl.status === 'Assigned') {
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Assignment sx={{ fontSize: 16, color: '#f59e0b', flexShrink: 0 }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ fontSize: 12, mt: 0.5 }}>⏳ Назначена, но не начата</Box>
+                <Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box>
+              </Box>
+            );
+          } else if (dl.status === 'Paused') {
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Pause sx={{ fontSize: 16, color: '#f59e0b', flexShrink: 0 }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ fontSize: 12, mt: 0.5 }}>⏸ Приостановлена</Box>
+                <Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box>
+              </Box>
+            );
+          } else {
+            tooltipContent = (
+              <Box>
+                Дедлайн: {new Date(dl.deadline).toLocaleString()}
+              </Box>
+            );
+          }
+          
+          return (
+            <Tooltip
+              key={idx}
+              title={tooltipContent}
+              arrow
+              placement="top"
+              componentsProps={{
+                tooltip: {
+                  sx: {
+                    bgcolor: '#1e293b',
+                    fontSize: '12px',
+                    padding: '8px 15px',
+                    minWidth: '350px',
+                    maxWidth: 'none',
+                    width: 'max-content',
+                    borderRadius: 2,
+                  }
+                }
+              }}
+            >
+              <Box
+                sx={{
+                  position: 'absolute',
+                  left: `${leftPos}%`,
+                  top: -10,
+                  transform: 'translateX(-50%)',
+                  width: 3,
+                  height: 20,
+                  bgcolor: dl.status === 'Completed' ? '#10b981' : '#ef4444',
+                  borderRadius: 2,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  '&:hover': { width: 5, boxShadow: '0 0 4px rgba(0,0,0,0.3)' }
+                }}
+                onMouseEnter={() => onTaskHover && onTaskHover(dl.taskId)}
+                onMouseLeave={() => onTaskHover && onTaskHover(null)}
+              />
+            </Tooltip>
+          );
+        })}
+      </Box>
+
+      {/* ТАЙМЛАЙН (реальное выполнение) */}
+      <Box sx={{ position: 'relative', bgcolor: '#f1f5f9', height: 36, borderRadius: 2, mb: 2, overflow: 'hidden', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
+        {/* Обед на таймлайне */}
+        {isWorkingDay && (
+          <Tooltip title="🍽 Обед (14:00–15:00)" arrow placement="top">
+            <Box
+              sx={{
+                position: 'absolute',
+                left: '44.444%',
+                width: '11.111%',
+                height: '100%',
+                top: 0,
+                backgroundColor: '#fef3c7',
+                opacity: 0.7,
+                zIndex: 1,
+                cursor: 'pointer',
+                borderRight: '1px solid rgba(0,0,0,0.05)',
+                '&:hover': { opacity: 0.9 }
+              }}
+            />
+          </Tooltip>
+        )}
+        
+        {/* Рабочие отрезки */}
+        {timelineSegments.filter(s => s.type === 'work').map((segment, idx) => {
+          const isFirst = idx === 0;
+          const isLast = idx === timelineSegments.filter(s => s.type === 'work').length - 1;
+          
+          return (
+            <Tooltip
+              key={`work-${idx}`}
+              title={`${segment.taskTitle || `Задача #${segment.taskId}`}\n⏱ ${formatTime(segment.start)} - ${formatTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`}
+              arrow
+              placement="top"
+            >
+              <Box
+                sx={{
+                  position: 'absolute',
+                  left: `${getLeft(segment.start)}%`,
+                  width: `${getWidth(segment.start, segment.end)}%`,
+                  height: '100%',
+                  top: 0,
+                  backgroundColor: getWorkColor(segment.taskId, segment.completed),
+                  opacity: 0.85,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  borderRight: idx !== timelineSegments.filter(s => s.type === 'work').length - 1 ? '1px solid rgba(255,255,255,0.3)' : 'none',
+                  borderTopLeftRadius: isFirst ? 2 : 0,
+                  borderBottomLeftRadius: isFirst ? 2 : 0,
+                  borderTopRightRadius: isLast ? 2 : 0,
+                  borderBottomRightRadius: isLast ? 2 : 0,
+                  zIndex: 2,
+                  '&:hover': { opacity: 1, filter: 'brightness(0.95)' }
+                }}
+              />
+            </Tooltip>
+          );
+        })}
+        
+        {/* Отрезки простоя */}
+        {timelineSegments.filter(s => s.type === 'idle').map((segment, idx) => (
+          <Tooltip
+            key={`idle-${idx}`}
+            title={`Простой\n⏱ ${formatTime(segment.start)} - ${formatTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`}
+            arrow
+            placement="top"
+          >
+            <Box
+              sx={{
+                position: 'absolute',
+                left: `${getLeft(segment.start)}%`,
+                width: `${getWidth(segment.start, segment.end)}%`,
+                height: '100%',
+                top: 0,
+                backgroundColor: '#e2e8f0',
+                opacity: 0.7,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                zIndex: 1,
+                '&:hover': { opacity: 0.9 }
+              }}
+            />
+          </Tooltip>
+        ))}
+      </Box>
+    </Paper>
+  );
+}
+
+function getLeft(dateTime) {
+  const d = new Date(dateTime);
+  const hours = d.getHours() + d.getMinutes() / 60;
+  return ((hours - 10) / 9) * 100;
+}
+
+function getWidth(start, end) {
+  const s = new Date(start);
+  const e = new Date(end);
+  const duration = (e - s) / (1000 * 60 * 60);
+  return (duration / 9) * 100;
+}
+
+function getDuration(start, end) {
+  const s = new Date(start);
+  const e = new Date(end);
+  return ((e - s) / (1000 * 60 * 60)).toFixed(1);
+}=== ./frontend/src/components/EmployeeSelector.jsx ===
+export default function EmployeeSelector({ value, onChange }) {
+  const employees = ['Дима', 'Яромир', 'Павел'];
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      {employees.map(emp => (
+        <option key={emp} value={emp}>{emp}</option>
+      ))}
+    </select>
+  );
+}=== ./frontend/src/components/SplitTaskModal.jsx ===
+import { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Stack,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  TextField,
+  IconButton,
+  Typography,
+  Alert,
+  Paper,
+  Checkbox,
+  ListItemText,
+  OutlinedInput
+} from '@mui/material';
+import { Add, Delete, Warning } from '@mui/icons-material';
+
+export default function SplitTaskModal({ open, task, onClose, onSuccess }) {
+  const [parts, setParts] = useState([]);
+  const [error, setError] = useState('');
+  const [totalHours, setTotalHours] = useState(0);
+  
+  const employees = ['Дима', 'Яромир', 'Павел'];
+  const taskTypes = ['Резка', 'УФ печать', 'Монтаж', 'Дизайн', 'Сборка', 'Упаковка'];
+
+  useEffect(() => {
+    if (task && open) {
+      setParts([{ employeeName: employees[0], taskTypes: [taskTypes[0]], hours: 0 }]);
+      setTotalHours(task.estimateHours);
+      setError('');
+    }
+  }, [task, open]);
+
+  const addPart = () => {
+    setParts([...parts, { employeeName: employees[0], taskTypes: [taskTypes[0]], hours: 0 }]);
+  };
+
+  const removePart = (index) => {
+    const newParts = parts.filter((_, i) => i !== index);
+    setParts(newParts);
+  };
+
+  const updatePart = (index, field, value) => {
+    const newParts = [...parts];
+    newParts[index][field] = value;
+    setParts(newParts);
+    
+    const sum = newParts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
+    if (sum > totalHours) {
+      setError(`Сумма часов (${sum}) превышает выделенное время (${totalHours})`);
+    } else if (Math.abs(sum - totalHours) < 0.01) {
+      setError('');
+    } else {
+      setError(`Осталось распределить ${(totalHours - sum).toFixed(1)} ч`);
+    }
+  };
+
+  const handleSubmit = async () => {
+    const sum = parts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
+    if (Math.abs(sum - totalHours) > 0.01) {
+      setError(`Сумма часов должна равняться ${totalHours} ч`);
+      return;
+    }
+    
+    if (parts.some(p => !p.employeeName || p.taskTypes.length === 0 || p.hours <= 0)) {
+      setError('Заполните все поля для каждой части');
+      return;
+    }
+    
+    try {
+      const response = await fetch('/api/tasks/split', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parentTaskId: task.id,
+          parts: parts.map(p => ({
+            employeeName: p.employeeName,
+            taskType: p.taskTypes.join(', '), // Объединяем типы через запятую
+            allocatedHours: parseFloat(p.hours)
+          }))
+        })
+      });
+      
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>
+        Разделение задачи: {task?.title?.substring(0, 50)}...
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Всего часов: {totalHours} ч
+        </Typography>
+      </DialogTitle>
+      
+      <DialogContent>
+        {error && (
+          <Alert severity={error.includes('превышает') ? 'error' : 'info'} sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+        
+        <Stack spacing={2}>
+          {parts.map((part, idx) => (
+            <Paper key={idx} variant="outlined" sx={{ p: 2 }}>
+              <Stack direction="row" spacing={2} alignItems="flex-start" flexWrap="wrap">
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>Сотрудник</InputLabel>
+                  <Select
+                    value={part.employeeName}
+                    label="Сотрудник"
+                    onChange={(e) => updatePart(idx, 'employeeName', e.target.value)}
+                  >
+                    {employees.map(emp => (
+                      <MenuItem key={emp} value={emp}>{emp}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                
+                <FormControl size="small" sx={{ minWidth: 200, flex: 2 }}>
+                  <InputLabel>Типы работ</InputLabel>
+                  <Select
+                    multiple
+                    value={part.taskTypes}
+                    label="Типы работ"
+                    onChange={(e) => updatePart(idx, 'taskTypes', e.target.value)}
+                    input={<OutlinedInput label="Типы работ" />}
+                    renderValue={(selected) => selected.join(', ')}
+                  >
+                    {taskTypes.map((type) => (
+                      <MenuItem key={type} value={type}>
+                        <Checkbox checked={part.taskTypes.indexOf(type) !== -1} />
+                        <ListItemText primary={type} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Часы"
+                  value={part.hours}
+                  onChange={(e) => updatePart(idx, 'hours', e.target.value)}
+                  inputProps={{ step: 0.5, min: 0 }}
+                  sx={{ width: 100 }}
+                />
+                
+                {parts.length > 1 && (
+                  <IconButton color="error" onClick={() => removePart(idx)}>
+                    <Delete />
+                  </IconButton>
+                )}
+              </Stack>
+            </Paper>
+          ))}
+          
+          <Button
+            startIcon={<Add />}
+            onClick={addPart}
+            variant="outlined"
+            size="small"
+          >
+            Добавить часть
+          </Button>
+        </Stack>
+      </DialogContent>
+      
+      <DialogActions>
+        <Button onClick={onClose}>Отмена</Button>
+        <Button onClick={handleSubmit} variant="contained" color="primary">
+          Разделить
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}=== ./frontend/src/components/ActiveTasksList.jsx ===
+import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../services/api';
+import { Warning, Error, FolderOpen, AccessTime, Event, CallSplit, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
+import { Tooltip, Chip, IconButton, Stack } from '@mui/material';
+
+export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
+  const handleAction = async (id, action, progress = null) => {
+    try {
+      if (action === 'start') await startTask(id);
+      else if (action === 'pause') await pauseTask(id);
+      else if (action === 'resume') await resumeTask(id);
+      else if (action === 'progress') await setProgress(id, progress);
+      else if (action === 'complete') await completeTask(id);
+      onUpdate();
+    } catch (err) {
+      console.error('Ошибка действия:', err);
+      alert('Не удалось выполнить действие. Проверьте консоль.');
+    }
+  };
+
+  // Функция открытия файла
+  const openFile = async (filePath) => {
+    if (!filePath) {
+      alert('Путь к файлу не указан');
+      return;
+    }
+    try {
+      const response = await fetch('/api/files/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.message || 'Ошибка открытия файла');
+      }
+    } catch (err) {
+      console.error('Ошибка открытия файла:', err);
+      alert('Не удалось открыть файл');
+    }
+  };
+
+  // Функция определения риска дедлайна
+  const getRiskProps = (riskLevel) => {
+    switch (riskLevel) {
+      case 'overdue':
+        return { icon: <Error sx={{ fontSize: 16 }} />, color: '#dc2626', label: 'Дедлайн сорван' };
+      case 'critical':
+        return { icon: <Error sx={{ fontSize: 16 }} />, color: '#dc2626', label: 'Не хватает времени' };
+      case 'warning':
+        return { icon: <Warning sx={{ fontSize: 16 }} />, color: '#f59e0b', label: 'Дедлайн приближается' };
+      default:
+        return null;
+    }
+  };
+
+  // Сокращение названия
+  const getShortTitle = (title) => {
+    if (!title) return '';
+    return title.split('\\').pop().split('/').pop();
+  };
+
+  const isStarted = (status) => {
+    return status === 1 || status === 2; // InProgress или Paused
+  };
+
+  return (
+    <div className="active-tasks">
+      <h2>Активные задачи</h2>
+      <div className="tasks-list">
+        {tasks.map(task => {
+          const risk = getRiskProps(task.riskLevel);
+          const started = isStarted(task.status);
+          
+          return (
+            <div 
+              key={task.id} 
+              className="task-card" 
+              style={{
+                borderLeft: started ? '4px solid #22c55e' : '4px solid #cbd5e1',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <div className="task-title">
+                <Tooltip title="Открыть файл" arrow>
+                  <IconButton 
+                    size="small" 
+                    onClick={() => openFile(task.file)}
+                    sx={{ mr: 1, color: '#7c9ebf', p: 0.5 }}
+                  >
+                    <FolderOpen fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <span style={{ fontWeight: started ? 600 : 400 }}>
+                  {getShortTitle(task.title)}
+                </span>
+                <span className="task-type">({task.type})</span>
+                
+                {risk && (
+                  <Tooltip title={risk.label} arrow>
+                    <Chip
+                      icon={risk.icon}
+                      label={risk.label}
+                      size="small"
+                      sx={{
+                        ml: 1,
+                        height: 22,
+                        fontSize: '0.7rem',
+                        bgcolor: risk.color,
+                        color: 'white',
+                        '& .MuiChip-icon': { color: 'white', fontSize: 14, ml: 0.5 },
+                        '& .MuiChip-label': { px: 1 }
+                      }}
+                    />
+                  </Tooltip>
+                )}
+              </div>
+              
+              <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 1, mb: 1, fontSize: '0.8rem', color: 'text.secondary' }}>
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <AccessTime sx={{ fontSize: 14 }} />
+                  <span>{task.estimateHours} ч</span>
+                </Stack>
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Event sx={{ fontSize: 14 }} />
+                  <span>
+                    {task.deadline ? new Date(task.deadline).toLocaleDateString() + ' ' + new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Нет дедлайна'}
+                  </span>
+                </Stack>
+              </Stack>
+              
+              <div className="progress-bar-wrapper">
+                <div 
+                  className="progress-fill" 
+                  style={{ 
+                    width: `${(task.progress || 0) * 100}%`,
+                    backgroundColor: started ? '#22c55e' : '#cbd5e1'
+                  }} 
+                />
+              </div>
+              
+              <div className="task-buttons">
+                {task.status === 0 && (
+                  <button onClick={() => handleAction(task.id, 'start')}>
+                    <PlayArrow sx={{ fontSize: 16, mr: 0.5 }} /> Начал
+                  </button>
+                )}
+                
+                {task.status === 1 && (
+                  <button onClick={() => handleAction(task.id, 'pause')}>
+                    <Pause sx={{ fontSize: 16, mr: 0.5 }} /> Пауза
+                  </button>
+                )}
+                
+                {task.status === 2 && (
+                  <button onClick={() => handleAction(task.id, 'resume')}>
+                    <PlayArrow sx={{ fontSize: 16, mr: 0.5 }} /> Продолжить
+                  </button>
+                )}
+                
+                {task.status !== 3 && (
+                  <>
+                    <button onClick={() => handleAction(task.id, 'progress', 0.3)}>30%</button>
+                    <button onClick={() => handleAction(task.id, 'progress', 0.6)}>60%</button>
+                    <button onClick={() => handleAction(task.id, 'progress', 0.9)}>90%</button>
+                    <button onClick={() => handleAction(task.id, 'complete')}>
+                      <CheckCircle sx={{ fontSize: 16, mr: 0.5 }} /> Готово
+                    </button>
+                    <button onClick={() => onSplit(task)}>
+                      <CallSplit sx={{ fontSize: 16, mr: 0.5 }} /> Разделить
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <style>{`
+        .active-tasks {
+          margin-top: 20px;
+        }
+        
+        .active-tasks h2 {
+          margin-bottom: 16px;
+          font-size: 1.3rem;
+          font-weight: 500;
+        }
+        
+        .tasks-list {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+        
+        .task-card {
+          background: white;
+          border-radius: 12px;
+          padding: 16px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          transition: all 0.2s ease;
+          width: 100%;
+        }
+        
+        .task-card:hover {
+          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+          transform: translateY(-2px);
+        }
+        
+        .task-title {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 12px;
+          font-size: 0.95rem;
+        }
+        
+        .task-type {
+          color: #6b7c93;
+          font-size: 0.8rem;
+        }
+        
+        .progress-bar-wrapper {
+          background: #e2e8f0;
+          border-radius: 8px;
+          height: 8px;
+          overflow: hidden;
+          margin: 12px 0;
+        }
+        
+        .progress-fill {
+          height: 100%;
+          transition: width 0.3s ease;
+          border-radius: 8px;
+        }
+        
+        .task-buttons {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 12px;
+        }
+        
+        .task-buttons button {
+          padding: 6px 12px;
+          border-radius: 8px;
+          font-size: 0.75rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          border: 1px solid #e2e8f0;
+          background: #f8fafc;
+          color: #334155;
+          display: inline-flex;
+          align-items: center;
+        }
+        
+        .task-buttons button:hover {
+          background: #f1f5f9;
+          transform: translateY(-1px);
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .task-buttons button:active {
+          transform: translateY(0);
+        }
+      `}</style>
+    </div>
+  );
+}=== ./frontend/src/main.jsx ===
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './App.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)=== ./frontend/src/App.jsx ===
+import { useState, useEffect } from 'react';
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Container,
+  Box,
+  Paper,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Button,
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+  Chip,
+  Stack,
+  Tab,
+  Tabs
+} from '@mui/material';
+import { Today, RestartAlt, Notifications, TableChart, CalendarMonth } from '@mui/icons-material';
+import EmployeeSelector from './components/EmployeeSelector';
+import WeekCalendar from './components/WeekCalendar';
+import ActiveTasksList from './components/ActiveTasksList';
+import CompletedTasksList from './components/CompletedTasksList';
+import DeadlineWarnings from './components/DeadlineWarnings';
+import DebugPanel from './components/DebugPanel';
+import SplitTaskModal from './components/SplitTaskModal';
+import TaskTable from './components/TaskTable';
+import { getActiveTasks, syncTasks, shiftTasks } from './services/api';
+
+// Пастельная тема (оставляем без изменений)
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#7c9ebf',
+      light: '#a8c4e0',
+      dark: '#5d7f9e',
+    },
+    secondary: {
+      main: '#cbd5e1',
+      light: '#e2e8f0',
+      dark: '#94a3b8',
+    },
+    success: {
+      main: '#7c9e7c',
+      light: '#a3b8a3',
+      dark: '#5d7e5d',
+    },
+    error: {
+      main: '#d48c8c',
+      light: '#e29b9b',
+      dark: '#b06f6f',
+    },
+    background: {
+      default: '#f3f4f6',
+      paper: '#ffffff',
+    },
+    text: {
+      primary: '#374151',
+      secondary: '#6b7c93',
+    },
+  },
+  typography: {
+    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    h1: { fontSize: '1.6rem', fontWeight: 600 },
+    h2: { fontSize: '1.3rem', fontWeight: 500 },
+  },
+  shape: {
+    borderRadius: 12,
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          fontWeight: 500,
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        },
+      },
+    },
+  },
+});
+
+function App() {
+  const [employee, setEmployee] = useState('Дима');
+  const [activeTasks, setActiveTasks] = useState([]);
+  const [refresh, setRefresh] = useState(0);
+  const [isDebugMode, setIsDebugMode] = useState(false);
+  const [splitModalOpen, setSplitModalOpen] = useState(false);
+  const [selectedTaskForSplit, setSelectedTaskForSplit] = useState(null);
+  const [activeTab, setActiveTab] = useState(0); // 0 - календарь, 1 - таблица
+
+  // Запрос разрешения на уведомления при загрузке
+  useEffect(() => {
+    if ('Notification' in window) {
+      if (Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    loadActiveTasks();
+    const interval = setInterval(() => setRefresh(r => r + 1), 60000);
+    return () => clearInterval(interval);
+  }, [employee]);
+
+  const loadActiveTasks = async () => {
+    try {
+      const tasks = await getActiveTasks(employee);
+      setActiveTasks(tasks);
+    } catch (err) {
+      console.error('Ошибка загрузки активных задач:', err);
+    }
+  };
+
+  const refreshAll = () => {
+    loadActiveTasks();
+    setRefresh(r => r + 1);
+  };
+
+  const handleReset = async () => {
+    if (window.confirm('Очистить всю базу данных? Все активные и завершённые задачи будут удалены.')) {
+      try {
+        await fetch('/api/debug/reset-db', { method: 'POST' });
+        refreshAll();
+      } catch (err) {
+        console.error('Ошибка сброса БД:', err);
+      }
+    }
+  };
+
+  // Тестирование уведомлений
+  const testNotification = () => {
+    if (!('Notification' in window)) {
+      alert('Ваш браузер не поддерживает уведомления');
+      return;
+    }
+    
+    if (Notification.permission === 'granted') {
+      new Notification('✅ Уведомления работают!', { 
+        body: 'Это тестовое уведомление. Если вы его видите, всё настроено правильно.',
+        icon: '/vite.svg',
+        tag: 'test'
+      });
+    } else if (Notification.permission === 'denied') {
+      alert('Уведомления заблокированы. Разрешите их в настройках браузера.');
+    } else {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          new Notification('🎉 Разрешение получено!', { 
+            body: 'Теперь уведомления будут работать.',
+            icon: '/vite.svg'
+          });
+        }
+      });
+    }
+  };
+
+  const handleSplit = (task) => {
+    setSelectedTaskForSplit(task);
+    setSplitModalOpen(true);
+  };
+
+  const handleSplitSuccess = () => {
+    refreshAll();
+  };
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
+
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: 3 }}>
+        <Container maxWidth="xl">
+          {/* Header */}
+          <Paper elevation={0} sx={{ p: 2, mb: 3, borderRadius: 3 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={2}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <Today color="primary" />
+                <Typography variant="h1" component="h1">
+                  Mainstream assistant
+                </Typography>
+              </Stack>
+              
+              <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>Сотрудник</InputLabel>
+                  <Select
+                    value={employee}
+                    label="Сотрудник"
+                    onChange={(e) => setEmployee(e.target.value)}
+                  >
+                    <MenuItem value="Дима">Дима</MenuItem>
+                    <MenuItem value="Яромир">Яромир</MenuItem>
+                    <MenuItem value="Павел">Павел</MenuItem>
+                  </Select>
+                </FormControl>
+                
+                <Button
+                  variant="outlined"
+                  startIcon={<RestartAlt />}
+                  onClick={handleReset}
+                  color="error"
+                >
+                  Сброс БД
+                </Button>
+                
+                <Button
+                  variant="outlined"
+                  startIcon={<Notifications />}
+                  onClick={testNotification}
+                  sx={{ color: '#7c9ebf', borderColor: '#7c9ebf' }}
+                >
+                  🔔 Тест уведомлений
+                </Button>
+              </Stack>
+            </Stack>
+          </Paper>
+
+          {/* Вкладки */}
+          <Paper elevation={0} sx={{ mb: 3, borderRadius: 3 }}>
+            <Tabs value={activeTab} onChange={handleTabChange} centered>
+              <Tab icon={<CalendarMonth />} label="Календарь" />
+              <Tab icon={<TableChart />} label="Таблица задач" />
+            </Tabs>
+          </Paper>
+
+          {/* Календарь (виден только на вкладке 0) */}
+          {activeTab === 0 && (
+            <>
+              <DeadlineWarnings employee={employee} refresh={refresh} />
+              <WeekCalendar employee={employee} refresh={refresh} />
+              <ActiveTasksList tasks={activeTasks} onUpdate={refreshAll} onSplit={handleSplit} />
+              <CompletedTasksList employee={employee} refresh={refresh} />
+            </>
+          )}
+
+          {/* Таблица задач (видна только на вкладке 1) */}
+          {activeTab === 1 && (
+            <TaskTable 
+              refreshTrigger={refresh}
+              onTaskUpdate={refreshAll}
+            />
+          )}
+
+          {/* Панель отладки */}
+          <DebugPanel 
+            employee={employee} 
+            onTimeChange={refreshAll}
+            onRefresh={refreshAll}
+          />
+
+          {/* Модальное окно разделения задачи */}
+          <SplitTaskModal
+            open={splitModalOpen}
+            task={selectedTaskForSplit}
+            onClose={() => setSplitModalOpen(false)}
+            onSuccess={handleSplitSuccess}
+          />
+        </Container>
+      </Box>
+    </ThemeProvider>
+  );
+}
+
+export default App;
