@@ -1,4 +1,109 @@
-=== ./frontend/src/components/TaskTableHead.jsx ===
+=== ./frontend/src/context/EventLoggerContext.jsx ===
+import React, { createContext, useContext, useState, useCallback } from 'react';
+
+const EventLoggerContext = createContext();
+
+export const EventLoggerProvider = ({ children }) => {
+  const [events, setEvents] = useState([]);
+
+  const logEvent = useCallback((message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const newEvent = { id: Date.now() + Math.random(), timestamp, message, type };
+    setEvents(prev => [...prev, newEvent]);
+  }, []);
+
+  const clearEvents = useCallback(() => {
+    setEvents([]);
+  }, []);
+
+  return (
+    <EventLoggerContext.Provider value={{ events, logEvent, clearEvents }}>
+      {children}
+    </EventLoggerContext.Provider>
+  );
+};
+
+export const useEventLogger = () => {
+  const context = useContext(EventLoggerContext);
+  if (!context) throw new Error('useEventLogger must be used within EventLoggerProvider');
+  return context;
+};=== ./frontend/src/components/EventConsole.jsx ===
+import { useEffect, useRef } from 'react';
+import { Box, Paper, Typography, IconButton, Tooltip, Chip } from '@mui/material';
+import { DeleteSweep, Info, Warning, Error as ErrorIcon, CheckCircle } from '@mui/icons-material';
+import { useEventLogger } from '../context/EventLoggerContext';
+
+const getIcon = (type) => {
+  switch (type) {
+    case 'success': return <CheckCircle sx={{ fontSize: 16, color: '#4caf50' }} />;
+    case 'warning': return <Warning sx={{ fontSize: 16, color: '#ff9800' }} />;
+    case 'error': return <ErrorIcon sx={{ fontSize: 16, color: '#f44336' }} />;
+    default: return <Info sx={{ fontSize: 16, color: '#2196f3' }} />;
+  }
+};
+
+export default function EventConsole() {
+  const { events, clearEvents } = useEventLogger();
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [events]);
+
+  if (events.length === 0) {
+    return (
+      <Paper elevation={2} sx={{ mt: 2, p: 1, bgcolor: '#f5f5f5', borderRadius: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="caption" sx={{ fontWeight: 500 }}>📋 Журнал событий</Typography>
+          <IconButton size="small" onClick={clearEvents} disabled>
+            <DeleteSweep fontSize="small" />
+          </IconButton>
+        </Box>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', py: 1 }}>
+          События будут отображаться здесь
+        </Typography>
+      </Paper>
+    );
+  }
+
+  return (
+    <Paper elevation={2} sx={{ mt: 2, p: 1, bgcolor: '#f5f5f5', borderRadius: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography variant="caption" sx={{ fontWeight: 500 }}>📋 Журнал событий</Typography>
+        <Tooltip title="Очистить лог">
+          <IconButton size="small" onClick={clearEvents}>
+            <DeleteSweep fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <Box
+        ref={containerRef}
+        sx={{
+          maxHeight: '150px',
+          overflowY: 'auto',
+          fontSize: '0.75rem',
+          fontFamily: 'monospace',
+          bgcolor: '#1e1e1e',
+          color: '#d4d4d4',
+          p: 1,
+          borderRadius: 1,
+        }}
+      >
+        {events.map((event) => (
+          <Box key={event.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, fontFamily: 'monospace' }}>
+            <Chip label={event.timestamp} size="small" sx={{ fontSize: '0.65rem', height: 20, bgcolor: '#333' }} />
+            {getIcon(event.type)}
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#fff' }}>
+              {event.message}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+    </Paper>
+  );
+}=== ./frontend/src/components/TaskTableHead.jsx ===
 import { TableHead, TableRow, TableCell } from '@mui/material';
 
 export default function TaskTableHead({ isAdmin }) {
@@ -302,15 +407,17 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField
+  TextField,
+  IconButton,
+  Tooltip
 } from '@mui/material';
-import { Add } from '@mui/icons-material';
+import { Add, Lightbulb } from '@mui/icons-material';
 import SplitTaskModal from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
 import NewTaskRow from './NewTaskRow';
 import EditTaskRow from './EditTaskRow';
 import TaskRow from './TaskRow';
-import { groupTasksByParent } from '../utils/taskUtils';   // ← ДОБАВЛЕННЫЙ ИМПОРТ
+import { groupTasksByParent } from '../utils/taskUtils';
 
 export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser }) {
   const [rows, setRows] = useState([]);
@@ -324,10 +431,8 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
   const [tempComment, setTempComment] = useState('');
   const [employees] = useState(['Дима', 'Яромир', 'Павел']);
   const [taskTypes] = useState(['Резка', 'УФ печать', 'Монтаж', 'Дизайн', 'Сборка', 'Упаковка']);
-
+  const [highlightMyTasks, setHighlightMyTasks] = useState(false);
   const isAdmin = userRole === 'Admin';
-  
-  console.log('TaskTable - userRole:', userRole, 'isAdmin:', isAdmin);
 
   useEffect(() => {
     loadRows();
@@ -447,7 +552,6 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
           parentRowNumber: row.parentRowNumber
         })
       });
-      
       if (response.ok) {
         setEditingId(null);
         refresh();
@@ -529,15 +633,33 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     });
   };
 
+  const toggleHighlight = () => setHighlightMyTasks(!highlightMyTasks);
+
   return (
     <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h2" sx={{ fontWeight: 600 }}>📋 Таблица задач</Typography>
-        {isAdmin && (
-          <Button variant="contained" startIcon={<Add />} onClick={handleAddNewRow} sx={{ bgcolor: '#22c55e' }}>
-            Новая задача
-          </Button>
-        )}
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Tooltip title={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}>
+            <IconButton 
+              onClick={toggleHighlight} 
+              color={highlightMyTasks ? 'warning' : 'default'}
+              sx={{ 
+                border: '1px solid', 
+                borderColor: highlightMyTasks ? 'warning.main' : 'divider',
+                transition: 'all 0.2s ease',
+                '&:hover': { transform: 'scale(1.05)' }
+              }}
+            >
+              <Lightbulb />
+            </IconButton>
+          </Tooltip>
+          {isAdmin && (
+            <Button variant="contained" startIcon={<Add />} onClick={handleAddNewRow} sx={{ bgcolor: '#22c55e' }}>
+              Новая задача
+            </Button>
+          )}
+        </Box>
       </Box>
 
       <TableContainer sx={{ maxHeight: '70vh', overflow: 'auto' }}>
@@ -587,7 +709,9 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                   canEdit={isAdmin}
                   canDelete={isAdmin}
                   canSplit={isAdmin}
-                  canChangeStatus={true}
+                  canChangeStatus={!isAdmin}
+                  currentUser={currentUser}
+                  highlightMyTasks={highlightMyTasks}
                 />
               )
             ))}
@@ -948,7 +1072,6 @@ import {
   Tooltip,
   Typography,
   Chip,
-  LinearProgress,
   Collapse
 } from '@mui/material';
 import {
@@ -1004,10 +1127,12 @@ const getUniqueEmployees = (children) => {
   return Array.from(uniqueEmployees);
 };
 
-const getParentProgress = (parent) => {
-  if (!parent.children || parent.children.length === 0) return 0;
-  const completed = parent.children.filter(c => c.statusText === 'Готово').length;
-  return (completed / parent.children.length) * 100;
+const getParentStatus = (parent) => {
+  if (!parent.children || parent.children.length === 0) return "Назначена";
+  const allCompleted = parent.children.every(c => c.statusText === 'Готово');
+  if (allCompleted) return "Готово";
+  const anyStarted = parent.children.some(c => c.statusText === 'Начал' || c.statusText === 'Пауза');
+  return anyStarted ? "Начал" : "Назначена";
 };
 
 const isOverdue = (deadline, status) => {
@@ -1032,21 +1157,223 @@ export default function TaskRow({
   canEdit,
   canDelete,
   canSplit,
-  canChangeStatus
+  canChangeStatus,
+  currentUser,
+  highlightMyTasks
 }) {
   const overdue = isOverdue(task.deadline, task.statusText);
   const hasChildren = task.children && task.children.length > 0;
-  const progress = hasChildren ? getParentProgress(task) : (task.statusText === 'Готово' ? 100 : 0);
   
+  let displayStatus = task.statusText;
+  let displayStatusIcon = null;
+  let displayStatusColor = '#64748b';
+  
+  if (hasChildren) {
+    displayStatus = getParentStatus(task);
+    displayStatusIcon = getStatusIcon(displayStatus);
+    displayStatusColor = getStatusColor(displayStatus);
+  } else {
+    displayStatusIcon = getStatusIcon(displayStatus);
+    displayStatusColor = getStatusColor(displayStatus);
+  }
+
+  const isCurrentUserTask = () => {
+    if (!currentUser) return false;
+    
+    // Обычная задача (не родительская)
+    if (!hasChildren) {
+      // Подсвечиваем только если задача НЕ завершена
+      return task.employeeName === currentUser.fullName && task.statusText !== 'Готово';
+    }
+    
+    // Родительская задача: проверяем наличие НЕзавершённых дочерних задач текущего сотрудника
+    if (hasChildren && task.children?.length) {
+      return task.children.some(child => 
+        child.employeeName === currentUser.fullName && 
+        child.statusText !== 'Готово'
+      );
+    }
+    
+    return false;
+  };
+  const isMine = isCurrentUserTask();
+
+  const getRowStyle = () => {
+    let style = {
+      '&:hover': { bgcolor: '#f8fafc' },
+      borderLeft: isChild ? '2px solid #e2e8f0' : 'none'
+    };
+    let bgColor = overdue && task.statusText !== 'Готово' ? '#fef2f2' : 'inherit';
+    if (highlightMyTasks) {
+      if (isMine) {
+        bgColor = '#e6f7ff';
+        style.boxShadow = 'inset 0 0 0 2px #1890ff';
+        style.borderRadius = '4px';
+      } else {
+        style.opacity = '0.65';
+        style['&:hover'] = { bgcolor: '#f8fafc', opacity: '0.85' };
+      }
+    }
+    return { ...style, bgcolor: bgColor };
+  };
+
+  // Для дочерних задач показываем только важные колонки
+  if (isChild) {
+    return (
+      <TableRow sx={getRowStyle()}>
+        {/* Пустая ячейка для отступа (вместо иконок) */}
+        <TableCell sx={{ width: 60 }} />
+        
+        {/* Название задачи (с отступом) */}
+        <TableCell>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 4 }}>
+            <Tooltip title={task.fileName} arrow>
+              <Typography variant="body2">{task.fileName}</Typography>
+            </Tooltip>
+          </Box>
+        </TableCell>
+        
+        {/* Файл – скрыт для дочерних */}
+        <TableCell sx={{ display: 'none' }} />
+        
+        {/* Комментарий */}
+        <TableCell>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Tooltip 
+              title={task.comment || 'Нет комментария'} 
+              arrow 
+              placement="top"
+              slotProps={{
+                tooltip: {
+                  sx: {
+                    bgcolor: '#1e293b',
+                    fontSize: '12px',
+                    padding: '8px 15px',
+                    maxWidth: '400px',
+                    borderRadius: 2,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                  }
+                }
+              }}
+            >
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: 'text.secondary', 
+                  fontSize: '0.8rem',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '200px',
+                  cursor: 'default'
+                }}
+              >
+                {task.comment && task.comment.length > 30 
+                  ? `${task.comment.slice(0, 30)}...` 
+                  : (task.comment || '—')}
+              </Typography>
+            </Tooltip>
+            <IconButton size="small" onClick={() => onOpenComment(task)} sx={{ p: 0.5 }}>
+              <CommentIcon fontSize="small" sx={{ fontSize: 14, color: '#7c9ebf' }} />
+            </IconButton>
+          </Box>
+        </TableCell>
+        
+        {/* Дедлайн – скрыт для дочерних */}
+        <TableCell sx={{ display: 'none' }} />
+        
+        {/* Часы */}
+        <TableCell align="center">
+          <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+            {task.estimateHours.toFixed(1)} ч
+          </Typography>
+        </TableCell>
+        
+        {/* Тип работы */}
+        <TableCell>
+          <Tooltip title={task.type} arrow>
+            <Chip 
+              label={task.type && task.type.length > 20 ? task.type.substring(0, 20) + '...' : task.type} 
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: '0.7rem', maxWidth: '150px' }}
+            />
+          </Tooltip>
+        </TableCell>
+        
+        {/* Сотрудник */}
+        <TableCell>
+          <Chip 
+            icon={<Person sx={{ fontSize: 14 }} />}
+            label={task.employeeName} 
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: '0.7rem' }}
+          />
+        </TableCell>
+        
+        {/* Статус */}
+        <TableCell>
+          <Chip 
+            icon={displayStatusIcon}
+            label={task.statusText || "Назначена"} 
+            size="small"
+            sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem' }}
+          />
+        </TableCell>
+        
+        {/* Кнопки действий */}
+        <TableCell>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            {canChangeStatus && (
+              <>
+                {task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && (
+                  <Tooltip title="Начать">
+                    <IconButton size="small" onClick={() => onStart(task)} sx={{ color: '#22c55e' }}>
+                      <PlayArrow fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {task.statusText === 'Начал' && (
+                  <>
+                    <Tooltip title="Пауза">
+                      <IconButton size="small" onClick={() => onPause(task)} sx={{ color: '#f59e0b' }}>
+                        <Pause fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Завершить">
+                      <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
+                        <CheckCircle fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </>
+                )}
+                {task.statusText === 'Пауза' && (
+                  <>
+                    <Tooltip title="Продолжить">
+                      <IconButton size="small" onClick={() => onResume(task)} sx={{ color: '#22c55e' }}>
+                        <PlayArrow fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Завершить">
+                      <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
+                        <CheckCircle fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </>
+                )}
+              </>
+            )}
+          </Box>
+        </TableCell>
+      </TableRow>
+    );
+  }
+
+  // Обычная (родительская) задача – полное отображение
   return (
     <Fragment>
-      <TableRow 
-        sx={{
-          '&:hover': { bgcolor: '#f8fafc' },
-          bgcolor: overdue && task.statusText !== 'Готово' ? '#fef2f2' : 'inherit',
-          borderLeft: isChild ? '2px solid #e2e8f0' : 'none'
-        }}
-      >
+      <TableRow sx={getRowStyle()}>
         <TableCell>
           <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5 }}>
             {hasChildren && (
@@ -1063,16 +1390,14 @@ export default function TaskRow({
                 </IconButton>
               </Tooltip>
             )}
-            {isChild && <Box sx={{ width: 28 }} />}
           </Box>
         </TableCell>
         
         <TableCell>
           <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-            {isChild && <Box sx={{ width: 24 }} />}
             <Tooltip title={task.fileName} arrow>
-              <Typography variant="body2" sx={{ fontWeight: isChild ? 400 : 600 }}>
-                {isChild ? `└─ ` : ''}{getShortName(task.fileName, isChild)}
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {getShortName(task.fileName, false)}
               </Typography>
             </Tooltip>
             {hasChildren && (
@@ -1084,6 +1409,14 @@ export default function TaskRow({
               />
             )}
           </Box>
+        </TableCell>
+        
+        <TableCell>
+          <Tooltip title={task.fileName} arrow>
+            <Typography variant="body2" sx={{ fontSize: '0.8rem', wordBreak: 'break-all' }}>
+              {task.fileName}
+            </Typography>
+          </Tooltip>
         </TableCell>
         
         <TableCell>
@@ -1129,9 +1462,14 @@ export default function TaskRow({
         </TableCell>
         
         <TableCell>
-          <Typography variant="body2" sx={{ color: overdue ? '#dc2626' : 'inherit', fontSize: '0.8rem' }}>
-            {new Date(task.deadline).toLocaleString()}
-          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <Typography variant="body2" sx={{ color: overdue ? '#dc2626' : 'inherit', fontSize: '0.75rem' }}>
+              {new Date(task.deadline).toLocaleDateString()}
+            </Typography>
+            <Typography variant="caption" sx={{ color: overdue ? '#dc2626' : 'text.secondary', fontSize: '0.7rem' }}>
+              {new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Typography>
+          </Box>
         </TableCell>
         
         <TableCell align="center">
@@ -1152,114 +1490,43 @@ export default function TaskRow({
         </TableCell>
         
         <TableCell>
-          {hasChildren ? (
-            <Tooltip title={getUniqueEmployees(task.children).join(' / ')} arrow>
-              <Chip 
-                icon={<Person sx={{ fontSize: 14 }} />}
-                label={getUniqueEmployees(task.children).join(' / ')} 
-                size="small"
-                variant="outlined"
-                sx={{ fontSize: '0.7rem', bgcolor: '#f1f5f9', maxWidth: '120px' }}
-              />
-            </Tooltip>
-          ) : (
-            <Chip 
-              icon={<Person sx={{ fontSize: 14 }} />}
-              label={task.employeeName} 
-              size="small"
-              variant="outlined"
-              sx={{ fontSize: '0.7rem' }}
-            />
-          )}
+          <Chip 
+            icon={<Person sx={{ fontSize: 14 }} />}
+            label={task.employeeName} 
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: '0.7rem' }}
+          />
         </TableCell>
         
         <TableCell>
           {hasChildren ? (
-            progress >= 99.9 ? (
-              <Chip 
-                icon={<CheckCircle sx={{ fontSize: 16 }} />}
-                label="Готово" 
-                size="small"
-                sx={{ bgcolor: '#22c55e', color: 'white', fontSize: '0.7rem' }}
-              />
-            ) : (
-              <Box sx={{ width: 100 }}>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={progress} 
-                  sx={{ height: 6, borderRadius: 3 }}
-                />
-                <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
-                  {Math.round(progress)}%
-                </Typography>
-              </Box>
-            )
+            <Chip 
+              icon={displayStatusIcon}
+              label={displayStatus} 
+              size="small"
+              sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem' }}
+            />
           ) : (
             <Chip 
-              icon={getStatusIcon(task.statusText)}
+              icon={displayStatusIcon}
               label={task.statusText || "Назначена"} 
               size="small"
-              sx={{ bgcolor: getStatusColor(task.statusText), color: 'white', fontSize: '0.7rem' }}
+              sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem' }}
             />
           )}
         </TableCell>
         
         <TableCell>
           <Box sx={{ display: 'flex', flexDirection: 'row', gap: 0.5 }}>
-            {canChangeStatus && task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && !hasChildren && (
-              <Tooltip title="Начать">
-                <IconButton size="small" onClick={() => onStart(task)} sx={{ color: '#22c55e' }}>
-                  <PlayArrow fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            
-            {canChangeStatus && task.statusText === 'Начал' && !hasChildren && (
-              <>
-                <Tooltip title="Пауза">
-                  <IconButton size="small" onClick={() => onPause(task)} sx={{ color: '#f59e0b' }}>
-                    <Pause fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Завершить">
-                  <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#3b82f6' }}>
-                    <CheckCircle fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </>
-            )}
-            
-            {canChangeStatus && task.statusText === 'Пауза' && !hasChildren && (
-              <>
-                <Tooltip title="Продолжить">
-                  <IconButton size="small" onClick={() => onResume(task)} sx={{ color: '#22c55e' }}>
-                    <PlayArrow fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Завершить">
-                  <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#3b82f6' }}>
-                    <CheckCircle fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </>
-            )}
-            
-            {canChangeStatus && task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && !hasChildren && (
-              <Tooltip title="Завершить (без времени)">
-                <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#ef4444' }}>
-                  <CheckCircle fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            
-            {canSplit && (
+            {canSplit && !hasChildren && !isChild && task.statusText !== 'Готово' && (
               <Tooltip title="Разделить задачу">
                 <IconButton size="small" onClick={() => onSplit(task)} sx={{ color: '#8b5cf6' }}>
                   <CallSplit fontSize="small" />
                 </IconButton>
               </Tooltip>
             )}
-            
+
             {canEdit && (
               <Tooltip title="Редактировать">
                 <IconButton size="small" onClick={() => onEdit(task)}>
@@ -1267,7 +1534,7 @@ export default function TaskRow({
                 </IconButton>
               </Tooltip>
             )}
-            
+
             {canDelete && (
               <Tooltip title="Удалить">
                 <IconButton size="small" color="error" onClick={() => onDelete(task.id)}>
@@ -1281,7 +1548,7 @@ export default function TaskRow({
       
       {hasChildren && isExpanded && (
         <TableRow>
-          <TableCell colSpan={9} sx={{ p: 0 }}>
+          <TableCell colSpan={10} sx={{ p: 0 }}>
             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
               <table style={{ width: '100%', paddingLeft: '48px' }}>
                 <tbody>
@@ -1305,6 +1572,8 @@ export default function TaskRow({
                       canDelete={canDelete}
                       canSplit={canSplit}
                       canChangeStatus={canChangeStatus}
+                      currentUser={currentUser}
+                      highlightMyTasks={highlightMyTasks}
                     />
                   ))}
                 </tbody>
@@ -2794,7 +3063,7 @@ export default function SplitTaskModal({ open, task, onClose, onSuccess }) {
   );
 }=== ./frontend/src/components/ActiveTasksList.jsx ===
 import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../services/api';
-import { Warning, Error, FolderOpen, AccessTime, Event, CallSplit, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
+import { Warning, Error, FolderOpen, AccessTime, Event, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
 import { Tooltip, Chip, IconButton, Box, Typography } from '@mui/material';
 
 export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
@@ -2812,7 +3081,6 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     }
   };
 
-  // Функция открытия файла
   const openFile = async (filePath) => {
     if (!filePath) {
       alert('Путь к файлу не указан');
@@ -2834,7 +3102,6 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     }
   };
 
-  // Функция определения риска дедлайна
   const getRiskProps = (riskLevel) => {
     switch (riskLevel) {
       case 'overdue':
@@ -2848,14 +3115,13 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     }
   };
 
-  // Сокращение названия
   const getShortTitle = (title) => {
     if (!title) return '';
     return title.split('\\').pop().split('/').pop();
   };
 
   const isStarted = (status) => {
-    return status === 1 || status === 2; // InProgress или Paused
+    return status === 1 || status === 2;
   };
 
   return (
@@ -2963,35 +3229,65 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                 )}
                 
                 {task.status === 1 && (
-                  <Box 
-                    component="button"
-                    onClick={() => handleAction(task.id, 'pause')}
-                    sx={{ 
-                      px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                      border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                      display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                      '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                    }}
-                  >
-                    <Pause sx={{ fontSize: 16 }} /> Пауза
-                  </Box>
+                  <>
+                    <Box 
+                      component="button"
+                      onClick={() => handleAction(task.id, 'pause')}
+                      sx={{ 
+                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
+                        cursor: 'pointer', transition: 'all 0.2s ease',
+                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
+                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                      }}
+                    >
+                      <Pause sx={{ fontSize: 16 }} /> Пауза
+                    </Box>
+                    <Box 
+                      component="button"
+                      onClick={() => handleAction(task.id, 'complete')}
+                      sx={{ 
+                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
+                        cursor: 'pointer', transition: 'all 0.2s ease',
+                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
+                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                      }}
+                    >
+                      <CheckCircle sx={{ fontSize: 16 }} /> Готово
+                    </Box>
+                  </>
                 )}
                 
                 {task.status === 2 && (
-                  <Box 
-                    component="button"
-                    onClick={() => handleAction(task.id, 'resume')}
-                    sx={{ 
-                      px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                      border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                      display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                      '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                    }}
-                  >
-                    <PlayArrow sx={{ fontSize: 16 }} /> Продолжить
-                  </Box>
+                  <>
+                    <Box 
+                      component="button"
+                      onClick={() => handleAction(task.id, 'resume')}
+                      sx={{ 
+                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
+                        cursor: 'pointer', transition: 'all 0.2s ease',
+                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
+                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                      }}
+                    >
+                      <PlayArrow sx={{ fontSize: 16 }} /> Продолжить
+                    </Box>
+                    <Box 
+                      component="button"
+                      onClick={() => handleAction(task.id, 'complete')}
+                      sx={{ 
+                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
+                        cursor: 'pointer', transition: 'all 0.2s ease',
+                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
+                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                      }}
+                    >
+                      <CheckCircle sx={{ fontSize: 16 }} /> Готово
+                    </Box>
+                  </>
                 )}
                 
                 {task.status !== 3 && (
@@ -3003,7 +3299,6 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                         px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
                         cursor: 'pointer', transition: 'all 0.2s ease',
                         border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center',
                         '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                       }}
                     >
@@ -3032,32 +3327,6 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                       }}
                     >
                       90%
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'complete')}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <CheckCircle sx={{ fontSize: 16 }} /> Готово
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => onSplit(task)}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <CallSplit sx={{ fontSize: 16 }} /> Разделить
                     </Box>
                   </>
                 )}
@@ -3159,11 +3428,7 @@ function App() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
 
-  // Сбрасываем меню при смене пользователя
-  useEffect(() => {
-    setAnchorElUser(null);
-  }, [user]);
-
+  useEffect(() => { setAnchorElUser(null); }, [user]);
   useEffect(() => { checkAuth(); }, []);
 
   const checkAuth = async () => {
@@ -3192,13 +3457,8 @@ function App() {
     setEmployee('Дима');
   };
 
-  const handleOpenUserMenu = (event) => {
-    setAnchorElUser(event.currentTarget);
-  };
-
-  const handleCloseUserMenu = () => {
-    setAnchorElUser(null);
-  };
+  const handleOpenUserMenu = (event) => setAnchorElUser(event.currentTarget);
+  const handleCloseUserMenu = () => setAnchorElUser(null);
 
   const handleFileSelect = () => {
     const input = document.createElement('input');
@@ -3220,7 +3480,11 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('/api/auth/upload-avatar', { method: 'POST', body: formData, credentials: 'include' });
+      const response = await fetch('/api/auth/upload-avatar', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
       setUser(prev => ({ ...prev, avatarUrl: data.avatarUrl }));
@@ -3296,20 +3560,12 @@ function App() {
 
   const handleSplitSuccess = () => refreshAll();
   const handleTabChange = (event, newValue) => setActiveTab(newValue);
-
   const isAdmin = user?.role === 'Admin';
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <Typography>Загрузка...</Typography>
-      </Box>
-    );
-  }
-
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Typography>Загрузка...</Typography></Box>;
   if (!user) return <LoginForm onLogin={handleLogin} />;
 
-  const avatarUrl = user?.avatarUrl ? `http://localhost:5234${user.avatarUrl}` : null;
+  const avatarUrl = user?.avatarUrl ? user.avatarUrl : null;
 
   return (
     <ThemeProvider theme={theme}>
@@ -3322,7 +3578,6 @@ function App() {
                 <Today color="primary" sx={{ fontSize: 32 }} />
                 <Typography variant="h1" component="h1" sx={{ fontSize: '1.6rem', fontWeight: 600 }}>Mainstream Assistant</Typography>
               </Box>
-              
               <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                 {isAdmin && (
                   <FormControl size="small" sx={{ minWidth: 130 }}>
@@ -3334,17 +3589,13 @@ function App() {
                     </Select>
                   </FormControl>
                 )}
-                
                 {isAdmin && <Divider orientation="vertical" flexItem sx={{ height: 30 }} />}
-                
                 {isAdmin && (
                   <Button variant="outlined" startIcon={<RestartAlt />} onClick={handleReset} color="error" size="medium">Сброс БД</Button>
                 )}
-                
                 {isAdmin && (
                   <Button variant="outlined" startIcon={<Notifications />} onClick={testNotification} sx={{ color: '#7c9ebf', borderColor: '#7c9ebf' }} size="medium">Тест уведомлений</Button>
                 )}
-                
                 <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
                   <Avatar src={avatarUrl} sx={{ width: 40, height: 40, bgcolor: 'primary.main' }}>
                     {!avatarUrl && (user?.fullName?.[0] || 'U')}

@@ -13,42 +13,33 @@ namespace ProductionPlanner.Services
 
         public List<ScheduledSlot> GetSchedule(List<ProductionTask> activeTasks, DateTime now)
         {
-            var filteredTasks = activeTasks
+            // Все активные задачи (в работе или назначенные) сортируем по дедлайну от ближайшего к дальнему
+            var tasks = activeTasks
                 .Where(t => t.Status == JobStatus.Assigned || t.Status == JobStatus.InProgress)
+                .OrderBy(t => t.Deadline)
                 .ToList();
-            
-            var inProgress = filteredTasks.Where(t => t.Status == JobStatus.InProgress && t.Progress < 0.99).ToList();
-            var assigned = filteredTasks.Where(t => t.Status == JobStatus.Assigned).ToList();
 
             var slots = new List<ScheduledSlot>();
+            var currentStart = _workHours.GetNextWorkStart(now);
 
-            foreach (var task in inProgress)
+            foreach (var task in tasks)
             {
-                var remaining = task.EstimateHours * (1 - task.Progress);
-                if (remaining <= 0.01) continue;
-                var start = _workHours.GetNextWorkStart(now);
-                var end = _workHours.AddWorkHours(start, remaining);
-                slots.Add(new ScheduledSlot { Task = task, PlannedStart = start, PlannedEnd = end });
-            }
-
-            DateTime currentStart = slots.Any() ? slots.Max(s => s.PlannedEnd) : now;
-            currentStart = _workHours.GetNextWorkStart(currentStart);
-
-            foreach (var task in assigned)
-            {
+                // Пропускаем lunch
                 while (_workHours.IsLunchTime(currentStart))
                 {
                     currentStart = currentStart.AddMinutes(1);
                 }
-                
+
                 var remaining = task.EstimateHours * (1 - task.Progress);
                 if (remaining <= 0.01) continue;
-                var end = _workHours.AddWorkHours(currentStart, remaining);
-                slots.Add(new ScheduledSlot { Task = task, PlannedStart = currentStart, PlannedEnd = end });
+
+                var start = currentStart;
+                var end = _workHours.AddWorkHours(start, remaining);
+                slots.Add(new ScheduledSlot { Task = task, PlannedStart = start, PlannedEnd = end });
                 currentStart = end;
             }
 
-            return slots.OrderBy(s => s.Task.Deadline).ToList();
+            return slots;
         }
 
         public List<DeadlineRisk> CheckDeadlineRisks(List<ProductionTask> activeTasks, DateTime now)

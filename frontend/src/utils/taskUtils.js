@@ -12,7 +12,7 @@ export const generateTimeOptions = () => {
 };
 
 export const TIME_OPTIONS = generateTimeOptions();
-export const DEFAULT_TIME = '14:00';
+export const DEFAULT_TIME = '15:00';  // ← ДОБАВИТЬ, если нет
 
 // Парсинг даты и времени
 export const parseDateTime = (dateTimeStr) => {

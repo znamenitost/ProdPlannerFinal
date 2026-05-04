@@ -11,15 +11,17 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField
+  TextField,
+  IconButton,
+  Tooltip
 } from '@mui/material';
-import { Add } from '@mui/icons-material';
+import { Add, Lightbulb } from '@mui/icons-material';
 import SplitTaskModal from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
 import NewTaskRow from './NewTaskRow';
 import EditTaskRow from './EditTaskRow';
 import TaskRow from './TaskRow';
-import { groupTasksByParent } from '../utils/taskUtils';   // ← ДОБАВЛЕННЫЙ ИМПОРТ
+import { groupTasksByParent } from '../utils/taskUtils';
 
 export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser }) {
   const [rows, setRows] = useState([]);
@@ -33,10 +35,8 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
   const [tempComment, setTempComment] = useState('');
   const [employees] = useState(['Дима', 'Яромир', 'Павел']);
   const [taskTypes] = useState(['Резка', 'УФ печать', 'Монтаж', 'Дизайн', 'Сборка', 'Упаковка']);
-
+  const [highlightMyTasks, setHighlightMyTasks] = useState(false);
   const isAdmin = userRole === 'Admin';
-  
-  console.log('TaskTable - userRole:', userRole, 'isAdmin:', isAdmin);
 
   useEffect(() => {
     loadRows();
@@ -156,7 +156,6 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
           parentRowNumber: row.parentRowNumber
         })
       });
-      
       if (response.ok) {
         setEditingId(null);
         refresh();
@@ -238,15 +237,33 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     });
   };
 
+  const toggleHighlight = () => setHighlightMyTasks(!highlightMyTasks);
+
   return (
     <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h2" sx={{ fontWeight: 600 }}>📋 Таблица задач</Typography>
-        {isAdmin && (
-          <Button variant="contained" startIcon={<Add />} onClick={handleAddNewRow} sx={{ bgcolor: '#22c55e' }}>
-            Новая задача
-          </Button>
-        )}
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Tooltip title={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}>
+            <IconButton 
+              onClick={toggleHighlight} 
+              color={highlightMyTasks ? 'warning' : 'default'}
+              sx={{ 
+                border: '1px solid', 
+                borderColor: highlightMyTasks ? 'warning.main' : 'divider',
+                transition: 'all 0.2s ease',
+                '&:hover': { transform: 'scale(1.05)' }
+              }}
+            >
+              <Lightbulb />
+            </IconButton>
+          </Tooltip>
+          {isAdmin && (
+            <Button variant="contained" startIcon={<Add />} onClick={handleAddNewRow} sx={{ bgcolor: '#22c55e' }}>
+              Новая задача
+            </Button>
+          )}
+        </Box>
       </Box>
 
       <TableContainer sx={{ maxHeight: '70vh', overflow: 'auto' }}>
@@ -296,7 +313,9 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                   canEdit={isAdmin}
                   canDelete={isAdmin}
                   canSplit={isAdmin}
-                  canChangeStatus={true}
+                  canChangeStatus={!isAdmin}
+                  currentUser={currentUser}
+                  highlightMyTasks={highlightMyTasks}
                 />
               )
             ))}

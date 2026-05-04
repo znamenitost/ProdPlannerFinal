@@ -70,11 +70,7 @@ function App() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
 
-  // Сбрасываем меню при смене пользователя
-  useEffect(() => {
-    setAnchorElUser(null);
-  }, [user]);
-
+  useEffect(() => { setAnchorElUser(null); }, [user]);
   useEffect(() => { checkAuth(); }, []);
 
   const checkAuth = async () => {
@@ -103,13 +99,8 @@ function App() {
     setEmployee('Дима');
   };
 
-  const handleOpenUserMenu = (event) => {
-    setAnchorElUser(event.currentTarget);
-  };
-
-  const handleCloseUserMenu = () => {
-    setAnchorElUser(null);
-  };
+  const handleOpenUserMenu = (event) => setAnchorElUser(event.currentTarget);
+  const handleCloseUserMenu = () => setAnchorElUser(null);
 
   const handleFileSelect = () => {
     const input = document.createElement('input');
@@ -131,7 +122,11 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('/api/auth/upload-avatar', { method: 'POST', body: formData, credentials: 'include' });
+      const response = await fetch('/api/auth/upload-avatar', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
       setUser(prev => ({ ...prev, avatarUrl: data.avatarUrl }));
@@ -207,17 +202,9 @@ function App() {
 
   const handleSplitSuccess = () => refreshAll();
   const handleTabChange = (event, newValue) => setActiveTab(newValue);
-
   const isAdmin = user?.role === 'Admin';
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <Typography>Загрузка...</Typography>
-      </Box>
-    );
-  }
-
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Typography>Загрузка...</Typography></Box>;
   if (!user) return <LoginForm onLogin={handleLogin} />;
 
   const avatarUrl = user?.avatarUrl ? user.avatarUrl : null;
@@ -233,7 +220,6 @@ function App() {
                 <Today color="primary" sx={{ fontSize: 32 }} />
                 <Typography variant="h1" component="h1" sx={{ fontSize: '1.6rem', fontWeight: 600 }}>Mainstream Assistant</Typography>
               </Box>
-              
               <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                 {isAdmin && (
                   <FormControl size="small" sx={{ minWidth: 130 }}>
@@ -245,17 +231,13 @@ function App() {
                     </Select>
                   </FormControl>
                 )}
-                
                 {isAdmin && <Divider orientation="vertical" flexItem sx={{ height: 30 }} />}
-                
                 {isAdmin && (
                   <Button variant="outlined" startIcon={<RestartAlt />} onClick={handleReset} color="error" size="medium">Сброс БД</Button>
                 )}
-                
                 {isAdmin && (
                   <Button variant="outlined" startIcon={<Notifications />} onClick={testNotification} sx={{ color: '#7c9ebf', borderColor: '#7c9ebf' }} size="medium">Тест уведомлений</Button>
                 )}
-                
                 <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
                   <Avatar src={avatarUrl} sx={{ width: 40, height: 40, bgcolor: 'primary.main' }}>
                     {!avatarUrl && (user?.fullName?.[0] || 'U')}

@@ -11,7 +11,6 @@ namespace ProductionPlanner.Controllers
     {
         private readonly IProductionTaskRepository _repo;
         private readonly ApplicationDbContext _context;
-        private static DateTime? _mockDateTime = null;
 
         public DebugController(IProductionTaskRepository repo, ApplicationDbContext context)
         {
@@ -19,18 +18,12 @@ namespace ProductionPlanner.Controllers
             _context = context;
         }
 
-        // Получить текущее моковое время или реальное
-        public static DateTime GetCurrentTime()
-        {
-            return _mockDateTime ?? DateTime.Now;
-        }
-
         [HttpPost("set-time")]
         public IActionResult SetTime([FromBody] SetTimeRequest request)
         {
             if (DateTime.TryParse(request.MockDateTime, out var mockTime))
             {
-                _mockDateTime = mockTime;
+                AppTime.SetMock(mockTime);
                 return Ok(new { message = $"Time set to {mockTime}" });
             }
             return BadRequest(new { message = "Invalid date format" });
@@ -39,7 +32,7 @@ namespace ProductionPlanner.Controllers
         [HttpPost("reset-time")]
         public IActionResult ResetTime()
         {
-            _mockDateTime = null;
+            AppTime.SetMock(null);
             return Ok(new { message = "Time reset to real" });
         }
 
@@ -52,7 +45,7 @@ namespace ProductionPlanner.Controllers
             var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
             if (openInterval != null)
             {
-                openInterval.EndTime = GetCurrentTime();
+                openInterval.EndTime = AppTime.Now;
                 await _repo.UpdateWorkIntervalAsync(openInterval);
             }
             return Ok();
@@ -64,18 +57,16 @@ namespace ProductionPlanner.Controllers
             var task = await _repo.GetTaskByIdAsync(taskId);
             if (task == null) return NotFound();
 
-            // Закрываем старые открытые интервалы
             foreach (var interval in task.WorkIntervals.Where(i => i.EndTime == null))
             {
-                interval.EndTime = GetCurrentTime();
+                interval.EndTime = AppTime.Now;
                 await _repo.UpdateWorkIntervalAsync(interval);
             }
 
-            // Создаём новый
             var newInterval = new WorkInterval
             {
                 ProductionTaskId = task.Id,
-                StartTime = GetCurrentTime(),
+                StartTime = AppTime.Now,
                 EndTime = null
             };
             await _repo.AddWorkIntervalAsync(newInterval);
@@ -89,21 +80,15 @@ namespace ProductionPlanner.Controllers
         [HttpPost("reset-db")]
         public async Task<IActionResult> ResetDatabase()
         {
-            // Удаляем все интервалы
             await _repo.DeleteAllWorkIntervalsAsync();
-            
-            // Удаляем все ProductionTask
             await _repo.DeleteAllTasksAsync();
             
-            // Удаляем все TaskSplit
             var allSplits = _context.TaskSplits.ToList();
             _context.TaskSplits.RemoveRange(allSplits);
             
-            // Удаляем все TableRows
             var allTableRows = _context.TableRows.ToList();
             _context.TableRows.RemoveRange(allTableRows);
             
-            // Сбрасываем статистику
             var stats = await _repo.GetEmployeeStatAsync("Дима");
             if (stats != null)
             {
@@ -112,7 +97,6 @@ namespace ProductionPlanner.Controllers
                 await _repo.UpdateEmployeeStatAsync(stats);
             }
             
-            // Обновляем порядок (переиндексация)
             await _context.SaveChangesAsync();
             
             return Ok(new { message = "База данных полностью очищена" });

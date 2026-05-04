@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services;
 using System.Security.Claims;
 
 namespace ProductionPlanner.Controllers
@@ -20,7 +21,6 @@ namespace ProductionPlanner.Controllers
             _environment = environment;
         }
 
-        // Вход для сотрудников (без пароля)
         [HttpPost("login-employee")]
         public async Task<IActionResult> LoginEmployee([FromBody] EmployeeLoginRequest request)
         {
@@ -29,12 +29,10 @@ namespace ProductionPlanner.Controllers
                 return BadRequest(new { message = "Имя сотрудника обязательно" });
             }
 
-            // Ищем пользователя по имени
             var user = _userManager.Users.FirstOrDefault(u => u.FullName == request.FullName && u.Role == "Employee");
             
             if (user == null)
             {
-                // Если пользователь не найден, создаём его автоматически
                 var email = $"{request.FullName.ToLower()}@employee.local";
                 user = new User
                 {
@@ -55,9 +53,7 @@ namespace ProductionPlanner.Controllers
                 await _userManager.AddToRoleAsync(user, "Employee");
             }
 
-            // Входим без пароля
             await _signInManager.SignInAsync(user, isPersistent: false);
-            
             var roles = await _userManager.GetRolesAsync(user);
             
             return Ok(new
@@ -71,7 +67,6 @@ namespace ProductionPlanner.Controllers
             });
         }
 
-        // Вход для администратора (с паролем)
         [HttpPost("login-admin")]
         public async Task<IActionResult> LoginAdmin([FromBody] AdminLoginRequest request)
         {
@@ -91,7 +86,6 @@ namespace ProductionPlanner.Controllers
                 return Unauthorized(new { message = "Доступ только для администраторов" });
             }
 
-            // ИСПРАВЛЕНО: проверка на null для userName
             var userName = user.UserName ?? user.Email;
             if (string.IsNullOrEmpty(userName))
             {
@@ -99,7 +93,6 @@ namespace ProductionPlanner.Controllers
             }
             
             var result = await _signInManager.PasswordSignInAsync(userName, request.Password, false, false);
-            
             if (!result.Succeeded)
             {
                 return Unauthorized(new { message = "Неверный email или пароль" });
@@ -152,7 +145,6 @@ namespace ProductionPlanner.Controllers
             });
         }
 
-        // Загрузка аватара
         [HttpPost("upload-avatar")]
         public async Task<IActionResult> UploadAvatar(IFormFile file)
         {
@@ -172,7 +164,6 @@ namespace ProductionPlanner.Controllers
                 return BadRequest(new { message = "Файл не выбран" });
             }
 
-            // Проверяем тип файла
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (!allowedExtensions.Contains(extension))
@@ -180,24 +171,20 @@ namespace ProductionPlanner.Controllers
                 return BadRequest(new { message = "Разрешены только изображения (jpg, jpeg, png, gif, webp)" });
             }
 
-            // Ограничиваем размер (2MB)
             if (file.Length > 2 * 1024 * 1024)
             {
                 return BadRequest(new { message = "Размер файла не должен превышать 2MB" });
             }
 
-            // Создаём директорию для аватаров, если её нет
             var uploadsFolder = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "avatars");
             if (!Directory.Exists(uploadsFolder))
             {
                 Directory.CreateDirectory(uploadsFolder);
             }
 
-            // Генерируем уникальное имя файла
-            var fileName = $"{user.Id}_{DateTime.Now.Ticks}{extension}";
+            var fileName = $"{user.Id}_{AppTime.Now.Ticks}{extension}";
             var filePath = Path.Combine(uploadsFolder, fileName);
             
-            // Удаляем старый аватар, если есть
             if (!string.IsNullOrEmpty(user.AvatarUrl))
             {
                 var oldFilePath = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), user.AvatarUrl.TrimStart('/'));
@@ -207,20 +194,17 @@ namespace ProductionPlanner.Controllers
                 }
             }
 
-            // Сохраняем файл
             using (var stream = new FileStream(filePath, FileMode.Create))
             {
                 await file.CopyToAsync(stream);
             }
 
-            // Обновляем путь в базе
             user.AvatarUrl = $"/avatars/{fileName}";
             await _userManager.UpdateAsync(user);
 
             return Ok(new { avatarUrl = user.AvatarUrl, message = "Аватар загружен" });
         }
 
-        // Получение аватара
         [HttpGet("avatar/{userId}")]
         public async Task<IActionResult> GetAvatar(string userId)
         {
@@ -241,7 +225,6 @@ namespace ProductionPlanner.Controllers
             return File(fileBytes, contentType);
         }
 
-        // Удаление аватара
         [HttpDelete("avatar")]
         public async Task<IActionResult> DeleteAvatar()
         {
@@ -283,7 +266,6 @@ namespace ProductionPlanner.Controllers
             };
         }
 
-        // Инициализация сотрудников и администраторов
         [HttpPost("init-users")]
         public async Task<IActionResult> InitUsers()
         {

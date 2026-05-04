@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
-using ProductionPlanner.Controllers;
 
 namespace ProductionPlanner.Controllers;
 
@@ -12,7 +11,6 @@ public class ProductionTasksController : ControllerBase
 {
     private readonly IProductionTaskRepository _repo;
     private readonly ITaskLifecycleService _lifecycle;
-   
     private readonly IProductionScheduler _scheduler;
     private readonly IWorkHoursCalculator _workHours;
     private readonly ITaskSplitService _splitService;
@@ -49,7 +47,6 @@ public class ProductionTasksController : ControllerBase
         
         foreach (var task in allTasks.Where(t => t.EmployeeName == employee))
         {
-            // Пропускаем завершённые
             if (task.Status == JobStatus.Completed) continue;
             
             var tableRow = allTableRows.FirstOrDefault(r => r.Id == task.RowNumber);
@@ -59,13 +56,9 @@ public class ProductionTasksController : ControllerBase
                 continue;
             }
             
-            // Пропускаем задачи со статусом "Готово"
             if (tableRow.StatusText == "Готово") continue;
-            
-            // Пропускаем разделённые задачи
             if (tableRow.StatusText != null && tableRow.StatusText.StartsWith("Разделена")) continue;
             
-            // Пропускаем родительские задачи (у которых есть дети)
             bool isParentTask = allTableRows.Any(r => r.ParentRowNumber == tableRow.Id);
             if (isParentTask) continue;
             
@@ -77,7 +70,7 @@ public class ProductionTasksController : ControllerBase
 
     private object MapTaskToResult(ProductionTask task)
     {
-        var now = DebugController.GetCurrentTime();
+        var now = AppTime.Now;
         var hoursNeeded = task.EstimateHours * (1 - task.Progress);
         var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(now, task.Deadline);
         
@@ -114,15 +107,11 @@ public class ProductionTasksController : ControllerBase
         foreach (var task in allTasks.Where(t => t.EmployeeName == employee && t.Status == JobStatus.Completed))
         {
             var tableRow = allTableRows.FirstOrDefault(r => r.Id == task.RowNumber);
-            
-            // Проверяем, является ли эта задача родительской (у которой есть дети)
             bool isParentTask = false;
             if (tableRow != null)
             {
                 isParentTask = allTableRows.Any(r => r.ParentRowNumber == tableRow.Id);
             }
-            
-            // Родительские задачи НЕ добавляем в готовые
             if (!isParentTask)
             {
                 completedTasks.Add(task);
@@ -142,7 +131,7 @@ public class ProductionTasksController : ControllerBase
     [HttpPost("{id}/start")]
     public async Task<IActionResult> Start(int id)
     {
-        var now = DebugController.GetCurrentTime();
+        var now = AppTime.Now;
         await _lifecycle.StartTaskAsync(id, now);
         return Ok();
     }
@@ -150,21 +139,24 @@ public class ProductionTasksController : ControllerBase
     [HttpPost("{id}/progress")]
     public async Task<IActionResult> SetProgress(int id, [FromBody] double progress)
     {
-        await _lifecycle.UpdateProgressAsync(id, progress, DateTime.Now);
+        var now = AppTime.Now;
+        await _lifecycle.UpdateProgressAsync(id, progress, now);
         return Ok();
     }
 
     [HttpPost("{id}/complete")]
     public async Task<IActionResult> Complete(int id)
     {
-        await _lifecycle.CompleteTaskAsync(id, DateTime.Now);
+        var now = AppTime.Now;
+        await _lifecycle.CompleteTaskAsync(id, now);
         return Ok();
     }
 
     [HttpPost("{id}/return")]
     public async Task<IActionResult> Return(int id)
     {
-        await _lifecycle.ReturnTaskAsync(id, DateTime.Now);
+        var now = AppTime.Now;
+        await _lifecycle.ReturnTaskAsync(id, now);
         return Ok();
     }
 
@@ -179,7 +171,7 @@ public class ProductionTasksController : ControllerBase
     public async Task<IActionResult> ShiftTasks([FromQuery] string employee)
     {
         var tasks = await _repo.GetActiveTasksAsync(employee);
-        var tomorrow = DateTime.Now.Date.AddDays(1);
+        var tomorrow = AppTime.Now.Date.AddDays(1);
         var nextWorkStart = _workHours.GetNextWorkStart(tomorrow);
 
         foreach (var task in tasks.Where(t => t.Status == JobStatus.Assigned))
@@ -195,7 +187,7 @@ public class ProductionTasksController : ControllerBase
     public async Task<IActionResult> GetDeadlineRisks([FromQuery] string employee)
     {
         var tasks = await _repo.GetActiveTasksAsync(employee);
-        var now = DebugController.GetCurrentTime();
+        var now = AppTime.Now;
         var risks = _scheduler.CheckDeadlineRisks(tasks, now);
         return Ok(risks);
     }

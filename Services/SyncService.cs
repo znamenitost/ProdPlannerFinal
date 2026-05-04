@@ -1,5 +1,6 @@
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services;
 
 namespace ProductionPlanner.Services
 {
@@ -28,23 +29,9 @@ namespace ProductionPlanner.Services
             {
                 try
                 {
-                    // Пропускаем дочерние строки (у них есть родитель)
-                    if (row.ParentRowNumber.HasValue && row.ParentRowNumber > 0)
-                    {
-                        continue;
-                    }
-                    
-                    // Пропускаем разделённые задачи
-                    if (row.StatusText != null && row.StatusText.StartsWith("Разделена"))
-                    {
-                        continue;
-                    }
-                    
-                    // Пропускаем готовые задачи (не создаём активные)
-                    if (row.StatusText == "Готово")
-                    {
-                        continue;
-                    }
+                    if (row.ParentRowNumber.HasValue && row.ParentRowNumber > 0) continue;
+                    if (row.StatusText != null && row.StatusText.StartsWith("Разделена")) continue;
+                    if (row.StatusText == "Готово") continue;
                     
                     var existingTask = allTasks.FirstOrDefault(t => t.RowNumber == row.Id && !t.IsSplitTask);
                     var filePath = string.IsNullOrEmpty(row.FolderPath) ? row.FileName : $"{row.FolderPath}/{row.FileName}";
@@ -83,7 +70,7 @@ namespace ProductionPlanner.Services
                         if (newStatus == JobStatus.Completed && existingTask.Status != JobStatus.Completed)
                         {
                             existingTask.Status = JobStatus.Completed;
-                            existingTask.CompletedAt = DateTime.Now;
+                            existingTask.CompletedAt = AppTime.Now;
                             existingTask.Progress = 1;
                         }
                         else if (newStatus != JobStatus.Completed && existingTask.Status != newStatus)
@@ -96,7 +83,6 @@ namespace ProductionPlanner.Services
                 }
                 catch (Exception ex)
                 {
-                    // Логируем ошибку, но продолжаем синхронизацию остальных строк
                     Console.WriteLine($"[SyncService] Ошибка синхронизации строки {row.Id}: {ex.Message}");
                 }
             }

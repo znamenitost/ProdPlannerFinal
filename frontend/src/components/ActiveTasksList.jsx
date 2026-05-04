@@ -1,5 +1,5 @@
 import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../services/api';
-import { Warning, Error, FolderOpen, AccessTime, Event, CallSplit, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
+import { Warning, Error, FolderOpen, AccessTime, Event, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
 import { Tooltip, Chip, IconButton, Box, Typography } from '@mui/material';
 
 export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
@@ -17,7 +17,6 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     }
   };
 
-  // Функция открытия файла
   const openFile = async (filePath) => {
     if (!filePath) {
       alert('Путь к файлу не указан');
@@ -39,7 +38,6 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     }
   };
 
-  // Функция определения риска дедлайна
   const getRiskProps = (riskLevel) => {
     switch (riskLevel) {
       case 'overdue':
@@ -53,14 +51,13 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     }
   };
 
-  // Сокращение названия
   const getShortTitle = (title) => {
     if (!title) return '';
     return title.split('\\').pop().split('/').pop();
   };
 
   const isStarted = (status) => {
-    return status === 1 || status === 2; // InProgress или Paused
+    return status === 1 || status === 2;
   };
 
   return (
@@ -168,35 +165,65 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                 )}
                 
                 {task.status === 1 && (
-                  <Box 
-                    component="button"
-                    onClick={() => handleAction(task.id, 'pause')}
-                    sx={{ 
-                      px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                      border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                      display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                      '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                    }}
-                  >
-                    <Pause sx={{ fontSize: 16 }} /> Пауза
-                  </Box>
+                  <>
+                    <Box 
+                      component="button"
+                      onClick={() => handleAction(task.id, 'pause')}
+                      sx={{ 
+                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
+                        cursor: 'pointer', transition: 'all 0.2s ease',
+                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
+                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                      }}
+                    >
+                      <Pause sx={{ fontSize: 16 }} /> Пауза
+                    </Box>
+                    <Box 
+                      component="button"
+                      onClick={() => handleAction(task.id, 'complete')}
+                      sx={{ 
+                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
+                        cursor: 'pointer', transition: 'all 0.2s ease',
+                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
+                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                      }}
+                    >
+                      <CheckCircle sx={{ fontSize: 16 }} /> Готово
+                    </Box>
+                  </>
                 )}
                 
                 {task.status === 2 && (
-                  <Box 
-                    component="button"
-                    onClick={() => handleAction(task.id, 'resume')}
-                    sx={{ 
-                      px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                      border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                      display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                      '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                    }}
-                  >
-                    <PlayArrow sx={{ fontSize: 16 }} /> Продолжить
-                  </Box>
+                  <>
+                    <Box 
+                      component="button"
+                      onClick={() => handleAction(task.id, 'resume')}
+                      sx={{ 
+                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
+                        cursor: 'pointer', transition: 'all 0.2s ease',
+                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
+                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                      }}
+                    >
+                      <PlayArrow sx={{ fontSize: 16 }} /> Продолжить
+                    </Box>
+                    <Box 
+                      component="button"
+                      onClick={() => handleAction(task.id, 'complete')}
+                      sx={{ 
+                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
+                        cursor: 'pointer', transition: 'all 0.2s ease',
+                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
+                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                      }}
+                    >
+                      <CheckCircle sx={{ fontSize: 16 }} /> Готово
+                    </Box>
+                  </>
                 )}
                 
                 {task.status !== 3 && (
@@ -208,7 +235,6 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                         px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
                         cursor: 'pointer', transition: 'all 0.2s ease',
                         border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center',
                         '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                       }}
                     >
@@ -237,32 +263,6 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                       }}
                     >
                       90%
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'complete')}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <CheckCircle sx={{ fontSize: 16 }} /> Готово
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => onSplit(task)}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <CallSplit sx={{ fontSize: 16 }} /> Разделить
                     </Box>
                   </>
                 )}

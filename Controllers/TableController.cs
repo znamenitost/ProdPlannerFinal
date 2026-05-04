@@ -16,8 +16,8 @@ namespace ProductionPlanner.Controllers
         private readonly IWorkHoursCalculator _workHours;
 
         public TableController(
-            ITableRowRepository tableRepo, 
-            IProductionTaskRepository taskRepo, 
+            ITableRowRepository tableRepo,
+            IProductionTaskRepository taskRepo,
             ISyncService syncService,
             ITaskLifecycleService lifecycle,
             IWorkHoursCalculator workHours)
@@ -58,8 +58,8 @@ namespace ProductionPlanner.Controllers
             existing.EstimateHours = row.EstimateHours;
             existing.Type = row.Type;
             existing.EmployeeName = row.EmployeeName;
-            existing.ParentRowNumber = row.ParentRowNumber;   // ДОБАВЛЕНО
-            existing.UpdatedAt = DateTime.UtcNow;             // ДОБАВЛЕНО
+            existing.ParentRowNumber = row.ParentRowNumber;
+            existing.UpdatedAt = DateTime.UtcNow;
             
             await _tableRepo.UpdateRowAsync(existing);
             await _syncService.SyncTasksFromTable();
@@ -81,7 +81,7 @@ namespace ProductionPlanner.Controllers
             var row = await _tableRepo.GetRowByIdAsync(id);
             if (row == null) return NotFound();
             
-            var now = DebugController.GetCurrentTime();
+            var now = AppTime.Now;
             
             await _syncService.SyncTasksFromTable();
             var tasks = await _taskRepo.GetAllTasksAsync();
@@ -109,7 +109,7 @@ namespace ProductionPlanner.Controllers
             var row = await _tableRepo.GetRowByIdAsync(id);
             if (row == null) return NotFound();
             
-            var now = DebugController.GetCurrentTime();
+            var now = AppTime.Now;
             
             await _syncService.SyncTasksFromTable();
             var tasks = await _taskRepo.GetAllTasksAsync();
@@ -146,7 +146,7 @@ namespace ProductionPlanner.Controllers
             var row = await _tableRepo.GetRowByIdAsync(id);
             if (row == null) return NotFound();
             
-            var now = DebugController.GetCurrentTime();
+            var now = AppTime.Now;
             
             await _syncService.SyncTasksFromTable();
             var tasks = await _taskRepo.GetAllTasksAsync();
@@ -179,7 +179,7 @@ namespace ProductionPlanner.Controllers
             var row = await _tableRepo.GetRowByIdAsync(id);
             if (row == null) return NotFound();
             
-            var now = DebugController.GetCurrentTime();
+            var now = AppTime.Now;
             
             await _syncService.SyncTasksFromTable();
             var tasks = await _taskRepo.GetAllTasksAsync();
@@ -200,6 +200,5 @@ namespace ProductionPlanner.Controllers
             await _syncService.SyncTasksFromTable();
             return Ok(row);
         }
-
     }
 }

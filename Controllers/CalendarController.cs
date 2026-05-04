@@ -3,7 +3,6 @@ using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
 using System.Globalization;
-using ProductionPlanner.Controllers;
 
 namespace ProductionPlanner.Controllers;
 
@@ -34,7 +33,7 @@ public class CalendarController : ControllerBase
     [HttpGet("week")]
     public async Task<IActionResult> GetWeek([FromQuery] string employee, [FromQuery] string? startDate)
     {
-        var now = DebugController.GetCurrentTime();
+        var now = AppTime.Now;
         DateTime start;
 
         if (!string.IsNullOrEmpty(startDate) && DateTime.TryParseExact(startDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var parsed))
