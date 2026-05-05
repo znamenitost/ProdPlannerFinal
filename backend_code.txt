@@ -235,7 +235,6 @@ namespace ProductionPlanner.Controllers
     {
         private readonly IProductionTaskRepository _repo;
         private readonly ApplicationDbContext _context;
-        private static DateTime? _mockDateTime = null;
 
         public DebugController(IProductionTaskRepository repo, ApplicationDbContext context)
         {
@@ -243,18 +242,12 @@ namespace ProductionPlanner.Controllers
             _context = context;
         }
 
-        // Получить текущее моковое время или реальное
-        public static DateTime GetCurrentTime()
-        {
-            return _mockDateTime ?? DateTime.Now;
-        }
-
         [HttpPost("set-time")]
         public IActionResult SetTime([FromBody] SetTimeRequest request)
         {
             if (DateTime.TryParse(request.MockDateTime, out var mockTime))
             {
-                _mockDateTime = mockTime;
+                AppTime.SetMock(mockTime);
                 return Ok(new { message = $"Time set to {mockTime}" });
             }
             return BadRequest(new { message = "Invalid date format" });
@@ -263,7 +256,7 @@ namespace ProductionPlanner.Controllers
         [HttpPost("reset-time")]
         public IActionResult ResetTime()
         {
-            _mockDateTime = null;
+            AppTime.SetMock(null);
             return Ok(new { message = "Time reset to real" });
         }
 
@@ -276,7 +269,7 @@ namespace ProductionPlanner.Controllers
             var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
             if (openInterval != null)
             {
-                openInterval.EndTime = GetCurrentTime();
+                openInterval.EndTime = AppTime.Now;
                 await _repo.UpdateWorkIntervalAsync(openInterval);
             }
             return Ok();
@@ -288,18 +281,16 @@ namespace ProductionPlanner.Controllers
             var task = await _repo.GetTaskByIdAsync(taskId);
             if (task == null) return NotFound();
 
-            // Закрываем старые открытые интервалы
             foreach (var interval in task.WorkIntervals.Where(i => i.EndTime == null))
             {
-                interval.EndTime = GetCurrentTime();
+                interval.EndTime = AppTime.Now;
                 await _repo.UpdateWorkIntervalAsync(interval);
             }
 
-            // Создаём новый
             var newInterval = new WorkInterval
             {
                 ProductionTaskId = task.Id,
-                StartTime = GetCurrentTime(),
+                StartTime = AppTime.Now,
                 EndTime = null
             };
             await _repo.AddWorkIntervalAsync(newInterval);
@@ -313,21 +304,15 @@ namespace ProductionPlanner.Controllers
         [HttpPost("reset-db")]
         public async Task<IActionResult> ResetDatabase()
         {
-            // Удаляем все интервалы
             await _repo.DeleteAllWorkIntervalsAsync();
-            
-            // Удаляем все ProductionTask
             await _repo.DeleteAllTasksAsync();
             
-            // Удаляем все TaskSplit
             var allSplits = _context.TaskSplits.ToList();
             _context.TaskSplits.RemoveRange(allSplits);
             
-            // Удаляем все TableRows
             var allTableRows = _context.TableRows.ToList();
             _context.TableRows.RemoveRange(allTableRows);
             
-            // Сбрасываем статистику
             var stats = await _repo.GetEmployeeStatAsync("Дима");
             if (stats != null)
             {
@@ -336,7 +321,6 @@ namespace ProductionPlanner.Controllers
                 await _repo.UpdateEmployeeStatAsync(stats);
             }
             
-            // Обновляем порядок (переиндексация)
             await _context.SaveChangesAsync();
             
             return Ok(new { message = "База данных полностью очищена" });
@@ -360,7 +344,6 @@ using Microsoft.AspNetCore.Mvc;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
-using ProductionPlanner.Controllers;
 
 namespace ProductionPlanner.Controllers;
 
@@ -370,7 +353,6 @@ public class ProductionTasksController : ControllerBase
 {
     private readonly IProductionTaskRepository _repo;
     private readonly ITaskLifecycleService _lifecycle;
-   
     private readonly IProductionScheduler _scheduler;
     private readonly IWorkHoursCalculator _workHours;
     private readonly ITaskSplitService _splitService;
@@ -407,7 +389,6 @@ public class ProductionTasksController : ControllerBase
         
         foreach (var task in allTasks.Where(t => t.EmployeeName == employee))
         {
-            // Пропускаем завершённые
             if (task.Status == JobStatus.Completed) continue;
             
             var tableRow = allTableRows.FirstOrDefault(r => r.Id == task.RowNumber);
@@ -417,13 +398,9 @@ public class ProductionTasksController : ControllerBase
                 continue;
             }
             
-            // Пропускаем задачи со статусом "Готово"
             if (tableRow.StatusText == "Готово") continue;
-            
-            // Пропускаем разделённые задачи
             if (tableRow.StatusText != null && tableRow.StatusText.StartsWith("Разделена")) continue;
             
-            // Пропускаем родительские задачи (у которых есть дети)
             bool isParentTask = allTableRows.Any(r => r.ParentRowNumber == tableRow.Id);
             if (isParentTask) continue;
             
@@ -435,7 +412,7 @@ public class ProductionTasksController : ControllerBase
 
     private object MapTaskToResult(ProductionTask task)
     {
-        var now = DebugController.GetCurrentTime();
+        var now = AppTime.Now;
         var hoursNeeded = task.EstimateHours * (1 - task.Progress);
         var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(now, task.Deadline);
         
@@ -472,15 +449,11 @@ public class ProductionTasksController : ControllerBase
         foreach (var task in allTasks.Where(t => t.EmployeeName == employee && t.Status == JobStatus.Completed))
         {
             var tableRow = allTableRows.FirstOrDefault(r => r.Id == task.RowNumber);
-            
-            // Проверяем, является ли эта задача родительской (у которой есть дети)
             bool isParentTask = false;
             if (tableRow != null)
             {
                 isParentTask = allTableRows.Any(r => r.ParentRowNumber == tableRow.Id);
             }
-            
-            // Родительские задачи НЕ добавляем в готовые
             if (!isParentTask)
             {
                 completedTasks.Add(task);
@@ -500,7 +473,7 @@ public class ProductionTasksController : ControllerBase
     [HttpPost("{id}/start")]
     public async Task<IActionResult> Start(int id)
     {
-        var now = DebugController.GetCurrentTime();
+        var now = AppTime.Now;
         await _lifecycle.StartTaskAsync(id, now);
         return Ok();
     }
@@ -508,21 +481,24 @@ public class ProductionTasksController : ControllerBase
     [HttpPost("{id}/progress")]
     public async Task<IActionResult> SetProgress(int id, [FromBody] double progress)
     {
-        await _lifecycle.UpdateProgressAsync(id, progress, DateTime.Now);
+        var now = AppTime.Now;
+        await _lifecycle.UpdateProgressAsync(id, progress, now);
         return Ok();
     }
 
     [HttpPost("{id}/complete")]
     public async Task<IActionResult> Complete(int id)
     {
-        await _lifecycle.CompleteTaskAsync(id, DateTime.Now);
+        var now = AppTime.Now;
+        await _lifecycle.CompleteTaskAsync(id, now);
         return Ok();
     }
 
     [HttpPost("{id}/return")]
     public async Task<IActionResult> Return(int id)
     {
-        await _lifecycle.ReturnTaskAsync(id, DateTime.Now);
+        var now = AppTime.Now;
+        await _lifecycle.ReturnTaskAsync(id, now);
         return Ok();
     }
 
@@ -537,7 +513,7 @@ public class ProductionTasksController : ControllerBase
     public async Task<IActionResult> ShiftTasks([FromQuery] string employee)
     {
         var tasks = await _repo.GetActiveTasksAsync(employee);
-        var tomorrow = DateTime.Now.Date.AddDays(1);
+        var tomorrow = AppTime.Now.Date.AddDays(1);
         var nextWorkStart = _workHours.GetNextWorkStart(tomorrow);
 
         foreach (var task in tasks.Where(t => t.Status == JobStatus.Assigned))
@@ -553,7 +529,7 @@ public class ProductionTasksController : ControllerBase
     public async Task<IActionResult> GetDeadlineRisks([FromQuery] string employee)
     {
         var tasks = await _repo.GetActiveTasksAsync(employee);
-        var now = DebugController.GetCurrentTime();
+        var now = AppTime.Now;
         var risks = _scheduler.CheckDeadlineRisks(tasks, now);
         return Ok(risks);
     }
@@ -563,7 +539,6 @@ using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
 using System.Globalization;
-using ProductionPlanner.Controllers;
 
 namespace ProductionPlanner.Controllers;
 
@@ -594,7 +569,7 @@ public class CalendarController : ControllerBase
     [HttpGet("week")]
     public async Task<IActionResult> GetWeek([FromQuery] string employee, [FromQuery] string? startDate)
     {
-        var now = DebugController.GetCurrentTime();
+        var now = AppTime.Now;
         DateTime start;
 
         if (!string.IsNullOrEmpty(startDate) && DateTime.TryParseExact(startDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var parsed))
@@ -859,8 +834,8 @@ namespace ProductionPlanner.Controllers
         private readonly IWorkHoursCalculator _workHours;
 
         public TableController(
-            ITableRowRepository tableRepo, 
-            IProductionTaskRepository taskRepo, 
+            ITableRowRepository tableRepo,
+            IProductionTaskRepository taskRepo,
             ISyncService syncService,
             ITaskLifecycleService lifecycle,
             IWorkHoursCalculator workHours)
@@ -901,8 +876,8 @@ namespace ProductionPlanner.Controllers
             existing.EstimateHours = row.EstimateHours;
             existing.Type = row.Type;
             existing.EmployeeName = row.EmployeeName;
-            existing.ParentRowNumber = row.ParentRowNumber;   // ДОБАВЛЕНО
-            existing.UpdatedAt = DateTime.UtcNow;             // ДОБАВЛЕНО
+            existing.ParentRowNumber = row.ParentRowNumber;
+            existing.UpdatedAt = DateTime.UtcNow;
             
             await _tableRepo.UpdateRowAsync(existing);
             await _syncService.SyncTasksFromTable();
@@ -924,7 +899,7 @@ namespace ProductionPlanner.Controllers
             var row = await _tableRepo.GetRowByIdAsync(id);
             if (row == null) return NotFound();
             
-            var now = DebugController.GetCurrentTime();
+            var now = AppTime.Now;
             
             await _syncService.SyncTasksFromTable();
             var tasks = await _taskRepo.GetAllTasksAsync();
@@ -952,7 +927,7 @@ namespace ProductionPlanner.Controllers
             var row = await _tableRepo.GetRowByIdAsync(id);
             if (row == null) return NotFound();
             
-            var now = DebugController.GetCurrentTime();
+            var now = AppTime.Now;
             
             await _syncService.SyncTasksFromTable();
             var tasks = await _taskRepo.GetAllTasksAsync();
@@ -989,7 +964,7 @@ namespace ProductionPlanner.Controllers
             var row = await _tableRepo.GetRowByIdAsync(id);
             if (row == null) return NotFound();
             
-            var now = DebugController.GetCurrentTime();
+            var now = AppTime.Now;
             
             await _syncService.SyncTasksFromTable();
             var tasks = await _taskRepo.GetAllTasksAsync();
@@ -1022,7 +997,7 @@ namespace ProductionPlanner.Controllers
             var row = await _tableRepo.GetRowByIdAsync(id);
             if (row == null) return NotFound();
             
-            var now = DebugController.GetCurrentTime();
+            var now = AppTime.Now;
             
             await _syncService.SyncTasksFromTable();
             var tasks = await _taskRepo.GetAllTasksAsync();
@@ -1043,12 +1018,12 @@ namespace ProductionPlanner.Controllers
             await _syncService.SyncTasksFromTable();
             return Ok(row);
         }
-
     }
 }=== ./Controllers/AuthController.cs ===
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services;
 using System.Security.Claims;
 
 namespace ProductionPlanner.Controllers
@@ -1068,7 +1043,6 @@ namespace ProductionPlanner.Controllers
             _environment = environment;
         }
 
-        // Вход для сотрудников (без пароля)
         [HttpPost("login-employee")]
         public async Task<IActionResult> LoginEmployee([FromBody] EmployeeLoginRequest request)
         {
@@ -1077,12 +1051,10 @@ namespace ProductionPlanner.Controllers
                 return BadRequest(new { message = "Имя сотрудника обязательно" });
             }
 
-            // Ищем пользователя по имени
             var user = _userManager.Users.FirstOrDefault(u => u.FullName == request.FullName && u.Role == "Employee");
             
             if (user == null)
             {
-                // Если пользователь не найден, создаём его автоматически
                 var email = $"{request.FullName.ToLower()}@employee.local";
                 user = new User
                 {
@@ -1103,9 +1075,7 @@ namespace ProductionPlanner.Controllers
                 await _userManager.AddToRoleAsync(user, "Employee");
             }
 
-            // Входим без пароля
             await _signInManager.SignInAsync(user, isPersistent: false);
-            
             var roles = await _userManager.GetRolesAsync(user);
             
             return Ok(new
@@ -1119,7 +1089,6 @@ namespace ProductionPlanner.Controllers
             });
         }
 
-        // Вход для администратора (с паролем)
         [HttpPost("login-admin")]
         public async Task<IActionResult> LoginAdmin([FromBody] AdminLoginRequest request)
         {
@@ -1139,7 +1108,6 @@ namespace ProductionPlanner.Controllers
                 return Unauthorized(new { message = "Доступ только для администраторов" });
             }
 
-            // ИСПРАВЛЕНО: проверка на null для userName
             var userName = user.UserName ?? user.Email;
             if (string.IsNullOrEmpty(userName))
             {
@@ -1147,7 +1115,6 @@ namespace ProductionPlanner.Controllers
             }
             
             var result = await _signInManager.PasswordSignInAsync(userName, request.Password, false, false);
-            
             if (!result.Succeeded)
             {
                 return Unauthorized(new { message = "Неверный email или пароль" });
@@ -1200,7 +1167,6 @@ namespace ProductionPlanner.Controllers
             });
         }
 
-        // Загрузка аватара
         [HttpPost("upload-avatar")]
         public async Task<IActionResult> UploadAvatar(IFormFile file)
         {
@@ -1220,7 +1186,6 @@ namespace ProductionPlanner.Controllers
                 return BadRequest(new { message = "Файл не выбран" });
             }
 
-            // Проверяем тип файла
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (!allowedExtensions.Contains(extension))
@@ -1228,24 +1193,20 @@ namespace ProductionPlanner.Controllers
                 return BadRequest(new { message = "Разрешены только изображения (jpg, jpeg, png, gif, webp)" });
             }
 
-            // Ограничиваем размер (2MB)
             if (file.Length > 2 * 1024 * 1024)
             {
                 return BadRequest(new { message = "Размер файла не должен превышать 2MB" });
             }
 
-            // Создаём директорию для аватаров, если её нет
             var uploadsFolder = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "avatars");
             if (!Directory.Exists(uploadsFolder))
             {
                 Directory.CreateDirectory(uploadsFolder);
             }
 
-            // Генерируем уникальное имя файла
-            var fileName = $"{user.Id}_{DateTime.Now.Ticks}{extension}";
+            var fileName = $"{user.Id}_{AppTime.Now.Ticks}{extension}";
             var filePath = Path.Combine(uploadsFolder, fileName);
             
-            // Удаляем старый аватар, если есть
             if (!string.IsNullOrEmpty(user.AvatarUrl))
             {
                 var oldFilePath = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), user.AvatarUrl.TrimStart('/'));
@@ -1255,20 +1216,17 @@ namespace ProductionPlanner.Controllers
                 }
             }
 
-            // Сохраняем файл
             using (var stream = new FileStream(filePath, FileMode.Create))
             {
                 await file.CopyToAsync(stream);
             }
 
-            // Обновляем путь в базе
             user.AvatarUrl = $"/avatars/{fileName}";
             await _userManager.UpdateAsync(user);
 
             return Ok(new { avatarUrl = user.AvatarUrl, message = "Аватар загружен" });
         }
 
-        // Получение аватара
         [HttpGet("avatar/{userId}")]
         public async Task<IActionResult> GetAvatar(string userId)
         {
@@ -1289,7 +1247,6 @@ namespace ProductionPlanner.Controllers
             return File(fileBytes, contentType);
         }
 
-        // Удаление аватара
         [HttpDelete("avatar")]
         public async Task<IActionResult> DeleteAvatar()
         {
@@ -1331,7 +1288,6 @@ namespace ProductionPlanner.Controllers
             };
         }
 
-        // Инициализация сотрудников и администраторов
         [HttpPost("init-users")]
         public async Task<IActionResult> InitUsers()
         {
@@ -1836,6 +1792,7 @@ namespace ProductionPlanner.Data
 }=== ./Services/SyncService.cs ===
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services;
 
 namespace ProductionPlanner.Services
 {
@@ -1864,23 +1821,9 @@ namespace ProductionPlanner.Services
             {
                 try
                 {
-                    // Пропускаем дочерние строки (у них есть родитель)
-                    if (row.ParentRowNumber.HasValue && row.ParentRowNumber > 0)
-                    {
-                        continue;
-                    }
-                    
-                    // Пропускаем разделённые задачи
-                    if (row.StatusText != null && row.StatusText.StartsWith("Разделена"))
-                    {
-                        continue;
-                    }
-                    
-                    // Пропускаем готовые задачи (не создаём активные)
-                    if (row.StatusText == "Готово")
-                    {
-                        continue;
-                    }
+                    if (row.ParentRowNumber.HasValue && row.ParentRowNumber > 0) continue;
+                    if (row.StatusText != null && row.StatusText.StartsWith("Разделена")) continue;
+                    if (row.StatusText == "Готово") continue;
                     
                     var existingTask = allTasks.FirstOrDefault(t => t.RowNumber == row.Id && !t.IsSplitTask);
                     var filePath = string.IsNullOrEmpty(row.FolderPath) ? row.FileName : $"{row.FolderPath}/{row.FileName}";
@@ -1919,7 +1862,7 @@ namespace ProductionPlanner.Services
                         if (newStatus == JobStatus.Completed && existingTask.Status != JobStatus.Completed)
                         {
                             existingTask.Status = JobStatus.Completed;
-                            existingTask.CompletedAt = DateTime.Now;
+                            existingTask.CompletedAt = AppTime.Now;
                             existingTask.Progress = 1;
                         }
                         else if (newStatus != JobStatus.Completed && existingTask.Status != newStatus)
@@ -1932,7 +1875,6 @@ namespace ProductionPlanner.Services
                 }
                 catch (Exception ex)
                 {
-                    // Логируем ошибку, но продолжаем синхронизацию остальных строк
                     Console.WriteLine($"[SyncService] Ошибка синхронизации строки {row.Id}: {ex.Message}");
                 }
             }
@@ -2375,7 +2317,16 @@ namespace ProductionPlanner.Services
         Task<List<ProductionTask>> GetChildTasksAsync(int parentRowNumber);
     }
 }=== ./Services/AppTime.cs ===
-=== ./Services/TaskSplitService.cs ===
+namespace ProductionPlanner.Services;
+
+public static class AppTime
+{
+    private static DateTime? _mockDateTime = null;
+    
+    public static void SetMock(DateTime? mock) => _mockDateTime = mock;
+    
+    public static DateTime Now => _mockDateTime ?? DateTime.Now;
+}=== ./Services/TaskSplitService.cs ===
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
 using Microsoft.EntityFrameworkCore;

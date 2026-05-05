@@ -1,7 +1,6 @@
 import { TableRow, TableCell, TextField, Select, MenuItem, IconButton, Tooltip, Box } from '@mui/material';
 import { Save, Cancel } from '@mui/icons-material';
 
-// Рабочие часы: 10:00 – 19:00 с шагом 30 минут
 const WORK_TIME_OPTIONS = [];
 for (let h = 10; h <= 19; h++) {
   for (let m of [0, 30]) {
@@ -31,18 +30,33 @@ const combineDateTime = (date, time) => {
 
 export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, taskTypes, employees }) {
   const { date, time } = parseDateTime(task.deadline);
-  
+
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
       <TableCell sx={{ width: 60 }}>✏️</TableCell>
+
+      {/* Задача (путь к папке) */}
+      <TableCell>
+        <TextField
+          size="small"
+          value={task.folderPath || ''}
+          onChange={(e) => onFieldChange(task, 'folderPath', e.target.value)}
+          fullWidth
+          placeholder="Путь к папке"
+        />
+      </TableCell>
+
+      {/* Файл (имя файла) */}
       <TableCell>
         <TextField
           size="small"
           value={task.fileName || ''}
           onChange={(e) => onFieldChange(task, 'fileName', e.target.value)}
           fullWidth
+          placeholder="Имя файла"
         />
       </TableCell>
+
       <TableCell>
         <TextField
           size="small"
@@ -51,6 +65,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
           fullWidth
         />
       </TableCell>
+
       <TableCell sx={{ width: 230 }}>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <TextField
@@ -67,12 +82,11 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
             onChange={(e) => onFieldChange(task, 'deadline', combineDateTime(date, e.target.value))}
             sx={{ width: 85 }}
           >
-            {WORK_TIME_OPTIONS.map(t => (
-              <MenuItem key={t} value={t}>{t}</MenuItem>
-            ))}
+            {WORK_TIME_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
           </Select>
         </Box>
       </TableCell>
+
       <TableCell sx={{ width: 80 }}>
         <TextField
           size="small"
@@ -83,6 +97,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
           sx={{ width: 80 }}
         />
       </TableCell>
+
       <TableCell sx={{ width: 160 }}>
         <Select
           size="small"
@@ -92,13 +107,10 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
           renderValue={(selected) => selected.join(', ')}
           fullWidth
         >
-          {taskTypes.map((type) => (
-            <MenuItem key={type} value={type}>
-              {type}
-            </MenuItem>
-          ))}
+          {taskTypes.map((type) => <MenuItem key={type} value={type}>{type}</MenuItem>)}
         </Select>
       </TableCell>
+
       <TableCell sx={{ width: 120 }}>
         <Select
           size="small"
@@ -106,14 +118,14 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
           onChange={(e) => onFieldChange(task, 'employeeName', e.target.value)}
           fullWidth
         >
-          {employees.map(emp => (
-            <MenuItem key={emp} value={emp}>{emp}</MenuItem>
-          ))}
+          {employees.map(emp => <MenuItem key={emp} value={emp}>{emp}</MenuItem>)}
         </Select>
       </TableCell>
+
       <TableCell sx={{ width: 120 }}>
         <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{task.statusText || 'Назначена'}</span>
       </TableCell>
+
       <TableCell>
         <Box sx={{ display: 'flex', gap: 0.5 }}>
           <Tooltip title="Сохранить">

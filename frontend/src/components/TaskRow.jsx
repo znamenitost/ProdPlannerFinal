@@ -23,20 +23,16 @@ import {
   Comment as CommentIcon
 } from '@mui/icons-material';
 
-const getShortName = (fullPath, isChild = false) => {
-  if (!fullPath) return '';
-  const parts = fullPath.split(/[\/\\]/).filter(p => p !== '');
-  if (parts.length === 0) return '';
-  if (isChild) {
-    return parts[parts.length - 1];
-  }
-  const lastLevels = parts.slice(-2);
-  let result = lastLevels.join('/');
-  if (result.length > 40) {
-    return '...' + result.substring(result.length - 37);
-  }
-  return result;
-};
+function truncate(str, maxLen) {
+  if (!str) return '';
+  return str.length > maxLen ? str.substring(0, maxLen) + '...' : str;
+}
+
+function getLastPathSegment(path) {
+  if (!path) return '';
+  const parts = path.split(/[\/\\]/).filter(p => p !== '');
+  return parts.length > 0 ? parts[parts.length - 1] : '';
+}
 
 const getStatusColor = (status) => {
   if (status === 'Готово') return '#22c55e';
@@ -52,22 +48,22 @@ const getStatusIcon = (status) => {
   return null;
 };
 
-const getUniqueEmployees = (children) => {
-  const uniqueEmployees = new Set();
-  children.forEach(child => {
-    if (child.employeeName) {
-      uniqueEmployees.add(child.employeeName);
-    }
-  });
-  return Array.from(uniqueEmployees);
-};
-
 const getParentStatus = (parent) => {
   if (!parent.children || parent.children.length === 0) return "Назначена";
   const allCompleted = parent.children.every(c => c.statusText === 'Готово');
   if (allCompleted) return "Готово";
   const anyStarted = parent.children.some(c => c.statusText === 'Начал' || c.statusText === 'Пауза');
   return anyStarted ? "Начал" : "Назначена";
+};
+
+// Получить список уникальных сотрудников из дочерних задач
+const getUniqueEmployeesFromChildren = (children) => {
+  if (!children || children.length === 0) return '';
+  const employees = new Set();
+  children.forEach(child => {
+    if (child.employeeName) employees.add(child.employeeName);
+  });
+  return Array.from(employees).join('/');
 };
 
 const isOverdue = (deadline, status) => {
@@ -98,11 +94,11 @@ export default function TaskRow({
 }) {
   const overdue = isOverdue(task.deadline, task.statusText);
   const hasChildren = task.children && task.children.length > 0;
-  
+
   let displayStatus = task.statusText;
   let displayStatusIcon = null;
   let displayStatusColor = '#64748b';
-  
+
   if (hasChildren) {
     displayStatus = getParentStatus(task);
     displayStatusIcon = getStatusIcon(displayStatus);
@@ -112,23 +108,22 @@ export default function TaskRow({
     displayStatusColor = getStatusColor(displayStatus);
   }
 
+  // Для родительской задачи с детьми – строка сотрудников
+  const employeeDisplay = hasChildren 
+    ? getUniqueEmployeesFromChildren(task.children) 
+    : task.employeeName;
+
   const isCurrentUserTask = () => {
     if (!currentUser) return false;
-    
-    // Обычная задача (не родительская)
     if (!hasChildren) {
-      // Подсвечиваем только если задача НЕ завершена
       return task.employeeName === currentUser.fullName && task.statusText !== 'Готово';
     }
-    
-    // Родительская задача: проверяем наличие НЕзавершённых дочерних задач текущего сотрудника
     if (hasChildren && task.children?.length) {
       return task.children.some(child => 
         child.employeeName === currentUser.fullName && 
         child.statusText !== 'Готово'
       );
     }
-    
     return false;
   };
   const isMine = isCurrentUserTask();
@@ -152,149 +147,89 @@ export default function TaskRow({
     return { ...style, bgcolor: bgColor };
   };
 
-  // Для дочерних задач показываем только важные колонки
+  const fullFilePath = `${task.folderPath || ''}/${task.fileName || ''}`.replace(/\/\//g, '/');
+  const shortFolderPath = getLastPathSegment(task.folderPath);
+
+  // ------------------------------------------------------------
+  // Дочерняя задача
+  // ------------------------------------------------------------
   if (isChild) {
     return (
       <TableRow sx={getRowStyle()}>
-        {/* Пустая ячейка для отступа (вместо иконок) */}
-        <TableCell sx={{ width: 60 }} />
-        
-        {/* Название задачи (с отступом) */}
-        <TableCell>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 4 }}>
-            <Tooltip title={task.fileName} arrow>
-              <Typography variant="body2">{task.fileName}</Typography>
-            </Tooltip>
-          </Box>
+        <TableCell sx={{ width: '3%' }} />
+        <TableCell sx={{ width: '15%' }}>
+          <Tooltip title={task.folderPath || ''} arrow>
+            <Typography variant="body2" sx={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {truncate(shortFolderPath, 40)}
+            </Typography>
+          </Tooltip>
         </TableCell>
-        
-        {/* Файл – скрыт для дочерних */}
-        <TableCell sx={{ display: 'none' }} />
-        
-        {/* Комментарий */}
-        <TableCell>
+        <TableCell sx={{ width: '10%' }}>
+          <Tooltip title={task.fileName || ''} arrow>
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#4b5563', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {truncate(task.fileName || '', 40)}
+            </Typography>
+          </Tooltip>
+        </TableCell>
+        <TableCell sx={{ width: '20%' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Tooltip 
-              title={task.comment || 'Нет комментария'} 
-              arrow 
-              placement="top"
-              slotProps={{
-                tooltip: {
-                  sx: {
-                    bgcolor: '#1e293b',
-                    fontSize: '12px',
-                    padding: '8px 15px',
-                    maxWidth: '400px',
-                    borderRadius: 2,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                  }
-                }
-              }}
+            <Tooltip title={task.comment || 'Нет комментария'} arrow placement="top"
+              slotProps={{ tooltip: { sx: { bgcolor: '#1e293b', fontSize: '12px', padding: '8px 15px', maxWidth: '400px', borderRadius: 2 } } }}
             >
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  color: 'text.secondary', 
-                  fontSize: '0.8rem',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '200px',
-                  cursor: 'default'
-                }}
-              >
-                {task.comment && task.comment.length > 30 
-                  ? `${task.comment.slice(0, 30)}...` 
-                  : (task.comment || '—')}
+              <Typography variant="body2" sx={{
+                color: 'text.secondary',
+                fontSize: '0.8rem',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                wordBreak: 'break-word',
+                maxWidth: '100%',
+                cursor: 'default'
+              }}>
+                {truncate(task.comment || '—', 25)}
               </Typography>
             </Tooltip>
-            <IconButton size="small" onClick={() => onOpenComment(task)} sx={{ p: 0.5 }}>
+            <IconButton size="small" onClick={() => onOpenComment(task)} sx={{ p: 0.5, flexShrink: 0 }}>
               <CommentIcon fontSize="small" sx={{ fontSize: 14, color: '#7c9ebf' }} />
             </IconButton>
           </Box>
         </TableCell>
-        
-        {/* Дедлайн – скрыт для дочерних */}
-        <TableCell sx={{ display: 'none' }} />
-        
-        {/* Часы */}
-        <TableCell align="center">
-          <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+        <TableCell sx={{ width: '10%', display: 'none' }} />
+        <TableCell align="center" sx={{ width: '6%' }}>
+          <Typography variant="body2" sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
             {task.estimateHours.toFixed(1)} ч
           </Typography>
         </TableCell>
-        
-        {/* Тип работы */}
-        <TableCell>
+        <TableCell sx={{ width: '8%' }}>
           <Tooltip title={task.type} arrow>
-            <Chip 
-              label={task.type && task.type.length > 20 ? task.type.substring(0, 20) + '...' : task.type} 
-              size="small"
-              variant="outlined"
-              sx={{ fontSize: '0.7rem', maxWidth: '150px' }}
-            />
+            <Chip label={truncate(task.type, 20)} size="small" variant="outlined" sx={{ fontSize: '0.7rem', maxWidth: '100%' }} />
           </Tooltip>
         </TableCell>
-        
-        {/* Сотрудник */}
-        <TableCell>
-          <Chip 
-            icon={<Person sx={{ fontSize: 14 }} />}
-            label={task.employeeName} 
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: '0.7rem' }}
-          />
+        <TableCell sx={{ width: '8%' }}>
+          <Chip icon={<Person sx={{ fontSize: 14 }} />} label={employeeDisplay} size="small" variant="outlined" sx={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
         </TableCell>
-        
-        {/* Статус */}
-        <TableCell>
-          <Chip 
-            icon={displayStatusIcon}
-            label={task.statusText || "Назначена"} 
-            size="small"
-            sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem' }}
-          />
+        <TableCell sx={{ width: '8%' }}>
+          <Chip icon={displayStatusIcon} label={task.statusText || "Назначена"} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
         </TableCell>
-        
-        {/* Кнопки действий */}
-        <TableCell>
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
+        <TableCell sx={{ width: canChangeStatus ? '12%' : '10%' }}>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
             {canChangeStatus && (
               <>
                 {task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && (
-                  <Tooltip title="Начать">
-                    <IconButton size="small" onClick={() => onStart(task)} sx={{ color: '#22c55e' }}>
-                      <PlayArrow fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  <Tooltip title="Начать"><IconButton size="small" onClick={() => onStart(task)} sx={{ color: '#22c55e' }}><PlayArrow fontSize="small" /></IconButton></Tooltip>
                 )}
                 {task.statusText === 'Начал' && (
                   <>
-                    <Tooltip title="Пауза">
-                      <IconButton size="small" onClick={() => onPause(task)} sx={{ color: '#f59e0b' }}>
-                        <Pause fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Завершить">
-                      <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
-                        <CheckCircle fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    <Tooltip title="Пауза"><IconButton size="small" onClick={() => onPause(task)} sx={{ color: '#f59e0b' }}><Pause fontSize="small" /></IconButton></Tooltip>
+                    <Tooltip title="Завершить"><IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}><CheckCircle fontSize="small" /></IconButton></Tooltip>
                   </>
                 )}
                 {task.statusText === 'Пауза' && (
                   <>
-                    <Tooltip title="Продолжить">
-                      <IconButton size="small" onClick={() => onResume(task)} sx={{ color: '#22c55e' }}>
-                        <PlayArrow fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Завершить">
-                      <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
-                        <CheckCircle fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    <Tooltip title="Продолжить"><IconButton size="small" onClick={() => onResume(task)} sx={{ color: '#22c55e' }}><PlayArrow fontSize="small" /></IconButton></Tooltip>
+                    <Tooltip title="Завершить"><IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}><CheckCircle fontSize="small" /></IconButton></Tooltip>
                   </>
                 )}
               </>
@@ -305,21 +240,22 @@ export default function TaskRow({
     );
   }
 
-  // Обычная (родительская) задача – полное отображение
+  // ------------------------------------------------------------
+  // Родительская задача
+  // ------------------------------------------------------------
   return (
     <Fragment>
       <TableRow sx={getRowStyle()}>
-        <TableCell>
-          <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5 }}>
+        <TableCell sx={{ width: '3%' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
             {hasChildren && (
               <IconButton size="small" onClick={() => onToggleExpand(task.id)}>
                 {isExpanded ? <ExpandMore fontSize="small" /> : <ChevronRight fontSize="small" />}
               </IconButton>
             )}
             {!hasChildren && !isChild && <Box sx={{ width: 28 }} />}
-            
             {!isChild && (
-              <Tooltip title={`Открыть файл: ${task.folderPath}/${task.fileName}`} arrow>
+              <Tooltip title={`Открыть файл: ${fullFilePath}`} arrow>
                 <IconButton size="small" onClick={() => onOpenFile(task)} sx={{ color: '#7c9ebf' }}>
                   <FolderOpen fontSize="small" />
                 </IconButton>
@@ -327,141 +263,95 @@ export default function TaskRow({
             )}
           </Box>
         </TableCell>
-        
-        <TableCell>
-          <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-            <Tooltip title={task.fileName} arrow>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                {getShortName(task.fileName, false)}
-              </Typography>
-            </Tooltip>
-            {hasChildren && (
-              <Chip 
-                size="small" 
-                label={`Разделена на ${task.children.length}`}
-                icon={<CallSplit sx={{ fontSize: 12 }} />}
-                sx={{ height: 20, fontSize: '0.7rem', bgcolor: '#e0e7ff' }}
-              />
-            )}
-          </Box>
-        </TableCell>
-        
-        <TableCell>
-          <Tooltip title={task.fileName} arrow>
-            <Typography variant="body2" sx={{ fontSize: '0.8rem', wordBreak: 'break-all' }}>
-              {task.fileName}
+
+        <TableCell sx={{ width: '15%' }}>
+          <Tooltip title={task.folderPath || ''} arrow>
+            <Typography variant="body2" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {truncate(shortFolderPath, 50)}
             </Typography>
           </Tooltip>
         </TableCell>
-        
-        <TableCell>
-          <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5 }}>
-            <Tooltip 
-              title={task.comment || 'Нет комментария'} 
-              arrow 
-              placement="top"
-              slotProps={{
-                tooltip: {
-                  sx: {
-                    bgcolor: '#1e293b',
-                    fontSize: '12px',
-                    padding: '8px 15px',
-                    maxWidth: '400px',
-                    borderRadius: 2,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                  }
-                }
-              }}
+
+        <TableCell sx={{ width: '10%' }}>
+          <Tooltip title={task.fileName || ''} arrow>
+            <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {truncate(task.fileName || '', 50)}
+            </Typography>
+          </Tooltip>
+        </TableCell>
+
+        <TableCell sx={{ width: '20%' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Tooltip title={task.comment || 'Нет комментария'} arrow placement="top"
+              slotProps={{ tooltip: { sx: { bgcolor: '#1e293b', fontSize: '12px', padding: '8px 15px', maxWidth: '400px', borderRadius: 2 } } }}
             >
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  color: 'text.secondary', 
-                  fontSize: '0.8rem',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  maxWidth: '250px',
-                  cursor: 'default'
-                }}
-              >
-                {task.comment && task.comment.length > 25 
-                  ? `${task.comment.slice(0, 25)}...` 
-                  : (task.comment || '—')}
+              <Typography variant="body2" sx={{
+                color: 'text.secondary',
+                fontSize: '0.8rem',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                wordBreak: 'break-word',
+                maxWidth: '100%',
+                cursor: 'default'
+              }}>
+                {truncate(task.comment || '—', 25)}
               </Typography>
             </Tooltip>
-            <IconButton size="small" onClick={() => onOpenComment(task)} sx={{ p: 0.5 }}>
+            <IconButton size="small" onClick={() => onOpenComment(task)} sx={{ p: 0.5, flexShrink: 0 }}>
               <CommentIcon fontSize="small" sx={{ fontSize: 14, color: '#7c9ebf' }} />
             </IconButton>
           </Box>
         </TableCell>
-        
-        <TableCell>
+
+        <TableCell sx={{ width: '10%' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <Typography variant="body2" sx={{ color: overdue ? '#dc2626' : 'inherit', fontSize: '0.75rem' }}>
+            <Typography variant="body2" sx={{ color: overdue ? '#dc2626' : 'inherit', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
               {new Date(task.deadline).toLocaleDateString()}
             </Typography>
-            <Typography variant="caption" sx={{ color: overdue ? '#dc2626' : 'text.secondary', fontSize: '0.7rem' }}>
+            <Typography variant="caption" sx={{ color: overdue ? '#dc2626' : 'text.secondary', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
               {new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Typography>
           </Box>
         </TableCell>
-        
-        <TableCell align="center">
-          <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+
+        <TableCell align="center" sx={{ width: '6%' }}>
+          <Typography variant="body2" sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
             {task.estimateHours.toFixed(1)} ч
           </Typography>
         </TableCell>
-        
-        <TableCell>
+
+        <TableCell sx={{ width: '8%' }}>
           <Tooltip title={task.type} arrow>
-            <Chip 
-              label={task.type && task.type.length > 20 ? task.type.substring(0, 20) + '...' : task.type} 
-              size="small"
-              variant="outlined"
-              sx={{ fontSize: '0.7rem', maxWidth: '150px' }}
-            />
+            <Chip label={truncate(task.type, 20)} size="small" variant="outlined" sx={{ fontSize: '0.7rem', maxWidth: '100%' }} />
           </Tooltip>
         </TableCell>
-        
-        <TableCell>
-          <Chip 
-            icon={<Person sx={{ fontSize: 14 }} />}
-            label={task.employeeName} 
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: '0.7rem' }}
-          />
+
+        <TableCell sx={{ width: '8%' }}>
+          <Chip icon={<Person sx={{ fontSize: 14 }} />} label={employeeDisplay} size="small" variant="outlined" sx={{ fontSize: '0.7rem', whiteSpace: 'nowrap', maxWidth: '100%' }} />
         </TableCell>
-        
-        <TableCell>
+
+        <TableCell sx={{ width: '8%' }}>
           {hasChildren ? (
-            <Chip 
-              icon={displayStatusIcon}
-              label={displayStatus} 
-              size="small"
-              sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem' }}
-            />
+            <Chip icon={displayStatusIcon} label={displayStatus} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
           ) : (
-            <Chip 
-              icon={displayStatusIcon}
-              label={task.statusText || "Назначена"} 
-              size="small"
-              sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem' }}
-            />
+            <Chip icon={displayStatusIcon} label={task.statusText || "Назначена"} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
           )}
         </TableCell>
-        
-        <TableCell>
-          <Box sx={{ display: 'flex', flexDirection: 'row', gap: 0.5 }}>
-            {canSplit && !hasChildren && !isChild && task.statusText !== 'Готово' && (
+
+        <TableCell sx={{ width: (canEdit || canDelete || canSplit) ? '12%' : '10%' }}>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
+            {/* Кнопка разделения только для задач без детей */}
+            {canSplit && !hasChildren && task.statusText !== 'Готово' && (
               <Tooltip title="Разделить задачу">
                 <IconButton size="small" onClick={() => onSplit(task)} sx={{ color: '#8b5cf6' }}>
                   <CallSplit fontSize="small" />
                 </IconButton>
               </Tooltip>
             )}
-
+            {/* Кнопка редактирования */}
             {canEdit && (
               <Tooltip title="Редактировать">
                 <IconButton size="small" onClick={() => onEdit(task)}>
@@ -469,7 +359,7 @@ export default function TaskRow({
                 </IconButton>
               </Tooltip>
             )}
-
+            {/* Кнопка удаления */}
             {canDelete && (
               <Tooltip title="Удалить">
                 <IconButton size="small" color="error" onClick={() => onDelete(task.id)}>
@@ -477,10 +367,30 @@ export default function TaskRow({
                 </IconButton>
               </Tooltip>
             )}
+            {/* Кнопки статуса только для задач без детей */}
+            {canChangeStatus && !hasChildren && (
+              <>
+                {task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && (
+                  <Tooltip title="Начать"><IconButton size="small" onClick={() => onStart(task)} sx={{ color: '#22c55e' }}><PlayArrow fontSize="small" /></IconButton></Tooltip>
+                )}
+                {task.statusText === 'Начал' && (
+                  <>
+                    <Tooltip title="Пауза"><IconButton size="small" onClick={() => onPause(task)} sx={{ color: '#f59e0b' }}><Pause fontSize="small" /></IconButton></Tooltip>
+                    <Tooltip title="Завершить"><IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}><CheckCircle fontSize="small" /></IconButton></Tooltip>
+                  </>
+                )}
+                {task.statusText === 'Пауза' && (
+                  <>
+                    <Tooltip title="Продолжить"><IconButton size="small" onClick={() => onResume(task)} sx={{ color: '#22c55e' }}><PlayArrow fontSize="small" /></IconButton></Tooltip>
+                    <Tooltip title="Завершить"><IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}><CheckCircle fontSize="small" /></IconButton></Tooltip>
+                  </>
+                )}
+              </>
+            )}
           </Box>
         </TableCell>
       </TableRow>
-      
+
       {hasChildren && isExpanded && (
         <TableRow>
           <TableCell colSpan={10} sx={{ p: 0 }}>
@@ -488,7 +398,7 @@ export default function TaskRow({
               <table style={{ width: '100%', paddingLeft: '48px' }}>
                 <tbody>
                   {task.children.map(child => (
-                    <TaskRow 
+                    <TaskRow
                       key={child.id}
                       task={child}
                       isChild={true}

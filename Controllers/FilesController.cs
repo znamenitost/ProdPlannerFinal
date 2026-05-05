@@ -1,6 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 
 namespace ProductionPlanner.Controllers
 {
@@ -8,65 +6,32 @@ namespace ProductionPlanner.Controllers
     [Route("api/files")]
     public class FilesController : ControllerBase
     {
+        // Имя или IP Windows ПК с файлами (задай своё)
+        private const string SmbHost = "MINIMARKER";
+        private const string SmbBase = $"smb://{SmbHost}/Клиенты";
+
         [HttpPost("open")]
         public IActionResult OpenFile([FromBody] OpenFileRequest request)
         {
             if (string.IsNullOrEmpty(request.FilePath))
                 return BadRequest(new { message = "Путь к файлу не указан" });
 
-            try
+            var rawPath = request.FilePath.Replace('\\', '/');
+
+            // Если уже smb:// — возвращаем как есть
+            if (rawPath.StartsWith("smb://", StringComparison.OrdinalIgnoreCase))
+                return Ok(new { downloadUrl = rawPath });
+
+            // Ищем "Клиенты"
+            var idx = rawPath.LastIndexOf("Клиенты", StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
             {
-                // Преобразуем SMB путь обратно в локальный, если это тот же компьютер
-                var localPath = ConvertToLocalPath(request.FilePath);
-                
-                if (System.IO.File.Exists(localPath))
-                {
-                    if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                    {
-                        Process.Start("open", $"\"{localPath}\"");
-                        return Ok(new { message = "Файл открыт" });
-                    }
-                    
-                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                    {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = localPath,
-                            UseShellExecute = true
-                        });
-                        return Ok(new { message = "Файл открыт" });
-                    }
-                }
-                
-                // Если локального файла нет, пробуем открыть SMB путь
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                {
-                    Process.Start("open", $"\"{request.FilePath}\"");
-                    return Ok(new { message = "Файл открыт через SMB" });
-                }
-                
-                return NotFound(new { message = $"Файл не найден: {localPath}" });
+                var relativePath = rawPath.Substring(idx + "Клиенты".Length).TrimStart('/');
+                var smbUrl = $"{SmbBase}/{relativePath}";
+                return Ok(new { downloadUrl = smbUrl });
             }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = $"Ошибка открытия: {ex.Message}" });
-            }
-        }
-        
-        private string ConvertToLocalPath(string smbPath)
-        {
-            if (string.IsNullOrEmpty(smbPath)) return smbPath;
-            
-            // Преобразуем smb://MacBook-Air-Pavel.local/Yandex.Disk.localized/... обратно в локальный путь
-            if (smbPath.StartsWith("smb://MacBook-Air-Pavel.local/Yandex.Disk.localized"))
-            {
-                return smbPath.Replace(
-                    "smb://MacBook-Air-Pavel.local/Yandex.Disk.localized",
-                    "/Users/user/Yandex.Disk.localized"
-                );
-            }
-            
-            return smbPath;
+
+            return BadRequest(new { message = "Не удалось определить путь к файлу" });
         }
     }
 

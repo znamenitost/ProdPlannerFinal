@@ -85,22 +85,35 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     }
   };
 
+  // ==================== ИСПРАВЛЕННАЯ ФУНКЦИЯ openFile ====================
   const openFile = async (row) => {
-    const fullPath = row.folderPath ? `${row.folderPath}/${row.fileName}` : row.fileName;
-    if (!fullPath) return alert('Путь к файлу не указан');
+    const relativePath = `${row.folderPath || ''}/${row.fileName || ''}`.replace(/\\/g, '/').replace(/\/\//g, '/');
+    if (!relativePath || relativePath === '/') {
+      alert('Путь к файлу не указан');
+      return;
+    }
     try {
       const response = await fetch('/api/files/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath: fullPath })
+        body: JSON.stringify({ filePath: relativePath })
       });
       const data = await response.json();
-      if (!response.ok) alert(data.message || 'Ошибка открытия файла');
+      if (!response.ok) {
+        alert(data.message || 'Ошибка открытия файла');
+        return;
+      }
+      if (data.downloadUrl) {
+        window.open(data.downloadUrl, '_blank');
+      } else {
+        alert('Не удалось получить ссылку на файл');
+      }
     } catch (err) {
       console.error('Ошибка открытия файла:', err);
       alert('Не удалось открыть файл');
     }
   };
+  // =======================================================================
 
   const handleStartTask = async (row) => {
     try {
@@ -303,10 +316,7 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                   onPause={handlePauseTask}
                   onResume={handleResumeTask}
                   onComplete={handleCompleteTask}
-                  onEdit={() => {
-                    console.log('Edit clicked for task:', task.id);
-                    setEditingId(task.id);
-                  }}
+                  onEdit={() => setEditingId(task.id)}
                   onDelete={handleDeleteRow}
                   onSplit={handleSplitTask}
                   onOpenComment={handleOpenComment}
