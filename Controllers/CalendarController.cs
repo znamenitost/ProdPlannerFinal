@@ -41,8 +41,7 @@ public class CalendarController : ControllerBase
             if (string.IsNullOrEmpty(employee))
                 return BadRequest(new { error = "Employee name is required" });
 
-            var currentTime = _timeService.Now; // мок-время или реальное
-
+            var currentTime = _timeService.Now;
             DateTime weekStart;
             if (!string.IsNullOrEmpty(startDate) && DateTime.TryParseExact(startDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var parsed))
                 weekStart = GetMondayOfWeek(parsed);
@@ -52,6 +51,7 @@ public class CalendarController : ControllerBase
             var weekEnd = weekStart.AddDays(7);
             var allTasks = await _repo.GetAllTasksAsync();
 
+            // Задачи для календаря: все незавершённые, не являющиеся родительскими в split-задачах
             var tasksForCalendar = new List<ProductionTask>();
             foreach (var task in allTasks.Where(t => t.EmployeeName == employee && t.Status != JobStatus.Completed))
             {
@@ -59,6 +59,7 @@ public class CalendarController : ControllerBase
                 tasksForCalendar.Add(task);
             }
 
+            // Получаем расписание на основе текущего времени (мок или реальное)
             var slots = _scheduler.GetSchedule(tasksForCalendar, currentTime);
             var employeeTasks = allTasks.Where(t => t.EmployeeName == employee).ToList();
 
@@ -66,13 +67,38 @@ public class CalendarController : ControllerBase
             for (var day = weekStart; day < weekEnd; day = day.AddDays(1))
             {
                 // ===== ПЛАНОВЫЕ БЛОКИ (taskBlocks) =====
-                // (Ваш существующий код для taskBlocks, я не меняю, оставляю как есть)
-                // Здесь должен быть ваш код, который формирует taskBlocks.
-                // Для краткости я его не копирую, вы вставите свой.
                 var taskBlocks = new List<object>();
-                // -----------------------------------------------------------------
+                var dayStart = day.Date.AddHours(10);
+                var dayEnd = day.Date.AddHours(19);
+                var totalWorkHours = (dayEnd - dayStart).TotalHours; // 9 часов
 
-                // ===== РЕАЛЬНЫЙ ТАЙМЛАЙН =====
+                // Слоты, попадающие в этот день
+                var daySlots = slots.Where(s => s.PlannedStart.Date == day.Date).ToList();
+                foreach (var slot in daySlots)
+                {
+                    var start = slot.PlannedStart;
+                    var end = slot.PlannedEnd;
+
+                    // Обрезаем по границам рабочего дня (если задача началась раньше или закончится позже)
+                    if (start < dayStart) start = dayStart;
+                    if (end > dayEnd) end = dayEnd;
+                    if (start >= end) continue;
+
+                    var leftPercent = (start - dayStart).TotalHours / totalWorkHours * 100;
+                    var widthPercent = (end - start).TotalHours / totalWorkHours * 100;
+
+                    taskBlocks.Add(new
+                    {
+                        leftPercent = Math.Round(leftPercent, 2),
+                        widthPercent = Math.Round(widthPercent, 2),
+                        hours = Math.Round((end - start).TotalHours, 1),
+                        fullTitle = slot.Task.FileName ?? slot.Task.File,
+                        taskId = slot.Task.Id,
+                        title = slot.Task.FileName ?? "Без названия"
+                    });
+                }
+
+                // ===== РЕАЛЬНЫЙ ТАЙМЛАЙН (оставляем как есть) =====
                 var timeline = new List<object>();
                 var dayDate = day.Date;
                 var currentDate = currentTime.Date;
@@ -118,20 +144,15 @@ public class CalendarController : ControllerBase
                         events = events.OrderBy(e => e.time).ThenBy(e => e.type == 1 ? 0 : 1).ToList();
 
                         // Активные интервалы в порядке их начала (для назначения слоёв)
-                        var activeIndices = new List<int>(); // список индексов активных интервалов
+                        var activeIndices = new List<int>();
                         var layerForIndex = new int[intervals.Count];
-                        var activeIntervals = new List<int>(); // для отслеживания свободных слоёв
-
-                        // Проходим по событиям и назначаем слои
                         for (int i = 0; i < events.Count; i++)
                         {
                             var ev = events[i];
                             if (ev.type == 1) // начало
                             {
-                                // Находим минимальный свободный слой (не занятый в данный момент)
                                 int layer = 0;
-                                while (activeIndices.Contains(layer))
-                                    layer++;
+                                while (activeIndices.Contains(layer)) layer++;
                                 layerForIndex[ev.index] = layer;
                                 activeIndices.Add(layer);
                             }
@@ -142,7 +163,7 @@ public class CalendarController : ControllerBase
                             }
                         }
 
-                        // Для каждого интервала вычисляем максимальную глубину (maxDepth) за время его существования
+                        // Вычисляем максимальную глубину для каждого интервала
                         var maxDepthForIndex = new int[intervals.Count];
                         for (int i = 0; i < intervals.Count; i++)
                         {

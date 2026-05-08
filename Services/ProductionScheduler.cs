@@ -13,18 +13,17 @@ namespace ProductionPlanner.Services
 
         public List<ScheduledSlot> GetSchedule(List<ProductionTask> activeTasks, DateTime now)
         {
-            // Все активные задачи (в работе или назначенные) сортируем по дедлайну от ближайшего к дальнему
             var tasks = activeTasks
-                .Where(t => t.Status == JobStatus.Assigned || t.Status == JobStatus.InProgress)
-                .OrderBy(t => t.Deadline)
-                .ToList();
+            .Where(t => t.Status == JobStatus.Assigned || t.Status == JobStatus.InProgress || t.Status == JobStatus.Paused)
+            .OrderBy(t => t.Deadline)
+            .ToList();
 
             var slots = new List<ScheduledSlot>();
             var currentStart = _workHours.GetNextWorkStart(now);
 
             foreach (var task in tasks)
             {
-                // Пропускаем lunch
+                // Пропускаем обед
                 while (_workHours.IsLunchTime(currentStart))
                 {
                     currentStart = currentStart.AddMinutes(1);
@@ -33,6 +32,7 @@ namespace ProductionPlanner.Services
                 var remaining = task.EstimateHours * (1 - task.Progress);
                 if (remaining <= 0.01) continue;
 
+                // Планируем, даже если дедлайн уже прошёл
                 var start = currentStart;
                 var end = _workHours.AddWorkHours(start, remaining);
                 slots.Add(new ScheduledSlot { Task = task, PlannedStart = start, PlannedEnd = end });
@@ -86,7 +86,6 @@ namespace ProductionPlanner.Services
                     risks.Add(new DeadlineRisk
                     {
                         TaskId = task.Id,
-                        // Заменяем Title на FileName
                         TaskTitle = task.FileName.Length > 50 ? task.FileName.Substring(0, 50) + "..." : task.FileName,
                         Deadline = deadline,
                         RequiredHours = hoursNeeded,

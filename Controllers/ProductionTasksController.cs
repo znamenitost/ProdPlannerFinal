@@ -139,7 +139,6 @@ public class ProductionTasksController : ControllerBase
             task.ParentRowNumber = request.ParentRowNumber;
             task.UpdatedAt = _timeService.Now;
 
-            // Если это родительская разделённая задача, обновляем дедлайн у всех дочерних
             if (task.IsSplitTask && task.ParentRowNumber == null)
             {
                 var childTasks = await _repo.GetChildTasksAsync(task.Id);
@@ -273,8 +272,8 @@ public class ProductionTasksController : ControllerBase
             if (task == null)
                 return NotFound(new { error = $"Задача с id {id} не найдена" });
 
-            if (task.Status != JobStatus.Assigned && task.Status != JobStatus.Paused)
-                return BadRequest(new { error = $"Задача уже в статусе {task.Status}" });
+            if (task.Status != JobStatus.Assigned)
+                return BadRequest(new { error = $"Задача уже в статусе {task.Status}. Используйте /resume для паузы." });
 
             await _lifecycle.StartTaskAsync(id, _timeService.Now);
             return Ok(new { message = "Задача запущена" });
@@ -282,6 +281,50 @@ public class ProductionTasksController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка в Start для задачи {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("{id}/pause")]
+    public async Task<IActionResult> Pause(int id)
+    {
+        try
+        {
+            var task = await _repo.GetTaskByIdAsync(id);
+            if (task == null)
+                return NotFound(new { error = $"Задача с id {id} не найдена" });
+
+            if (task.Status != JobStatus.InProgress)
+                return BadRequest(new { error = $"Невозможно поставить на паузу задачу в статусе {task.Status}" });
+
+            await _lifecycle.PauseTaskAsync(id, _timeService.Now);
+            return Ok(new { message = "Задача приостановлена" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в Pause для задачи {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("{id}/resume")]
+    public async Task<IActionResult> Resume(int id)
+    {
+        try
+        {
+            var task = await _repo.GetTaskByIdAsync(id);
+            if (task == null)
+                return NotFound(new { error = $"Задача с id {id} не найдена" });
+
+            if (task.Status != JobStatus.Paused)
+                return BadRequest(new { error = $"Невозможно возобновить задачу в статусе {task.Status}" });
+
+            await _lifecycle.ResumeTaskAsync(id, _timeService.Now);
+            return Ok(new { message = "Задача возобновлена" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в Resume для задачи {Id}", id);
             return StatusCode(500, new { error = ex.Message });
         }
     }
@@ -335,28 +378,7 @@ public class ProductionTasksController : ControllerBase
         }
     }
 
-    [HttpPost("shift")]
-    public async Task<IActionResult> ShiftTasks([FromQuery] string employee)
-    {
-        try
-        {
-            var tasks = await _repo.GetActiveTasksAsync(employee);
-            var tomorrow = _timeService.Now.Date.AddDays(1);
-            var nextWorkStart = _workHours.GetNextWorkStart(tomorrow);
-            foreach (var task in tasks.Where(t => t.Status == JobStatus.Assigned))
-            {
-                foreach (var interval in task.WorkIntervals.ToList())
-                    await _repo.DeleteWorkIntervalAsync(interval);
-                await _repo.UpdateTaskAsync(task);
-            }
-            return Ok();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка в ShiftTasks для сотрудника {Employee}", employee);
-            return StatusCode(500, new { error = ex.Message });
-        }
-    }
+    
 
     [HttpGet("deadline-risks")]
     public async Task<IActionResult> GetDeadlineRisks([FromQuery] string employee)

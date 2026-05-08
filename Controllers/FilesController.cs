@@ -8,8 +8,8 @@ namespace ProductionPlanner.Controllers
     [Route("api/files")]
     public class FilesController : ControllerBase
     {
-        private const string SmbHost = "MINIMARKER";
-        private const string ShareName = "Клиенты";
+        private const string SmbHost = "MINIMARKER";      // Имя или IP Windows-ПК в сети
+        private const string ShareName = "Клиенты";       // Имя расшаренной папки
 
         [HttpPost("open")]
         public IActionResult OpenFile([FromBody] OpenFileRequest request)
@@ -23,11 +23,12 @@ namespace ProductionPlanner.Controllers
             if (clientIdx < 0)
                 return BadRequest(new { message = "Не удалось определить путь к файлу" });
 
+            // Относительный путь после "Клиенты"
             var relativePath = rawPath.Substring(clientIdx + ShareName.Length).TrimStart('/');
-            
             var parts = relativePath.Split('/');
             var cleanFileName = parts[parts.Length - 1].Split('[')[0].Trim();
             
+            // Добавляем расширение, если его нет
             if (!cleanFileName.EndsWith(".cdr") && 
                 !cleanFileName.EndsWith(".ai") && 
                 !cleanFileName.EndsWith(".pdf") &&
@@ -39,29 +40,37 @@ namespace ProductionPlanner.Controllers
             parts[parts.Length - 1] = cleanFileName;
             var correctedPath = string.Join("/", parts);
             
+            // macOS формат: smb://MINIMARKER/Клиенты/...
             var smbUrl = $"smb://{SmbHost}/{ShareName}/{correctedPath}";
+            
+            // Windows формат: \\MINIMARKER\Клиенты\...
+            var uncPath = $@"\\{SmbHost}\{ShareName}\{correctedPath.Replace("/", "\\")}";
             
             try
             {
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                 {
-                    // Открываем SMB-ссылку через open (macOS откроет Finder или приложение по умолчанию)
+                    // macOS: открываем через open
                     Process.Start("open", $"\"{smbUrl}\"");
                 }
                 else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = smbUrl,
-                        UseShellExecute = true
-                    });
+                    // Windows: используем explorer с UNC-путём
+                    // Экранируем пробелы и спецсимволы
+                    var args = $"/c start \"\" \"{uncPath}\"";
+                    Process.Start("cmd.exe", args);
+                }
+                else
+                {
+                    // Linux: просто возвращаем ссылку
+                    return Ok(new { downloadUrl = smbUrl });
                 }
                 
-                return Ok(new { message = "Файл открывается", downloadUrl = smbUrl });
+                return Ok(new { message = "Файл открывается", downloadUrl = smbUrl, uncPath });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = $"Ошибка: {ex.Message}", downloadUrl = smbUrl });
+                return StatusCode(500, new { message = $"Ошибка: {ex.Message}", downloadUrl = smbUrl, uncPath });
             }
         }
     }

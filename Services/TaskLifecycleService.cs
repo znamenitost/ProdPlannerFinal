@@ -28,13 +28,13 @@ namespace ProductionPlanner.Services
         public async Task StartTaskAsync(int taskId, DateTime now)
         {
             Console.WriteLine($"[DEBUG] StartTaskAsync called with time: {now}");
-            
+
             var task = await _repo.GetTaskByIdAsync(taskId);
             if (task == null)
                 throw new Exception($"Задача {taskId} не найдена");
 
-            if (task.Status != JobStatus.Assigned && task.Status != JobStatus.Paused)
-                throw new Exception($"Невозможно запустить задачу в статусе {task.Status}");
+            if (task.Status != JobStatus.Assigned)
+                throw new Exception($"Невозможно запустить задачу в статусе {task.Status}. Используйте Resume для паузы.");
 
             var startTime = _workHours.GetNextWorkStart(now);
             task.Status = JobStatus.InProgress;
@@ -49,28 +49,20 @@ namespace ProductionPlanner.Services
 
             await _repo.AddWorkIntervalAsync(interval);
             await _repo.UpdateTaskAsync(task);
-            
+
             Console.WriteLine($"[DEBUG] Task {taskId} started, interval start: {startTime}");
         }
 
-        public async Task UpdateProgressAsync(int taskId, double newProgress, DateTime now)
+        public async Task PauseTaskAsync(int taskId, DateTime now)
         {
-            var task = await _repo.GetTaskByIdAsync(taskId);
-            if (task == null || task.Status == JobStatus.Completed) return;
-            if (newProgress > 0.99) newProgress = 0.99;
-            task.Progress = newProgress;
-            task.UpdatedAt = now;
-            if (task.Status == JobStatus.Assigned && newProgress > 0)
-                task.Status = JobStatus.InProgress;
-            await _repo.UpdateTaskAsync(task);
-        }
+            Console.WriteLine($"[DEBUG] PauseTaskAsync called with time: {now}");
 
-        public async Task CompleteTaskAsync(int taskId, DateTime now)
-        {
-            Console.WriteLine($"[DEBUG] CompleteTaskAsync called with time: {now}");
-            
             var task = await _repo.GetTaskByIdAsync(taskId);
-            if (task == null || task.Status == JobStatus.Completed) return;
+            if (task == null)
+                throw new Exception($"Задача {taskId} не найдена");
+
+            if (task.Status != JobStatus.InProgress)
+                throw new Exception($"Невозможно поставить на паузу задачу в статусе {task.Status}");
 
             var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
             if (openInterval != null)
@@ -80,10 +72,94 @@ namespace ProductionPlanner.Services
                 Console.WriteLine($"[DEBUG] Closed interval for task {taskId} at {now}");
             }
 
-            double actual = 0;
-            foreach (var interval in task.WorkIntervals.Where(i => i.EndTime.HasValue))
+            task.Status = JobStatus.Paused;
+            task.UpdatedAt = now;
+            await _repo.UpdateTaskAsync(task);
+        }
+
+        public async Task ResumeTaskAsync(int taskId, DateTime now)
+        {
+            Console.WriteLine($"[DEBUG] ResumeTaskAsync called with time: {now}");
+
+            var task = await _repo.GetTaskByIdAsync(taskId);
+            if (task == null)
+                throw new Exception($"Задача {taskId} не найдена");
+
+            if (task.Status != JobStatus.Paused)
+                throw new Exception($"Невозможно возобновить задачу в статусе {task.Status}");
+
+            var startTime = _workHours.GetNextWorkStart(now);
+            task.Status = JobStatus.InProgress;
+            task.UpdatedAt = now;
+
+            var interval = new WorkInterval
             {
-                actual += (interval.EndTime!.Value - interval.StartTime).TotalHours;
+                ProductionTaskId = task.Id,
+                StartTime = startTime,
+                EndTime = null
+            };
+
+            await _repo.AddWorkIntervalAsync(interval);
+            await _repo.UpdateTaskAsync(task);
+
+            Console.WriteLine($"[DEBUG] Task {taskId} resumed, interval start: {startTime}");
+        }
+
+        public async Task UpdateProgressAsync(int taskId, double newProgress, DateTime now)
+        {
+            var task = await _repo.GetTaskByIdAsync(taskId);
+            if (task == null || task.Status == JobStatus.Completed) return;
+            if (newProgress > 0.99) newProgress = 0.99;
+
+            if (task.Status == JobStatus.Assigned && newProgress > 0)
+            {
+                Console.WriteLine($"[DEBUG] Auto-starting task {taskId} because progress set to {newProgress}");
+                await StartTaskAsync(taskId, now);
+                task = await _repo.GetTaskByIdAsync(taskId);
+                if (task == null) return;
+            }
+
+            task.Progress = newProgress;
+            task.UpdatedAt = now;
+
+            if (task.Status == JobStatus.Assigned && newProgress > 0)
+                task.Status = JobStatus.InProgress;
+
+            await _repo.UpdateTaskAsync(task);
+        }
+
+        public async Task CompleteTaskAsync(int taskId, DateTime now)
+        {
+            Console.WriteLine($"[DEBUG] CompleteTaskAsync called with time: {now}");
+
+            var task = await _repo.GetTaskByIdAsync(taskId);
+            if (task == null || task.Status == JobStatus.Completed) return;
+
+            // Автоматический старт, если задача не была начата
+            if (task.Status == JobStatus.Assigned)
+            {
+                Console.WriteLine($"[DEBUG] Task {taskId} was not started, auto-starting before completion");
+                await StartTaskAsync(taskId, now);
+                task = await _repo.GetTaskByIdAsync(taskId);
+                if (task == null) return;
+            }
+
+            // Закрываем открытый интервал (если есть)
+            var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
+            if (openInterval != null)
+            {
+                openInterval.EndTime = now;
+                await _repo.UpdateWorkIntervalAsync(openInterval);
+                Console.WriteLine($"[DEBUG] Closed interval for task {taskId} at {now}");
+            }
+
+            double actual = 0;
+            foreach (var interval in task.WorkIntervals)
+            {
+                if (interval.EndTime.HasValue)
+                {
+                    actual += (interval.EndTime.Value - interval.StartTime).TotalHours;
+                }
             }
             task.ActualHours = actual;
             task.Status = JobStatus.Completed;

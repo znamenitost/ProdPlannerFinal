@@ -2079,7 +2079,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
   );
 }=== ./frontend/src/components/DayColumn.jsx ===
 import { useState } from 'react';
-import { Paper, Typography, Box, Tooltip, alpha } from '@mui/material';
+import { Paper, Typography, Box, Tooltip } from '@mui/material';
 import { CheckCircle, Warning, Restaurant, PlayArrow, Schedule, Pause, Assignment, DoneAll } from '@mui/icons-material';
 
 const tooltipSx = {
@@ -2108,44 +2108,6 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
 
   const formatTime = (dateTime) => new Date(dateTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
-  // Разбиваем timeline на непересекающиеся слои
-  const getLayeredTimeline = (timelineSegments) => {
-    if (!timelineSegments || timelineSegments.length === 0) return [];
-    
-    // Берём только рабочие интервалы, сортируем по start
-    const workSegments = timelineSegments
-      .filter(s => s.type === 'work')
-      .sort((a, b) => new Date(a.start) - new Date(b.start));
-    
-    if (workSegments.length === 0) return [];
-    
-    // Размещаем в слои
-    const layers = [];
-    for (const segment of workSegments) {
-      let placed = false;
-      for (let i = 0; i < layers.length; i++) {
-        const lastInLayer = layers[i][layers[i].length - 1];
-        if (new Date(segment.start) >= new Date(lastInLayer.end)) {
-          layers[i].push(segment);
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) {
-        layers.push([segment]);
-      }
-    }
-    
-    // Создаём массив объектов со слоем и сегментом
-    const layered = [];
-    for (let i = 0; i < layers.length; i++) {
-      for (const seg of layers[i]) {
-        layered.push({ ...seg, layer: i, totalLayers: layers.length });
-      }
-    }
-    return layered;
-  };
-
   const getTimelineSegments = () => {
     if (!day.timeline || day.timeline.length === 0) return [];
     
@@ -2160,7 +2122,6 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
       const end = new Date(segment.end);
       
       if (segment.type === 'work') {
-        // Разбиваем обедом
         if (start < lunchEnd && end > lunchStart) {
           if (start < lunchStart) {
             const beforeLunchEnd = end < lunchStart ? end : lunchStart;
@@ -2178,7 +2139,6 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
           segments.push({ ...segment, start: start, end: end });
         }
       } else {
-        // idle – пропускаем обед, но добавляем остальное
         const isLunchTime = (start >= lunchStart && start < lunchEnd) ||
                             (end > lunchStart && end <= lunchEnd) ||
                             (start <= lunchStart && end >= lunchEnd);
@@ -2188,16 +2148,11 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
       }
     });
     
-    // Сортируем по start
     return segments.sort((a, b) => new Date(a.start) - new Date(b.start));
   };
 
   const rawTimelineSegments = getTimelineSegments();
-  const layeredSegments = getLayeredTimeline(rawTimelineSegments);
-  
-  // Группируем по слоям для отрисовки
-  const maxLayers = layeredSegments.length > 0 ? Math.max(...layeredSegments.map(l => l.layer)) + 1 : 1;
-  const layerHeight = 36 / maxLayers; // высота одного слоя
+  const workSegments = rawTimelineSegments.filter(s => s.type === 'work');
 
   const taskBlocksMap = new Map();
   allDays?.forEach(d => {
@@ -2313,7 +2268,7 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
         })}
       </Box>
 
-      {/* Таймлайн реального выполнения с многослойным отображением */}
+      {/* Таймлайн реального выполнения с динамической высотой от бэкенда */}
       <Box sx={{ position: 'relative', bgcolor: '#f1f5f9', height: 36, borderRadius: 2, mb: 2, overflow: 'hidden', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
         {isWorkingDay && (
           <Tooltip title="🍽 Обед (14:00–15:00)" arrow placement="top" slotProps={{ tooltip: { sx: tooltipSx } }}>
@@ -2321,11 +2276,13 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
           </Tooltip>
         )}
         
-        {layeredSegments.map((segment, idx) => {
-          const topPos = segment.layer * layerHeight;
-          const segmentHeight = layerHeight - 1; // небольшой отступ между слоями
-          const isFirstInLayer = layeredSegments.filter(s => s.layer === segment.layer && s.start === segment.start).length > 0;
-          
+        {workSegments.map((segment, idx) => {
+          // Используем данные с бэкенда: layer и maxDepth
+          const layer = segment.layer ?? 0;
+          const maxDepth = segment.maxDepth ?? 1;
+          const layerHeight = 36 / maxDepth;
+          const topPos = layer * layerHeight;
+          const segmentHeight = layerHeight - 1;
           return (
             <Tooltip
               key={`work-${idx}`}
@@ -2354,9 +2311,11 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
           );
         })}
         
-        {/* Idle сегменты – показываем в нижней части, если есть свободное место */}
         {rawTimelineSegments.filter(s => s.type === 'idle').map((segment, idx) => {
-          const idleTop = maxLayers * layerHeight - 4;
+          // Показываем idle, если в этом промежутке нет работы
+          const hasWorkOverlap = workSegments.some(ws => ws.start < segment.end && ws.end > segment.start);
+          if (hasWorkOverlap) return null;
+          const idleTop = 36 - 4;
           const idleHeight = 4;
           return (
             <Tooltip
