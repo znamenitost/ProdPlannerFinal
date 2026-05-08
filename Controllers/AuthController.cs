@@ -13,12 +13,18 @@ namespace ProductionPlanner.Controllers
         private readonly SignInManager<User> _signInManager;
         private readonly UserManager<User> _userManager;
         private readonly IWebHostEnvironment _environment;
+        private readonly IAppTimeService _timeService;
 
-        public AuthController(SignInManager<User> signInManager, UserManager<User> userManager, IWebHostEnvironment environment)
+        public AuthController(
+            SignInManager<User> signInManager,
+            UserManager<User> userManager,
+            IWebHostEnvironment environment,
+            IAppTimeService timeService)
         {
             _signInManager = signInManager;
             _userManager = userManager;
             _environment = environment;
+            _timeService = timeService;
         }
 
         [HttpPost("login-employee")]
@@ -182,7 +188,8 @@ namespace ProductionPlanner.Controllers
                 Directory.CreateDirectory(uploadsFolder);
             }
 
-            var fileName = $"{user.Id}_{AppTime.Now.Ticks}{extension}";
+            // Замена AppTime.Now на _timeService.Now
+            var fileName = $"{user.Id}_{_timeService.Now.Ticks}{extension}";
             var filePath = Path.Combine(uploadsFolder, fileName);
             
             if (!string.IsNullOrEmpty(user.AvatarUrl))
@@ -266,6 +273,8 @@ namespace ProductionPlanner.Controllers
             };
         }
 
+        // Метод init-users оставляем на случай ручного вызова, но использование AppTime в нём не было
+        // (там только DateTime.UtcNow, что корректно). Оставляем без изменений.
         [HttpPost("init-users")]
         public async Task<IActionResult> InitUsers()
         {

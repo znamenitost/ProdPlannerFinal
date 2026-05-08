@@ -29,7 +29,8 @@ import {
   Logout, 
   Person,
   CloudUpload,
-  Delete
+  Delete,
+  Schedule
 } from '@mui/icons-material';
 import WeekCalendar from './components/WeekCalendar';
 import ActiveTasksList from './components/ActiveTasksList';
@@ -69,9 +70,18 @@ function App() {
   const [activeTab, setActiveTab] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
   useEffect(() => { checkAuth(); }, []);
+
+  // Обновление времени каждую секунду
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const checkAuth = async () => {
     try {
@@ -175,6 +185,10 @@ function App() {
   const refreshAll = () => {
     loadActiveTasks();
     setRefresh(r => r + 1);
+    setTimeout(() => {
+      loadActiveTasks();
+      setRefresh(r => r + 1);
+    }, 200);
   };
 
   const handleReset = async () => {
@@ -204,6 +218,24 @@ function App() {
   const handleTabChange = (event, newValue) => setActiveTab(newValue);
   const isAdmin = user?.role === 'Admin';
 
+  // Форматирование времени
+  const formatTime = (date) => {
+    return date.toLocaleTimeString('ru-RU', { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit',
+      timeZone: 'Europe/Moscow'
+    });
+  };
+
+  const formatDate = (date) => {
+    return date.toLocaleDateString('ru-RU', { 
+      day: 'numeric', 
+      month: 'long',
+      timeZone: 'Europe/Moscow'
+    });
+  };
+
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Typography>Загрузка...</Typography></Box>;
   if (!user) return <LoginForm onLogin={handleLogin} />;
 
@@ -220,6 +252,20 @@ function App() {
                 <Today color="primary" sx={{ fontSize: 32 }} />
                 <Typography variant="h1" component="h1" sx={{ fontSize: '1.6rem', fontWeight: 600 }}>Mainstream Assistant</Typography>
               </Box>
+              
+              {/* Блок с текущим временем */}
+              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, bgcolor: '#f0f4f8', px: 2, py: 1, borderRadius: 3 }}>
+                <Schedule sx={{ color: '#7c9ebf' }} />
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                    {formatDate(currentTime)}
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+                    {formatTime(currentTime)}
+                  </Typography>
+                </Box>
+              </Box>
+
               <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                 {isAdmin && (
                   <FormControl size="small" sx={{ minWidth: 130 }}>

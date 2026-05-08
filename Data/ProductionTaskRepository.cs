@@ -1,15 +1,18 @@
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services; 
 
 namespace ProductionPlanner.Data
 {
     public class ProductionTaskRepository : IProductionTaskRepository
     {
         private readonly ApplicationDbContext _context;
+        private readonly IAppTimeService _timeService;
 
-        public ProductionTaskRepository(ApplicationDbContext context)
+        public ProductionTaskRepository(ApplicationDbContext context, IAppTimeService timeService)
         {
             _context = context;
+            _timeService = timeService;
         }
 
         public async Task<List<ProductionTask>> GetActiveTasksAsync(string employeeName)
@@ -39,17 +42,20 @@ namespace ProductionPlanner.Data
         {
             return await _context.ProductionTasks
                 .Include(t => t.WorkIntervals)
-                .FirstOrDefaultAsync(t => t.RowNumber == rowNumber);
+                .FirstOrDefaultAsync(t => t.Id == rowNumber);
         }
 
         public async Task AddTaskAsync(ProductionTask task)
         {
+            task.CreatedAt = _timeService.Now;
+            task.UpdatedAt = _timeService.Now;
             await _context.ProductionTasks.AddAsync(task);
             await _context.SaveChangesAsync();
         }
 
         public async Task UpdateTaskAsync(ProductionTask task)
         {
+            task.UpdatedAt = _timeService.Now;
             _context.ProductionTasks.Update(task);
             await _context.SaveChangesAsync();
         }
@@ -115,6 +121,44 @@ namespace ProductionPlanner.Data
             return await _context.ProductionTasks
                 .Include(t => t.WorkIntervals)
                 .ToListAsync();
+        }
+
+        public async Task<List<ProductionTask>> GetRootTasksAsync()
+        {
+            return await _context.ProductionTasks
+                .Include(t => t.WorkIntervals)
+                .Where(t => t.ParentRowNumber == null)
+                .OrderBy(t => t.DisplayOrder)
+                .ToListAsync();
+        }
+
+        public async Task<List<ProductionTask>> GetChildTasksAsync(int parentId)
+        {
+            return await _context.ProductionTasks
+                .Include(t => t.WorkIntervals)
+                .Where(t => t.ParentRowNumber == parentId)
+                .ToListAsync();
+        }
+
+        public async Task ReorderTasksAsync(List<int> orderedIds)
+        {
+            var allTasks = await _context.ProductionTasks.ToListAsync();
+            var order = 0;
+            foreach (var id in orderedIds)
+            {
+                var task = allTasks.FirstOrDefault(t => t.Id == id);
+                if (task != null)
+                {
+                    task.DisplayOrder = order;
+                    order++;
+                }
+            }
+            foreach (var task in allTasks.Where(t => !orderedIds.Contains(t.Id)))
+            {
+                task.DisplayOrder = order;
+                order++;
+            }
+            await _context.SaveChangesAsync();
         }
     }
 }

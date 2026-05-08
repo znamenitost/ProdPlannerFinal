@@ -19,5 +19,8 @@ namespace ProductionPlanner.Data
         Task<EmployeeStat?> GetEmployeeStatAsync(string employeeName);
         Task UpdateEmployeeStatAsync(EmployeeStat stat);
         Task<List<ProductionTask>> GetAllTasksAsync();
+        Task<List<ProductionTask>> GetRootTasksAsync();
+        Task<List<ProductionTask>> GetChildTasksAsync(int parentId);
+        Task ReorderTasksAsync(List<int> orderedIds);
     }
 }

@@ -29,7 +29,11 @@ namespace ProductionPlanner.Services
         {
             DateTime next = from;
             while (!IsWorkingHour(next))
+            {
+                Console.WriteLine($"[WorkHours] {next} - not working hour, incrementing");
                 next = next.AddMinutes(1);
+            }
+            Console.WriteLine($"[WorkHours] Next work start: {next}");
             return next;
         }
 
@@ -72,7 +76,6 @@ namespace ProductionPlanner.Services
             
             while (current < end)
             {
-                // Пропускаем обед целиком
                 if (current.TimeOfDay >= lunchStart && current.TimeOfDay < lunchEnd)
                 {
                     current = current.Date.AddHours(15);

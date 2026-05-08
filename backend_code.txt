@@ -1,24 +1,4 @@
-=== ./Models/TaskRelation.cs ===
-// === ./Models/TaskRelation.cs ===
-using System.ComponentModel.DataAnnotations;
-
-namespace ProductionPlanner.Models
-{
-    public class TaskRelation
-    {
-        [Key]
-        public int Id { get; set; }
-        
-        // ID родительской задачи в таблице
-        public int ParentTableRowId { get; set; }
-        
-        // ID дочерней задачи в таблице
-        public int ChildTableRowId { get; set; }
-        
-        // Тип связи (Split - разделение)
-        public string RelationType { get; set; } = "Split";
-    }
-}=== ./Models/JobStatus.cs ===
+=== ./Models/JobStatus.cs ===
 namespace ProductionPlanner.Models
 {
     public enum JobStatus
@@ -51,30 +31,71 @@ namespace ProductionPlanner.Models
     {
         [Key]
         public int Id { get; set; }
-        public int RowNumber { get; set; }
-        public string EmployeeName { get; set; } = string.Empty;
-        public string Title { get; set; } = string.Empty;
-        public string File { get; set; } = string.Empty;
-        public string Comment { get; set; } = string.Empty;
-        public string Type { get; set; } = string.Empty;
+        
+        public int DisplayOrder { get; set; }
+        
+        private string? _folderPath;
+        public string FolderPath 
+        { 
+            get => _folderPath ?? string.Empty;
+            set => _folderPath = value;
+        }
+        
+        private string? _fileName;
+        public string FileName 
+        { 
+            get => _fileName ?? string.Empty;
+            set => _fileName = value;
+        }
+        
+        private string? _comment;
+        public string Comment 
+        { 
+            get => _comment ?? string.Empty;
+            set => _comment = value;
+        }
+        
         public DateTime Deadline { get; set; }
         public double EstimateHours { get; set; }
+        
+        private string? _type;
+        public string Type 
+        { 
+            get => _type ?? string.Empty;
+            set => _type = value;
+        }
+        
+        private string? _employeeName;
+        public string EmployeeName 
+        { 
+            get => _employeeName ?? string.Empty;
+            set => _employeeName = value;
+        }
+        
         public JobStatus Status { get; set; }
         public double Progress { get; set; }
         public double ActualHours { get; set; }
         public DateTime? CompletedAt { get; set; }
+        
         public List<WorkInterval> WorkIntervals { get; set; } = new();
         
-        // Поля для уведомлений (добавить)
-        public bool Notified { get; set; } = false;
-        public bool OverdueNotified { get; set; } = false;
+        public bool Notified { get; set; }
+        public bool OverdueNotified { get; set; }
         
-        // Новые поля для разделения задач
-        public int? ParentRowNumber { get; set; }  // Если не null, это дочерняя задача
-        public bool IsSplitTask { get; set; } = false;  // Является ли результат разделения
-        
-        // Навигационное свойство для дочерних задач
+        public int? ParentRowNumber { get; set; }
+        public bool IsSplitTask { get; set; }
         public List<TaskSplit> ChildSplits { get; set; } = new();
+        
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        
+        public string FullPath => string.IsNullOrEmpty(FolderPath) ? FileName : $"{FolderPath}/{FileName}";
+        
+        public string File 
+        { 
+            get => FullPath;
+            set { /* для совместимости */ }
+        }
     }
 }=== ./Models/User.cs ===
 // ./Models/User.cs
@@ -100,34 +121,6 @@ namespace ProductionPlanner.Models
         public double TotalSavedHours { get; set; }
         public double TodaySavedHours { get; set; }
         public DateTime LastResetDate { get; set; }
-    }
-}=== ./Models/TableRow.cs ===
-// === ./Models/TableRow.cs ===
-using System.ComponentModel.DataAnnotations;
-
-namespace ProductionPlanner.Models
-{
-    public class TableRow
-    {
-        [Key]
-        public int Id { get; set; }
-        public int DisplayOrder { get; set; }  // Порядок отображения (0 - самая верхняя)
-        public string FolderPath { get; set; } = string.Empty;
-        public string FileName { get; set; } = string.Empty;
-        public string Comment { get; set; } = string.Empty;
-        public string StatusText { get; set; } = string.Empty;
-        public DateTime Deadline { get; set; }
-        public double EstimateHours { get; set; }
-        public string Type { get; set; } = string.Empty;
-        public string EmployeeName { get; set; } = string.Empty;
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
-        
-        // Флаг, что задача была перенесена из Google Sheets
-        public bool IsFromGoogleSheets { get; set; } = false;
-        
-        // НОВОЕ ПОЛЕ: ID родительской задачи (если задача была разделена)
-        public int? ParentRowNumber { get; set; }  // null - это корневая задача
     }
 }=== ./Models/SplitTaskRequest.cs ===
 namespace ProductionPlanner.Models
@@ -211,7 +204,8 @@ namespace ProductionPlanner.Controllers
         public async Task<IActionResult> GetChildTasks(int parentRowNumber)
         {
             var children = await _splitService.GetChildTasksAsync(parentRowNumber);
-            return Ok(children.Select(c => new { c.Id, c.Title, c.EmployeeName, c.Status, c.Progress }));
+            // Заменяем Title на FileName
+            return Ok(children.Select(c => new { c.Id, Title = c.FileName, c.EmployeeName, c.Status, c.Progress }));
         }
 
         [HttpGet("check-completion/{parentRowNumber}")]
@@ -227,118 +221,127 @@ using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
 
-namespace ProductionPlanner.Controllers
+namespace ProductionPlanner.Controllers;
+
+[ApiController]
+[Route("api/debug")]
+public class DebugController : ControllerBase
 {
-    [ApiController]
-    [Route("api/debug")]
-    public class DebugController : ControllerBase
+    private readonly IProductionTaskRepository _repo;
+    private readonly ApplicationDbContext _context;
+    private readonly IAppTimeService _timeService;
+    private readonly ITaskLifecycleService _lifecycle;
+
+    public DebugController(
+        IProductionTaskRepository repo, 
+        ApplicationDbContext context, 
+        IAppTimeService timeService,
+        ITaskLifecycleService lifecycle)
     {
-        private readonly IProductionTaskRepository _repo;
-        private readonly ApplicationDbContext _context;
-
-        public DebugController(IProductionTaskRepository repo, ApplicationDbContext context)
-        {
-            _repo = repo;
-            _context = context;
-        }
-
-        [HttpPost("set-time")]
-        public IActionResult SetTime([FromBody] SetTimeRequest request)
-        {
-            if (DateTime.TryParse(request.MockDateTime, out var mockTime))
-            {
-                AppTime.SetMock(mockTime);
-                return Ok(new { message = $"Time set to {mockTime}" });
-            }
-            return BadRequest(new { message = "Invalid date format" });
-        }
-
-        [HttpPost("reset-time")]
-        public IActionResult ResetTime()
-        {
-            AppTime.SetMock(null);
-            return Ok(new { message = "Time reset to real" });
-        }
-
-        [HttpPost("close-interval/{taskId}")]
-        public async Task<IActionResult> CloseInterval(int taskId)
-        {
-            var task = await _repo.GetTaskByIdAsync(taskId);
-            if (task == null) return NotFound();
-
-            var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
-            if (openInterval != null)
-            {
-                openInterval.EndTime = AppTime.Now;
-                await _repo.UpdateWorkIntervalAsync(openInterval);
-            }
-            return Ok();
-        }
-
-        [HttpPost("create-interval/{taskId}")]
-        public async Task<IActionResult> CreateInterval(int taskId)
-        {
-            var task = await _repo.GetTaskByIdAsync(taskId);
-            if (task == null) return NotFound();
-
-            foreach (var interval in task.WorkIntervals.Where(i => i.EndTime == null))
-            {
-                interval.EndTime = AppTime.Now;
-                await _repo.UpdateWorkIntervalAsync(interval);
-            }
-
-            var newInterval = new WorkInterval
-            {
-                ProductionTaskId = task.Id,
-                StartTime = AppTime.Now,
-                EndTime = null
-            };
-            await _repo.AddWorkIntervalAsync(newInterval);
-            
-            task.Status = JobStatus.InProgress;
-            await _repo.UpdateTaskAsync(task);
-            
-            return Ok();
-        }
-
-        [HttpPost("reset-db")]
-        public async Task<IActionResult> ResetDatabase()
-        {
-            await _repo.DeleteAllWorkIntervalsAsync();
-            await _repo.DeleteAllTasksAsync();
-            
-            var allSplits = _context.TaskSplits.ToList();
-            _context.TaskSplits.RemoveRange(allSplits);
-            
-            var allTableRows = _context.TableRows.ToList();
-            _context.TableRows.RemoveRange(allTableRows);
-            
-            var stats = await _repo.GetEmployeeStatAsync("Дима");
-            if (stats != null)
-            {
-                stats.TotalSavedHours = 0;
-                stats.TodaySavedHours = 0;
-                await _repo.UpdateEmployeeStatAsync(stats);
-            }
-            
-            await _context.SaveChangesAsync();
-            
-            return Ok(new { message = "База данных полностью очищена" });
-        }
-
-        [HttpGet("get-intervals/{taskId}")]
-        public async Task<IActionResult> GetIntervals(int taskId)
-        {
-            var task = await _repo.GetTaskByIdAsync(taskId);
-            if (task == null) return NotFound();
-            return Ok(task.WorkIntervals.Select(i => new { i.Id, i.StartTime, i.EndTime }));
-        }
+        _repo = repo;
+        _context = context;
+        _timeService = timeService;
+        _lifecycle = lifecycle;
     }
 
-    public class SetTimeRequest
+    [HttpPost("set-time")]
+    public IActionResult SetTime([FromBody] SetTimeRequest request)
     {
-        public string MockDateTime { get; set; } = "";
+        if (DateTime.TryParse(request.MockDateTime, out var mockTime))
+        {
+            _timeService.SetMock(mockTime);
+            Console.WriteLine($"[DEBUG] Time set to: {mockTime}");
+            return Ok(new { message = $"Time set to {mockTime}", currentTime = _timeService.Now });
+        }
+        return BadRequest(new { message = "Invalid date format" });
     }
+
+    [HttpPost("reset-time")]
+    public IActionResult ResetTime()
+    {
+        _timeService.ResetMock();
+        Console.WriteLine($"[DEBUG] Time reset to real: {_timeService.Now}");
+        return Ok(new { message = "Time reset to real", currentTime = _timeService.Now });
+    }
+
+    [HttpPost("close-interval/{taskId}")]
+    public async Task<IActionResult> CloseInterval(int taskId)
+    {
+        var task = await _repo.GetTaskByIdAsync(taskId);
+        if (task == null) return NotFound();
+
+        var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
+        if (openInterval != null)
+        {
+            openInterval.EndTime = _timeService.Now;
+            await _repo.UpdateWorkIntervalAsync(openInterval);
+            Console.WriteLine($"[DEBUG] Closed interval for task {taskId} at {_timeService.Now}");
+        }
+        return Ok();
+    }
+
+    [HttpPost("create-interval/{taskId}")]
+    public async Task<IActionResult> CreateInterval(int taskId)
+    {
+        var task = await _repo.GetTaskByIdAsync(taskId);
+        if (task == null) return NotFound();
+
+        // Закрываем все открытые интервалы
+        foreach (var interval in task.WorkIntervals.Where(i => i.EndTime == null))
+        {
+            interval.EndTime = _timeService.Now;
+            await _repo.UpdateWorkIntervalAsync(interval);
+        }
+
+        var newInterval = new WorkInterval
+        {
+            ProductionTaskId = task.Id,
+            StartTime = _timeService.Now,
+            EndTime = null
+        };
+        await _repo.AddWorkIntervalAsync(newInterval);
+        
+        task.Status = JobStatus.InProgress;
+        await _repo.UpdateTaskAsync(task);
+        
+        Console.WriteLine($"[DEBUG] Created interval for task {taskId} at {_timeService.Now}");
+        return Ok();
+    }
+
+    [HttpPost("reset-db")]
+    public async Task<IActionResult> ResetDatabase()
+    {
+        await _repo.DeleteAllWorkIntervalsAsync();
+        await _repo.DeleteAllTasksAsync();
+        
+        var allSplits = _context.TaskSplits.ToList();
+        _context.TaskSplits.RemoveRange(allSplits);
+        
+        var stats = await _repo.GetEmployeeStatAsync("Дима");
+        if (stats != null)
+        {
+            stats.TotalSavedHours = 0;
+            stats.TodaySavedHours = 0;
+            await _repo.UpdateEmployeeStatAsync(stats);
+        }
+        
+        await _context.SaveChangesAsync();
+        
+        return Ok(new { message = "База данных полностью очищена" });
+    }
+
+    [HttpGet("get-intervals/{taskId}")]
+    public async Task<IActionResult> GetIntervals(int taskId)
+    {
+        var task = await _repo.GetTaskByIdAsync(taskId);
+        if (task == null) return NotFound();
+        return Ok(task.WorkIntervals.Select(i => new { i.Id, i.StartTime, i.EndTime }));
+    }
+}
+
+public class SetTimeRequest
+{
+    public string MockDateTime { get; set; } = "";
 }=== ./Controllers/ProductionTasksController.cs ===
 using Microsoft.AspNetCore.Mvc;
 using ProductionPlanner.Data;
@@ -356,8 +359,8 @@ public class ProductionTasksController : ControllerBase
     private readonly IProductionScheduler _scheduler;
     private readonly IWorkHoursCalculator _workHours;
     private readonly ITaskSplitService _splitService;
-    private readonly ISyncService _syncService;
-    private readonly ITableRowRepository _tableRepo;
+    private readonly IAppTimeService _timeService;
+    private readonly ILogger<ProductionTasksController> _logger;
 
     public ProductionTasksController(
         IProductionTaskRepository repo,
@@ -365,174 +368,426 @@ public class ProductionTasksController : ControllerBase
         IProductionScheduler scheduler,
         IWorkHoursCalculator workHours,
         ITaskSplitService splitService,
-        ISyncService syncService,
-        ITableRowRepository tableRepo)
+        IAppTimeService timeService,
+        ILogger<ProductionTasksController> logger)
     {
         _repo = repo;
         _lifecycle = lifecycle;
         _scheduler = scheduler;
         _workHours = workHours;
         _splitService = splitService;
-        _syncService = syncService;
-        _tableRepo = tableRepo;
+        _timeService = timeService;
+        _logger = logger;
+    }
+
+    [HttpGet("table")]
+    public async Task<IActionResult> GetTableRows()
+    {
+        try
+        {
+            var allTasks = await _repo.GetAllTasksAsync();
+            var rootTasks = allTasks.Where(t => t.ParentRowNumber == null).OrderBy(t => t.DisplayOrder);
+            var result = rootTasks.Select(parent => new
+            {
+                parent.Id,
+                parent.DisplayOrder,
+                parent.FolderPath,
+                parent.FileName,
+                parent.Comment,
+                StatusText = MapStatusToText(parent.Status),
+                parent.Deadline,
+                parent.EstimateHours,
+                parent.Type,
+                parent.EmployeeName,
+                parent.CreatedAt,
+                parent.UpdatedAt,
+                parent.ParentRowNumber,
+                parent.IsSplitTask,
+                parent.Progress,
+                Children = allTasks
+                    .Where(c => c.ParentRowNumber == parent.Id && c.IsSplitTask)
+                    .OrderBy(c => c.DisplayOrder)
+                    .Select(c => new
+                    {
+                        c.Id,
+                        c.FolderPath,
+                        c.FileName,
+                        c.Comment,
+                        StatusText = MapStatusToText(c.Status),
+                        c.Deadline,
+                        c.EstimateHours,
+                        c.Type,
+                        c.EmployeeName,
+                        c.IsSplitTask,
+                        c.Progress
+                    }).ToList()
+            });
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в GetTableRows");
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("table/row")]
+    public async Task<IActionResult> CreateTableRow([FromBody] CreateTaskRequest request)
+    {
+        try
+        {
+            var newTask = new ProductionTask
+            {
+                DisplayOrder = -1,
+                FolderPath = request.FolderPath ?? "",
+                FileName = request.FileName ?? "",
+                Comment = request.Comment ?? "",
+                Deadline = request.Deadline,
+                EstimateHours = request.EstimateHours,
+                Type = request.Type ?? "Резка",
+                EmployeeName = request.EmployeeName ?? "Дима",
+                Status = JobStatus.Assigned,
+                Progress = 0,
+                ActualHours = 0,
+                ParentRowNumber = request.ParentRowNumber,
+                IsSplitTask = false,
+                CreatedAt = _timeService.Now,
+                UpdatedAt = _timeService.Now
+            };
+            await _repo.AddTaskAsync(newTask);
+            var allRootIds = (await _repo.GetRootTasksAsync()).OrderBy(t => t.DisplayOrder).Select(t => t.Id).ToList();
+            await _repo.ReorderTasksAsync(allRootIds);
+            return Ok(newTask);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в CreateTableRow");
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpPut("table/row/{id}")]
+    public async Task<IActionResult> UpdateTableRow(int id, [FromBody] UpdateTaskRequest request)
+    {
+        try
+        {
+            var task = await _repo.GetTaskByIdAsync(id);
+            if (task == null) return NotFound();
+
+            task.FolderPath = request.FolderPath ?? task.FolderPath;
+            task.FileName = request.FileName ?? task.FileName;
+            task.Comment = request.Comment ?? task.Comment;
+            task.Deadline = request.Deadline;
+            task.EstimateHours = request.EstimateHours;
+            task.Type = request.Type ?? task.Type;
+            task.EmployeeName = request.EmployeeName ?? task.EmployeeName;
+            task.ParentRowNumber = request.ParentRowNumber;
+            task.UpdatedAt = _timeService.Now;
+
+            // Если это родительская разделённая задача, обновляем дедлайн у всех дочерних
+            if (task.IsSplitTask && task.ParentRowNumber == null)
+            {
+                var childTasks = await _repo.GetChildTasksAsync(task.Id);
+                foreach (var child in childTasks)
+                {
+                    child.Deadline = request.Deadline;
+                    child.UpdatedAt = _timeService.Now;
+                    await _repo.UpdateTaskAsync(child);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(request.StatusText))
+            {
+                var newStatus = MapStatusFromText(request.StatusText);
+                if (newStatus != task.Status)
+                {
+                    if (newStatus == JobStatus.Completed && task.Status != JobStatus.Completed)
+                        await _lifecycle.CompleteTaskAsync(task.Id, _timeService.Now);
+                    else
+                    {
+                        task.Status = newStatus;
+                        await _repo.UpdateTaskAsync(task);
+                    }
+                }
+            }
+            else
+                await _repo.UpdateTaskAsync(task);
+
+            return Ok(task);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в UpdateTableRow для id {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpDelete("table/row/{id}")]
+    public async Task<IActionResult> DeleteTableRow(int id)
+    {
+        try
+        {
+            var task = await _repo.GetTaskByIdAsync(id);
+            if (task == null) return NotFound();
+            await _repo.DeleteTaskAsync(id);
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в DeleteTableRow для id {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("table/reorder")]
+    public async Task<IActionResult> ReorderRows([FromBody] List<int> orderedIds)
+    {
+        try
+        {
+            await _repo.ReorderTasksAsync(orderedIds);
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в ReorderRows");
+            return StatusCode(500, new { error = ex.Message });
+        }
     }
 
     [HttpGet("active")]
     public async Task<IActionResult> GetActiveTasks([FromQuery] string employee)
     {
-        await _syncService.SyncTasksFromTable();
-        
-        var allTasks = await _repo.GetAllTasksAsync();
-        var allTableRows = await _tableRepo.GetAllRowsAsync();
-        
-        var result = new List<object>();
-        
-        foreach (var task in allTasks.Where(t => t.EmployeeName == employee))
+        try
         {
-            if (task.Status == JobStatus.Completed) continue;
-            
-            var tableRow = allTableRows.FirstOrDefault(r => r.Id == task.RowNumber);
-            if (tableRow == null)
-            {
-                result.Add(MapTaskToResult(task));
-                continue;
-            }
-            
-            if (tableRow.StatusText == "Готово") continue;
-            if (tableRow.StatusText != null && tableRow.StatusText.StartsWith("Разделена")) continue;
-            
-            bool isParentTask = allTableRows.Any(r => r.ParentRowNumber == tableRow.Id);
-            if (isParentTask) continue;
-            
-            result.Add(MapTaskToResult(task));
-        }
-        
-        return Ok(result);
-    }
+            if (string.IsNullOrEmpty(employee))
+                return BadRequest(new { error = "Employee name is required" });
 
-    private object MapTaskToResult(ProductionTask task)
-    {
-        var now = AppTime.Now;
-        var hoursNeeded = task.EstimateHours * (1 - task.Progress);
-        var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(now, task.Deadline);
-        
-        string riskLevel = "ok";
-        if (task.Deadline < now) riskLevel = "overdue";
-        else if (workHoursUntilDeadline < hoursNeeded) riskLevel = "critical";
-        else if (workHoursUntilDeadline < hoursNeeded + 2) riskLevel = "warning";
-        
-        return new
+            var allTasks = await _repo.GetAllTasksAsync();
+            var now = _timeService.Now;
+            var result = new List<object>();
+
+            foreach (var task in allTasks.Where(t => t.EmployeeName == employee && t.Status != JobStatus.Completed))
+            {
+                if (task.IsSplitTask && task.ParentRowNumber == null) continue;
+                result.Add(MapTaskToResult(task, now));
+            }
+            return Ok(result);
+        }
+        catch (Exception ex)
         {
-            task.Id,
-            task.Title,
-            task.File,
-            task.Type,
-            task.Deadline,
-            task.EstimateHours,
-            task.Progress,
-            task.Status,
-            task.RowNumber,
-            RiskLevel = riskLevel
-        };
+            _logger.LogError(ex, "Ошибка в GetActiveTasks для сотрудника {Employee}", employee);
+            return StatusCode(500, new { error = ex.Message });
+        }
     }
 
     [HttpGet("completed")]
     public async Task<IActionResult> GetCompletedTasks([FromQuery] string employee)
     {
-        await _syncService.SyncTasksFromTable();
-        
-        var allTasks = await _repo.GetAllTasksAsync();
-        var allTableRows = await _tableRepo.GetAllRowsAsync();
-        
-        var completedTasks = new List<ProductionTask>();
-        
-        foreach (var task in allTasks.Where(t => t.EmployeeName == employee && t.Status == JobStatus.Completed))
+        try
         {
-            var tableRow = allTableRows.FirstOrDefault(r => r.Id == task.RowNumber);
-            bool isParentTask = false;
-            if (tableRow != null)
+            if (string.IsNullOrEmpty(employee))
+                return BadRequest(new { error = "Employee name is required" });
+
+            var allTasks = await _repo.GetAllTasksAsync();
+            var completedTasks = allTasks
+                .Where(t => t.EmployeeName == employee && t.Status == JobStatus.Completed
+                            && !(t.IsSplitTask && t.ParentRowNumber == null))
+                .ToList();
+
+            var stats = new
             {
-                isParentTask = allTableRows.Any(r => r.ParentRowNumber == tableRow.Id);
-            }
-            if (!isParentTask)
-            {
-                completedTasks.Add(task);
-            }
+                totalTasks = completedTasks.Count,
+                totalEstimate = completedTasks.Sum(t => t.EstimateHours),
+                totalActual = completedTasks.Sum(t => t.ActualHours)
+            };
+            return Ok(new { tasks = completedTasks, stats });
         }
-        
-        var stats = new
+        catch (Exception ex)
         {
-            totalTasks = completedTasks.Count,
-            totalEstimate = completedTasks.Sum(t => t.EstimateHours),
-            totalActual = completedTasks.Sum(t => t.ActualHours)
-        };
-        
-        return Ok(new { tasks = completedTasks, stats });
+            _logger.LogError(ex, "Ошибка в GetCompletedTasks для сотрудника {Employee}", employee);
+            return StatusCode(500, new { error = ex.Message });
+        }
     }
 
     [HttpPost("{id}/start")]
     public async Task<IActionResult> Start(int id)
     {
-        var now = AppTime.Now;
-        await _lifecycle.StartTaskAsync(id, now);
-        return Ok();
+        try
+        {
+            var task = await _repo.GetTaskByIdAsync(id);
+            if (task == null)
+                return NotFound(new { error = $"Задача с id {id} не найдена" });
+
+            if (task.Status != JobStatus.Assigned && task.Status != JobStatus.Paused)
+                return BadRequest(new { error = $"Задача уже в статусе {task.Status}" });
+
+            await _lifecycle.StartTaskAsync(id, _timeService.Now);
+            return Ok(new { message = "Задача запущена" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в Start для задачи {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
     }
 
     [HttpPost("{id}/progress")]
     public async Task<IActionResult> SetProgress(int id, [FromBody] double progress)
     {
-        var now = AppTime.Now;
-        await _lifecycle.UpdateProgressAsync(id, progress, now);
-        return Ok();
+        try
+        {
+            await _lifecycle.UpdateProgressAsync(id, progress, _timeService.Now);
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в SetProgress для задачи {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
     }
 
     [HttpPost("{id}/complete")]
     public async Task<IActionResult> Complete(int id)
     {
-        var now = AppTime.Now;
-        await _lifecycle.CompleteTaskAsync(id, now);
-        return Ok();
+        try
+        {
+            var task = await _repo.GetTaskByIdAsync(id);
+            if (task == null)
+                return NotFound(new { error = $"Задача с id {id} не найдена" });
+
+            await _lifecycle.CompleteTaskAsync(id, _timeService.Now);
+            return Ok(new { message = "Задача завершена" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в Complete для задачи {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
     }
 
     [HttpPost("{id}/return")]
     public async Task<IActionResult> Return(int id)
     {
-        var now = AppTime.Now;
-        await _lifecycle.ReturnTaskAsync(id, now);
-        return Ok();
-    }
-
-    [HttpPost("sync")]
-    public async Task<IActionResult> Sync()
-    {
-        await _syncService.SyncTasksFromTable();
-        return Ok(new { message = "Синхронизация завершена" });
+        try
+        {
+            await _lifecycle.ReturnTaskAsync(id, _timeService.Now);
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в Return для задачи {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
     }
 
     [HttpPost("shift")]
     public async Task<IActionResult> ShiftTasks([FromQuery] string employee)
     {
-        var tasks = await _repo.GetActiveTasksAsync(employee);
-        var tomorrow = AppTime.Now.Date.AddDays(1);
-        var nextWorkStart = _workHours.GetNextWorkStart(tomorrow);
-
-        foreach (var task in tasks.Where(t => t.Status == JobStatus.Assigned))
+        try
         {
-            foreach (var interval in task.WorkIntervals.ToList())
-                await _repo.DeleteWorkIntervalAsync(interval);
-            await _repo.UpdateTaskAsync(task);
+            var tasks = await _repo.GetActiveTasksAsync(employee);
+            var tomorrow = _timeService.Now.Date.AddDays(1);
+            var nextWorkStart = _workHours.GetNextWorkStart(tomorrow);
+            foreach (var task in tasks.Where(t => t.Status == JobStatus.Assigned))
+            {
+                foreach (var interval in task.WorkIntervals.ToList())
+                    await _repo.DeleteWorkIntervalAsync(interval);
+                await _repo.UpdateTaskAsync(task);
+            }
+            return Ok();
         }
-        return Ok();
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в ShiftTasks для сотрудника {Employee}", employee);
+            return StatusCode(500, new { error = ex.Message });
+        }
     }
 
     [HttpGet("deadline-risks")]
     public async Task<IActionResult> GetDeadlineRisks([FromQuery] string employee)
     {
-        var tasks = await _repo.GetActiveTasksAsync(employee);
-        var now = AppTime.Now;
-        var risks = _scheduler.CheckDeadlineRisks(tasks, now);
-        return Ok(risks);
+        try
+        {
+            if (string.IsNullOrEmpty(employee))
+                return BadRequest(new { error = "Employee name is required" });
+
+            var tasks = await _repo.GetActiveTasksAsync(employee);
+            var now = _timeService.Now;
+            var risks = _scheduler.CheckDeadlineRisks(tasks, now);
+            return Ok(risks);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в GetDeadlineRisks для сотрудника {Employee}", employee);
+            return StatusCode(500, new { error = ex.Message });
+        }
     }
+
+    private object MapTaskToResult(ProductionTask task, DateTime now)
+    {
+        var hoursNeeded = task.EstimateHours * (1 - task.Progress);
+        var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(now, task.Deadline);
+        string riskLevel = "ok";
+        if (task.Deadline < now) riskLevel = "overdue";
+        else if (workHoursUntilDeadline < hoursNeeded) riskLevel = "critical";
+        else if (workHoursUntilDeadline < hoursNeeded + 2) riskLevel = "warning";
+
+        return new
+        {
+            task.Id,
+            Title = task.FileName ?? string.Empty,
+            File = task.FullPath ?? string.Empty,
+            task.Type,
+            task.Deadline,
+            task.EstimateHours,
+            task.Progress,
+            task.Status,
+            RowNumber = task.Id,
+            RiskLevel = riskLevel
+        };
+    }
+
+    private string MapStatusToText(JobStatus status) => status switch
+    {
+        JobStatus.Assigned => "",
+        JobStatus.InProgress => "Начал",
+        JobStatus.Paused => "Пауза",
+        JobStatus.Completed => "Готово",
+        _ => ""
+    };
+
+    private JobStatus MapStatusFromText(string statusText) => statusText switch
+    {
+        "Готово" => JobStatus.Completed,
+        "Начал" => JobStatus.InProgress,
+        "Пауза" => JobStatus.Paused,
+        _ => JobStatus.Assigned
+    };
+}
+
+public class CreateTaskRequest
+{
+    public string? FolderPath { get; set; }
+    public string? FileName { get; set; }
+    public string? Comment { get; set; }
+    public DateTime Deadline { get; set; }
+    public double EstimateHours { get; set; }
+    public string? Type { get; set; }
+    public string? EmployeeName { get; set; }
+    public int? ParentRowNumber { get; set; }
+}
+
+public class UpdateTaskRequest
+{
+    public string? FolderPath { get; set; }
+    public string? FileName { get; set; }
+    public string? Comment { get; set; }
+    public DateTime Deadline { get; set; }
+    public double EstimateHours { get; set; }
+    public string? Type { get; set; }
+    public string? EmployeeName { get; set; }
+    public int? ParentRowNumber { get; set; }
+    public string? StatusText { get; set; }
 }=== ./Controllers/CalendarController.cs ===
 using Microsoft.AspNetCore.Mvc;
 using ProductionPlanner.Data;
@@ -550,211 +805,204 @@ public class CalendarController : ControllerBase
     private readonly IProductionScheduler _scheduler;
     private readonly IWorkHoursCalculator _workHours;
     private readonly IEmployeeStatsService _statsService;
-    private readonly ITableRowRepository _tableRepo;
+    private readonly IAppTimeService _timeService;
+    private readonly ILogger<CalendarController> _logger;
 
     public CalendarController(
         IProductionTaskRepository repo,
         IProductionScheduler scheduler,
         IWorkHoursCalculator workHours,
         IEmployeeStatsService statsService,
-        ITableRowRepository tableRepo)
+        IAppTimeService timeService,
+        ILogger<CalendarController> logger)
     {
         _repo = repo;
         _scheduler = scheduler;
         _workHours = workHours;
         _statsService = statsService;
-        _tableRepo = tableRepo;
+        _timeService = timeService;
+        _logger = logger;
     }
 
     [HttpGet("week")]
     public async Task<IActionResult> GetWeek([FromQuery] string employee, [FromQuery] string? startDate)
     {
-        var now = AppTime.Now;
-        DateTime start;
+        try
+        {
+            if (string.IsNullOrEmpty(employee))
+                return BadRequest(new { error = "Employee name is required" });
 
-        if (!string.IsNullOrEmpty(startDate) && DateTime.TryParseExact(startDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var parsed))
-        {
-            start = GetMondayOfWeek(parsed);
-        }
-        else
-        {
-            start = GetMondayOfWeek(now);
-        }
+            var now = _timeService.Now;
+            DateTime start;
 
-        var end = start.AddDays(7);
-        
-        var allTasks = await _repo.GetAllTasksAsync();
-        var allTableRows = await _tableRepo.GetAllRowsAsync();
-        
-        var tasksForCalendar = new List<ProductionTask>();
-        foreach (var task in allTasks.Where(t => t.EmployeeName == employee))
-        {
-            if (task.Status == JobStatus.Completed) continue;
-            
-            var tableRow = allTableRows.FirstOrDefault(r => r.Id == task.RowNumber);
-            if (tableRow == null)
+            if (!string.IsNullOrEmpty(startDate) && DateTime.TryParseExact(startDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var parsed))
             {
+                start = GetMondayOfWeek(parsed);
+            }
+            else
+            {
+                start = GetMondayOfWeek(now);
+            }
+
+            var end = start.AddDays(7);
+            var allTasks = await _repo.GetAllTasksAsync();
+
+            var tasksForCalendar = new List<ProductionTask>();
+            foreach (var task in allTasks.Where(t => t.EmployeeName == employee && t.Status != JobStatus.Completed))
+            {
+                if (task.IsSplitTask && task.ParentRowNumber == null) continue;
                 tasksForCalendar.Add(task);
-                continue;
-            }
-            
-            if (tableRow.StatusText == "Готово") continue;
-            if (tableRow.StatusText != null && tableRow.StatusText.StartsWith("Разделена")) continue;
-            
-            bool isParentTask = allTableRows.Any(r => r.ParentRowNumber == tableRow.Id);
-            if (isParentTask) continue;
-            
-            tasksForCalendar.Add(task);
-        }
-        
-        var slots = _scheduler.GetSchedule(tasksForCalendar, now);
-        
-        var employeeTasks = allTasks.Where(t => t.EmployeeName == employee).ToList();
-
-        var days = new List<object>();
-        for (var day = start; day < end; day = day.AddDays(1))
-        {
-            var intersectingSlots = slots.Where(s => s.PlannedStart < day.AddDays(1) && s.PlannedEnd > day).ToList();
-
-            var taskBlocks = new List<object>();
-            foreach (var slot in intersectingSlots.OrderBy(s => s.Task.Deadline))
-            {
-                var startInDay = slot.PlannedStart > day ? slot.PlannedStart : day;
-                var endInDay = slot.PlannedEnd < day.AddDays(1) ? slot.PlannedEnd : day.AddDays(1);
-                
-                if (day.Date == now.Date && startInDay < now)
-                {
-                    startInDay = now;
-                    var remaining = slot.Task.EstimateHours * (1 - slot.Task.Progress);
-                    endInDay = _workHours.AddWorkHours(startInDay, remaining);
-                    if (endInDay > day.AddDays(1)) endInDay = day.AddDays(1);
-                }
-                
-                if (startInDay >= endInDay) continue;
-                
-                var lunchStartTime = day.AddHours(14);
-                var lunchEndTime = day.AddHours(15);
-                
-                if (startInDay < lunchEndTime && endInDay > lunchStartTime)
-                {
-                    var beforeLunchEnd = lunchStartTime;
-                    if (beforeLunchEnd > startInDay)
-                    {
-                        var hoursBefore = _workHours.GetWorkHoursBetween(startInDay, beforeLunchEnd);
-                        if (hoursBefore > 0.001)
-                        {
-                            var leftPercent = ((startInDay - day).TotalHours - 10) / 9 * 100;
-                            var widthPercent = hoursBefore / 9 * 100;
-                            taskBlocks.Add(new
-                            {
-                                title = slot.Task.Title.Length > 20 ? slot.Task.Title.Substring(0, 20) + "..." : slot.Task.Title,
-                                fullTitle = slot.Task.Title,
-                                hours = hoursBefore,
-                                percentage = Math.Round(hoursBefore / 8 * 100),
-                                leftPercent = Math.Max(0, leftPercent),
-                                widthPercent = Math.Min(100 - leftPercent, widthPercent),
-                                deadline = slot.Task.Deadline,
-                                taskId = slot.Task.Id
-                            });
-                        }
-                    }
-                    
-                    var afterLunchStart = lunchEndTime;
-                    if (afterLunchStart < endInDay)
-                    {
-                        var hoursAfter = _workHours.GetWorkHoursBetween(afterLunchStart, endInDay);
-                        if (hoursAfter > 0.001)
-                        {
-                            var leftPercent = ((afterLunchStart - day).TotalHours - 10) / 9 * 100;
-                            var widthPercent = hoursAfter / 9 * 100;
-                            taskBlocks.Add(new
-                            {
-                                title = slot.Task.Title.Length > 20 ? slot.Task.Title.Substring(0, 20) + "..." : slot.Task.Title,
-                                fullTitle = slot.Task.Title,
-                                hours = hoursAfter,
-                                percentage = Math.Round(hoursAfter / 8 * 100),
-                                leftPercent = Math.Max(0, leftPercent),
-                                widthPercent = Math.Min(100 - leftPercent, widthPercent),
-                                deadline = slot.Task.Deadline,
-                                taskId = slot.Task.Id
-                            });
-                        }
-                    }
-                }
-                else
-                {
-                    var hoursInDay = _workHours.GetWorkHoursBetween(startInDay, endInDay);
-                    if (hoursInDay <= 0.001) continue;
-                    
-                    var leftPercent = ((startInDay - day).TotalHours - 10) / 9 * 100;
-                    var widthPercent = hoursInDay / 9 * 100;
-                    
-                    taskBlocks.Add(new
-                    {
-                        title = slot.Task.Title.Length > 20 ? slot.Task.Title.Substring(0, 20) + "..." : slot.Task.Title,
-                        fullTitle = slot.Task.Title,
-                        hours = hoursInDay,
-                        percentage = Math.Round(hoursInDay / 8 * 100),
-                        leftPercent = Math.Max(0, leftPercent),
-                        widthPercent = Math.Min(100 - leftPercent, widthPercent),
-                        deadline = slot.Task.Deadline,
-                        taskId = slot.Task.Id
-                    });
-                }
             }
 
-            var timeline = new List<object>();
-            if (day.Date <= now.Date)
+            var slots = _scheduler.GetSchedule(tasksForCalendar, now);
+            var employeeTasks = allTasks.Where(t => t.EmployeeName == employee).ToList();
+
+            var days = new List<object>();
+            for (var day = start; day < end; day = day.AddDays(1))
             {
-                var realWorkIntervals = new List<(DateTime start, DateTime end, int taskId)>();
+                var intersectingSlots = slots.Where(s => s.PlannedStart < day.AddDays(1) && s.PlannedEnd > day).ToList();
+
+                var taskBlocks = new List<object>();
+                foreach (var slot in intersectingSlots.OrderBy(s => s.Task.Deadline))
+                {
+                    var startInDay = slot.PlannedStart > day ? slot.PlannedStart : day;
+                    var endInDay = slot.PlannedEnd < day.AddDays(1) ? slot.PlannedEnd : day.AddDays(1);
+
+                    if (day.Date == now.Date && startInDay < now)
+                    {
+                        startInDay = now;
+                        var remaining = slot.Task.EstimateHours * (1 - slot.Task.Progress);
+                        endInDay = _workHours.AddWorkHours(startInDay, remaining);
+                        if (endInDay > day.AddDays(1)) endInDay = day.AddDays(1);
+                    }
+
+                    if (startInDay >= endInDay) continue;
+
+                    var lunchStartTime = day.AddHours(14);
+                    var lunchEndTime = day.AddHours(15);
+
+                    if (startInDay < lunchEndTime && endInDay > lunchStartTime)
+                    {
+                        var beforeLunchEnd = lunchStartTime;
+                        if (beforeLunchEnd > startInDay)
+                        {
+                            var hoursBefore = _workHours.GetWorkHoursBetween(startInDay, beforeLunchEnd);
+                            if (hoursBefore > 0.001)
+                            {
+                                var leftPercent = ((startInDay - day).TotalHours - 10) / 9 * 100;
+                                var widthPercent = hoursBefore / 9 * 100;
+                                taskBlocks.Add(new
+                                {
+                                    title = slot.Task.FileName?.Length > 20 ? slot.Task.FileName.Substring(0, 20) + "..." : slot.Task.FileName,
+                                    fullTitle = slot.Task.FileName,
+                                    hours = hoursBefore,
+                                    percentage = Math.Round(hoursBefore / 8 * 100),
+                                    leftPercent = Math.Max(0, leftPercent),
+                                    widthPercent = Math.Min(100 - leftPercent, widthPercent),
+                                    deadline = slot.Task.Deadline,
+                                    taskId = slot.Task.Id
+                                });
+                            }
+                        }
+
+                        var afterLunchStart = lunchEndTime;
+                        if (afterLunchStart < endInDay)
+                        {
+                            var hoursAfter = _workHours.GetWorkHoursBetween(afterLunchStart, endInDay);
+                            if (hoursAfter > 0.001)
+                            {
+                                var leftPercent = ((afterLunchStart - day).TotalHours - 10) / 9 * 100;
+                                var widthPercent = hoursAfter / 9 * 100;
+                                taskBlocks.Add(new
+                                {
+                                    title = slot.Task.FileName?.Length > 20 ? slot.Task.FileName.Substring(0, 20) + "..." : slot.Task.FileName,
+                                    fullTitle = slot.Task.FileName,
+                                    hours = hoursAfter,
+                                    percentage = Math.Round(hoursAfter / 8 * 100),
+                                    leftPercent = Math.Max(0, leftPercent),
+                                    widthPercent = Math.Min(100 - leftPercent, widthPercent),
+                                    deadline = slot.Task.Deadline,
+                                    taskId = slot.Task.Id
+                                });
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var hoursInDay = _workHours.GetWorkHoursBetween(startInDay, endInDay);
+                        if (hoursInDay <= 0.001) continue;
+
+                        var leftPercent = ((startInDay - day).TotalHours - 10) / 9 * 100;
+                        var widthPercent = hoursInDay / 9 * 100;
+
+                        taskBlocks.Add(new
+                        {
+                            title = slot.Task.FileName?.Length > 20 ? slot.Task.FileName.Substring(0, 20) + "..." : slot.Task.FileName,
+                            fullTitle = slot.Task.FileName,
+                            hours = hoursInDay,
+                            percentage = Math.Round(hoursInDay / 8 * 100),
+                            leftPercent = Math.Max(0, leftPercent),
+                            widthPercent = Math.Min(100 - leftPercent, widthPercent),
+                            deadline = slot.Task.Deadline,
+                            taskId = slot.Task.Id
+                        });
+                    }
+                }
+
+                var timeline = new List<object>();
+                var timelineEnd = (day.Date == now.Date) ? now : day.AddDays(1);
+
+                // Собираем рабочие интервалы за день
+                var realWorkIntervals = new List<(DateTime start, DateTime end, int taskId, string taskTitle, bool isCompleted)>();
                 foreach (var task in employeeTasks)
                 {
                     foreach (var interval in task.WorkIntervals)
                     {
                         if (task.Status == JobStatus.Completed && interval.EndTime == null) continue;
-                        
+
                         var intervalStart = interval.StartTime;
-                        var intervalEnd = interval.EndTime ?? now;
+                        var intervalEnd = interval.EndTime ?? timelineEnd;
                         var intervalEndDate = intervalEnd;
-                        
+
                         if (intervalStart.Date <= day.Date && intervalEndDate.Date >= day.Date)
                         {
                             var startInDay = intervalStart > day ? intervalStart : day;
-                            var endInDay = intervalEndDate < day.AddDays(1) ? intervalEndDate : day.AddDays(1);
+                            var endInDay = intervalEndDate < timelineEnd ? intervalEndDate : timelineEnd;
                             if (startInDay < endInDay)
                             {
-                                realWorkIntervals.Add((startInDay, endInDay, task.Id));
+                                realWorkIntervals.Add((startInDay, endInDay, task.Id, task.FileName, task.Status == JobStatus.Completed));
                             }
                         }
                     }
                 }
 
                 realWorkIntervals = realWorkIntervals.OrderBy(i => i.start).ToList();
-                
-                foreach (var (startInDay, endInDay, taskId) in realWorkIntervals)
+
+                // Добавляем рабочие интервалы
+                foreach (var (startInDay, endInDay, taskId, taskTitle, isCompleted) in realWorkIntervals)
                 {
-                    var task = employeeTasks.FirstOrDefault(t => t.Id == taskId);
-                    var isCompleted = task?.Status == JobStatus.Completed;
                     timeline.Add(new
                     {
                         start = startInDay,
                         end = endInDay,
                         type = "work",
                         taskId = taskId,
-                        taskTitle = task?.Title ?? $"Задача #{taskId}",
+                        taskTitle = taskTitle,
                         completed = isCompleted
                     });
                 }
 
+                // Добавляем idle (простой) между рабочими интервалами
                 var workPeriods = new[] { (TimeSpan.FromHours(10), TimeSpan.FromHours(14)), (TimeSpan.FromHours(15), TimeSpan.FromHours(19)) };
                 foreach (var (workStart, workEnd) in workPeriods)
                 {
-                    var current = day + workStart;
-                    var endWork = day + workEnd;
-                    if (day.Date == now.Date && endWork > now) endWork = now;
-                    if (endWork > day.AddHours(19)) endWork = day.AddHours(19);
-                    
-                    while (current < endWork)
+                    var periodStart = day + workStart;
+                    var periodEnd = day + workEnd;
+                    if (periodEnd > timelineEnd) periodEnd = timelineEnd;
+                    if (periodStart >= periodEnd) continue;
+
+                    var current = periodStart;
+                    while (current < periodEnd)
                     {
                         var coveringWork = realWorkIntervals.FirstOrDefault(w => w.start <= current && w.end > current);
                         if (coveringWork != default)
@@ -764,8 +1012,8 @@ public class CalendarController : ControllerBase
                         else
                         {
                             var nextWork = realWorkIntervals.FirstOrDefault(w => w.start > current);
-                            var idleEnd = nextWork != default && nextWork.start < endWork ? nextWork.start : endWork;
-                            if (idleEnd > current && idleEnd <= day.AddHours(19))
+                            var idleEnd = nextWork != default && nextWork.start < periodEnd ? nextWork.start : periodEnd;
+                            if (idleEnd > current)
                             {
                                 timeline.Add(new
                                 {
@@ -781,243 +1029,45 @@ public class CalendarController : ControllerBase
                         }
                     }
                 }
+
                 timeline = timeline.OrderBy(t => ((DateTime)t.GetType().GetProperty("start")!.GetValue(t)!).Ticks).ToList();
+
+                var completedTasks = await _repo.GetCompletedTasksAsync(employee);
+                var completedThisDay = completedTasks.Where(t => t.CompletedAt?.Date == day);
+                double netSaved = 0;
+                foreach (var task in completedThisDay)
+                {
+                    netSaved += (task.EstimateHours - task.ActualHours);
+                }
+
+                var deadlines = employeeTasks
+                    .Where(t => t.Deadline.Date == day)
+                    .Select(t => new { t.Deadline, Status = t.Status.ToString(), t.Progress, TaskId = t.Id, TaskTitle = t.FileName ?? string.Empty })
+                    .ToList();
+
+                days.Add(new
+                {
+                    date = day,
+                    netSaved,
+                    taskBlocks,
+                    timeline,
+                    deadlines
+                });
             }
 
-            var completed = await _repo.GetCompletedTasksAsync(employee);
-            var completedThisDay = completed.Where(t => t.CompletedAt?.Date == day);
-            double netSaved = 0;
-            foreach (var task in completedThisDay)
-            {
-                netSaved += (task.EstimateHours - task.ActualHours);
-            }
-
-            var deadlines = employeeTasks
-                .Where(t => t.Deadline.Date == day)
-                .Select(t => new { t.Deadline, Status = t.Status.ToString(), t.Progress, TaskId = t.Id, TaskTitle = t.Title })
-                .ToList();
-
-            days.Add(new
-            {
-                date = day,
-                netSaved,
-                taskBlocks,
-                timeline,
-                deadlines
-            });
+            return Ok(new { start, days });
         }
-
-        return Ok(new { start, days });
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в GetWeek для сотрудника {Employee}", employee);
+            return StatusCode(500, new { error = ex.Message });
+        }
     }
 
     private DateTime GetMondayOfWeek(DateTime date)
     {
         int diff = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
         return date.AddDays(-diff).Date;
-    }
-}=== ./Controllers/TableController.cs ===
-using Microsoft.AspNetCore.Mvc;
-using ProductionPlanner.Models;
-using ProductionPlanner.Data;
-using ProductionPlanner.Services;
-
-namespace ProductionPlanner.Controllers
-{
-    [ApiController]
-    [Route("api/table")]
-    public class TableController : ControllerBase
-    {
-        private readonly ITableRowRepository _tableRepo;
-        private readonly IProductionTaskRepository _taskRepo;
-        private readonly ISyncService _syncService;
-        private readonly ITaskLifecycleService _lifecycle;
-        private readonly IWorkHoursCalculator _workHours;
-
-        public TableController(
-            ITableRowRepository tableRepo,
-            IProductionTaskRepository taskRepo,
-            ISyncService syncService,
-            ITaskLifecycleService lifecycle,
-            IWorkHoursCalculator workHours)
-        {
-            _tableRepo = tableRepo;
-            _taskRepo = taskRepo;
-            _syncService = syncService;
-            _lifecycle = lifecycle;
-            _workHours = workHours;
-        }
-
-        [HttpGet("rows")]
-        public async Task<IActionResult> GetRows()
-        {
-            var rows = await _tableRepo.GetAllRowsAsync();
-            return Ok(rows);
-        }
-
-        [HttpPost("row")]
-        public async Task<IActionResult> CreateRow([FromBody] TableRow row)
-        {
-            await _tableRepo.AddRowAsync(row);
-            await _syncService.SyncTasksFromTable();
-            return Ok(row);
-        }
-
-        [HttpPut("row/{id}")]
-        public async Task<IActionResult> UpdateRow(int id, [FromBody] TableRow row)
-        {
-            var existing = await _tableRepo.GetRowByIdAsync(id);
-            if (existing == null) return NotFound();
-            
-            existing.FolderPath = row.FolderPath;
-            existing.FileName = row.FileName;
-            existing.Comment = row.Comment;
-            existing.StatusText = row.StatusText;
-            existing.Deadline = row.Deadline;
-            existing.EstimateHours = row.EstimateHours;
-            existing.Type = row.Type;
-            existing.EmployeeName = row.EmployeeName;
-            existing.ParentRowNumber = row.ParentRowNumber;
-            existing.UpdatedAt = DateTime.UtcNow;
-            
-            await _tableRepo.UpdateRowAsync(existing);
-            await _syncService.SyncTasksFromTable();
-            
-            return Ok(existing);
-        }
-
-        [HttpDelete("row/{id}")]
-        public async Task<IActionResult> DeleteRow(int id)
-        {
-            await _tableRepo.DeleteRowAsync(id);
-            await _syncService.SyncTasksFromTable();
-            return Ok();
-        }
-
-        [HttpPost("row/{id}/start")]
-        public async Task<IActionResult> StartTask(int id)
-        {
-            var row = await _tableRepo.GetRowByIdAsync(id);
-            if (row == null) return NotFound();
-            
-            var now = AppTime.Now;
-            
-            await _syncService.SyncTasksFromTable();
-            var tasks = await _taskRepo.GetAllTasksAsync();
-            var task = tasks.FirstOrDefault(t => t.RowNumber == id);
-            
-            if (task == null)
-            {
-                return BadRequest(new { message = "ProductionTask не найдена для строки " + id });
-            }
-            
-            if (task.Status == JobStatus.Assigned || task.Status == JobStatus.Paused)
-            {
-                await _lifecycle.StartTaskAsync(task.Id, now);
-                row.StatusText = "Начал";
-                await _tableRepo.UpdateRowAsync(row);
-            }
-            
-            await _syncService.SyncTasksFromTable();
-            return Ok(row);
-        }
-
-        [HttpPost("row/{id}/pause")]
-        public async Task<IActionResult> PauseTask(int id)
-        {
-            var row = await _tableRepo.GetRowByIdAsync(id);
-            if (row == null) return NotFound();
-            
-            var now = AppTime.Now;
-            
-            await _syncService.SyncTasksFromTable();
-            var tasks = await _taskRepo.GetAllTasksAsync();
-            var task = tasks.FirstOrDefault(t => t.RowNumber == id);
-            
-            if (task == null)
-            {
-                return BadRequest(new { message = "ProductionTask не найдена для строки " + id });
-            }
-            
-            if (task.Status == JobStatus.InProgress)
-            {
-                var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
-                if (openInterval != null)
-                {
-                    openInterval.EndTime = now;
-                    await _taskRepo.UpdateWorkIntervalAsync(openInterval);
-                }
-                
-                task.Status = JobStatus.Paused;
-                await _taskRepo.UpdateTaskAsync(task);
-                
-                row.StatusText = "Пауза";
-                await _tableRepo.UpdateRowAsync(row);
-            }
-            
-            await _syncService.SyncTasksFromTable();
-            return Ok(row);
-        }
-
-        [HttpPost("row/{id}/resume")]
-        public async Task<IActionResult> ResumeTask(int id)
-        {
-            var row = await _tableRepo.GetRowByIdAsync(id);
-            if (row == null) return NotFound();
-            
-            var now = AppTime.Now;
-            
-            await _syncService.SyncTasksFromTable();
-            var tasks = await _taskRepo.GetAllTasksAsync();
-            var task = tasks.FirstOrDefault(t => t.RowNumber == id);
-            
-            if (task == null)
-            {
-                return BadRequest(new { message = "ProductionTask не найдена для строки " + id });
-            }
-            
-            if (task.Status == JobStatus.Paused)
-            {
-                var startTime = _workHours.GetNextWorkStart(now);
-                task.Status = JobStatus.InProgress;
-                var interval = new WorkInterval { ProductionTaskId = task.Id, StartTime = startTime, EndTime = null };
-                await _taskRepo.AddWorkIntervalAsync(interval);
-                await _taskRepo.UpdateTaskAsync(task);
-                
-                row.StatusText = "Начал";
-                await _tableRepo.UpdateRowAsync(row);
-            }
-            
-            await _syncService.SyncTasksFromTable();
-            return Ok(row);
-        }
-
-        [HttpPost("row/{id}/complete")]
-        public async Task<IActionResult> CompleteTask(int id)
-        {
-            var row = await _tableRepo.GetRowByIdAsync(id);
-            if (row == null) return NotFound();
-            
-            var now = AppTime.Now;
-            
-            await _syncService.SyncTasksFromTable();
-            var tasks = await _taskRepo.GetAllTasksAsync();
-            var task = tasks.FirstOrDefault(t => t.RowNumber == id);
-            
-            if (task == null)
-            {
-                return BadRequest(new { message = "ProductionTask не найдена для строки " + id });
-            }
-            
-            if (task.Status != JobStatus.Completed)
-            {
-                await _lifecycle.CompleteTaskAsync(task.Id, now);
-                row.StatusText = "Готово";
-                await _tableRepo.UpdateRowAsync(row);
-            }
-            
-            await _syncService.SyncTasksFromTable();
-            return Ok(row);
-        }
     }
 }=== ./Controllers/AuthController.cs ===
 using Microsoft.AspNetCore.Identity;
@@ -1035,12 +1085,18 @@ namespace ProductionPlanner.Controllers
         private readonly SignInManager<User> _signInManager;
         private readonly UserManager<User> _userManager;
         private readonly IWebHostEnvironment _environment;
+        private readonly IAppTimeService _timeService;
 
-        public AuthController(SignInManager<User> signInManager, UserManager<User> userManager, IWebHostEnvironment environment)
+        public AuthController(
+            SignInManager<User> signInManager,
+            UserManager<User> userManager,
+            IWebHostEnvironment environment,
+            IAppTimeService timeService)
         {
             _signInManager = signInManager;
             _userManager = userManager;
             _environment = environment;
+            _timeService = timeService;
         }
 
         [HttpPost("login-employee")]
@@ -1204,7 +1260,8 @@ namespace ProductionPlanner.Controllers
                 Directory.CreateDirectory(uploadsFolder);
             }
 
-            var fileName = $"{user.Id}_{AppTime.Now.Ticks}{extension}";
+            // Замена AppTime.Now на _timeService.Now
+            var fileName = $"{user.Id}_{_timeService.Now.Ticks}{extension}";
             var filePath = Path.Combine(uploadsFolder, fileName);
             
             if (!string.IsNullOrEmpty(user.AvatarUrl))
@@ -1288,6 +1345,8 @@ namespace ProductionPlanner.Controllers
             };
         }
 
+        // Метод init-users оставляем на случай ручного вызова, но использование AppTime в нём не было
+        // (там только DateTime.UtcNow, что корректно). Оставляем без изменений.
         [HttpPost("init-users")]
         public async Task<IActionResult> InitUsers()
         {
@@ -1371,88 +1430,89 @@ namespace ProductionPlanner.Controllers
     [Route("api/files")]
     public class FilesController : ControllerBase
     {
+        private const string SmbHost = "MINIMARKER";
+        private const string ShareName = "Клиенты";
+        private const string MountPoint = "/Volumes/Клиенты";
+
         [HttpPost("open")]
         public IActionResult OpenFile([FromBody] OpenFileRequest request)
         {
             if (string.IsNullOrEmpty(request.FilePath))
                 return BadRequest(new { message = "Путь к файлу не указан" });
 
+            var rawPath = request.FilePath.Replace('\\', '/');
+            
+            var clientIdx = rawPath.LastIndexOf(ShareName, StringComparison.OrdinalIgnoreCase);
+            if (clientIdx < 0)
+                return BadRequest(new { message = "Не удалось определить путь к файлу" });
+
+            var relativePath = rawPath.Substring(clientIdx + ShareName.Length).TrimStart('/');
+            
+            var parts = relativePath.Split('/');
+            var cleanFileName = parts[parts.Length - 1].Split('[')[0].Trim();
+            
+            if (!cleanFileName.EndsWith(".cdr") && 
+                !cleanFileName.EndsWith(".ai") && 
+                !cleanFileName.EndsWith(".pdf") &&
+                !cleanFileName.EndsWith(".eps"))
+            {
+                cleanFileName += ".cdr";
+            }
+            
+            parts[parts.Length - 1] = cleanFileName;
+            var correctedPath = string.Join("/", parts);
+            
+            var smbUrl = $"smb://{SmbHost}/{ShareName}/{correctedPath}";
+            var localFilePath = $"{MountPoint}/{correctedPath}";
+            
             try
             {
-                // Преобразуем SMB путь обратно в локальный, если это тот же компьютер
-                var localPath = ConvertToLocalPath(request.FilePath);
-                
-                if (System.IO.File.Exists(localPath))
-                {
-                    if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                    {
-                        Process.Start("open", $"\"{localPath}\"");
-                        return Ok(new { message = "Файл открыт" });
-                    }
-                    
-                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                    {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = localPath,
-                            UseShellExecute = true
-                        });
-                        return Ok(new { message = "Файл открыт" });
-                    }
-                }
-                
-                // Если локального файла нет, пробуем открыть SMB путь
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                 {
-                    Process.Start("open", $"\"{request.FilePath}\"");
-                    return Ok(new { message = "Файл открыт через SMB" });
+                    if (!System.IO.Directory.Exists(MountPoint))
+                    {
+                        var mountProcess = new Process
+                        {
+                            StartInfo = new ProcessStartInfo
+                            {
+                                FileName = "open",
+                                Arguments = $"\"smb://{SmbHost}/{ShareName}\"",
+                                UseShellExecute = false
+                            }
+                        };
+                        mountProcess.Start();
+                        System.Threading.Thread.Sleep(3000);
+                    }
+                    
+                    // Просто open - откроет программой по умолчанию
+                    Process.Start("open", $"\"{localFilePath}\"");
+                    
+                    return Ok(new { message = "Файл открывается", localPath = localFilePath });
                 }
-                
-                return NotFound(new { message = $"Файл не найден: {localPath}" });
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = smbUrl,
+                        UseShellExecute = true
+                    });
+                    return Ok(new { message = "Файл открывается", downloadUrl = smbUrl });
+                }
+                else
+                {
+                    return Ok(new { downloadUrl = smbUrl });
+                }
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = $"Ошибка открытия: {ex.Message}" });
+                return StatusCode(500, new { message = $"Ошибка: {ex.Message}", downloadUrl = smbUrl });
             }
-        }
-        
-        private string ConvertToLocalPath(string smbPath)
-        {
-            if (string.IsNullOrEmpty(smbPath)) return smbPath;
-            
-            // Преобразуем smb://MacBook-Air-Pavel.local/Yandex.Disk.localized/... обратно в локальный путь
-            if (smbPath.StartsWith("smb://MacBook-Air-Pavel.local/Yandex.Disk.localized"))
-            {
-                return smbPath.Replace(
-                    "smb://MacBook-Air-Pavel.local/Yandex.Disk.localized",
-                    "/Users/user/Yandex.Disk.localized"
-                );
-            }
-            
-            return smbPath;
         }
     }
 
     public class OpenFileRequest
     {
         public string FilePath { get; set; } = "";
-    }
-}=== ./Data/ITableRowRepository.cs ===
-// === ./Data/ITableRowRepository.cs ===
-using ProductionPlanner.Models;
-
-namespace ProductionPlanner.Data
-{
-    public interface ITableRowRepository
-    {
-        Task<List<TableRow>> GetAllRowsAsync();
-        Task<TableRow?> GetRowByIdAsync(int id);
-        Task AddRowAsync(TableRow row);
-        Task UpdateRowAsync(TableRow row);
-        Task DeleteRowAsync(int id);
-        Task ReorderRowsAsync(List<int> orderedIds);
-        Task<List<TableRow>> GetActiveRowsAsync();
-        Task<TableRow?> GetRowByFileNamesAsync(string folderPath, string fileName);
     }
 }=== ./Data/IProductionTaskRepository.cs ===
 using ProductionPlanner.Models;
@@ -1476,20 +1536,26 @@ namespace ProductionPlanner.Data
         Task<EmployeeStat?> GetEmployeeStatAsync(string employeeName);
         Task UpdateEmployeeStatAsync(EmployeeStat stat);
         Task<List<ProductionTask>> GetAllTasksAsync();
+        Task<List<ProductionTask>> GetRootTasksAsync();
+        Task<List<ProductionTask>> GetChildTasksAsync(int parentId);
+        Task ReorderTasksAsync(List<int> orderedIds);
     }
 }=== ./Data/ProductionTaskRepository.cs ===
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services; 
 
 namespace ProductionPlanner.Data
 {
     public class ProductionTaskRepository : IProductionTaskRepository
     {
         private readonly ApplicationDbContext _context;
+        private readonly IAppTimeService _timeService;
 
-        public ProductionTaskRepository(ApplicationDbContext context)
+        public ProductionTaskRepository(ApplicationDbContext context, IAppTimeService timeService)
         {
             _context = context;
+            _timeService = timeService;
         }
 
         public async Task<List<ProductionTask>> GetActiveTasksAsync(string employeeName)
@@ -1519,17 +1585,20 @@ namespace ProductionPlanner.Data
         {
             return await _context.ProductionTasks
                 .Include(t => t.WorkIntervals)
-                .FirstOrDefaultAsync(t => t.RowNumber == rowNumber);
+                .FirstOrDefaultAsync(t => t.Id == rowNumber);
         }
 
         public async Task AddTaskAsync(ProductionTask task)
         {
+            task.CreatedAt = _timeService.Now;
+            task.UpdatedAt = _timeService.Now;
             await _context.ProductionTasks.AddAsync(task);
             await _context.SaveChangesAsync();
         }
 
         public async Task UpdateTaskAsync(ProductionTask task)
         {
+            task.UpdatedAt = _timeService.Now;
             _context.ProductionTasks.Update(task);
             await _context.SaveChangesAsync();
         }
@@ -1596,6 +1665,44 @@ namespace ProductionPlanner.Data
                 .Include(t => t.WorkIntervals)
                 .ToListAsync();
         }
+
+        public async Task<List<ProductionTask>> GetRootTasksAsync()
+        {
+            return await _context.ProductionTasks
+                .Include(t => t.WorkIntervals)
+                .Where(t => t.ParentRowNumber == null)
+                .OrderBy(t => t.DisplayOrder)
+                .ToListAsync();
+        }
+
+        public async Task<List<ProductionTask>> GetChildTasksAsync(int parentId)
+        {
+            return await _context.ProductionTasks
+                .Include(t => t.WorkIntervals)
+                .Where(t => t.ParentRowNumber == parentId)
+                .ToListAsync();
+        }
+
+        public async Task ReorderTasksAsync(List<int> orderedIds)
+        {
+            var allTasks = await _context.ProductionTasks.ToListAsync();
+            var order = 0;
+            foreach (var id in orderedIds)
+            {
+                var task = allTasks.FirstOrDefault(t => t.Id == id);
+                if (task != null)
+                {
+                    task.DisplayOrder = order;
+                    order++;
+                }
+            }
+            foreach (var task in allTasks.Where(t => !orderedIds.Contains(t.Id)))
+            {
+                task.DisplayOrder = order;
+                order++;
+            }
+            await _context.SaveChangesAsync();
+        }
     }
 }=== ./Data/ApplicationDbContext.cs ===
 using Microsoft.AspNetCore.Identity;
@@ -1613,7 +1720,6 @@ namespace ProductionPlanner.Data
         public DbSet<WorkInterval> WorkIntervals { get; set; }
         public DbSet<EmployeeStat> EmployeeStats { get; set; }
         public DbSet<TaskSplit> TaskSplits { get; set; }
-        public DbSet<TableRow> TableRows { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -1670,224 +1776,49 @@ namespace ProductionPlanner.Data
             });
         }
     }
-}=== ./Data/TableRowRepository.cs ===
-// === ./Data/TableRowRepository.cs ===
-using Microsoft.EntityFrameworkCore;
-using ProductionPlanner.Models;
+}=== ./Services/AppTimeService.cs ===
+using System.Threading;
 
-namespace ProductionPlanner.Data
+namespace ProductionPlanner.Services;
+
+public interface IAppTimeService
 {
-    public class TableRowRepository : ITableRowRepository
+    DateTime Now { get; }
+    void SetMock(DateTime? mock);
+    void ResetMock();
+}
+
+public class AppTimeService : IAppTimeService
+{
+    private static readonly AsyncLocal<DateTime?> _mockDateTime = new();
+    private static DateTime? _globalMock;
+
+    public DateTime Now
     {
-        private readonly ApplicationDbContext _context;
-
-        public TableRowRepository(ApplicationDbContext context)
+        get
         {
-            _context = context;
-        }
-
-        public async Task<List<TableRow>> GetAllRowsAsync()
-        {
-            return await _context.TableRows
-                .OrderBy(r => r.DisplayOrder)
-                .ToListAsync();
-        }
-
-        public async Task<TableRow?> GetRowByIdAsync(int id)
-        {
-            return await _context.TableRows.FindAsync(id);
-        }
-
-        public async Task AddRowAsync(TableRow row)
-        {
-            // Новая строка получает DisplayOrder = -1, чтобы стать первой
-            row.DisplayOrder = -1;
-            row.CreatedAt = DateTime.UtcNow;
-            row.UpdatedAt = DateTime.UtcNow;
-            await _context.TableRows.AddAsync(row);
-            await _context.SaveChangesAsync();
+            if (_mockDateTime.Value.HasValue)
+                return _mockDateTime.Value.Value;
             
-            // Обновляем порядок
-            await ReorderRowsAsync(null);
-        }
-
-        public async Task UpdateRowAsync(TableRow row)
-        {
-            row.UpdatedAt = DateTime.UtcNow;
-            _context.TableRows.Update(row);
-            await _context.SaveChangesAsync();
-        }
-
-        public async Task DeleteRowAsync(int id)
-        {
-            var row = await GetRowByIdAsync(id);
-            if (row != null)
-            {
-                _context.TableRows.Remove(row);
-                await _context.SaveChangesAsync();
-                await ReorderRowsAsync(null);
-            }
-        }
-
-        public async Task ReorderRowsAsync(List<int>? orderedIds)
-        {
-            var allRows = await _context.TableRows.OrderBy(r => r.DisplayOrder).ToListAsync();
+            if (_globalMock.HasValue)
+                return _globalMock.Value;
             
-            if (orderedIds != null)
-            {
-                var order = 0;
-                foreach (var id in orderedIds)
-                {
-                    var row = allRows.FirstOrDefault(r => r.Id == id);
-                    if (row != null)
-                    {
-                        row.DisplayOrder = order;
-                        order++;
-                    }
-                }
-                // Добавляем строки, которых нет в orderedIds, в конец
-                foreach (var row in allRows.Where(r => !orderedIds.Contains(r.Id)))
-                {
-                    row.DisplayOrder = order;
-                    order++;
-                }
-            }
-            else
-            {
-                // Переиндексация с 0
-                for (int i = 0; i < allRows.Count; i++)
-                {
-                    allRows[i].DisplayOrder = i;
-                }
-            }
-            
-            await _context.SaveChangesAsync();
-        }
-
-        public async Task<List<TableRow>> GetActiveRowsAsync()
-        {
-            return await _context.TableRows
-                .Where(r => r.StatusText != "Готово" && (r.StatusText == null || !r.StatusText.StartsWith("Разделена")))
-                .OrderBy(r => r.DisplayOrder)
-                .ToListAsync();
-        }
-
-        public async Task<TableRow?> GetRowByFileNamesAsync(string folderPath, string fileName)
-        {
-            return await _context.TableRows
-                .FirstOrDefaultAsync(r => r.FolderPath == folderPath && r.FileName == fileName);
-        }
-
-        public async Task UpdateParentRowStatusAsync(int parentRowId, string status)
-        {
-            var parentRow = await GetRowByIdAsync(parentRowId);
-            if (parentRow != null)
-            {
-                parentRow.StatusText = status;
-                parentRow.UpdatedAt = DateTime.UtcNow;
-                await UpdateRowAsync(parentRow);
-            }
+            return DateTime.Now;
         }
     }
-}=== ./Services/SyncService.cs ===
-using ProductionPlanner.Data;
-using ProductionPlanner.Models;
-using ProductionPlanner.Services;
 
-namespace ProductionPlanner.Services
-{
-    public interface ISyncService
+    public void SetMock(DateTime? mock)
     {
-        Task SyncTasksFromTable();
+        _globalMock = mock;
+        _mockDateTime.Value = mock;
+        Console.WriteLine($"[AppTimeService] Mock set to: {mock}");
     }
 
-    public class SyncService : ISyncService
+    public void ResetMock()
     {
-        private readonly ITableRowRepository _tableRepo;
-        private readonly IProductionTaskRepository _taskRepo;
-
-        public SyncService(ITableRowRepository tableRepo, IProductionTaskRepository taskRepo)
-        {
-            _tableRepo = tableRepo;
-            _taskRepo = taskRepo;
-        }
-
-        public async Task SyncTasksFromTable()
-        {
-            var tableRows = await _tableRepo.GetAllRowsAsync();
-            var allTasks = await _taskRepo.GetAllTasksAsync();
-
-            foreach (var row in tableRows)
-            {
-                try
-                {
-                    if (row.ParentRowNumber.HasValue && row.ParentRowNumber > 0) continue;
-                    if (row.StatusText != null && row.StatusText.StartsWith("Разделена")) continue;
-                    if (row.StatusText == "Готово") continue;
-                    
-                    var existingTask = allTasks.FirstOrDefault(t => t.RowNumber == row.Id && !t.IsSplitTask);
-                    var filePath = string.IsNullOrEmpty(row.FolderPath) ? row.FileName : $"{row.FolderPath}/{row.FileName}";
-
-                    if (existingTask == null)
-                    {
-                        var newTask = new ProductionTask
-                        {
-                            RowNumber = row.Id,
-                            Title = string.IsNullOrEmpty(row.FileName) ? "Без названия" : row.FileName,
-                            File = filePath,
-                            Comment = row.Comment ?? "",
-                            Deadline = row.Deadline,
-                            EstimateHours = row.EstimateHours,
-                            Type = string.IsNullOrEmpty(row.Type) ? "Резка" : row.Type,
-                            EmployeeName = string.IsNullOrEmpty(row.EmployeeName) ? "Дима" : row.EmployeeName,
-                            Status = ConvertStatus(row.StatusText ?? ""),
-                            Progress = 0,
-                            WorkIntervals = new List<WorkInterval>(),
-                            IsSplitTask = false,
-                            ParentRowNumber = null
-                        };
-                        await _taskRepo.AddTaskAsync(newTask);
-                    }
-                    else
-                    {
-                        existingTask.Title = string.IsNullOrEmpty(row.FileName) ? "Без названия" : row.FileName;
-                        existingTask.File = filePath;
-                        existingTask.Comment = row.Comment ?? "";
-                        existingTask.Deadline = row.Deadline;
-                        existingTask.EstimateHours = row.EstimateHours;
-                        existingTask.Type = string.IsNullOrEmpty(row.Type) ? "Резка" : row.Type;
-                        existingTask.EmployeeName = string.IsNullOrEmpty(row.EmployeeName) ? "Дима" : row.EmployeeName;
-                        
-                        var newStatus = ConvertStatus(row.StatusText ?? "");
-                        if (newStatus == JobStatus.Completed && existingTask.Status != JobStatus.Completed)
-                        {
-                            existingTask.Status = JobStatus.Completed;
-                            existingTask.CompletedAt = AppTime.Now;
-                            existingTask.Progress = 1;
-                        }
-                        else if (newStatus != JobStatus.Completed && existingTask.Status != newStatus)
-                        {
-                            existingTask.Status = newStatus;
-                        }
-                        
-                        await _taskRepo.UpdateTaskAsync(existingTask);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[SyncService] Ошибка синхронизации строки {row.Id}: {ex.Message}");
-                }
-            }
-        }
-
-        private JobStatus ConvertStatus(string statusText)
-        {
-            if (string.IsNullOrEmpty(statusText)) return JobStatus.Assigned;
-            if (statusText == "Готово") return JobStatus.Completed;
-            if (statusText == "Начал") return JobStatus.InProgress;
-            if (statusText == "Пауза") return JobStatus.Paused;
-            return JobStatus.Assigned;
-        }
+        _globalMock = null;
+        _mockDateTime.Value = null;
+        Console.WriteLine("[AppTimeService] Mock reset");
     }
 }=== ./Services/IWorkHoursCalculator.cs ===
 namespace ProductionPlanner.Services
@@ -1940,39 +1871,48 @@ namespace ProductionPlanner.Services
         private readonly IEmployeeStatsService _statsService;
         private readonly IWorkHoursCalculator _workHours;
         private readonly ITaskSplitService _splitService;
-        private readonly ITableRowRepository _tableRepo;
+        private readonly IAppTimeService _timeService;
 
         public TaskLifecycleService(
             IProductionTaskRepository repo,
             IEmployeeStatsService statsService,
             IWorkHoursCalculator workHours,
             ITaskSplitService splitService,
-            ITableRowRepository tableRepo)
+            IAppTimeService timeService)
         {
             _repo = repo;
             _statsService = statsService;
             _workHours = workHours;
             _splitService = splitService;
-            _tableRepo = tableRepo;
+            _timeService = timeService;
         }
 
         public async Task StartTaskAsync(int taskId, DateTime now)
         {
+            Console.WriteLine($"[DEBUG] StartTaskAsync called with time: {now}");
+            
             var task = await _repo.GetTaskByIdAsync(taskId);
-            if (task == null || task.Status != JobStatus.Assigned) return;
+            if (task == null)
+                throw new Exception($"Задача {taskId} не найдена");
+
+            if (task.Status != JobStatus.Assigned && task.Status != JobStatus.Paused)
+                throw new Exception($"Невозможно запустить задачу в статусе {task.Status}");
 
             var startTime = _workHours.GetNextWorkStart(now);
             task.Status = JobStatus.InProgress;
-            var interval = new WorkInterval { ProductionTaskId = task.Id, StartTime = startTime, EndTime = null };
+            task.UpdatedAt = now;
+
+            var interval = new WorkInterval
+            {
+                ProductionTaskId = task.Id,
+                StartTime = startTime,
+                EndTime = null
+            };
+
             await _repo.AddWorkIntervalAsync(interval);
             await _repo.UpdateTaskAsync(task);
-
-            var tableRow = await _tableRepo.GetRowByIdAsync(task.RowNumber);
-            if (tableRow != null && tableRow.StatusText != "Готово")
-            {
-                tableRow.StatusText = "Начал";
-                await _tableRepo.UpdateRowAsync(tableRow);
-            }
+            
+            Console.WriteLine($"[DEBUG] Task {taskId} started, interval start: {startTime}");
         }
 
         public async Task UpdateProgressAsync(int taskId, double newProgress, DateTime now)
@@ -1981,6 +1921,7 @@ namespace ProductionPlanner.Services
             if (task == null || task.Status == JobStatus.Completed) return;
             if (newProgress > 0.99) newProgress = 0.99;
             task.Progress = newProgress;
+            task.UpdatedAt = now;
             if (task.Status == JobStatus.Assigned && newProgress > 0)
                 task.Status = JobStatus.InProgress;
             await _repo.UpdateTaskAsync(task);
@@ -1988,15 +1929,17 @@ namespace ProductionPlanner.Services
 
         public async Task CompleteTaskAsync(int taskId, DateTime now)
         {
+            Console.WriteLine($"[DEBUG] CompleteTaskAsync called with time: {now}");
+            
             var task = await _repo.GetTaskByIdAsync(taskId);
-            if (task == null) return;
-            if (task.Status == JobStatus.Completed) return;
+            if (task == null || task.Status == JobStatus.Completed) return;
 
             var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
             if (openInterval != null)
             {
                 openInterval.EndTime = now;
                 await _repo.UpdateWorkIntervalAsync(openInterval);
+                Console.WriteLine($"[DEBUG] Closed interval for task {taskId} at {now}");
             }
 
             double actual = 0;
@@ -2008,21 +1951,24 @@ namespace ProductionPlanner.Services
             task.Status = JobStatus.Completed;
             task.CompletedAt = now;
             task.Progress = 1;
+            task.UpdatedAt = now;
             await _repo.UpdateTaskAsync(task);
 
             double saved = task.EstimateHours - actual;
             await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
 
-            var tableRow = await _tableRepo.GetRowByIdAsync(task.RowNumber);
-            if (tableRow != null)
-            {
-                tableRow.StatusText = "Готово";
-                await _tableRepo.UpdateRowAsync(tableRow);
-            }
-
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
             {
-                await _splitService.AreAllSubtasksCompletedAsync(task.ParentRowNumber.Value);
+                var parentId = task.ParentRowNumber.Value;
+                var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId);
+                if (allCompleted)
+                {
+                    var parentTask = await _repo.GetTaskByIdAsync(parentId);
+                    if (parentTask != null && parentTask.IsSplitTask)
+                    {
+                        await _repo.DeleteTaskAsync(parentId);
+                    }
+                }
             }
         }
 
@@ -2034,14 +1980,8 @@ namespace ProductionPlanner.Services
             task.Status = JobStatus.Assigned;
             task.CompletedAt = null;
             task.Progress = 0;
+            task.UpdatedAt = now;
             await _repo.UpdateTaskAsync(task);
-
-            var tableRow = await _tableRepo.GetRowByIdAsync(task.RowNumber);
-            if (tableRow != null)
-            {
-                tableRow.StatusText = "";
-                await _tableRepo.UpdateRowAsync(tableRow);
-            }
         }
     }
 }=== ./Services/ProductionScheduler.cs ===
@@ -2133,7 +2073,8 @@ namespace ProductionPlanner.Services
                     risks.Add(new DeadlineRisk
                     {
                         TaskId = task.Id,
-                        TaskTitle = task.Title.Length > 50 ? task.Title.Substring(0, 50) + "..." : task.Title,
+                        // Заменяем Title на FileName
+                        TaskTitle = task.FileName.Length > 50 ? task.FileName.Substring(0, 50) + "..." : task.FileName,
                         Deadline = deadline,
                         RequiredHours = hoursNeeded,
                         AvailableHoursBeforeDeadline = workHoursUntilDeadline,
@@ -2178,7 +2119,11 @@ namespace ProductionPlanner.Services
         {
             DateTime next = from;
             while (!IsWorkingHour(next))
+            {
+                Console.WriteLine($"[WorkHours] {next} - not working hour, incrementing");
                 next = next.AddMinutes(1);
+            }
+            Console.WriteLine($"[WorkHours] Next work start: {next}");
             return next;
         }
 
@@ -2221,7 +2166,6 @@ namespace ProductionPlanner.Services
             
             while (current < end)
             {
-                // Пропускаем обед целиком
                 if (current.TimeOfDay >= lunchStart && current.TimeOfDay < lunchEnd)
                 {
                     current = current.Date.AddHours(15);
@@ -2256,10 +2200,12 @@ namespace ProductionPlanner.Services
     public class EmployeeStatsService : IEmployeeStatsService
     {
         private readonly IProductionTaskRepository _repo;
+        private readonly IAppTimeService _timeService;
 
-        public EmployeeStatsService(IProductionTaskRepository repo)
+        public EmployeeStatsService(IProductionTaskRepository repo, IAppTimeService timeService)
         {
             _repo = repo;
+            _timeService = timeService;
         }
 
         public async Task AddSavedHoursAsync(string employeeName, double savedHours, DateTime now)
@@ -2316,16 +2262,6 @@ namespace ProductionPlanner.Services
         Task UpdateParentCompletionStatusAsync(int parentRowNumber);
         Task<List<ProductionTask>> GetChildTasksAsync(int parentRowNumber);
     }
-}=== ./Services/AppTime.cs ===
-namespace ProductionPlanner.Services;
-
-public static class AppTime
-{
-    private static DateTime? _mockDateTime = null;
-    
-    public static void SetMock(DateTime? mock) => _mockDateTime = mock;
-    
-    public static DateTime Now => _mockDateTime ?? DateTime.Now;
 }=== ./Services/TaskSplitService.cs ===
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
@@ -2336,17 +2272,14 @@ namespace ProductionPlanner.Services
     public class TaskSplitService : ITaskSplitService
     {
         private readonly IProductionTaskRepository _repo;
-        private readonly ITableRowRepository _tableRepo;
         private readonly ApplicationDbContext _context;
+        private readonly IAppTimeService _timeService;
 
-        public TaskSplitService(
-            IProductionTaskRepository repo, 
-            ITableRowRepository tableRepo,
-            ApplicationDbContext context)
+        public TaskSplitService(IProductionTaskRepository repo, ApplicationDbContext context, IAppTimeService timeService)
         {
             _repo = repo;
-            _tableRepo = tableRepo;
             _context = context;
+            _timeService = timeService;
         }
 
         public async Task<ProductionTask> SplitTaskAsync(int parentTaskId, List<SplitPart> parts)
@@ -2355,58 +2288,36 @@ namespace ProductionPlanner.Services
             if (parentTask == null)
                 throw new Exception($"Задача {parentTaskId} не найдена");
 
-            var parentTableRow = await _tableRepo.GetRowByIdAsync(parentTask.RowNumber);
-            if (parentTableRow == null)
-                throw new Exception($"Строка таблицы {parentTask.RowNumber} не найдена");
-
             var totalAllocated = parts.Sum(p => p.AllocatedHours);
             if (Math.Abs(totalAllocated - parentTask.EstimateHours) > 0.01)
                 throw new Exception($"Сумма выделенных часов ({totalAllocated}) не равна оценке задачи ({parentTask.EstimateHours})");
 
             foreach (var part in parts)
             {
-                // Дочерняя строка в таблице
-                var childTableRow = new TableRow
-                {
-                    DisplayOrder = -1,
-                    FolderPath = parentTableRow.FolderPath,
-                    FileName = $"{parentTableRow.FileName} [{part.TaskType}]",
-                    Comment = parentTableRow.Comment,
-                    StatusText = "",
-                    Deadline = parentTableRow.Deadline,
-                    EstimateHours = part.AllocatedHours,
-                    Type = part.TaskType,
-                    EmployeeName = part.EmployeeName,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow,
-                    IsFromGoogleSheets = false,
-                    ParentRowNumber = parentTableRow.Id
-                };
-                await _tableRepo.AddRowAsync(childTableRow);
-                
-                // Дочерняя ProductionTask
                 var childTask = new ProductionTask
                 {
-                    RowNumber = childTableRow.Id,
-                    EmployeeName = part.EmployeeName,
-                    Title = $"{parentTask.Title} [{part.TaskType}]",
-                    File = parentTask.File,
+                    DisplayOrder = -1,
+                    FolderPath = parentTask.FolderPath,
+                    FileName = $"{parentTask.FileName} [{part.TaskType}]",
                     Comment = parentTask.Comment,
-                    Type = part.TaskType,
                     Deadline = parentTask.Deadline,
                     EstimateHours = part.AllocatedHours,
+                    Type = part.TaskType,
+                    EmployeeName = part.EmployeeName,
                     Status = JobStatus.Assigned,
                     Progress = 0,
                     ActualHours = 0,
-                    ParentRowNumber = parentTask.RowNumber,
-                    IsSplitTask = true
+                    ParentRowNumber = parentTask.Id,
+                    IsSplitTask = true,
+                    CreatedAt = _timeService.Now,
+                    UpdatedAt = _timeService.Now,
+                    WorkIntervals = new List<WorkInterval>()
                 };
                 await _repo.AddTaskAsync(childTask);
-                
-                // Связь
+
                 var split = new TaskSplit
                 {
-                    ParentRowNumber = parentTask.RowNumber,
+                    ParentRowNumber = parentTask.Id,
                     ChildTaskId = childTask.Id,
                     AssignedTo = part.EmployeeName,
                     SplitType = part.TaskType,
@@ -2414,39 +2325,25 @@ namespace ProductionPlanner.Services
                 };
                 await _context.TaskSplits.AddAsync(split);
             }
-            
-            // Удаляем родительскую ProductionTask
-            await _repo.DeleteTaskAsync(parentTaskId);
-            
-            // Обновляем родительскую строку
-            parentTableRow.StatusText = $"Разделена на {parts.Count}";
-            await _tableRepo.UpdateRowAsync(parentTableRow);
-            
+
+            parentTask.IsSplitTask = true;
+            parentTask.UpdatedAt = _timeService.Now;
+            await _repo.UpdateTaskAsync(parentTask);
+
             await _context.SaveChangesAsync();
-            
+
+            var allRootIds = (await _repo.GetRootTasksAsync()).OrderBy(t => t.DisplayOrder).Select(t => t.Id).ToList();
+            await _repo.ReorderTasksAsync(allRootIds);
+
             return parentTask;
         }
 
         public async Task<bool> AreAllSubtasksCompletedAsync(int parentRowNumber)
         {
-            var allTableRows = await _tableRepo.GetAllRowsAsync();
-            var children = allTableRows.Where(r => r.ParentRowNumber == parentRowNumber).ToList();
-            
-            if (!children.Any()) return false;
-            
-            bool allCompleted = children.All(r => r.StatusText == "Готово");
-            
-            if (allCompleted)
-            {
-                var parentRow = await _tableRepo.GetRowByIdAsync(parentRowNumber);
-                if (parentRow != null && parentRow.StatusText != "Готово")
-                {
-                    parentRow.StatusText = "Готово";
-                    await _tableRepo.UpdateRowAsync(parentRow);
-                }
-            }
-            
-            return allCompleted;
+            var allTasks = await _repo.GetAllTasksAsync();
+            var children = allTasks.Where(t => t.ParentRowNumber == parentRowNumber && t.IsSplitTask).ToList();
+            if (!children.Any()) return true;
+            return children.All(t => t.Status == JobStatus.Completed);
         }
 
         public async Task UpdateParentCompletionStatusAsync(int parentRowNumber)
@@ -2484,6 +2381,7 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.UseUrls("http://0.0.0.0:5234", "http://localhost:5234");
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -2493,20 +2391,20 @@ builder.Services.AddControllers()
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddLogging();
 
-// Настройка SQLite с папкой App_Data (для прав на запись на хостинге)
-var dataDirectory = Path.Combine(AppContext.BaseDirectory, "App_Data");
+// БД создаётся в папке App_Data в КОРНЕ ПРОЕКТА, а не в bin
+var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "App_Data");
 Directory.CreateDirectory(dataDirectory);
 var dbPath = Path.Combine(dataDirectory, "ProductionPlanner.db");
+Console.WriteLine($"Путь к БД: {dbPath}");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"));
 
-// Добавляем Identity
 builder.Services.AddIdentity<User, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
 
-// Настройка паролей (упрощённая для тестирования)
 builder.Services.Configure<IdentityOptions>(options =>
 {
     options.Password.RequireDigit = false;
@@ -2516,19 +2414,17 @@ builder.Services.Configure<IdentityOptions>(options =>
     options.Password.RequireLowercase = false;
 });
 
-// Настройка Cookie для аутентификации
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Lax;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.None; // Для разработки (http)
+    options.Cookie.SecurePolicy = CookieSecurePolicy.None;
     options.LoginPath = "/api/auth/login";
     options.LogoutPath = "/api/auth/logout";
     options.ExpireTimeSpan = TimeSpan.FromDays(7);
     options.SlidingExpiration = true;
 });
 
-// Добавляем аутентификацию
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
@@ -2538,17 +2434,14 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// Регистрация сервисов (Google Sheets удалён)
 builder.Services.AddScoped<IWorkHoursCalculator, WorkHoursCalculator>();
 builder.Services.AddScoped<IProductionScheduler, ProductionScheduler>();
 builder.Services.AddScoped<ITaskLifecycleService, TaskLifecycleService>();
 builder.Services.AddScoped<IEmployeeStatsService, EmployeeStatsService>();
 builder.Services.AddScoped<IProductionTaskRepository, ProductionTaskRepository>();
 builder.Services.AddScoped<ITaskSplitService, TaskSplitService>();
-builder.Services.AddScoped<ITableRowRepository, TableRowRepository>();
-builder.Services.AddScoped<ISyncService, SyncService>();
+builder.Services.AddScoped<IAppTimeService, AppTimeService>();
 
-// CORS для разработки (не мешает на продакшене)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReact", policy =>
@@ -2565,29 +2458,54 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    db.Database.EnsureCreated();
-    
-    // Создаём таблицу TableRows, если её нет (с полем ParentRowNumber)
-    db.Database.ExecuteSqlRaw(@"
-        CREATE TABLE IF NOT EXISTS ""TableRows"" (
-            ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_TableRows"" PRIMARY KEY AUTOINCREMENT,
-            ""DisplayOrder"" INTEGER NOT NULL,
-            ""FolderPath"" TEXT NOT NULL,
-            ""FileName"" TEXT NOT NULL,
-            ""Comment"" TEXT NOT NULL,
-            ""StatusText"" TEXT NOT NULL,
-            ""Deadline"" TEXT NOT NULL,
-            ""EstimateHours"" REAL NOT NULL,
-            ""Type"" TEXT NOT NULL,
-            ""EmployeeName"" TEXT NOT NULL,
-            ""CreatedAt"" TEXT NOT NULL,
-            ""UpdatedAt"" TEXT NOT NULL,
-            ""IsFromGoogleSheets"" INTEGER NOT NULL,
-            ""ParentRowNumber"" INTEGER NULL
-        );
-    ");
-    
-    // Создаём роли и пользователей
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    // Принудительно удаляем и создаём БД заново (только при разработке, удалить потом)
+    // db.Database.EnsureDeleted(); // раскомментировать при необходимости
+
+    var created = db.Database.EnsureCreated();
+    logger.LogInformation(created ? "База данных создана." : "База данных уже существует.");
+
+    // Автоматическое добавление недостающих колонок (безопасно)
+    try
+    {
+        var connection = db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(ProductionTasks)";
+            using var reader = await cmd.ExecuteReaderAsync();
+            var columns = new HashSet<string>();
+            while (await reader.ReadAsync())
+                columns.Add(reader.GetString(1));
+
+            var alterCommands = new List<string>();
+            if (!columns.Contains("FolderPath"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN FolderPath TEXT NOT NULL DEFAULT ''");
+            if (!columns.Contains("FileName"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN FileName TEXT NOT NULL DEFAULT ''");
+            if (!columns.Contains("DisplayOrder"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN DisplayOrder INTEGER NOT NULL DEFAULT 0");
+            if (!columns.Contains("CreatedAt"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN CreatedAt TEXT NOT NULL DEFAULT '2024-01-01 00:00:00'");
+            if (!columns.Contains("UpdatedAt"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN UpdatedAt TEXT NOT NULL DEFAULT '2024-01-01 00:00:00'");
+
+            foreach (var alterCmd in alterCommands)
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = alterCmd;
+                await alterCommand.ExecuteNonQueryAsync();
+                logger.LogInformation($"Выполнен ALTER: {alterCmd}");
+            }
+        }
+        await connection.CloseAsync();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Ошибка при обновлении схемы БД");
+    }
+
     await InitializeUsersAsync(scope.ServiceProvider);
 }
 
@@ -2597,57 +2515,46 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Порядок middleware важен!
-app.UseStaticFiles();           // Отдаём статику (фронтенд из wwwroot)
+app.UseStaticFiles();
 app.UseCors("AllowReact");
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapControllers();           // API-контроллеры
-app.MapFallbackToFile("index.html"); // SPA fallback — для React-роутинга
+app.MapControllers();
+app.MapFallbackToFile("index.html");
 
 app.Run();
 
-// Функция для инициализации пользователей
 async Task InitializeUsersAsync(IServiceProvider serviceProvider)
 {
     var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     var userManager = serviceProvider.GetRequiredService<UserManager<User>>();
-    
-    // Создаём роли
+    var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+
     string[] roles = { "Admin", "Employee", "Viewer" };
     foreach (var role in roles)
-    {
         if (!await roleManager.RoleExistsAsync(role))
-        {
             await roleManager.CreateAsync(new IdentityRole(role));
-        }
-    }
-    
-    // 1. Администратор Павел
-    var pavelEmail = "pavel@admin.com";
-    var pavelUser = await userManager.FindByEmailAsync(pavelEmail);
-    if (pavelUser == null)
+
+    if (await userManager.FindByEmailAsync("pavel@admin.com") == null)
     {
-        pavelUser = new User
+        var user = new User
         {
-            UserName = pavelEmail,
-            Email = pavelEmail,
+            UserName = "pavel@admin.com",
+            Email = "pavel@admin.com",
             FullName = "Павел",
             Role = "Admin",
             IsActive = true,
             EmailConfirmed = true,
             CreatedAt = DateTime.UtcNow
         };
-        await userManager.CreateAsync(pavelUser, "Admin123!");
-        await userManager.AddToRoleAsync(pavelUser, "Admin");
-        Console.WriteLine("Администратор Павел создан");
+        await userManager.CreateAsync(user, "Admin123!");
+        await userManager.AddToRoleAsync(user, "Admin");
+        logger.LogInformation("Создан администратор Павел");
     }
-    
-    // 2. Сотрудник Дима (вход без пароля)
-    var dimaUser = userManager.Users.FirstOrDefault(u => u.FullName == "Дима");
-    if (dimaUser == null)
+
+    if (await userManager.FindByNameAsync("dima@employee.local") == null)
     {
-        dimaUser = new User
+        var user = new User
         {
             UserName = "dima@employee.local",
             Email = "dima@employee.local",
@@ -2657,16 +2564,14 @@ async Task InitializeUsersAsync(IServiceProvider serviceProvider)
             EmailConfirmed = true,
             CreatedAt = DateTime.UtcNow
         };
-        await userManager.CreateAsync(dimaUser, "Employee123!");
-        await userManager.AddToRoleAsync(dimaUser, "Employee");
-        Console.WriteLine("Сотрудник Дима создан");
+        await userManager.CreateAsync(user, "Employee123!");
+        await userManager.AddToRoleAsync(user, "Employee");
+        logger.LogInformation("Создан сотрудник Дима");
     }
-    
-    // 3. Сотрудник Яромир (вход без пароля)
-    var yaromerUser = userManager.Users.FirstOrDefault(u => u.FullName == "Яромир");
-    if (yaromerUser == null)
+
+    if (await userManager.FindByNameAsync("yaromer@employee.local") == null)
     {
-        yaromerUser = new User
+        var user = new User
         {
             UserName = "yaromer@employee.local",
             Email = "yaromer@employee.local",
@@ -2676,28 +2581,8 @@ async Task InitializeUsersAsync(IServiceProvider serviceProvider)
             EmailConfirmed = true,
             CreatedAt = DateTime.UtcNow
         };
-        await userManager.CreateAsync(yaromerUser, "Employee123!");
-        await userManager.AddToRoleAsync(yaromerUser, "Employee");
-        Console.WriteLine("Сотрудник Яромир создан");
-    }
-    
-    // 4. Дополнительный администратор (на всякий случай)
-    var adminEmail = "admin@example.com";
-    var adminUser = await userManager.FindByEmailAsync(adminEmail);
-    if (adminUser == null)
-    {
-        adminUser = new User
-        {
-            UserName = adminEmail,
-            Email = adminEmail,
-            FullName = "Администратор",
-            Role = "Admin",
-            IsActive = true,
-            EmailConfirmed = true,
-            CreatedAt = DateTime.UtcNow
-        };
-        await userManager.CreateAsync(adminUser, "Admin123!");
-        await userManager.AddToRoleAsync(adminUser, "Admin");
-        Console.WriteLine("Дополнительный администратор создан");
+        await userManager.CreateAsync(user, "Employee123!");
+        await userManager.AddToRoleAsync(user, "Employee");
+        logger.LogInformation("Создан сотрудник Яромир");
     }
 }

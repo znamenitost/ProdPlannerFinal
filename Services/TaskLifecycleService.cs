@@ -9,39 +9,48 @@ namespace ProductionPlanner.Services
         private readonly IEmployeeStatsService _statsService;
         private readonly IWorkHoursCalculator _workHours;
         private readonly ITaskSplitService _splitService;
-        private readonly ITableRowRepository _tableRepo;
+        private readonly IAppTimeService _timeService;
 
         public TaskLifecycleService(
             IProductionTaskRepository repo,
             IEmployeeStatsService statsService,
             IWorkHoursCalculator workHours,
             ITaskSplitService splitService,
-            ITableRowRepository tableRepo)
+            IAppTimeService timeService)
         {
             _repo = repo;
             _statsService = statsService;
             _workHours = workHours;
             _splitService = splitService;
-            _tableRepo = tableRepo;
+            _timeService = timeService;
         }
 
         public async Task StartTaskAsync(int taskId, DateTime now)
         {
+            Console.WriteLine($"[DEBUG] StartTaskAsync called with time: {now}");
+            
             var task = await _repo.GetTaskByIdAsync(taskId);
-            if (task == null || task.Status != JobStatus.Assigned) return;
+            if (task == null)
+                throw new Exception($"Задача {taskId} не найдена");
+
+            if (task.Status != JobStatus.Assigned && task.Status != JobStatus.Paused)
+                throw new Exception($"Невозможно запустить задачу в статусе {task.Status}");
 
             var startTime = _workHours.GetNextWorkStart(now);
             task.Status = JobStatus.InProgress;
-            var interval = new WorkInterval { ProductionTaskId = task.Id, StartTime = startTime, EndTime = null };
+            task.UpdatedAt = now;
+
+            var interval = new WorkInterval
+            {
+                ProductionTaskId = task.Id,
+                StartTime = startTime,
+                EndTime = null
+            };
+
             await _repo.AddWorkIntervalAsync(interval);
             await _repo.UpdateTaskAsync(task);
-
-            var tableRow = await _tableRepo.GetRowByIdAsync(task.RowNumber);
-            if (tableRow != null && tableRow.StatusText != "Готово")
-            {
-                tableRow.StatusText = "Начал";
-                await _tableRepo.UpdateRowAsync(tableRow);
-            }
+            
+            Console.WriteLine($"[DEBUG] Task {taskId} started, interval start: {startTime}");
         }
 
         public async Task UpdateProgressAsync(int taskId, double newProgress, DateTime now)
@@ -50,6 +59,7 @@ namespace ProductionPlanner.Services
             if (task == null || task.Status == JobStatus.Completed) return;
             if (newProgress > 0.99) newProgress = 0.99;
             task.Progress = newProgress;
+            task.UpdatedAt = now;
             if (task.Status == JobStatus.Assigned && newProgress > 0)
                 task.Status = JobStatus.InProgress;
             await _repo.UpdateTaskAsync(task);
@@ -57,15 +67,17 @@ namespace ProductionPlanner.Services
 
         public async Task CompleteTaskAsync(int taskId, DateTime now)
         {
+            Console.WriteLine($"[DEBUG] CompleteTaskAsync called with time: {now}");
+            
             var task = await _repo.GetTaskByIdAsync(taskId);
-            if (task == null) return;
-            if (task.Status == JobStatus.Completed) return;
+            if (task == null || task.Status == JobStatus.Completed) return;
 
             var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
             if (openInterval != null)
             {
                 openInterval.EndTime = now;
                 await _repo.UpdateWorkIntervalAsync(openInterval);
+                Console.WriteLine($"[DEBUG] Closed interval for task {taskId} at {now}");
             }
 
             double actual = 0;
@@ -77,21 +89,24 @@ namespace ProductionPlanner.Services
             task.Status = JobStatus.Completed;
             task.CompletedAt = now;
             task.Progress = 1;
+            task.UpdatedAt = now;
             await _repo.UpdateTaskAsync(task);
 
             double saved = task.EstimateHours - actual;
             await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
 
-            var tableRow = await _tableRepo.GetRowByIdAsync(task.RowNumber);
-            if (tableRow != null)
-            {
-                tableRow.StatusText = "Готово";
-                await _tableRepo.UpdateRowAsync(tableRow);
-            }
-
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
             {
-                await _splitService.AreAllSubtasksCompletedAsync(task.ParentRowNumber.Value);
+                var parentId = task.ParentRowNumber.Value;
+                var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId);
+                if (allCompleted)
+                {
+                    var parentTask = await _repo.GetTaskByIdAsync(parentId);
+                    if (parentTask != null && parentTask.IsSplitTask)
+                    {
+                        await _repo.DeleteTaskAsync(parentId);
+                    }
+                }
             }
         }
 
@@ -103,14 +118,8 @@ namespace ProductionPlanner.Services
             task.Status = JobStatus.Assigned;
             task.CompletedAt = null;
             task.Progress = 0;
+            task.UpdatedAt = now;
             await _repo.UpdateTaskAsync(task);
-
-            var tableRow = await _tableRepo.GetRowByIdAsync(task.RowNumber);
-            if (tableRow != null)
-            {
-                tableRow.StatusText = "";
-                await _tableRepo.UpdateRowAsync(tableRow);
-            }
         }
     }
 }

@@ -1,0 +1,310 @@
+// ./frontend/src/components/ParentTaskRow.jsx
+import { Fragment } from 'react';
+import {
+  TableRow,
+  TableCell,
+  Box,
+  IconButton,
+  Tooltip,
+  Typography,
+  Chip,
+  Collapse
+} from '@mui/material';
+import {
+  PlayArrow,
+  Pause,
+  CheckCircle,
+  Edit,
+  Delete,
+  FolderOpen,
+  ExpandMore,
+  ChevronRight,
+  CallSplit,
+  Person,
+  Comment as CommentIcon
+} from '@mui/icons-material';
+import {
+  truncate,
+  getStatusColor,
+  getStatusIcon,
+  getParentStatus,
+  getUniqueEmployeesFromChildren,
+  isOverdue,
+  getLastPathSegment,
+  isTaskBelongsToUser
+} from '../utils/taskHelpers';
+import ChildTaskRow from './ChildTaskRow';
+
+export default function ParentTaskRow({
+  task,
+  isExpanded,
+  onToggleExpand,
+  onOpenFile,
+  onStart,
+  onPause,
+  onResume,
+  onComplete,
+  onEdit,
+  onDelete,
+  onSplit,
+  onOpenComment,
+  canEdit,
+  canDelete,
+  canSplit,
+  canChangeStatus,
+  currentUser,
+  highlightMyTasks
+}) {
+  const overdue = isOverdue(task.deadline, task.statusText);
+  const hasChildren = task.children && task.children.length > 0;
+
+  // Статус для отображения (если есть дети — вычисляем составной статус)
+  let displayStatus = task.statusText;
+  let displayStatusIcon = getStatusIcon(displayStatus);
+  let displayStatusColor = getStatusColor(displayStatus);
+
+  if (hasChildren) {
+    displayStatus = getParentStatus(task);
+    displayStatusIcon = getStatusIcon(displayStatus);
+    displayStatusColor = getStatusColor(displayStatus);
+  }
+
+  // Кто отображается в колонке "Сотрудник"
+  const employeeDisplay = hasChildren
+    ? getUniqueEmployeesFromChildren(task.children)
+    : task.employeeName;
+
+  // Подсветка задач текущего пользователя
+  const isMine = isTaskBelongsToUser(task, currentUser, hasChildren);
+  const fullFilePath = `${task.folderPath || ''}/${task.fileName || ''}`.replace(/\/\//g, '/');
+  const shortFolderPath = getLastPathSegment(task.folderPath);
+
+  // Проверка, может ли текущий пользователь управлять этой задачей
+  const canUserManage = () => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'Admin') return true;
+    if (!hasChildren) {
+      return task.employeeName === currentUser.fullName && task.statusText !== 'Готово';
+    }
+    return false;
+  };
+
+  const getRowStyle = () => {
+    let style = {
+      '&:hover': { bgcolor: '#f8fafc' },
+      borderLeft: 'none'
+    };
+    let bgColor = overdue && task.statusText !== 'Готово' ? '#fef2f2' : 'inherit';
+    if (highlightMyTasks) {
+      if (isMine) {
+        bgColor = '#e6f7ff';
+        style.boxShadow = 'inset 0 0 0 2px #1890ff';
+        style.borderRadius = '4px';
+      } else {
+        style.opacity = '0.65';
+        style['&:hover'] = { bgcolor: '#f8fafc', opacity: '0.85' };
+      }
+    }
+    return { ...style, bgcolor: bgColor };
+  };
+
+  const showActionButtons = canUserManage() && canChangeStatus && !hasChildren;
+
+  return (
+    <Fragment>
+      {/* Основная строка */}
+      <TableRow sx={getRowStyle()}>
+        <TableCell sx={{ width: '3%' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
+            {hasChildren && (
+              <IconButton size="small" onClick={() => onToggleExpand(task.id)}>
+                {isExpanded ? <ExpandMore fontSize="small" /> : <ChevronRight fontSize="small" />}
+              </IconButton>
+            )}
+            {!hasChildren && <Box sx={{ width: 28 }} />}
+            <Tooltip title={`Открыть файл: ${fullFilePath}`} arrow>
+              <IconButton size="small" onClick={() => onOpenFile(task)} sx={{ color: '#7c9ebf' }}>
+                <FolderOpen fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </TableCell>
+
+        <TableCell sx={{ width: '15%' }}>
+          <Tooltip title={task.folderPath || ''} arrow>
+            <Typography variant="body2" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {truncate(shortFolderPath, 50)}
+            </Typography>
+          </Tooltip>
+        </TableCell>
+
+        <TableCell sx={{ width: '10%' }}>
+          <Tooltip title={task.fileName || ''} arrow>
+            <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {truncate(task.fileName || '', 50)}
+            </Typography>
+          </Tooltip>
+        </TableCell>
+
+        <TableCell sx={{ width: '20%' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Tooltip title={task.comment || 'Нет комментария'} arrow placement="top"
+              slotProps={{ tooltip: { sx: { bgcolor: '#1e293b', fontSize: '12px', padding: '8px 15px', maxWidth: '400px', borderRadius: 2 } } }}
+            >
+              <Typography variant="body2" sx={{
+                color: 'text.secondary',
+                fontSize: '0.8rem',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                wordBreak: 'break-word',
+                maxWidth: '100%',
+                cursor: 'default'
+              }}>
+                {truncate(task.comment || '—', 25)}
+              </Typography>
+            </Tooltip>
+            <IconButton size="small" onClick={() => onOpenComment(task)} sx={{ p: 0.5, flexShrink: 0 }}>
+              <CommentIcon fontSize="small" sx={{ fontSize: 14, color: '#7c9ebf' }} />
+            </IconButton>
+          </Box>
+        </TableCell>
+
+        <TableCell sx={{ width: '10%' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <Typography variant="body2" sx={{ color: overdue ? '#dc2626' : 'inherit', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+              {new Date(task.deadline).toLocaleDateString()}
+            </Typography>
+            <Typography variant="caption" sx={{ color: overdue ? '#dc2626' : 'text.secondary', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+              {new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Typography>
+          </Box>
+        </TableCell>
+
+        <TableCell align="center" sx={{ width: '6%' }}>
+          <Typography variant="body2" sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+            {task.estimateHours.toFixed(1)} ч
+          </Typography>
+        </TableCell>
+
+        <TableCell sx={{ width: '8%' }}>
+          <Tooltip title={task.type} arrow>
+            <Chip label={truncate(task.type, 20)} size="small" variant="outlined" sx={{ fontSize: '0.7rem', maxWidth: '100%' }} />
+          </Tooltip>
+        </TableCell>
+
+        <TableCell sx={{ width: '8%' }}>
+          <Chip icon={<Person sx={{ fontSize: 14 }} />} label={employeeDisplay} size="small" variant="outlined" sx={{ fontSize: '0.7rem', whiteSpace: 'nowrap', maxWidth: '100%' }} />
+        </TableCell>
+
+        <TableCell sx={{ width: '8%' }}>
+          {hasChildren ? (
+            <Chip icon={displayStatusIcon} label={displayStatus} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
+          ) : (
+            <Chip icon={displayStatusIcon} label={task.statusText || "Назначена"} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
+          )}
+        </TableCell>
+
+        <TableCell sx={{ width: (canEdit || canDelete || canSplit) ? '12%' : '10%' }}>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
+            {/* Кнопка разделения только для задач без детей и для админа */}
+            {canSplit && !hasChildren && task.statusText !== 'Готово' && (
+              <Tooltip title="Разделить задачу">
+                <IconButton size="small" onClick={() => onSplit(task)} sx={{ color: '#8b5cf6' }}>
+                  <CallSplit fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {/* Редактирование - только для админа */}
+            {canEdit && (
+              <Tooltip title="Редактировать">
+                <IconButton size="small" onClick={() => onEdit(task)}>
+                  <Edit fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {/* Удаление - только для админа */}
+            {canDelete && (
+              <Tooltip title="Удалить">
+                <IconButton size="small" color="error" onClick={() => onDelete(task.id)}>
+                  <Delete fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {/* Кнопки статуса - только если задача назначена текущему пользователю */}
+            {showActionButtons && (
+              <>
+                {task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && (
+                  <Tooltip title="Начать">
+                    <IconButton size="small" onClick={() => onStart(task)} sx={{ color: '#22c55e' }}>
+                      <PlayArrow fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {task.statusText === 'Начал' && (
+                  <>
+                    <Tooltip title="Пауза">
+                      <IconButton size="small" onClick={() => onPause(task)} sx={{ color: '#f59e0b' }}>
+                        <Pause fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Завершить">
+                      <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
+                        <CheckCircle fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </>
+                )}
+                {task.statusText === 'Пауза' && (
+                  <>
+                    <Tooltip title="Продолжить">
+                      <IconButton size="small" onClick={() => onResume(task)} sx={{ color: '#22c55e' }}>
+                        <PlayArrow fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Завершить">
+                      <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
+                        <CheckCircle fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </>
+                )}
+              </>
+            )}
+          </Box>
+        </TableCell>
+      </TableRow>
+
+      {/* Дочерние строки (если есть и развёрнуто) */}
+      {hasChildren && isExpanded && (
+        <TableRow>
+          <TableCell colSpan={10} sx={{ p: 0 }}>
+            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+              <table style={{ width: '100%', paddingLeft: '48px' }}>
+                <tbody>
+                  {task.children.map(child => (
+                    <ChildTaskRow
+                      key={child.id}
+                      task={child}
+                      onOpenFile={onOpenFile}
+                      onStart={onStart}
+                      onPause={onPause}
+                      onResume={onResume}
+                      onComplete={onComplete}
+                      onOpenComment={onOpenComment}
+                      canChangeStatus={canChangeStatus}
+                      currentUser={currentUser}
+                      highlightMyTasks={highlightMyTasks}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </Collapse>
+          </TableCell>
+        </TableRow>
+      )}
+    </Fragment>
+  );
+}

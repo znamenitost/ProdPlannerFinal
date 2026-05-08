@@ -1,41 +1,15 @@
+// ./frontend/src/components/EditTaskRow.jsx
 import { TableRow, TableCell, TextField, Select, MenuItem, IconButton, Tooltip, Box } from '@mui/material';
 import { Save, Cancel } from '@mui/icons-material';
-
-const WORK_TIME_OPTIONS = [];
-for (let h = 10; h <= 19; h++) {
-  for (let m of [0, 30]) {
-    if (h === 19 && m === 30) continue;
-    const hour = h.toString().padStart(2, '0');
-    const minute = m.toString().padStart(2, '0');
-    WORK_TIME_OPTIONS.push(`${hour}:${minute}`);
-  }
-}
-const DEFAULT_TIME = '15:00';
-
-const parseDateTime = (dateTimeStr) => {
-  if (!dateTimeStr) return { date: '', time: DEFAULT_TIME };
-  const date = new Date(dateTimeStr);
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return { date: `${year}-${month}-${day}`, time: `${hours}:${minutes}` };
-};
-
-const combineDateTime = (date, time) => {
-  if (!date) return '';
-  return `${date}T${time}`;
-};
+import { WORK_TIME_OPTIONS, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
 
 export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, taskTypes, employees }) {
   const { date, time } = parseDateTime(task.deadline);
 
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
-      <TableCell sx={{ width: 60 }}>✏️</TableCell>
+      <TableCell>✏️</TableCell>
 
-      {/* Задача (путь к папке) */}
       <TableCell>
         <TextField
           size="small"
@@ -46,7 +20,6 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
         />
       </TableCell>
 
-      {/* Файл (имя файла) */}
       <TableCell>
         <TextField
           size="small"
@@ -66,7 +39,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
         />
       </TableCell>
 
-      <TableCell sx={{ width: 230 }}>
+      <TableCell>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <TextField
             size="small"
@@ -74,7 +47,6 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
             value={date}
             onChange={(e) => onFieldChange(task, 'deadline', combineDateTime(e.target.value, time))}
             sx={{ width: 130 }}
-            slotProps={{ inputLabel: { shrink: true } }}
           />
           <Select
             size="small"
@@ -87,7 +59,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
         </Box>
       </TableCell>
 
-      <TableCell sx={{ width: 80 }}>
+      <TableCell>
         <TextField
           size="small"
           type="number"
@@ -98,7 +70,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
         />
       </TableCell>
 
-      <TableCell sx={{ width: 160 }}>
+      <TableCell>
         <Select
           size="small"
           multiple
@@ -111,7 +83,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
         </Select>
       </TableCell>
 
-      <TableCell sx={{ width: 120 }}>
+      <TableCell>
         <Select
           size="small"
           value={task.employeeName || ''}
@@ -122,7 +94,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
         </Select>
       </TableCell>
 
-      <TableCell sx={{ width: 120 }}>
+      <TableCell>
         <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{task.statusText || 'Назначена'}</span>
       </TableCell>
 

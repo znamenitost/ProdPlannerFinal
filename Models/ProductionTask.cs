@@ -6,29 +6,70 @@ namespace ProductionPlanner.Models
     {
         [Key]
         public int Id { get; set; }
-        public int RowNumber { get; set; }
-        public string EmployeeName { get; set; } = string.Empty;
-        public string Title { get; set; } = string.Empty;
-        public string File { get; set; } = string.Empty;
-        public string Comment { get; set; } = string.Empty;
-        public string Type { get; set; } = string.Empty;
+        
+        public int DisplayOrder { get; set; }
+        
+        private string? _folderPath;
+        public string FolderPath 
+        { 
+            get => _folderPath ?? string.Empty;
+            set => _folderPath = value;
+        }
+        
+        private string? _fileName;
+        public string FileName 
+        { 
+            get => _fileName ?? string.Empty;
+            set => _fileName = value;
+        }
+        
+        private string? _comment;
+        public string Comment 
+        { 
+            get => _comment ?? string.Empty;
+            set => _comment = value;
+        }
+        
         public DateTime Deadline { get; set; }
         public double EstimateHours { get; set; }
+        
+        private string? _type;
+        public string Type 
+        { 
+            get => _type ?? string.Empty;
+            set => _type = value;
+        }
+        
+        private string? _employeeName;
+        public string EmployeeName 
+        { 
+            get => _employeeName ?? string.Empty;
+            set => _employeeName = value;
+        }
+        
         public JobStatus Status { get; set; }
         public double Progress { get; set; }
         public double ActualHours { get; set; }
         public DateTime? CompletedAt { get; set; }
+        
         public List<WorkInterval> WorkIntervals { get; set; } = new();
         
-        // Поля для уведомлений (добавить)
-        public bool Notified { get; set; } = false;
-        public bool OverdueNotified { get; set; } = false;
+        public bool Notified { get; set; }
+        public bool OverdueNotified { get; set; }
         
-        // Новые поля для разделения задач
-        public int? ParentRowNumber { get; set; }  // Если не null, это дочерняя задача
-        public bool IsSplitTask { get; set; } = false;  // Является ли результат разделения
-        
-        // Навигационное свойство для дочерних задач
+        public int? ParentRowNumber { get; set; }
+        public bool IsSplitTask { get; set; }
         public List<TaskSplit> ChildSplits { get; set; } = new();
+        
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        
+        public string FullPath => string.IsNullOrEmpty(FolderPath) ? FileName : $"{FolderPath}/{FileName}";
+        
+        public string File 
+        { 
+            get => FullPath;
+            set { /* для совместимости */ }
+        }
     }
 }

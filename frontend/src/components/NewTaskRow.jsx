@@ -1,16 +1,7 @@
+// ./frontend/src/components/NewTaskRow.jsx
 import { TableRow, TableCell, TextField, Select, MenuItem, FormControl, InputLabel, Box, Chip, IconButton, Tooltip, Button } from '@mui/material';
 import { Save, Cancel } from '@mui/icons-material';
-
-const WORK_TIME_OPTIONS = [];
-for (let h = 10; h <= 19; h++) {
-  for (let m of [0, 30]) {
-    if (h === 19 && m === 30) continue;
-    const hour = h.toString().padStart(2, '0');
-    const minute = m.toString().padStart(2, '0');
-    WORK_TIME_OPTIONS.push(`${hour}:${minute}`);
-  }
-}
-const DEFAULT_TIME = '15:00';
+import { WORK_TIME_OPTIONS, DEFAULT_TIME, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
 
 export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, onSave, onCancel }) {
   const currentDate = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(0, 10) : '';
@@ -20,22 +11,20 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
       <TableCell>✨</TableCell>
       
-      {/* Поле "Задача" – путь к папке */}
       <TableCell>
         <TextField
           size="small"
-          placeholder="Путь к папке (например, Users/user/Yandex.Disk.localized/Клиенты/А/)"
+          placeholder="Путь к папке"
           value={newRow.folderPath || ''}
           onChange={(e) => setNewRow({ ...newRow, folderPath: e.target.value })}
           fullWidth
         />
       </TableCell>
       
-      {/* Поле "Файл" – имя файла */}
       <TableCell>
         <TextField
           size="small"
-          placeholder="Имя файла (например, test.cdr)"
+          placeholder="Имя файла"
           value={newRow.fileName || ''}
           onChange={(e) => setNewRow({ ...newRow, fileName: e.target.value })}
           fullWidth
@@ -58,13 +47,13 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
             size="small"
             type="date"
             value={currentDate}
-            onChange={(e) => setNewRow({ ...newRow, deadline: `${e.target.value}T${currentTime}` })}
+            onChange={(e) => setNewRow({ ...newRow, deadline: combineDateTime(e.target.value, currentTime) })}
             sx={{ width: 130 }}
           />
           <Select
             size="small"
             value={currentTime}
-            onChange={(e) => setNewRow({ ...newRow, deadline: `${currentDate}T${e.target.value}` })}
+            onChange={(e) => setNewRow({ ...newRow, deadline: combineDateTime(currentDate, e.target.value) })}
             sx={{ width: 85 }}
           >
             {WORK_TIME_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}

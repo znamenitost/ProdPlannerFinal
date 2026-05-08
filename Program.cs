@@ -7,9 +7,7 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Для локальной разработки и публикации — слушаем все адреса
 builder.WebHost.UseUrls("http://0.0.0.0:5234", "http://localhost:5234");
-
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -19,10 +17,13 @@ builder.Services.AddControllers()
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddLogging();
 
-var dataDirectory = Path.Combine(AppContext.BaseDirectory, "App_Data");
+// БД создаётся в папке App_Data в КОРНЕ ПРОЕКТА, а не в bin
+var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "App_Data");
 Directory.CreateDirectory(dataDirectory);
 var dbPath = Path.Combine(dataDirectory, "ProductionPlanner.db");
+Console.WriteLine($"Путь к БД: {dbPath}");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"));
 
@@ -65,8 +66,7 @@ builder.Services.AddScoped<ITaskLifecycleService, TaskLifecycleService>();
 builder.Services.AddScoped<IEmployeeStatsService, EmployeeStatsService>();
 builder.Services.AddScoped<IProductionTaskRepository, ProductionTaskRepository>();
 builder.Services.AddScoped<ITaskSplitService, TaskSplitService>();
-builder.Services.AddScoped<ITableRowRepository, TableRowRepository>();
-builder.Services.AddScoped<ISyncService, SyncService>();
+builder.Services.AddScoped<IAppTimeService, AppTimeService>();
 
 builder.Services.AddCors(options =>
 {
@@ -84,26 +84,53 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    db.Database.EnsureCreated();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    db.Database.ExecuteSqlRaw(@"
-        CREATE TABLE IF NOT EXISTS ""TableRows"" (
-            ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_TableRows"" PRIMARY KEY AUTOINCREMENT,
-            ""DisplayOrder"" INTEGER NOT NULL,
-            ""FolderPath"" TEXT NOT NULL,
-            ""FileName"" TEXT NOT NULL,
-            ""Comment"" TEXT NOT NULL,
-            ""StatusText"" TEXT NOT NULL,
-            ""Deadline"" TEXT NOT NULL,
-            ""EstimateHours"" REAL NOT NULL,
-            ""Type"" TEXT NOT NULL,
-            ""EmployeeName"" TEXT NOT NULL,
-            ""CreatedAt"" TEXT NOT NULL,
-            ""UpdatedAt"" TEXT NOT NULL,
-            ""IsFromGoogleSheets"" INTEGER NOT NULL,
-            ""ParentRowNumber"" INTEGER NULL
-        );
-    ");
+    // Принудительно удаляем и создаём БД заново (только при разработке, удалить потом)
+    // db.Database.EnsureDeleted(); // раскомментировать при необходимости
+
+    var created = db.Database.EnsureCreated();
+    logger.LogInformation(created ? "База данных создана." : "База данных уже существует.");
+
+    // Автоматическое добавление недостающих колонок (безопасно)
+    try
+    {
+        var connection = db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(ProductionTasks)";
+            using var reader = await cmd.ExecuteReaderAsync();
+            var columns = new HashSet<string>();
+            while (await reader.ReadAsync())
+                columns.Add(reader.GetString(1));
+
+            var alterCommands = new List<string>();
+            if (!columns.Contains("FolderPath"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN FolderPath TEXT NOT NULL DEFAULT ''");
+            if (!columns.Contains("FileName"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN FileName TEXT NOT NULL DEFAULT ''");
+            if (!columns.Contains("DisplayOrder"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN DisplayOrder INTEGER NOT NULL DEFAULT 0");
+            if (!columns.Contains("CreatedAt"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN CreatedAt TEXT NOT NULL DEFAULT '2024-01-01 00:00:00'");
+            if (!columns.Contains("UpdatedAt"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN UpdatedAt TEXT NOT NULL DEFAULT '2024-01-01 00:00:00'");
+
+            foreach (var alterCmd in alterCommands)
+            {
+                using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = alterCmd;
+                await alterCommand.ExecuteNonQueryAsync();
+                logger.LogInformation($"Выполнен ALTER: {alterCmd}");
+            }
+        }
+        await connection.CloseAsync();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Ошибка при обновлении схемы БД");
+    }
 
     await InitializeUsersAsync(scope.ServiceProvider);
 }
@@ -114,7 +141,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseStaticFiles();  // для фронтенда из wwwroot
+app.UseStaticFiles();
 app.UseCors("AllowReact");
 app.UseAuthentication();
 app.UseAuthorization();
@@ -127,17 +154,16 @@ async Task InitializeUsersAsync(IServiceProvider serviceProvider)
 {
     var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     var userManager = serviceProvider.GetRequiredService<UserManager<User>>();
+    var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
 
     string[] roles = { "Admin", "Employee", "Viewer" };
     foreach (var role in roles)
         if (!await roleManager.RoleExistsAsync(role))
             await roleManager.CreateAsync(new IdentityRole(role));
 
-    // Админ Павел
-    var pavelUser = await userManager.FindByEmailAsync("pavel@admin.com");
-    if (pavelUser == null)
+    if (await userManager.FindByEmailAsync("pavel@admin.com") == null)
     {
-        pavelUser = new User
+        var user = new User
         {
             UserName = "pavel@admin.com",
             Email = "pavel@admin.com",
@@ -147,14 +173,14 @@ async Task InitializeUsersAsync(IServiceProvider serviceProvider)
             EmailConfirmed = true,
             CreatedAt = DateTime.UtcNow
         };
-        await userManager.CreateAsync(pavelUser, "Admin123!");
-        await userManager.AddToRoleAsync(pavelUser, "Admin");
+        await userManager.CreateAsync(user, "Admin123!");
+        await userManager.AddToRoleAsync(user, "Admin");
+        logger.LogInformation("Создан администратор Павел");
     }
 
-    var dimaUser = userManager.Users.FirstOrDefault(u => u.FullName == "Дима");
-    if (dimaUser == null)
+    if (await userManager.FindByNameAsync("dima@employee.local") == null)
     {
-        dimaUser = new User
+        var user = new User
         {
             UserName = "dima@employee.local",
             Email = "dima@employee.local",
@@ -164,14 +190,14 @@ async Task InitializeUsersAsync(IServiceProvider serviceProvider)
             EmailConfirmed = true,
             CreatedAt = DateTime.UtcNow
         };
-        await userManager.CreateAsync(dimaUser, "Employee123!");
-        await userManager.AddToRoleAsync(dimaUser, "Employee");
+        await userManager.CreateAsync(user, "Employee123!");
+        await userManager.AddToRoleAsync(user, "Employee");
+        logger.LogInformation("Создан сотрудник Дима");
     }
 
-    var yaromerUser = userManager.Users.FirstOrDefault(u => u.FullName == "Яромир");
-    if (yaromerUser == null)
+    if (await userManager.FindByNameAsync("yaromer@employee.local") == null)
     {
-        yaromerUser = new User
+        var user = new User
         {
             UserName = "yaromer@employee.local",
             Email = "yaromer@employee.local",
@@ -181,7 +207,8 @@ async Task InitializeUsersAsync(IServiceProvider serviceProvider)
             EmailConfirmed = true,
             CreatedAt = DateTime.UtcNow
         };
-        await userManager.CreateAsync(yaromerUser, "Employee123!");
-        await userManager.AddToRoleAsync(yaromerUser, "Employee");
+        await userManager.CreateAsync(user, "Employee123!");
+        await userManager.AddToRoleAsync(user, "Employee");
+        logger.LogInformation("Создан сотрудник Яромир");
     }
 }

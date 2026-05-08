@@ -13,10 +13,12 @@ namespace ProductionPlanner.Services
     public class EmployeeStatsService : IEmployeeStatsService
     {
         private readonly IProductionTaskRepository _repo;
+        private readonly IAppTimeService _timeService;
 
-        public EmployeeStatsService(IProductionTaskRepository repo)
+        public EmployeeStatsService(IProductionTaskRepository repo, IAppTimeService timeService)
         {
             _repo = repo;
+            _timeService = timeService;
         }
 
         public async Task AddSavedHoursAsync(string employeeName, double savedHours, DateTime now)

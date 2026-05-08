@@ -5,20 +5,37 @@ import { Warning, Error, Close, Schedule, AccessTime, Flag, Event } from '@mui/i
 export default function DeadlineWarnings({ employee, refresh }) {
   const [risks, setRisks] = useState([]);
   const [open, setOpen] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const fetchRisks = async () => {
+      if (!employee) return;
+      
+      setLoading(true);
       try {
         const res = await fetch(`/api/tasks/deadline-risks?employee=${encodeURIComponent(employee)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setRisks(data.filter(r => r.riskLevel !== 'ok'));
+        // Фильтруем только риски (не 'ok')
+        const risksData = Array.isArray(data) ? data.filter(r => r.riskLevel !== 'ok') : [];
+        setRisks(risksData);
+        
+        // Если появились новые риски, раскрываем предупреждения
+        if (risksData.length > 0 && risks.length === 0) {
+          setOpen(true);
+        }
       } catch (err) {
         console.error('Ошибка загрузки рисков:', err);
+        setRisks([]);
+      } finally {
+        setLoading(false);
       }
     };
+    
     fetchRisks();
-  }, [employee, refresh]);
+  }, [employee, refresh]); // refresh вызывает перезагрузку
 
+  if (loading && risks.length === 0) return null;
   if (risks.length === 0) return null;
 
   return (
@@ -43,12 +60,13 @@ export default function DeadlineWarnings({ employee, refresh }) {
           if (risk.riskLevel === 'overdue') {
             shortMessage = 'Задача просрочена';
           } else if (risk.riskLevel === 'critical') {
-            shortMessage = `Не хватает ${Math.round(risk.requiredHours - risk.availableHoursBeforeDeadline)} ч`;
+            const deficit = risk.requiredHours - risk.availableHoursBeforeDeadline;
+            shortMessage = `Не хватает ${Math.round(deficit)} ч`;
           } else {
             shortMessage = `Осталось ${Math.round(risk.availableHoursBeforeDeadline)} из ${Math.round(risk.requiredHours)} ч`;
           }
           
-          const shortTitle = risk.taskTitle.split('\\').pop().split('/').pop();
+          const shortTitle = (risk.taskTitle || 'Без названия').split('\\').pop().split('/').pop();
           
           return (
             <Alert 
@@ -82,7 +100,10 @@ export default function DeadlineWarnings({ employee, refresh }) {
                 </Stack>
                 <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
                   <Event sx={{ fontSize: 14 }} />
-                  <span>{new Date(risk.deadline).toLocaleDateString()} {new Date(risk.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span>
+                    {new Date(risk.deadline).toLocaleDateString()} {' '}
+                    {new Date(risk.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 </Stack>
               </Stack>
             </Alert>

@@ -36,7 +36,8 @@ namespace ProductionPlanner.Controllers
         public async Task<IActionResult> GetChildTasks(int parentRowNumber)
         {
             var children = await _splitService.GetChildTasksAsync(parentRowNumber);
-            return Ok(children.Select(c => new { c.Id, c.Title, c.EmployeeName, c.Status, c.Progress }));
+            // Заменяем Title на FileName
+            return Ok(children.Select(c => new { c.Id, Title = c.FileName, c.EmployeeName, c.Status, c.Progress }));
         }
 
         [HttpGet("check-completion/{parentRowNumber}")]

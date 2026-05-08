@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace ProductionPlanner.Controllers
 {
@@ -6,9 +8,8 @@ namespace ProductionPlanner.Controllers
     [Route("api/files")]
     public class FilesController : ControllerBase
     {
-        // Имя или IP Windows ПК с файлами (задай своё)
         private const string SmbHost = "MINIMARKER";
-        private const string SmbBase = $"smb://{SmbHost}/Клиенты";
+        private const string ShareName = "Клиенты";
 
         [HttpPost("open")]
         public IActionResult OpenFile([FromBody] OpenFileRequest request)
@@ -17,21 +18,51 @@ namespace ProductionPlanner.Controllers
                 return BadRequest(new { message = "Путь к файлу не указан" });
 
             var rawPath = request.FilePath.Replace('\\', '/');
+            
+            var clientIdx = rawPath.LastIndexOf(ShareName, StringComparison.OrdinalIgnoreCase);
+            if (clientIdx < 0)
+                return BadRequest(new { message = "Не удалось определить путь к файлу" });
 
-            // Если уже smb:// — возвращаем как есть
-            if (rawPath.StartsWith("smb://", StringComparison.OrdinalIgnoreCase))
-                return Ok(new { downloadUrl = rawPath });
-
-            // Ищем "Клиенты"
-            var idx = rawPath.LastIndexOf("Клиенты", StringComparison.OrdinalIgnoreCase);
-            if (idx >= 0)
+            var relativePath = rawPath.Substring(clientIdx + ShareName.Length).TrimStart('/');
+            
+            var parts = relativePath.Split('/');
+            var cleanFileName = parts[parts.Length - 1].Split('[')[0].Trim();
+            
+            if (!cleanFileName.EndsWith(".cdr") && 
+                !cleanFileName.EndsWith(".ai") && 
+                !cleanFileName.EndsWith(".pdf") &&
+                !cleanFileName.EndsWith(".eps"))
             {
-                var relativePath = rawPath.Substring(idx + "Клиенты".Length).TrimStart('/');
-                var smbUrl = $"{SmbBase}/{relativePath}";
-                return Ok(new { downloadUrl = smbUrl });
+                cleanFileName += ".cdr";
             }
-
-            return BadRequest(new { message = "Не удалось определить путь к файлу" });
+            
+            parts[parts.Length - 1] = cleanFileName;
+            var correctedPath = string.Join("/", parts);
+            
+            var smbUrl = $"smb://{SmbHost}/{ShareName}/{correctedPath}";
+            
+            try
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                {
+                    // Открываем SMB-ссылку через open (macOS откроет Finder или приложение по умолчанию)
+                    Process.Start("open", $"\"{smbUrl}\"");
+                }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = smbUrl,
+                        UseShellExecute = true
+                    });
+                }
+                
+                return Ok(new { message = "Файл открывается", downloadUrl = smbUrl });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Ошибка: {ex.Message}", downloadUrl = smbUrl });
+            }
         }
     }
 

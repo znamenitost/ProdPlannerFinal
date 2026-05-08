@@ -1,57 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Paper,
   Table,
   TableBody,
   TableContainer,
-  Button,
-  Box,
-  Typography,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  IconButton,
-  Tooltip
 } from '@mui/material';
-import { Add, Lightbulb } from '@mui/icons-material';
 import SplitTaskModal from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
 import NewTaskRow from './NewTaskRow';
 import EditTaskRow from './EditTaskRow';
-import TaskRow from './TaskRow';
-import { groupTasksByParent } from '../utils/taskUtils';
+import ParentTaskRow from './ParentTaskRow';
+import TaskTableToolbar from './TaskTableToolbar';
+import CommentDialog from './CommentDialog';
+import useTaskTableApi from '../hooks/useTaskTableApi';
+import useExpandedRows from '../hooks/useExpandedRows';
 
 export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser }) {
   const [rows, setRows] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [newRow, setNewRow] = useState(null);
-  const [expandedRows, setExpandedRows] = useState(new Set());
   const [splitModalOpen, setSplitModalOpen] = useState(false);
   const [selectedTaskForSplit, setSelectedTaskForSplit] = useState(null);
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [selectedCommentTask, setSelectedCommentTask] = useState(null);
-  const [tempComment, setTempComment] = useState('');
+  const [highlightMyTasks, setHighlightMyTasks] = useState(false);
   const [employees] = useState(['Дима', 'Яромир', 'Павел']);
   const [taskTypes] = useState(['Резка', 'УФ печать', 'Монтаж', 'Дизайн', 'Сборка', 'Упаковка']);
-  const [highlightMyTasks, setHighlightMyTasks] = useState(false);
+
   const isAdmin = userRole === 'Admin';
+  const api = useTaskTableApi();
+  const { isExpanded, toggleExpand } = useExpandedRows();
 
-  useEffect(() => {
-    loadRows();
-  }, [refreshTrigger]);
-
-  const loadRows = async () => {
+  const loadRows = useCallback(async () => {
     try {
-      const response = await fetch('/api/table/rows');
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      setRows(groupTasksByParent(data));
+      const data = await api.loadRows();
+      setRows(data);
     } catch (err) {
       console.error('Ошибка загрузки:', err);
     }
-  };
+  }, [api]);
+
+  useEffect(() => {
+    loadRows();
+  }, [refreshTrigger, loadRows]);
 
   const refresh = () => {
     loadRows();
@@ -60,176 +51,126 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
 
   const handleSaveNewRow = async () => {
     try {
-      const response = await fetch('/api/table/row', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          folderPath: newRow.folderPath,
-          fileName: newRow.fileName,
-          comment: newRow.comment,
-          statusText: newRow.statusText,
-          deadline: newRow.deadline,
-          estimateHours: newRow.estimateHours,
-          type: (newRow.types || []).join(', '),
-          employeeName: newRow.employeeName,
-          parentRowNumber: null
-        })
+      await api.createRow({
+        folderPath: newRow.folderPath,
+        fileName: newRow.fileName,
+        comment: newRow.comment,
+        deadline: newRow.deadline,
+        estimateHours: newRow.estimateHours,
+        type: (newRow.types || []).join(', '),
+        employeeName: newRow.employeeName,
+        parentRowNumber: null
       });
-      if (response.ok) {
-        setNewRow(null);
-        refresh();
-      }
+      setNewRow(null);
+      refresh();
     } catch (err) {
       console.error('Ошибка сохранения:', err);
       alert('Ошибка сохранения задачи');
     }
   };
 
-  // ==================== ИСПРАВЛЕННАЯ ФУНКЦИЯ openFile ====================
-  const openFile = async (row) => {
-    const relativePath = `${row.folderPath || ''}/${row.fileName || ''}`.replace(/\\/g, '/').replace(/\/\//g, '/');
-    if (!relativePath || relativePath === '/') {
-      alert('Путь к файлу не указан');
-      return;
-    }
-    try {
-      const response = await fetch('/api/files/open', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath: relativePath })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        alert(data.message || 'Ошибка открытия файла');
-        return;
-      }
-      if (data.downloadUrl) {
-        window.open(data.downloadUrl, '_blank');
-      } else {
-        alert('Не удалось получить ссылку на файл');
-      }
-    } catch (err) {
-      console.error('Ошибка открытия файла:', err);
-      alert('Не удалось открыть файл');
-    }
-  };
-  // =======================================================================
-
-  const handleStartTask = async (row) => {
-    try {
-      await fetch(`/api/table/row/${row.id}/start`, { method: 'POST' });
-      refresh();
-    } catch (err) { console.error('Ошибка:', err); }
-  };
-
-  const handlePauseTask = async (row) => {
-    try {
-      await fetch(`/api/table/row/${row.id}/pause`, { method: 'POST' });
-      refresh();
-    } catch (err) { console.error('Ошибка:', err); }
-  };
-
-  const handleResumeTask = async (row) => {
-    try {
-      await fetch(`/api/table/row/${row.id}/resume`, { method: 'POST' });
-      refresh();
-    } catch (err) { console.error('Ошибка:', err); }
-  };
-
-  const handleCompleteTask = async (row) => {
-    try {
-      await fetch(`/api/table/row/${row.id}/complete`, { method: 'POST' });
-      refresh();
-    } catch (err) { console.error('Ошибка:', err); }
-  };
-
-  const handleDeleteRow = async (id) => {
-    if (!window.confirm('Удалить задачу?')) return;
-    try {
-      await fetch(`/api/table/row/${id}`, { method: 'DELETE' });
-      refresh();
-    } catch (err) { console.error('Ошибка удаления:', err); }
-  };
-
   const handleUpdateRow = async (row) => {
     try {
-      const response = await fetch(`/api/table/row/${row.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: row.id,
-          folderPath: row.folderPath,
-          fileName: row.fileName,
-          comment: row.comment,
-          statusText: row.statusText,
-          deadline: row.deadline,
-          estimateHours: row.estimateHours,
-          type: row.type,
-          employeeName: row.employeeName,
-          parentRowNumber: row.parentRowNumber
-        })
+      await api.updateRow(row.id, {
+        folderPath: row.folderPath,
+        fileName: row.fileName,
+        comment: row.comment,
+        deadline: row.deadline,
+        estimateHours: row.estimateHours,
+        type: row.type,
+        employeeName: row.employeeName,
+        parentRowNumber: row.parentRowNumber,
+        statusText: row.statusText
       });
-      if (response.ok) {
-        setEditingId(null);
-        refresh();
-      } else {
-        alert('Ошибка обновления задачи');
-      }
+      setEditingId(null);
+      refresh();
     } catch (err) {
       console.error('Ошибка обновления:', err);
       alert('Ошибка обновления задачи');
     }
   };
 
-  const handleSplitTask = (row) => {
-    const fetchTaskForSplit = async () => {
-      try {
-        const response = await fetch(`/api/tasks/active?employee=${encodeURIComponent(row.employeeName)}`);
-        const tasks = await response.json();
-        const task = tasks.find(t => t.rowNumber === row.id);
-        if (task) {
-          setSelectedTaskForSplit(task);
-          setSplitModalOpen(true);
-        } else {
-          alert('Не удалось найти задачу для разделения');
-        }
-      } catch (err) {
-        console.error('Ошибка:', err);
-        alert('Ошибка при подготовке к разделению');
-      }
-    };
-    fetchTaskForSplit();
+  const handleStartTask = async (row) => {
+    try {
+      await api.startTask(row.id);
+      refresh();
+      setTimeout(() => refresh(), 100);
+    } catch (err) { 
+      console.error(err);
+      alert('Ошибка при начале задачи: ' + (err.message || 'неизвестная ошибка'));
+    }
+  };
+
+  const handlePauseTask = async (row) => {
+    try {
+      await api.pauseTask(row.id);
+      refresh();
+      setTimeout(() => refresh(), 100);
+    } catch (err) { 
+      console.error(err);
+      alert('Ошибка при паузе задачи: ' + (err.message || 'неизвестная ошибка'));
+    }
+  };
+
+  const handleResumeTask = async (row) => {
+    try {
+      await api.resumeTask(row.id);
+      refresh();
+      setTimeout(() => refresh(), 100);
+    } catch (err) { 
+      console.error(err);
+      alert('Ошибка при возобновлении задачи: ' + (err.message || 'неизвестная ошибка'));
+    }
+  };
+
+  const handleCompleteTask = async (row) => {
+    try {
+      await api.completeTask(row.id);
+      refresh();
+      setTimeout(() => refresh(), 100);
+    } catch (err) { 
+      console.error(err);
+      alert('Ошибка при завершении задачи: ' + (err.message || 'неизвестная ошибка'));
+    }
+  };
+
+  const handleDeleteRow = async (id) => {
+    if (!window.confirm('Удалить задачу?')) return;
+    try {
+      await api.deleteRow(id);
+      refresh();
+    } catch (err) { console.error(err); }
+  };
+
+  const handleSplitTask = async (row) => {
+    try {
+      const task = await api.getTaskForSplit(row.employeeName, row.id);
+      setSelectedTaskForSplit(task);
+      setSplitModalOpen(true);
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
   const handleSplitSuccess = () => refresh();
 
   const handleOpenComment = (row) => {
     setSelectedCommentTask(row);
-    setTempComment(row.comment || '');
     setCommentDialogOpen(true);
   };
 
-  const handleSaveComment = async () => {
+  const handleSaveComment = async (newComment) => {
     if (!selectedCommentTask) return;
+    const updatedTask = { ...selectedCommentTask, comment: newComment };
     try {
-      const response = await fetch(`/api/table/row/${selectedCommentTask.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...selectedCommentTask, comment: tempComment })
-      });
-      if (response.ok) {
-        setCommentDialogOpen(false);
-        setSelectedCommentTask(null);
-        refresh();
-      }
-    } catch (err) { console.error('Ошибка сохранения комментария:', err); }
-  };
-
-  const toggleExpand = (rowId) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(rowId)) newExpanded.delete(rowId);
-    else newExpanded.add(rowId);
-    setExpandedRows(newExpanded);
+      await api.updateRow(updatedTask.id, updatedTask);
+      setCommentDialogOpen(false);
+      setSelectedCommentTask(null);
+      refresh();
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка сохранения комментария');
+    }
   };
 
   const handleFieldChange = (task, field, value) => {
@@ -241,7 +182,6 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
       folderPath: '',
       fileName: '',
       comment: '',
-      statusText: '',
       deadline: new Date().toISOString().slice(0, 16),
       estimateHours: 1,
       types: [taskTypes[0]],
@@ -254,30 +194,12 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
 
   return (
     <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h2" sx={{ fontWeight: 600 }}>📋 Таблица задач</Typography>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <Tooltip title={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}>
-            <IconButton 
-              onClick={toggleHighlight} 
-              color={highlightMyTasks ? 'warning' : 'default'}
-              sx={{ 
-                border: '1px solid', 
-                borderColor: highlightMyTasks ? 'warning.main' : 'divider',
-                transition: 'all 0.2s ease',
-                '&:hover': { transform: 'scale(1.05)' }
-              }}
-            >
-              <Lightbulb />
-            </IconButton>
-          </Tooltip>
-          {isAdmin && (
-            <Button variant="contained" startIcon={<Add />} onClick={handleAddNewRow} sx={{ bgcolor: '#22c55e' }}>
-              Новая задача
-            </Button>
-          )}
-        </Box>
-      </Box>
+      <TaskTableToolbar
+        isAdmin={isAdmin}
+        onAddNew={handleAddNewRow}
+        highlightMyTasks={highlightMyTasks}
+        onToggleHighlight={toggleHighlight}
+      />
 
       <TableContainer sx={{ maxHeight: '70vh', overflow: 'auto' }}>
         <Table stickyHeader size="small">
@@ -305,13 +227,12 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                   employees={employees}
                 />
               ) : (
-                <TaskRow
+                <ParentTaskRow
                   key={task.id}
                   task={task}
-                  isChild={false}
-                  isExpanded={expandedRows.has(task.id)}
+                  isExpanded={isExpanded(task.id)}
                   onToggleExpand={toggleExpand}
-                  onOpenFile={openFile}
+                  onOpenFile={api.openFile}
                   onStart={handleStartTask}
                   onPause={handlePauseTask}
                   onResume={handleResumeTask}
@@ -333,25 +254,12 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
         </Table>
       </TableContainer>
 
-      <Dialog open={commentDialogOpen} onClose={() => setCommentDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Редактирование комментария</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Комментарий"
-            fullWidth
-            multiline
-            rows={3}
-            value={tempComment}
-            onChange={(e) => setTempComment(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCommentDialogOpen(false)}>Отмена</Button>
-          <Button onClick={handleSaveComment} variant="contained">Сохранить</Button>
-        </DialogActions>
-      </Dialog>
+      <CommentDialog
+        open={commentDialogOpen}
+        comment={selectedCommentTask?.comment || ''}
+        onSave={handleSaveComment}
+        onClose={() => setCommentDialogOpen(false)}
+      />
 
       <SplitTaskModal
         open={splitModalOpen}

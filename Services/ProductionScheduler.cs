@@ -86,7 +86,8 @@ namespace ProductionPlanner.Services
                     risks.Add(new DeadlineRisk
                     {
                         TaskId = task.Id,
-                        TaskTitle = task.Title.Length > 50 ? task.Title.Substring(0, 50) + "..." : task.Title,
+                        // Заменяем Title на FileName
+                        TaskTitle = task.FileName.Length > 50 ? task.FileName.Substring(0, 50) + "..." : task.FileName,
                         Deadline = deadline,
                         RequiredHours = hoursNeeded,
                         AvailableHoursBeforeDeadline = workHoursUntilDeadline,
