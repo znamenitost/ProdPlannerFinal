@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Data;
@@ -11,11 +12,13 @@ namespace ProductionPlanner.Controllers
     {
         private readonly ITaskSplitService _splitService;
         private readonly IProductionTaskRepository _repo;
+        private readonly UserManager<User> _userManager;
 
-        public TaskSplitController(ITaskSplitService splitService, IProductionTaskRepository repo)
+        public TaskSplitController(ITaskSplitService splitService, IProductionTaskRepository repo, UserManager<User> userManager)
         {
             _splitService = splitService;
             _repo = repo;
+            _userManager = userManager;
         }
 
         [HttpPost]
@@ -35,9 +38,31 @@ namespace ProductionPlanner.Controllers
         [HttpGet("children/{parentRowNumber}")]
         public async Task<IActionResult> GetChildTasks(int parentRowNumber)
         {
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null) return Unauthorized();
+
+            // Получаем всех детей без фильтрации по сотруднику (для таблицы)
             var children = await _splitService.GetChildTasksAsync(parentRowNumber);
-            // Заменяем Title на FileName
-            return Ok(children.Select(c => new { c.Id, Title = c.FileName, c.EmployeeName, c.Status, c.Progress }));
+
+            var result = children.Select(c => new
+            {
+                c.Id,
+                c.DisplayOrder,
+                c.FolderPath,
+                c.FileName,
+                c.Comment,
+                StatusText = MapStatusToText(c.Status),
+                c.Deadline,
+                c.EstimateHours,
+                c.Type,
+                c.EmployeeName,
+                c.CreatedAt,
+                c.UpdatedAt,
+                c.ParentRowNumber,
+                c.IsSplitTask,
+                c.Progress
+            });
+            return Ok(result);
         }
 
         [HttpGet("check-completion/{parentRowNumber}")]
@@ -46,5 +71,14 @@ namespace ProductionPlanner.Controllers
             var completed = await _splitService.AreAllSubtasksCompletedAsync(parentRowNumber);
             return Ok(new { parentRowNumber, allCompleted = completed });
         }
+
+        private string MapStatusToText(JobStatus status) => status switch
+        {
+            JobStatus.Assigned => "",
+            JobStatus.InProgress => "Начал",
+            JobStatus.Paused => "Пауза",
+            JobStatus.Completed => "Готово",
+            _ => ""
+        };
     }
 }

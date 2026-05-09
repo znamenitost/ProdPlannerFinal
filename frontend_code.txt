@@ -333,12 +333,13 @@ export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
     </>
   );
 }=== ./frontend/src/components/TaskTable.jsx ===
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Paper,
   Table,
   TableBody,
   TableContainer,
+  TablePagination,
 } from '@mui/material';
 import SplitTaskModal from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
@@ -348,10 +349,12 @@ import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
 import useTaskTableApi from '../hooks/useTaskTableApi';
-import useExpandedRows from '../hooks/useExpandedRows';
 
 export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser }) {
   const [rows, setRows] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);      // 0-index для MUI TablePagination
+  const [rowsPerPage, setRowsPerPage] = useState(50);
   const [editingId, setEditingId] = useState(null);
   const [newRow, setNewRow] = useState(null);
   const [splitModalOpen, setSplitModalOpen] = useState(false);
@@ -364,23 +367,66 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
 
   const isAdmin = userRole === 'Admin';
   const api = useTaskTableApi();
-  const { isExpanded, toggleExpand } = useExpandedRows();
 
+  // Expanded rows (Set of parent IDs)
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [childrenCache, setChildrenCache] = useState(new Map()); // parentId -> children[]
+  const [loadingChildren, setLoadingChildren] = useState(new Set());
+
+  // Загрузка родительских задач с пагинацией
   const loadRows = useCallback(async () => {
     try {
-      const data = await api.loadRows();
-      setRows(data);
+      const result = await api.loadRows(page + 1, rowsPerPage);
+      setRows(result.items);
+      setTotalCount(result.totalCount);
     } catch (err) {
-      console.error('Ошибка загрузки:', err);
+      console.error('Ошибка загрузки задач:', err);
     }
-  }, [api]);
+  }, [api, page, rowsPerPage]);
 
   useEffect(() => {
     loadRows();
-  }, [refreshTrigger, loadRows]);
+  }, [refreshTrigger, page, rowsPerPage, loadRows]);
+
+  // Подгрузка детей при разворачивании
+  const loadChildrenForParent = async (parentId) => {
+    if (childrenCache.has(parentId)) return childrenCache.get(parentId);
+    if (loadingChildren.has(parentId)) return;
+    
+    setLoadingChildren(prev => new Set(prev).add(parentId));
+    try {
+      const children = await api.loadChildren(parentId);
+      setChildrenCache(prev => new Map(prev).set(parentId, children));
+      return children;
+    } catch (err) {
+      console.error('Ошибка загрузки детей', err);
+      return [];
+    } finally {
+      setLoadingChildren(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(parentId);
+        return newSet;
+      });
+    }
+  };
+
+  const toggleExpand = async (parentId) => {
+    if (expandedRows.has(parentId)) {
+      setExpandedRows(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(parentId);
+        return newSet;
+      });
+    } else {
+      await loadChildrenForParent(parentId);
+      setExpandedRows(prev => new Set(prev).add(parentId));
+    }
+  };
 
   const refresh = () => {
     loadRows();
+    // Очищаем кэш детей, чтобы при следующем разворачивании получить свежие данные
+    setChildrenCache(new Map());
     if (onTaskUpdate) onTaskUpdate();
   };
 
@@ -527,6 +573,12 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
 
   const toggleHighlight = () => setHighlightMyTasks(!highlightMyTasks);
 
+  const handleChangePage = (event, newPage) => setPage(newPage);
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
   return (
     <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
       <TaskTableToolbar
@@ -550,29 +602,22 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                 onCancel={() => setNewRow(null)}
               />
             )}
-            {rows.map(task => (
-              editingId === task.id ? (
-                <EditTaskRow
-                  key={task.id}
-                  task={task}
-                  onUpdate={handleUpdateRow}
-                  onCancel={() => setEditingId(null)}
-                  onFieldChange={handleFieldChange}
-                  taskTypes={taskTypes}
-                  employees={employees}
-                />
-              ) : (
+            {rows.map(parent => {
+              const children = childrenCache.get(parent.id) || [];
+              const isExpanded = expandedRows.has(parent.id);
+              return (
                 <ParentTaskRow
-                  key={task.id}
-                  task={task}
-                  isExpanded={isExpanded(task.id)}
+                  key={parent.id}
+                  task={parent}
+                  childrenTasks={children}
+                  isExpanded={isExpanded}
                   onToggleExpand={toggleExpand}
                   onOpenFile={api.openFile}
                   onStart={handleStartTask}
                   onPause={handlePauseTask}
                   onResume={handleResumeTask}
                   onComplete={handleCompleteTask}
-                  onEdit={() => setEditingId(task.id)}
+                  onEdit={() => setEditingId(parent.id)}
                   onDelete={handleDeleteRow}
                   onSplit={handleSplitTask}
                   onOpenComment={handleOpenComment}
@@ -583,11 +628,23 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                   currentUser={currentUser}
                   highlightMyTasks={highlightMyTasks}
                 />
-              )
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>
+
+      {isAdmin && (
+        <TablePagination
+          rowsPerPageOptions={[25, 50, 100]}
+          component="div"
+          count={totalCount}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+        />
+      )}
 
       <CommentDialog
         open={commentDialogOpen}
@@ -644,6 +701,7 @@ import ChildTaskRow from './ChildTaskRow';
 
 export default function ParentTaskRow({
   task,
+  childrenTasks,
   isExpanded,
   onToggleExpand,
   onOpenFile,
@@ -663,7 +721,7 @@ export default function ParentTaskRow({
   highlightMyTasks
 }) {
   const overdue = isOverdue(task.deadline, task.statusText);
-  const hasChildren = task.children && task.children.length > 0;
+  const hasChildren = childrenTasks && childrenTasks.length > 0;
 
   // Статус для отображения (если есть дети — вычисляем составной статус)
   let displayStatus = task.statusText;
@@ -671,18 +729,18 @@ export default function ParentTaskRow({
   let displayStatusColor = getStatusColor(displayStatus);
 
   if (hasChildren) {
-    displayStatus = getParentStatus(task);
+    displayStatus = getParentStatus({ ...task, children: childrenTasks });
     displayStatusIcon = getStatusIcon(displayStatus);
     displayStatusColor = getStatusColor(displayStatus);
   }
 
   // Кто отображается в колонке "Сотрудник"
   const employeeDisplay = hasChildren
-    ? getUniqueEmployeesFromChildren(task.children)
+    ? getUniqueEmployeesFromChildren(childrenTasks)
     : task.employeeName;
 
   // Подсветка задач текущего пользователя
-  const isMine = isTaskBelongsToUser(task, currentUser, hasChildren);
+  const isMine = isTaskBelongsToUser({ ...task, children: childrenTasks }, currentUser, hasChildren);
   const fullFilePath = `${task.folderPath || ''}/${task.fileName || ''}`.replace(/\/\//g, '/');
   const shortFolderPath = getLastPathSegment(task.folderPath);
 
@@ -816,7 +874,6 @@ export default function ParentTaskRow({
 
         <TableCell sx={{ width: (canEdit || canDelete || canSplit) ? '12%' : '10%' }}>
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
-            {/* Кнопка разделения только для задач без детей и для админа */}
             {canSplit && !hasChildren && task.statusText !== 'Готово' && (
               <Tooltip title="Разделить задачу">
                 <IconButton size="small" onClick={() => onSplit(task)} sx={{ color: '#8b5cf6' }}>
@@ -824,7 +881,6 @@ export default function ParentTaskRow({
                 </IconButton>
               </Tooltip>
             )}
-            {/* Редактирование - только для админа */}
             {canEdit && (
               <Tooltip title="Редактировать">
                 <IconButton size="small" onClick={() => onEdit(task)}>
@@ -832,7 +888,6 @@ export default function ParentTaskRow({
                 </IconButton>
               </Tooltip>
             )}
-            {/* Удаление - только для админа */}
             {canDelete && (
               <Tooltip title="Удалить">
                 <IconButton size="small" color="error" onClick={() => onDelete(task.id)}>
@@ -840,7 +895,6 @@ export default function ParentTaskRow({
                 </IconButton>
               </Tooltip>
             )}
-            {/* Кнопки статуса - только если задача назначена текущему пользователю */}
             {showActionButtons && (
               <>
                 {task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && (
@@ -884,14 +938,13 @@ export default function ParentTaskRow({
         </TableCell>
       </TableRow>
 
-      {/* Дочерние строки (если есть и развёрнуто) */}
       {hasChildren && isExpanded && (
         <TableRow>
           <TableCell colSpan={10} sx={{ p: 0 }}>
             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
               <table style={{ width: '100%', paddingLeft: '48px' }}>
                 <tbody>
-                  {task.children.map(child => (
+                  {childrenTasks.map(child => (
                     <ChildTaskRow
                       key={child.id}
                       task={child}
@@ -3075,19 +3128,28 @@ export default function useTaskTableApi() {
     return response.json();
   }, []);
 
-  const loadRows = useCallback(async () => {
+  const loadRows = useCallback(async (page = 1, pageSize = 50) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/tasks/table');
+      const response = await fetch(`/api/tasks/table?page=${page}&pageSize=${pageSize}`);
       const data = await handleResponse(response);
-      return data;
+      if (data.items && data.totalCount !== undefined) {
+        return { items: data.items, totalCount: data.totalCount, page: data.page, pageSize: data.pageSize };
+      }
+      return { items: data, totalCount: data.length, page: 1, pageSize: data.length };
     } catch (err) {
       setError(err.message);
       throw err;
     } finally {
       setLoading(false);
     }
+  }, [handleResponse]);
+
+  const loadChildren = useCallback(async (parentId) => {
+    const response = await fetch(`/api/tasks/split/children/${parentId}`);
+    const children = await handleResponse(response);
+    return children;
   }, [handleResponse]);
 
   const createRow = useCallback(async (rowData) => {
@@ -3140,9 +3202,7 @@ export default function useTaskTableApi() {
   const deleteRow = useCallback(async (id) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/tasks/table/row/${id}`, {
-        method: 'DELETE'
-      });
+      const response = await fetch(`/api/tasks/table/row/${id}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Ошибка удаления');
     } finally {
       setLoading(false);
@@ -3152,9 +3212,7 @@ export default function useTaskTableApi() {
   const startTask = useCallback(async (rowId) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/tasks/${rowId}/start`, {
-        method: 'POST'
-      });
+      const response = await fetch(`/api/tasks/${rowId}/start`, { method: 'POST' });
       return await handleResponse(response);
     } finally {
       setLoading(false);
@@ -3164,9 +3222,7 @@ export default function useTaskTableApi() {
   const pauseTask = useCallback(async (rowId) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/tasks/${rowId}/pause`, {
-        method: 'POST'
-      });
+      const response = await fetch(`/api/tasks/${rowId}/pause`, { method: 'POST' });
       return await handleResponse(response);
     } finally {
       setLoading(false);
@@ -3176,9 +3232,7 @@ export default function useTaskTableApi() {
   const resumeTask = useCallback(async (rowId) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/tasks/${rowId}/resume`, {
-        method: 'POST'
-      });
+      const response = await fetch(`/api/tasks/${rowId}/resume`, { method: 'POST' });
       return await handleResponse(response);
     } finally {
       setLoading(false);
@@ -3188,9 +3242,7 @@ export default function useTaskTableApi() {
   const completeTask = useCallback(async (rowId) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/tasks/${rowId}/complete`, {
-        method: 'POST'
-      });
+      const response = await fetch(`/api/tasks/${rowId}/complete`, { method: 'POST' });
       return await handleResponse(response);
     } finally {
       setLoading(false);
@@ -3241,6 +3293,7 @@ export default function useTaskTableApi() {
     loading,
     error,
     loadRows,
+    loadChildren,
     createRow,
     updateRow,
     deleteRow,
@@ -3251,11 +3304,7 @@ export default function useTaskTableApi() {
     openFile,
     getTaskForSplit,
     splitTask
-  }), [
-    loading, error, loadRows, createRow, updateRow, deleteRow,
-    startTask, pauseTask, resumeTask, completeTask, openFile,
-    getTaskForSplit, splitTask
-  ]);
+  }), [loading, error, loadRows, loadChildren, createRow, updateRow, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, getTaskForSplit, splitTask]);
 
   return api;
 }=== ./frontend/src/hooks/useExpandedRows.jsx ===

@@ -22,6 +22,17 @@ namespace ProductionPlanner.Models
         public DateTime StartTime { get; set; }
         public DateTime? EndTime { get; set; }
     }
+}=== ./Models/PaginatedResult.cs ===
+namespace ProductionPlanner.Models
+{
+    public class PaginatedResult<T>
+    {
+        public List<T> Items { get; set; } = new();
+        public int TotalCount { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+        public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
+    }
 }=== ./Models/ProductionTask.cs ===
 using System.ComponentModel.DataAnnotations;
 
@@ -185,6 +196,7 @@ namespace ProductionPlanner.Models
     }
 }=== ./Controllers/TaskSplitController.cs ===
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Data;
@@ -197,11 +209,13 @@ namespace ProductionPlanner.Controllers
     {
         private readonly ITaskSplitService _splitService;
         private readonly IProductionTaskRepository _repo;
+        private readonly UserManager<User> _userManager;
 
-        public TaskSplitController(ITaskSplitService splitService, IProductionTaskRepository repo)
+        public TaskSplitController(ITaskSplitService splitService, IProductionTaskRepository repo, UserManager<User> userManager)
         {
             _splitService = splitService;
             _repo = repo;
+            _userManager = userManager;
         }
 
         [HttpPost]
@@ -221,8 +235,17 @@ namespace ProductionPlanner.Controllers
         [HttpGet("children/{parentRowNumber}")]
         public async Task<IActionResult> GetChildTasks(int parentRowNumber)
         {
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null) return Unauthorized();
+            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+
             var children = await _splitService.GetChildTasksAsync(parentRowNumber);
-            // Заменяем Title на FileName
+            
+            if (!isAdmin)
+            {
+                children = children.Where(c => c.EmployeeName == currentUser.FullName).ToList();
+            }
+
             return Ok(children.Select(c => new { c.Id, Title = c.FileName, c.EmployeeName, c.Status, c.Progress }));
         }
 
@@ -372,6 +395,8 @@ public class SetTimeRequest
     public string MockDateTime { get; set; } = "";
 }=== ./Controllers/ProductionTasksController.cs ===
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
@@ -389,6 +414,8 @@ public class ProductionTasksController : ControllerBase
     private readonly ITaskSplitService _splitService;
     private readonly IAppTimeService _timeService;
     private readonly ILogger<ProductionTasksController> _logger;
+    private readonly UserManager<User> _userManager;
+    private readonly ApplicationDbContext _context;
 
     public ProductionTasksController(
         IProductionTaskRepository repo,
@@ -397,7 +424,9 @@ public class ProductionTasksController : ControllerBase
         IWorkHoursCalculator workHours,
         ITaskSplitService splitService,
         IAppTimeService timeService,
-        ILogger<ProductionTasksController> logger)
+        ILogger<ProductionTasksController> logger,
+        UserManager<User> userManager,
+        ApplicationDbContext context)
     {
         _repo = repo;
         _lifecycle = lifecycle;
@@ -406,16 +435,37 @@ public class ProductionTasksController : ControllerBase
         _splitService = splitService;
         _timeService = timeService;
         _logger = logger;
+        _userManager = userManager;
+        _context = context;
     }
 
     [HttpGet("table")]
-    public async Task<IActionResult> GetTableRows()
+    public async Task<IActionResult> GetTableRows([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         try
         {
-            var allTasks = await _repo.GetAllTasksAsync();
-            var rootTasks = allTasks.Where(t => t.ParentRowNumber == null).OrderBy(t => t.DisplayOrder);
-            var result = rootTasks.Select(parent => new
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null) return Unauthorized();
+
+            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+            
+            var query = _context.ProductionTasks
+                .Where(t => t.ParentRowNumber == null)
+                .AsQueryable();
+
+            if (!isAdmin)
+            {
+                query = query.Where(t => t.EmployeeName == currentUser.FullName);
+            }
+
+            var totalCount = await query.CountAsync<ProductionTask>();
+            var items = await query
+                .OrderBy(t => t.DisplayOrder)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync<ProductionTask>();
+
+            var resultItems = items.Select(parent => (object)new
             {
                 parent.Id,
                 parent.DisplayOrder,
@@ -431,26 +481,16 @@ public class ProductionTasksController : ControllerBase
                 parent.UpdatedAt,
                 parent.ParentRowNumber,
                 parent.IsSplitTask,
-                parent.Progress,
-                Children = allTasks
-                    .Where(c => c.ParentRowNumber == parent.Id && c.IsSplitTask)
-                    .OrderBy(c => c.DisplayOrder)
-                    .Select(c => new
-                    {
-                        c.Id,
-                        c.FolderPath,
-                        c.FileName,
-                        c.Comment,
-                        StatusText = MapStatusToText(c.Status),
-                        c.Deadline,
-                        c.EstimateHours,
-                        c.Type,
-                        c.EmployeeName,
-                        c.IsSplitTask,
-                        c.Progress
-                    }).ToList()
+                parent.Progress
+            }).ToList();
+
+            return Ok(new PaginatedResult<object>
+            {
+                Items = resultItems,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
             });
-            return Ok(result);
         }
         catch (Exception ex)
         {
@@ -458,6 +498,13 @@ public class ProductionTasksController : ControllerBase
             return StatusCode(500, new { error = ex.Message });
         }
     }
+
+    // Остальные методы (CreateTableRow, UpdateTableRow, DeleteTableRow, ReorderRows,
+    // GetActiveTasks, GetCompletedTasks, Start, Pause, Resume, SetProgress, Complete,
+    // Return, GetDeadlineRisks, MapTaskToResult, MapStatusToText, MapStatusFromText)
+    // остаются без изменений — они такие же, как в вашем последнем сообщении.
+    // Для краткости они здесь не повторяются, но в вашем файле они должны быть.
+    // Ниже я приведу их для полноты, но вы можете оставить свои копии.
 
     [HttpPost("table/row")]
     public async Task<IActionResult> CreateTableRow([FromBody] CreateTaskRequest request)
@@ -750,8 +797,6 @@ public class ProductionTasksController : ControllerBase
             return StatusCode(500, new { error = ex.Message });
         }
     }
-
-    
 
     [HttpGet("deadline-risks")]
     public async Task<IActionResult> GetDeadlineRisks([FromQuery] string employee)
@@ -1569,6 +1614,7 @@ namespace ProductionPlanner.Data
         Task<List<ProductionTask>> GetAllTasksAsync();
         Task<List<ProductionTask>> GetRootTasksAsync();
         Task<List<ProductionTask>> GetChildTasksAsync(int parentId);
+        Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize);
         Task ReorderTasksAsync(List<int> orderedIds);
     }
 }=== ./Data/ProductionTaskRepository.cs ===
@@ -1712,6 +1758,27 @@ namespace ProductionPlanner.Data
                 .Include(t => t.WorkIntervals)
                 .Where(t => t.ParentRowNumber == parentId)
                 .ToListAsync();
+        }
+
+        public async Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize)
+        {
+            var query = _context.ProductionTasks
+                .Where(t => t.ParentRowNumber == null)
+                .OrderBy(t => t.DisplayOrder);
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PaginatedResult<ProductionTask>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
         }
 
         public async Task ReorderTasksAsync(List<int> orderedIds)
@@ -1918,6 +1985,21 @@ namespace ProductionPlanner.Services
             _timeService = timeService;
         }
 
+        /// <summary>
+        /// Закрывает все незакрытые WorkInterval для указанной задачи.
+        /// Используется как защита от дублирующихся открытых интервалов.
+        /// </summary>
+        private async Task CloseAllOpenIntervalsAsync(ProductionTask task, DateTime closedAt)
+        {
+            var openIntervals = task.WorkIntervals.Where(i => i.EndTime == null).ToList();
+            foreach (var interval in openIntervals)
+            {
+                interval.EndTime = closedAt;
+                await _repo.UpdateWorkIntervalAsync(interval);
+                Console.WriteLine($"[DEBUG] Закрыт 'висящий' интервал {interval.Id} для задачи {task.Id} в {closedAt}");
+            }
+        }
+
         public async Task StartTaskAsync(int taskId, DateTime now)
         {
             Console.WriteLine($"[DEBUG] StartTaskAsync called with time: {now}");
@@ -1928,6 +2010,9 @@ namespace ProductionPlanner.Services
 
             if (task.Status != JobStatus.Assigned)
                 throw new Exception($"Невозможно запустить задачу в статусе {task.Status}. Используйте Resume для паузы.");
+
+            // Защита: закрываем все существующие открытые интервалы (на случай сбоев)
+            await CloseAllOpenIntervalsAsync(task, now);
 
             var startTime = _workHours.GetNextWorkStart(now);
             task.Status = JobStatus.InProgress;
@@ -1957,13 +2042,8 @@ namespace ProductionPlanner.Services
             if (task.Status != JobStatus.InProgress)
                 throw new Exception($"Невозможно поставить на паузу задачу в статусе {task.Status}");
 
-            var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
-            if (openInterval != null)
-            {
-                openInterval.EndTime = now;
-                await _repo.UpdateWorkIntervalAsync(openInterval);
-                Console.WriteLine($"[DEBUG] Closed interval for task {taskId} at {now}");
-            }
+            // Закрываем открытый интервал (должен быть один, но для надёжности закрываем все)
+            await CloseAllOpenIntervalsAsync(task, now);
 
             task.Status = JobStatus.Paused;
             task.UpdatedAt = now;
@@ -1980,6 +2060,9 @@ namespace ProductionPlanner.Services
 
             if (task.Status != JobStatus.Paused)
                 throw new Exception($"Невозможно возобновить задачу в статусе {task.Status}");
+
+            // Защита: закрываем все висящие интервалы (если вдруг остались)
+            await CloseAllOpenIntervalsAsync(task, now);
 
             var startTime = _workHours.GetNextWorkStart(now);
             task.Status = JobStatus.InProgress;
@@ -2036,14 +2119,10 @@ namespace ProductionPlanner.Services
                 if (task == null) return;
             }
 
-            var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
-            if (openInterval != null)
-            {
-                openInterval.EndTime = now;
-                await _repo.UpdateWorkIntervalAsync(openInterval);
-                Console.WriteLine($"[DEBUG] Closed interval for task {taskId} at {now}");
-            }
+            // Закрываем все открытые интервалы (в норме один, но на всякий случай)
+            await CloseAllOpenIntervalsAsync(task, now);
 
+            // Пересчёт фактического времени по всем закрытым интервалам
             double actual = 0;
             foreach (var interval in task.WorkIntervals)
             {
@@ -2082,6 +2161,7 @@ namespace ProductionPlanner.Services
             var task = await _repo.GetTaskByIdAsync(taskId);
             if (task == null || task.Status != JobStatus.Completed) return;
 
+            // При возврате задачи все интервалы остаются закрытыми, но нужно обнулить прогресс
             task.Status = JobStatus.Assigned;
             task.CompletedAt = null;
             task.Progress = 0;
@@ -2222,7 +2302,6 @@ namespace ProductionPlanner.Services
         public DateTime GetNextWorkStart(DateTime from)
         {
             var t = from;
-            // Если время в выходной – переходим к понедельнику 10:00
             if (t.DayOfWeek == DayOfWeek.Saturday)
                 t = t.Date.AddDays(2).Add(workStart);
             else if (t.DayOfWeek == DayOfWeek.Sunday)
@@ -2236,69 +2315,137 @@ namespace ProductionPlanner.Services
                     t = t.Date + lunchEnd;
                 else if (tod >= workEnd)
                     t = t.Date.AddDays(1).Add(workStart);
-                // иначе уже рабочий час – оставляем как есть
             }
-            // Рекурсивно проверяем, что не попали на выходной (если перенос на понедельник)
             if (t.DayOfWeek == DayOfWeek.Saturday || t.DayOfWeek == DayOfWeek.Sunday)
                 return GetNextWorkStart(t);
             return t;
         }
 
-        public DateTime AddWorkHours(DateTime start, double hours)
-        {
-            var current = GetNextWorkStart(start);
-            var remaining = hours;
-            while (remaining > 0.001)
-            {
-                if (!IsWorkingHour(current))
-                {
-                    current = current.AddMinutes(1);
-                    continue;
-                }
-                var endOfBlock = GetEndOfCurrentWorkBlock(current);
-                var minutesLeftInBlock = (endOfBlock - current).TotalMinutes;
-                var minutesToWork = Math.Min(remaining * 60, minutesLeftInBlock);
-                current = current.AddMinutes(minutesToWork);
-                remaining -= minutesToWork / 60;
-            }
-            return current;
-        }
-
-        private DateTime GetEndOfCurrentWorkBlock(DateTime time)
-        {
-            var date = time.Date;
-            if (time.TimeOfDay < new TimeSpan(14, 0, 0))
-                return date.AddHours(14);
-            if (time.TimeOfDay < new TimeSpan(15, 0, 0))
-                return date.AddHours(15);
-            return date.AddHours(19);
-        }
-
+        /// <summary>
+        /// Эффективное вычисление количества рабочих часов между двумя моментами.
+        /// Без поминутных циклов, только арифметика по дням.
+        /// </summary>
         public double GetWorkHoursBetween(DateTime start, DateTime end)
         {
             if (start >= end) return 0;
-            
-            double total = 0;
-            DateTime current = start;
-            
-            while (current < end)
+
+            var totalMinutes = 0.0;
+            var currentDate = start.Date;
+            var endDate = end.Date;
+
+            while (currentDate <= endDate)
             {
-                if (current.TimeOfDay >= lunchStart && current.TimeOfDay < lunchEnd)
+                // Выходные пропускаем
+                if (currentDate.DayOfWeek != DayOfWeek.Saturday && currentDate.DayOfWeek != DayOfWeek.Sunday)
                 {
-                    current = current.Date.AddHours(15);
+                    // Определяем границы рабочего дня
+                    var dayStart = currentDate + workStart;
+                    var dayEnd = currentDate + workEnd;
+
+                    // Интервал для текущего дня с учётом глобальных start/end
+                    var intervalStart = start > dayStart ? start : dayStart;
+                    var intervalEnd = end < dayEnd ? end : dayEnd;
+
+                    if (intervalStart < intervalEnd)
+                    {
+                        // Рабочие минуты без учёта обеда
+                        var workMinutes = (intervalEnd - intervalStart).TotalMinutes;
+
+                        // Вычитаем обеденное время (14:00-15:00), если оно попадает в интервал
+                        var lunchStartToday = currentDate + lunchStart;
+                        var lunchEndToday = currentDate + lunchEnd;
+
+                        if (intervalStart < lunchEndToday && intervalEnd > lunchStartToday)
+                        {
+                            var lunchOverlapStart = intervalStart > lunchStartToday ? intervalStart : lunchStartToday;
+                            var lunchOverlapEnd = intervalEnd < lunchEndToday ? intervalEnd : lunchEndToday;
+                            workMinutes -= (lunchOverlapEnd - lunchOverlapStart).TotalMinutes;
+                        }
+
+                        totalMinutes += Math.Max(0, workMinutes);
+                    }
+                }
+
+                currentDate = currentDate.AddDays(1);
+            }
+
+            return Math.Round(totalMinutes / 60.0, 2);
+        }
+
+        /// <summary>
+        /// Добавляет заданное количество рабочих часов к начальному моменту.
+        /// Эффективно перебирает дни, не используя поминутные циклы.
+        /// </summary>
+        public DateTime AddWorkHours(DateTime start, double hours)
+        {
+            if (hours <= 0) return start;
+
+            var remainingMinutes = hours * 60.0;
+            var current = GetNextWorkStart(start);
+
+            while (remainingMinutes > 0.001)
+            {
+                // Определяем остаток рабочих минут в текущем дне после current
+                var date = current.Date;
+                var minutesLeftToday = GetRemainingWorkMinutesInDay(current, date);
+
+                if (minutesLeftToday <= 0)
+                {
+                    // Переход на следующий рабочий день
+                    current = GetNextWorkStart(date.AddDays(1));
                     continue;
                 }
-                
-                if (IsWorkingHour(current))
+
+                var minutesToAdd = Math.Min(remainingMinutes, minutesLeftToday);
+                current = current.AddMinutes(minutesToAdd);
+                remainingMinutes -= minutesToAdd;
+
+                if (remainingMinutes > 0.001)
                 {
-                    DateTime next = current.AddMinutes(1);
-                    if (next > end) next = end;
-                    total += (next - current).TotalHours;
+                    // Переходим на следующий рабочий день
+                    current = GetNextWorkStart(current.Date.AddDays(1));
                 }
-                current = current.AddMinutes(1);
             }
-            
-            return Math.Round(total, 2);
+
+            return current;
+        }
+
+        /// <summary>
+        /// Возвращает количество рабочих минут, оставшихся в указанном дне после момента 'current'.
+        /// Учитывается только рабочее время (10-14, 15-19), без обеда.
+        /// </summary>
+        private double GetRemainingWorkMinutesInDay(DateTime current, DateTime day)
+        {
+            var dayStart = day + workStart;
+            var dayEnd = day + workEnd;
+            var lunchStartToday = day + lunchStart;
+            var lunchEndToday = day + lunchEnd;
+
+            if (current >= dayEnd) return 0;
+
+            var remaining = 0.0;
+
+            // Первый рабочий блок: 10:00 – 14:00
+            var block1Start = dayStart;
+            var block1End = lunchStartToday;
+            if (current < block1End)
+            {
+                var start = current > block1Start ? current : block1Start;
+                if (start < block1End)
+                    remaining += (block1End - start).TotalMinutes;
+            }
+
+            // Второй рабочий блок: 15:00 – 19:00
+            var block2Start = lunchEndToday;
+            var block2End = dayEnd;
+            if (current < block2End)
+            {
+                var start = current > block2Start ? current : block2Start;
+                if (start < block2End)
+                    remaining += (block2End - start).TotalMinutes;
+            }
+
+            return remaining;
         }
     }
 }=== ./Services/EmployeeStatsService.cs ===

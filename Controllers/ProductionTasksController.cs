@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
@@ -16,6 +18,8 @@ public class ProductionTasksController : ControllerBase
     private readonly ITaskSplitService _splitService;
     private readonly IAppTimeService _timeService;
     private readonly ILogger<ProductionTasksController> _logger;
+    private readonly UserManager<User> _userManager;
+    private readonly ApplicationDbContext _context;
 
     public ProductionTasksController(
         IProductionTaskRepository repo,
@@ -24,7 +28,9 @@ public class ProductionTasksController : ControllerBase
         IWorkHoursCalculator workHours,
         ITaskSplitService splitService,
         IAppTimeService timeService,
-        ILogger<ProductionTasksController> logger)
+        ILogger<ProductionTasksController> logger,
+        UserManager<User> userManager,
+        ApplicationDbContext context)
     {
         _repo = repo;
         _lifecycle = lifecycle;
@@ -33,51 +39,70 @@ public class ProductionTasksController : ControllerBase
         _splitService = splitService;
         _timeService = timeService;
         _logger = logger;
+        _userManager = userManager;
+        _context = context;
     }
 
     [HttpGet("table")]
-    public async Task<IActionResult> GetTableRows()
+    public async Task<IActionResult> GetTableRows([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         try
         {
-            var allTasks = await _repo.GetAllTasksAsync();
-            var rootTasks = allTasks.Where(t => t.ParentRowNumber == null).OrderBy(t => t.DisplayOrder);
-            var result = rootTasks.Select(parent => new
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null) return Unauthorized();
+
+            var query = _context.ProductionTasks
+                .Where(t => t.ParentRowNumber == null)
+                .OrderBy(t => t.DisplayOrder)
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            // Для каждого родителя узнаём, есть ли у текущего пользователя дочерние задачи-сплиты
+            // (это нужно для подсветки, даже если дети ещё не загружены)
+            var resultItems = new List<object>();
+            foreach (var parent in items)
             {
-                parent.Id,
-                parent.DisplayOrder,
-                parent.FolderPath,
-                parent.FileName,
-                parent.Comment,
-                StatusText = MapStatusToText(parent.Status),
-                parent.Deadline,
-                parent.EstimateHours,
-                parent.Type,
-                parent.EmployeeName,
-                parent.CreatedAt,
-                parent.UpdatedAt,
-                parent.ParentRowNumber,
-                parent.IsSplitTask,
-                parent.Progress,
-                Children = allTasks
-                    .Where(c => c.ParentRowNumber == parent.Id && c.IsSplitTask)
-                    .OrderBy(c => c.DisplayOrder)
-                    .Select(c => new
-                    {
-                        c.Id,
-                        c.FolderPath,
-                        c.FileName,
-                        c.Comment,
-                        StatusText = MapStatusToText(c.Status),
-                        c.Deadline,
-                        c.EstimateHours,
-                        c.Type,
-                        c.EmployeeName,
-                        c.IsSplitTask,
-                        c.Progress
-                    }).ToList()
+                bool hasChildrenForCurrentUser = false;
+                if (parent.IsSplitTask)
+                {
+                    // Проверяем, есть ли хотя бы одна дочерняя задача, назначенная на currentUser.FullName
+                    hasChildrenForCurrentUser = await _context.ProductionTasks
+                        .AnyAsync(c => c.ParentRowNumber == parent.Id && c.EmployeeName == currentUser.FullName);
+                }
+
+                resultItems.Add((object)new
+                {
+                    parent.Id,
+                    parent.DisplayOrder,
+                    parent.FolderPath,
+                    parent.FileName,
+                    parent.Comment,
+                    StatusText = MapStatusToText(parent.Status),
+                    parent.Deadline,
+                    parent.EstimateHours,
+                    parent.Type,
+                    parent.EmployeeName,
+                    parent.CreatedAt,
+                    parent.UpdatedAt,
+                    parent.ParentRowNumber,
+                    parent.IsSplitTask,
+                    parent.Progress,
+                    HasChildrenForCurrentUser = hasChildrenForCurrentUser // новое поле
+                });
+            }
+
+            return Ok(new PaginatedResult<object>
+            {
+                Items = resultItems,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
             });
-            return Ok(result);
         }
         catch (Exception ex)
         {
@@ -85,6 +110,7 @@ public class ProductionTasksController : ControllerBase
             return StatusCode(500, new { error = ex.Message });
         }
     }
+
 
     [HttpPost("table/row")]
     public async Task<IActionResult> CreateTableRow([FromBody] CreateTaskRequest request)
@@ -377,8 +403,6 @@ public class ProductionTasksController : ControllerBase
             return StatusCode(500, new { error = ex.Message });
         }
     }
-
-    
 
     [HttpGet("deadline-risks")]
     public async Task<IActionResult> GetDeadlineRisks([FromQuery] string employee)

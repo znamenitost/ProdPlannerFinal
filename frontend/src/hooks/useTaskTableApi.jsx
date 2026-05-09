@@ -12,19 +12,28 @@ export default function useTaskTableApi() {
     return response.json();
   }, []);
 
-  const loadRows = useCallback(async () => {
+  const loadRows = useCallback(async (page = 1, pageSize = 50) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/tasks/table');
+      const response = await fetch(`/api/tasks/table?page=${page}&pageSize=${pageSize}`);
       const data = await handleResponse(response);
-      return data;
+      if (data.items && data.totalCount !== undefined) {
+        return { items: data.items, totalCount: data.totalCount, page: data.page, pageSize: data.pageSize };
+      }
+      return { items: data, totalCount: data.length, page: 1, pageSize: data.length };
     } catch (err) {
       setError(err.message);
       throw err;
     } finally {
       setLoading(false);
     }
+  }, [handleResponse]);
+
+  const loadChildren = useCallback(async (parentId) => {
+    const response = await fetch(`/api/tasks/split/children/${parentId}`);
+    const children = await handleResponse(response);
+    return children;
   }, [handleResponse]);
 
   const createRow = useCallback(async (rowData) => {
@@ -77,9 +86,7 @@ export default function useTaskTableApi() {
   const deleteRow = useCallback(async (id) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/tasks/table/row/${id}`, {
-        method: 'DELETE'
-      });
+      const response = await fetch(`/api/tasks/table/row/${id}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Ошибка удаления');
     } finally {
       setLoading(false);
@@ -89,9 +96,7 @@ export default function useTaskTableApi() {
   const startTask = useCallback(async (rowId) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/tasks/${rowId}/start`, {
-        method: 'POST'
-      });
+      const response = await fetch(`/api/tasks/${rowId}/start`, { method: 'POST' });
       return await handleResponse(response);
     } finally {
       setLoading(false);
@@ -101,9 +106,7 @@ export default function useTaskTableApi() {
   const pauseTask = useCallback(async (rowId) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/tasks/${rowId}/pause`, {
-        method: 'POST'
-      });
+      const response = await fetch(`/api/tasks/${rowId}/pause`, { method: 'POST' });
       return await handleResponse(response);
     } finally {
       setLoading(false);
@@ -113,9 +116,7 @@ export default function useTaskTableApi() {
   const resumeTask = useCallback(async (rowId) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/tasks/${rowId}/resume`, {
-        method: 'POST'
-      });
+      const response = await fetch(`/api/tasks/${rowId}/resume`, { method: 'POST' });
       return await handleResponse(response);
     } finally {
       setLoading(false);
@@ -125,9 +126,7 @@ export default function useTaskTableApi() {
   const completeTask = useCallback(async (rowId) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/tasks/${rowId}/complete`, {
-        method: 'POST'
-      });
+      const response = await fetch(`/api/tasks/${rowId}/complete`, { method: 'POST' });
       return await handleResponse(response);
     } finally {
       setLoading(false);
@@ -178,6 +177,7 @@ export default function useTaskTableApi() {
     loading,
     error,
     loadRows,
+    loadChildren,
     createRow,
     updateRow,
     deleteRow,
@@ -188,11 +188,7 @@ export default function useTaskTableApi() {
     openFile,
     getTaskForSplit,
     splitTask
-  }), [
-    loading, error, loadRows, createRow, updateRow, deleteRow,
-    startTask, pauseTask, resumeTask, completeTask, openFile,
-    getTaskForSplit, splitTask
-  ]);
+  }), [loading, error, loadRows, loadChildren, createRow, updateRow, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, getTaskForSplit, splitTask]);
 
   return api;
 }

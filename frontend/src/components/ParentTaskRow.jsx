@@ -37,6 +37,7 @@ import ChildTaskRow from './ChildTaskRow';
 
 export default function ParentTaskRow({
   task,
+  childrenTasks,
   isExpanded,
   onToggleExpand,
   onOpenFile,
@@ -56,30 +57,30 @@ export default function ParentTaskRow({
   highlightMyTasks
 }) {
   const overdue = isOverdue(task.deadline, task.statusText);
-  const hasChildren = task.children && task.children.length > 0;
+  // Важно: даже если childrenTasks ещё не загружены, но задача помечена как split – показываем кнопку
+  const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
 
-  // Статус для отображения (если есть дети — вычисляем составной статус)
+  // Статус для отображения (если есть дети – вычисляем составной статус)
   let displayStatus = task.statusText;
   let displayStatusIcon = getStatusIcon(displayStatus);
   let displayStatusColor = getStatusColor(displayStatus);
 
-  if (hasChildren) {
-    displayStatus = getParentStatus(task);
+  if (hasChildren && childrenTasks && childrenTasks.length > 0) {
+    displayStatus = getParentStatus({ ...task, children: childrenTasks });
     displayStatusIcon = getStatusIcon(displayStatus);
     displayStatusColor = getStatusColor(displayStatus);
   }
 
   // Кто отображается в колонке "Сотрудник"
-  const employeeDisplay = hasChildren
-    ? getUniqueEmployeesFromChildren(task.children)
+  const employeeDisplay = (hasChildren && childrenTasks && childrenTasks.length > 0)
+    ? getUniqueEmployeesFromChildren(childrenTasks)
     : task.employeeName;
 
   // Подсветка задач текущего пользователя
-  const isMine = isTaskBelongsToUser(task, currentUser, hasChildren);
+  const isMine = task.hasChildrenForCurrentUser || isTaskBelongsToUser({ ...task, children: childrenTasks }, currentUser, hasChildren);
   const fullFilePath = `${task.folderPath || ''}/${task.fileName || ''}`.replace(/\/\//g, '/');
   const shortFolderPath = getLastPathSegment(task.folderPath);
 
-  // Проверка, может ли текущий пользователь управлять этой задачей
   const canUserManage = () => {
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
@@ -112,7 +113,6 @@ export default function ParentTaskRow({
 
   return (
     <Fragment>
-      {/* Основная строка */}
       <TableRow sx={getRowStyle()}>
         <TableCell sx={{ width: '3%' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
@@ -130,6 +130,7 @@ export default function ParentTaskRow({
           </Box>
         </TableCell>
 
+        {/* остальные ячейки без изменений */}
         <TableCell sx={{ width: '15%' }}>
           <Tooltip title={task.folderPath || ''} arrow>
             <Typography variant="body2" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -209,7 +210,6 @@ export default function ParentTaskRow({
 
         <TableCell sx={{ width: (canEdit || canDelete || canSplit) ? '12%' : '10%' }}>
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
-            {/* Кнопка разделения только для задач без детей и для админа */}
             {canSplit && !hasChildren && task.statusText !== 'Готово' && (
               <Tooltip title="Разделить задачу">
                 <IconButton size="small" onClick={() => onSplit(task)} sx={{ color: '#8b5cf6' }}>
@@ -217,7 +217,6 @@ export default function ParentTaskRow({
                 </IconButton>
               </Tooltip>
             )}
-            {/* Редактирование - только для админа */}
             {canEdit && (
               <Tooltip title="Редактировать">
                 <IconButton size="small" onClick={() => onEdit(task)}>
@@ -225,7 +224,6 @@ export default function ParentTaskRow({
                 </IconButton>
               </Tooltip>
             )}
-            {/* Удаление - только для админа */}
             {canDelete && (
               <Tooltip title="Удалить">
                 <IconButton size="small" color="error" onClick={() => onDelete(task.id)}>
@@ -233,7 +231,6 @@ export default function ParentTaskRow({
                 </IconButton>
               </Tooltip>
             )}
-            {/* Кнопки статуса - только если задача назначена текущему пользователю */}
             {showActionButtons && (
               <>
                 {task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && (
@@ -277,14 +274,13 @@ export default function ParentTaskRow({
         </TableCell>
       </TableRow>
 
-      {/* Дочерние строки (если есть и развёрнуто) */}
       {hasChildren && isExpanded && (
         <TableRow>
           <TableCell colSpan={10} sx={{ p: 0 }}>
             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
               <table style={{ width: '100%', paddingLeft: '48px' }}>
                 <tbody>
-                  {task.children.map(child => (
+                  {(childrenTasks || []).map(child => (
                     <ChildTaskRow
                       key={child.id}
                       task={child}

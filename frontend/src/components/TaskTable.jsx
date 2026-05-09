@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Paper,
   Table,
   TableBody,
   TableContainer,
+  TablePagination,
 } from '@mui/material';
 import SplitTaskModal from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
@@ -13,10 +14,12 @@ import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
 import useTaskTableApi from '../hooks/useTaskTableApi';
-import useExpandedRows from '../hooks/useExpandedRows';
 
 export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser }) {
   const [rows, setRows] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);      // 0-index для MUI TablePagination
+  const [rowsPerPage, setRowsPerPage] = useState(50);
   const [editingId, setEditingId] = useState(null);
   const [newRow, setNewRow] = useState(null);
   const [splitModalOpen, setSplitModalOpen] = useState(false);
@@ -29,23 +32,66 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
 
   const isAdmin = userRole === 'Admin';
   const api = useTaskTableApi();
-  const { isExpanded, toggleExpand } = useExpandedRows();
 
+  // Expanded rows (Set of parent IDs)
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [childrenCache, setChildrenCache] = useState(new Map()); // parentId -> children[]
+  const [loadingChildren, setLoadingChildren] = useState(new Set());
+
+  // Загрузка родительских задач с пагинацией
   const loadRows = useCallback(async () => {
     try {
-      const data = await api.loadRows();
-      setRows(data);
+      const result = await api.loadRows(page + 1, rowsPerPage);
+      setRows(result.items);
+      setTotalCount(result.totalCount);
     } catch (err) {
-      console.error('Ошибка загрузки:', err);
+      console.error('Ошибка загрузки задач:', err);
     }
-  }, [api]);
+  }, [api, page, rowsPerPage]);
 
   useEffect(() => {
     loadRows();
-  }, [refreshTrigger, loadRows]);
+  }, [refreshTrigger, page, rowsPerPage, loadRows]);
+
+  // Подгрузка детей при разворачивании
+  const loadChildrenForParent = async (parentId) => {
+    if (childrenCache.has(parentId)) return childrenCache.get(parentId);
+    if (loadingChildren.has(parentId)) return;
+    
+    setLoadingChildren(prev => new Set(prev).add(parentId));
+    try {
+      const children = await api.loadChildren(parentId);
+      setChildrenCache(prev => new Map(prev).set(parentId, children));
+      return children;
+    } catch (err) {
+      console.error('Ошибка загрузки детей', err);
+      return [];
+    } finally {
+      setLoadingChildren(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(parentId);
+        return newSet;
+      });
+    }
+  };
+
+  const toggleExpand = async (parentId) => {
+    if (expandedRows.has(parentId)) {
+      setExpandedRows(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(parentId);
+        return newSet;
+      });
+    } else {
+      await loadChildrenForParent(parentId);
+      setExpandedRows(prev => new Set(prev).add(parentId));
+    }
+  };
 
   const refresh = () => {
     loadRows();
+    // Очищаем кэш детей, чтобы при следующем разворачивании получить свежие данные
+    setChildrenCache(new Map());
     if (onTaskUpdate) onTaskUpdate();
   };
 
@@ -192,6 +238,12 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
 
   const toggleHighlight = () => setHighlightMyTasks(!highlightMyTasks);
 
+  const handleChangePage = (event, newPage) => setPage(newPage);
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
   return (
     <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
       <TaskTableToolbar
@@ -215,29 +267,22 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                 onCancel={() => setNewRow(null)}
               />
             )}
-            {rows.map(task => (
-              editingId === task.id ? (
-                <EditTaskRow
-                  key={task.id}
-                  task={task}
-                  onUpdate={handleUpdateRow}
-                  onCancel={() => setEditingId(null)}
-                  onFieldChange={handleFieldChange}
-                  taskTypes={taskTypes}
-                  employees={employees}
-                />
-              ) : (
+            {rows.map(parent => {
+              const children = childrenCache.get(parent.id) || [];
+              const isExpanded = expandedRows.has(parent.id);
+              return (
                 <ParentTaskRow
-                  key={task.id}
-                  task={task}
-                  isExpanded={isExpanded(task.id)}
+                  key={parent.id}
+                  task={parent}
+                  childrenTasks={children}
+                  isExpanded={isExpanded}
                   onToggleExpand={toggleExpand}
                   onOpenFile={api.openFile}
                   onStart={handleStartTask}
                   onPause={handlePauseTask}
                   onResume={handleResumeTask}
                   onComplete={handleCompleteTask}
-                  onEdit={() => setEditingId(task.id)}
+                  onEdit={() => setEditingId(parent.id)}
                   onDelete={handleDeleteRow}
                   onSplit={handleSplitTask}
                   onOpenComment={handleOpenComment}
@@ -248,11 +293,23 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                   currentUser={currentUser}
                   highlightMyTasks={highlightMyTasks}
                 />
-              )
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>
+
+      {isAdmin && (
+        <TablePagination
+          rowsPerPageOptions={[25, 50, 100]}
+          component="div"
+          count={totalCount}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+        />
+      )}
 
       <CommentDialog
         open={commentDialogOpen}

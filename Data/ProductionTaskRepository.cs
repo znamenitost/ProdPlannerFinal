@@ -140,6 +140,27 @@ namespace ProductionPlanner.Data
                 .ToListAsync();
         }
 
+        public async Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize)
+        {
+            var query = _context.ProductionTasks
+                .Where(t => t.ParentRowNumber == null)
+                .OrderBy(t => t.DisplayOrder);
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PaginatedResult<ProductionTask>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
         public async Task ReorderTasksAsync(List<int> orderedIds)
         {
             var allTasks = await _context.ProductionTasks.ToListAsync();
