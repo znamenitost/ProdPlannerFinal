@@ -733,28 +733,7 @@ public class ProductionTasksController : ControllerBase
         }
     }
 
-    [HttpPost("shift")]
-    public async Task<IActionResult> ShiftTasks([FromQuery] string employee)
-    {
-        try
-        {
-            var tasks = await _repo.GetActiveTasksAsync(employee);
-            var tomorrow = _timeService.Now.Date.AddDays(1);
-            var nextWorkStart = _workHours.GetNextWorkStart(tomorrow);
-            foreach (var task in tasks.Where(t => t.Status == JobStatus.Assigned))
-            {
-                foreach (var interval in task.WorkIntervals.ToList())
-                    await _repo.DeleteWorkIntervalAsync(interval);
-                await _repo.UpdateTaskAsync(task);
-            }
-            return Ok();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка в ShiftTasks для сотрудника {Employee}", employee);
-            return StatusCode(500, new { error = ex.Message });
-        }
-    }
+    
 
     [HttpGet("deadline-risks")]
     public async Task<IActionResult> GetDeadlineRisks([FromQuery] string employee)
@@ -2031,7 +2010,6 @@ namespace ProductionPlanner.Services
             var task = await _repo.GetTaskByIdAsync(taskId);
             if (task == null || task.Status == JobStatus.Completed) return;
 
-            // Автоматический старт, если задача не была начата
             if (task.Status == JobStatus.Assigned)
             {
                 Console.WriteLine($"[DEBUG] Task {taskId} was not started, auto-starting before completion");
@@ -2040,7 +2018,6 @@ namespace ProductionPlanner.Services
                 if (task == null) return;
             }
 
-            // Закрываем открытый интервал (если есть)
             var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
             if (openInterval != null)
             {
@@ -2111,9 +2088,9 @@ namespace ProductionPlanner.Services
         public List<ScheduledSlot> GetSchedule(List<ProductionTask> activeTasks, DateTime now)
         {
             var tasks = activeTasks
-                .Where(t => t.Status == JobStatus.Assigned || t.Status == JobStatus.InProgress)
-                .OrderBy(t => t.Deadline)
-                .ToList();
+            .Where(t => t.Status == JobStatus.Assigned || t.Status == JobStatus.InProgress || t.Status == JobStatus.Paused)
+            .OrderBy(t => t.Deadline)
+            .ToList();
 
             var slots = new List<ScheduledSlot>();
             var currentStart = _workHours.GetNextWorkStart(now);

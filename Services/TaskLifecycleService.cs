@@ -135,7 +135,6 @@ namespace ProductionPlanner.Services
             var task = await _repo.GetTaskByIdAsync(taskId);
             if (task == null || task.Status == JobStatus.Completed) return;
 
-            // Автоматический старт, если задача не была начата
             if (task.Status == JobStatus.Assigned)
             {
                 Console.WriteLine($"[DEBUG] Task {taskId} was not started, auto-starting before completion");
@@ -144,7 +143,6 @@ namespace ProductionPlanner.Services
                 if (task == null) return;
             }
 
-            // Закрываем открытый интервал (если есть)
             var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
             if (openInterval != null)
             {
