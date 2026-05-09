@@ -35,9 +35,15 @@ namespace ProductionPlanner.Models
     }
 }=== ./Models/ProductionTask.cs ===
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace ProductionPlanner.Models
 {
+    [Index(nameof(EmployeeName))]
+    [Index(nameof(Status))]
+    [Index(nameof(ParentRowNumber))]
+    [Index(nameof(Deadline))]
+    [Index(nameof(DisplayOrder))]
     public class ProductionTask
     {
         [Key]
@@ -108,10 +114,6 @@ namespace ProductionPlanner.Models
             set { /* для совместимости */ }
         }
 
-        /// <summary>
-        /// Отображаемое имя задачи – последний сегмент FolderPath (название заказа/клиента),
-        /// а если FolderPath пуст, то FileName.
-        /// </summary>
         public string TaskDisplayName
         {
             get
@@ -120,7 +122,7 @@ namespace ProductionPlanner.Models
                 {
                     var segments = FolderPath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
                     if (segments.Length > 0)
-                        return segments[^1]; // последняя папка
+                        return segments[^1];
                 }
                 return FileName;
             }
@@ -983,17 +985,26 @@ public class CalendarController : ControllerBase
                 weekStart = GetMondayOfWeek(currentTime);
 
             var weekEnd = weekStart.AddDays(7);
-            var allTasks = await _repo.GetAllTasksAsync();
 
-            var tasksForCalendar = new List<ProductionTask>();
-            foreach (var task in allTasks.Where(t => t.EmployeeName == employee && t.Status != JobStatus.Completed))
+            // Загружаем только активные задачи сотрудника (без интервалов)
+            var tasksForCalendar = await _repo.GetActiveTasksWithIntervalsByEmployeeAsync(employee);
+            // Загружаем интервалы за неделю
+            var intervals = await _repo.GetWorkIntervalsForDateRangeAsync(employee, weekStart, weekEnd);
+
+            // Привязываем интервалы к задачам
+            var intervalsByTask = intervals.GroupBy(i => i.ProductionTaskId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var task in tasksForCalendar)
             {
-                if (task.IsSplitTask && task.ParentRowNumber == null) continue;
-                tasksForCalendar.Add(task);
+                if (intervalsByTask.TryGetValue(task.Id, out var taskIntervals))
+                    task.WorkIntervals = taskIntervals;
+                else
+                    task.WorkIntervals = new List<WorkInterval>();
             }
 
             var slots = _scheduler.GetSchedule(tasksForCalendar, currentTime);
-            var employeeTasks = allTasks.Where(t => t.EmployeeName == employee).ToList();
+            var employeeTasks = tasksForCalendar; // теперь только задачи этого сотрудника
 
             var days = new List<object>();
             for (var day = weekStart; day < weekEnd; day = day.AddDays(1))
@@ -1041,7 +1052,7 @@ public class CalendarController : ControllerBase
                     else
                         timelineEnd = dayEndTime;
 
-                    var intervals = new List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)>();
+                    var intervalsForDay = new List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)>();
                     foreach (var task in employeeTasks)
                     {
                         foreach (var interval in task.WorkIntervals)
@@ -1063,26 +1074,26 @@ public class CalendarController : ControllerBase
                                 var endInDay = intervalEnd < timelineEnd ? intervalEnd : timelineEnd;
                                 if (startInDay < endInDay)
                                 {
-                                    intervals.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
+                                    intervalsForDay.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
                                 }
                             }
                         }
                     }
 
-                    if (intervals.Any())
+                    if (intervalsForDay.Any())
                     {
-                        intervals = intervals.OrderBy(i => i.start).ToList();
+                        intervalsForDay = intervalsForDay.OrderBy(i => i.start).ToList();
 
                         var events = new List<(DateTime time, int type, int index)>();
-                        for (int i = 0; i < intervals.Count; i++)
+                        for (int i = 0; i < intervalsForDay.Count; i++)
                         {
-                            events.Add((intervals[i].start, 1, i));
-                            events.Add((intervals[i].end, -1, i));
+                            events.Add((intervalsForDay[i].start, 1, i));
+                            events.Add((intervalsForDay[i].end, -1, i));
                         }
                         events = events.OrderBy(e => e.time).ThenBy(e => e.type == 1 ? 0 : 1).ToList();
 
                         var activeIndices = new List<int>();
-                        var layerForIndex = new int[intervals.Count];
+                        var layerForIndex = new int[intervalsForDay.Count];
                         for (int i = 0; i < events.Count; i++)
                         {
                             var ev = events[i];
@@ -1099,23 +1110,23 @@ public class CalendarController : ControllerBase
                             }
                         }
 
-                        var maxDepthForIndex = new int[intervals.Count];
-                        for (int i = 0; i < intervals.Count; i++)
+                        var maxDepthForIndex = new int[intervalsForDay.Count];
+                        for (int i = 0; i < intervalsForDay.Count; i++)
                         {
                             int maxDepth = 0;
-                            var curStart = intervals[i].start;
-                            var curEnd = intervals[i].end;
-                            for (int j = 0; j < intervals.Count; j++)
+                            var curStart = intervalsForDay[i].start;
+                            var curEnd = intervalsForDay[i].end;
+                            for (int j = 0; j < intervalsForDay.Count; j++)
                             {
-                                if (intervals[j].start < curEnd && intervals[j].end > curStart)
+                                if (intervalsForDay[j].start < curEnd && intervalsForDay[j].end > curStart)
                                     maxDepth++;
                             }
                             maxDepthForIndex[i] = maxDepth;
                         }
 
-                        for (int i = 0; i < intervals.Count; i++)
+                        for (int i = 0; i < intervalsForDay.Count; i++)
                         {
-                            var iv = intervals[i];
+                            var iv = intervalsForDay[i];
                             timeline.Add(new
                             {
                                 start = iv.start,
@@ -1130,7 +1141,7 @@ public class CalendarController : ControllerBase
                         }
                     }
 
-                    // Простой (idle)
+                    // Простой (idle) – логика без изменений
                     var idleSegments = new List<object>();
                     var workPeriods = new[] { (TimeSpan.FromHours(10), TimeSpan.FromHours(14)), (TimeSpan.FromHours(15), TimeSpan.FromHours(19)) };
                     foreach (var (workStart, workEndPeriod) in workPeriods)
@@ -1143,14 +1154,14 @@ public class CalendarController : ControllerBase
                         var current = periodStart;
                         while (current < periodEnd)
                         {
-                            var covering = intervals.FirstOrDefault(w => w.start <= current && w.end > current);
+                            var covering = intervalsForDay.FirstOrDefault(w => w.start <= current && w.end > current);
                             if (covering != default)
                             {
                                 current = covering.end;
                             }
                             else
                             {
-                                var next = intervals.FirstOrDefault(w => w.start > current);
+                                var next = intervalsForDay.FirstOrDefault(w => w.start > current);
                                 var idleEnd = next != default && next.start < periodEnd ? next.start : periodEnd;
                                 if (idleEnd > current)
                                 {
@@ -1664,6 +1675,10 @@ namespace ProductionPlanner.Data
         Task<List<ProductionTask>> GetChildTasksAsync(int parentId);
         Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize);
         Task ReorderTasksAsync(List<int> orderedIds);
+        
+        // Новые методы для оптимизации календаря
+        Task<List<ProductionTask>> GetActiveTasksWithIntervalsByEmployeeAsync(string employeeName);
+        Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end);
     }
 }=== ./Data/ProductionTaskRepository.cs ===
 using Microsoft.EntityFrameworkCore;
@@ -1829,25 +1844,57 @@ namespace ProductionPlanner.Data
             };
         }
 
+        // Оптимизированный метод ReorderTasksAsync без загрузки всех задач в память
         public async Task ReorderTasksAsync(List<int> orderedIds)
         {
-            var allTasks = await _context.ProductionTasks.ToListAsync();
-            var order = 0;
-            foreach (var id in orderedIds)
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                var task = allTasks.FirstOrDefault(t => t.Id == id);
-                if (task != null)
+                // 1. Сбросить DisplayOrder для всех задач, которых нет в списке (ставить большой номер)
+                var notListedIds = await _context.ProductionTasks
+                    .Where(t => !orderedIds.Contains(t.Id))
+                    .Select(t => t.Id)
+                    .ToListAsync();
+
+                if (notListedIds.Any())
                 {
-                    task.DisplayOrder = order;
-                    order++;
+                    await _context.ProductionTasks
+                        .Where(t => notListedIds.Contains(t.Id))
+                        .ExecuteUpdateAsync(setter => setter.SetProperty(t => t.DisplayOrder, int.MaxValue));
                 }
+
+                // 2. Обновить DisplayOrder для переданных Id по порядку
+                for (int i = 0; i < orderedIds.Count; i++)
+                {
+                    await _context.ProductionTasks
+                        .Where(t => t.Id == orderedIds[i])
+                        .ExecuteUpdateAsync(setter => setter.SetProperty(t => t.DisplayOrder, i));
+                }
+
+                await transaction.CommitAsync();
             }
-            foreach (var task in allTasks.Where(t => !orderedIds.Contains(t.Id)))
+            catch
             {
-                task.DisplayOrder = order;
-                order++;
+                await transaction.RollbackAsync();
+                throw;
             }
-            await _context.SaveChangesAsync();
+        }
+
+        // Новые методы для оптимизации календаря
+        public async Task<List<ProductionTask>> GetActiveTasksWithIntervalsByEmployeeAsync(string employeeName)
+        {
+            return await _context.ProductionTasks
+                .Where(t => t.EmployeeName == employeeName && t.Status != JobStatus.Completed)
+                .ToListAsync();
+        }
+
+        public async Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end)
+        {
+            return await _context.WorkIntervals
+                .Include(i => i.Task)
+                .Where(i => i.Task.EmployeeName == employeeName &&
+                            i.StartTime >= start && i.StartTime <= end)
+                .ToListAsync();
         }
     }
 }=== ./Data/ApplicationDbContext.cs ===
@@ -2746,11 +2793,10 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddLogging();
 
-// БД создаётся в папке App_Data в КОРНЕ ПРОЕКТА, а не в bin
+// --- SQLite ---
 var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "App_Data");
 Directory.CreateDirectory(dataDirectory);
 var dbPath = Path.Combine(dataDirectory, "ProductionPlanner.db");
-Console.WriteLine($"Путь к БД: {dbPath}");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"));
 
@@ -2813,13 +2859,11 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    // Принудительно удаляем и создаём БД заново (только при разработке, удалить потом)
-    // db.Database.EnsureDeleted(); // раскомментировать при необходимости
-
+    // Создаём БД, если её нет (для SQLite – файл .db)
     var created = db.Database.EnsureCreated();
     logger.LogInformation(created ? "База данных создана." : "База данных уже существует.");
 
-    // Автоматическое добавление недостающих колонок (безопасно)
+    // Автоматическое добавление недостающих колонок (безопасно для SQLite)
     try
     {
         var connection = db.Database.GetDbConnection();

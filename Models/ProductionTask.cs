@@ -1,7 +1,13 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace ProductionPlanner.Models
 {
+    [Index(nameof(EmployeeName))]
+    [Index(nameof(Status))]
+    [Index(nameof(ParentRowNumber))]
+    [Index(nameof(Deadline))]
+    [Index(nameof(DisplayOrder))]
     public class ProductionTask
     {
         [Key]
@@ -72,10 +78,6 @@ namespace ProductionPlanner.Models
             set { /* для совместимости */ }
         }
 
-        /// <summary>
-        /// Отображаемое имя задачи – последний сегмент FolderPath (название заказа/клиента),
-        /// а если FolderPath пуст, то FileName.
-        /// </summary>
         public string TaskDisplayName
         {
             get
@@ -84,7 +86,7 @@ namespace ProductionPlanner.Models
                 {
                     var segments = FolderPath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
                     if (segments.Length > 0)
-                        return segments[^1]; // последняя папка
+                        return segments[^1];
                 }
                 return FileName;
             }

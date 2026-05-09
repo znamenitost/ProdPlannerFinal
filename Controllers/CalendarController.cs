@@ -49,17 +49,30 @@ public class CalendarController : ControllerBase
                 weekStart = GetMondayOfWeek(currentTime);
 
             var weekEnd = weekStart.AddDays(7);
-            var allTasks = await _repo.GetAllTasksAsync();
 
-            var tasksForCalendar = new List<ProductionTask>();
-            foreach (var task in allTasks.Where(t => t.EmployeeName == employee && t.Status != JobStatus.Completed))
+            // Загружаем ВСЕ задачи сотрудника (включая завершённые)
+            var allEmployeeTasks = await _repo.GetEmployeeTasksAsync(employee);
+            // Загружаем интервалы за неделю
+            var intervals = await _repo.GetWorkIntervalsForDateRangeAsync(employee, weekStart, weekEnd);
+
+            // Привязываем интервалы к задачам
+            var intervalsByTask = intervals.GroupBy(i => i.ProductionTaskId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var task in allEmployeeTasks)
             {
-                if (task.IsSplitTask && task.ParentRowNumber == null) continue;
-                tasksForCalendar.Add(task);
+                if (intervalsByTask.TryGetValue(task.Id, out var taskIntervals))
+                    task.WorkIntervals = taskIntervals;
+                else
+                    task.WorkIntervals = new List<WorkInterval>();
             }
 
-            var slots = _scheduler.GetSchedule(tasksForCalendar, currentTime);
-            var employeeTasks = allTasks.Where(t => t.EmployeeName == employee).ToList();
+            // Активные задачи для плановых блоков (только не завершённые)
+            var activeTasksForSchedule = allEmployeeTasks.Where(t => t.Status != JobStatus.Completed).ToList();
+            var slots = _scheduler.GetSchedule(activeTasksForSchedule, currentTime);
+
+            // Для таймлайна используем все задачи (чтобы отобразить интервалы завершённых)
+            var employeeTasks = allEmployeeTasks;
 
             var days = new List<object>();
             for (var day = weekStart; day < weekEnd; day = day.AddDays(1))
@@ -68,7 +81,7 @@ public class CalendarController : ControllerBase
                 var dayEndTime = day.Date.AddHours(19);
                 var totalWorkHours = (dayEndTime - dayStartTime).TotalHours;
 
-                // ПЛАНОВЫЕ БЛОКИ
+                // ПЛАНОВЫЕ БЛОКИ (только активные задачи)
                 var taskBlocks = new List<object>();
                 var daySlots = slots.Where(s => s.PlannedStart.Date == day.Date).ToList();
                 foreach (var slot in daySlots)
@@ -94,7 +107,7 @@ public class CalendarController : ControllerBase
                     });
                 }
 
-                // РЕАЛЬНЫЙ ТАЙМЛАЙН
+                // РЕАЛЬНЫЙ ТАЙМЛАЙН (все задачи, включая завершённые)
                 var timeline = new List<object>();
                 var dayDate = day.Date;
                 var currentDate = currentTime.Date;
@@ -107,7 +120,7 @@ public class CalendarController : ControllerBase
                     else
                         timelineEnd = dayEndTime;
 
-                    var intervals = new List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)>();
+                    var intervalsForDay = new List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)>();
                     foreach (var task in employeeTasks)
                     {
                         foreach (var interval in task.WorkIntervals)
@@ -129,26 +142,26 @@ public class CalendarController : ControllerBase
                                 var endInDay = intervalEnd < timelineEnd ? intervalEnd : timelineEnd;
                                 if (startInDay < endInDay)
                                 {
-                                    intervals.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
+                                    intervalsForDay.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
                                 }
                             }
                         }
                     }
 
-                    if (intervals.Any())
+                    if (intervalsForDay.Any())
                     {
-                        intervals = intervals.OrderBy(i => i.start).ToList();
+                        intervalsForDay = intervalsForDay.OrderBy(i => i.start).ToList();
 
                         var events = new List<(DateTime time, int type, int index)>();
-                        for (int i = 0; i < intervals.Count; i++)
+                        for (int i = 0; i < intervalsForDay.Count; i++)
                         {
-                            events.Add((intervals[i].start, 1, i));
-                            events.Add((intervals[i].end, -1, i));
+                            events.Add((intervalsForDay[i].start, 1, i));
+                            events.Add((intervalsForDay[i].end, -1, i));
                         }
                         events = events.OrderBy(e => e.time).ThenBy(e => e.type == 1 ? 0 : 1).ToList();
 
                         var activeIndices = new List<int>();
-                        var layerForIndex = new int[intervals.Count];
+                        var layerForIndex = new int[intervalsForDay.Count];
                         for (int i = 0; i < events.Count; i++)
                         {
                             var ev = events[i];
@@ -165,23 +178,23 @@ public class CalendarController : ControllerBase
                             }
                         }
 
-                        var maxDepthForIndex = new int[intervals.Count];
-                        for (int i = 0; i < intervals.Count; i++)
+                        var maxDepthForIndex = new int[intervalsForDay.Count];
+                        for (int i = 0; i < intervalsForDay.Count; i++)
                         {
                             int maxDepth = 0;
-                            var curStart = intervals[i].start;
-                            var curEnd = intervals[i].end;
-                            for (int j = 0; j < intervals.Count; j++)
+                            var curStart = intervalsForDay[i].start;
+                            var curEnd = intervalsForDay[i].end;
+                            for (int j = 0; j < intervalsForDay.Count; j++)
                             {
-                                if (intervals[j].start < curEnd && intervals[j].end > curStart)
+                                if (intervalsForDay[j].start < curEnd && intervalsForDay[j].end > curStart)
                                     maxDepth++;
                             }
                             maxDepthForIndex[i] = maxDepth;
                         }
 
-                        for (int i = 0; i < intervals.Count; i++)
+                        for (int i = 0; i < intervalsForDay.Count; i++)
                         {
-                            var iv = intervals[i];
+                            var iv = intervalsForDay[i];
                             timeline.Add(new
                             {
                                 start = iv.start,
@@ -196,7 +209,7 @@ public class CalendarController : ControllerBase
                         }
                     }
 
-                    // Простой (idle)
+                    // Простой (idle) – логика без изменений
                     var idleSegments = new List<object>();
                     var workPeriods = new[] { (TimeSpan.FromHours(10), TimeSpan.FromHours(14)), (TimeSpan.FromHours(15), TimeSpan.FromHours(19)) };
                     foreach (var (workStart, workEndPeriod) in workPeriods)
@@ -209,14 +222,14 @@ public class CalendarController : ControllerBase
                         var current = periodStart;
                         while (current < periodEnd)
                         {
-                            var covering = intervals.FirstOrDefault(w => w.start <= current && w.end > current);
+                            var covering = intervalsForDay.FirstOrDefault(w => w.start <= current && w.end > current);
                             if (covering != default)
                             {
                                 current = covering.end;
                             }
                             else
                             {
-                                var next = intervals.FirstOrDefault(w => w.start > current);
+                                var next = intervalsForDay.FirstOrDefault(w => w.start > current);
                                 var idleEnd = next != default && next.start < periodEnd ? next.start : periodEnd;
                                 if (idleEnd > current)
                                 {

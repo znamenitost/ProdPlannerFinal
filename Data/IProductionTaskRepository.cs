@@ -23,5 +23,12 @@ namespace ProductionPlanner.Data
         Task<List<ProductionTask>> GetChildTasksAsync(int parentId);
         Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize);
         Task ReorderTasksAsync(List<int> orderedIds);
+        
+        // Новые методы для оптимизации календаря
+        Task<List<ProductionTask>> GetActiveTasksWithIntervalsByEmployeeAsync(string employeeName);
+        Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end);
+        
+        // Новый метод – все задачи сотрудника (без фильтра по статусу)
+        Task<List<ProductionTask>> GetEmployeeTasksAsync(string employeeName);
     }
 }

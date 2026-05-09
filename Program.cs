@@ -19,11 +19,10 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddLogging();
 
-// БД создаётся в папке App_Data в КОРНЕ ПРОЕКТА, а не в bin
+// --- SQLite ---
 var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "App_Data");
 Directory.CreateDirectory(dataDirectory);
 var dbPath = Path.Combine(dataDirectory, "ProductionPlanner.db");
-Console.WriteLine($"Путь к БД: {dbPath}");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"));
 
@@ -86,13 +85,11 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    // Принудительно удаляем и создаём БД заново (только при разработке, удалить потом)
-    // db.Database.EnsureDeleted(); // раскомментировать при необходимости
-
+    // Создаём БД, если её нет (для SQLite – файл .db)
     var created = db.Database.EnsureCreated();
     logger.LogInformation(created ? "База данных создана." : "База данных уже существует.");
 
-    // Автоматическое добавление недостающих колонок (безопасно)
+    // Автоматическое добавление недостающих колонок (безопасно для SQLite)
     try
     {
         var connection = db.Database.GetDbConnection();

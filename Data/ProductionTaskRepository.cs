@@ -161,25 +161,64 @@ namespace ProductionPlanner.Data
             };
         }
 
+        // Оптимизированный метод ReorderTasksAsync без загрузки всех задач в память
         public async Task ReorderTasksAsync(List<int> orderedIds)
         {
-            var allTasks = await _context.ProductionTasks.ToListAsync();
-            var order = 0;
-            foreach (var id in orderedIds)
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                var task = allTasks.FirstOrDefault(t => t.Id == id);
-                if (task != null)
+                // 1. Сбросить DisplayOrder для всех задач, которых нет в списке (ставить большой номер)
+                var notListedIds = await _context.ProductionTasks
+                    .Where(t => !orderedIds.Contains(t.Id))
+                    .Select(t => t.Id)
+                    .ToListAsync();
+
+                if (notListedIds.Any())
                 {
-                    task.DisplayOrder = order;
-                    order++;
+                    await _context.ProductionTasks
+                        .Where(t => notListedIds.Contains(t.Id))
+                        .ExecuteUpdateAsync(setter => setter.SetProperty(t => t.DisplayOrder, int.MaxValue));
                 }
+
+                // 2. Обновить DisplayOrder для переданных Id по порядку
+                for (int i = 0; i < orderedIds.Count; i++)
+                {
+                    await _context.ProductionTasks
+                        .Where(t => t.Id == orderedIds[i])
+                        .ExecuteUpdateAsync(setter => setter.SetProperty(t => t.DisplayOrder, i));
+                }
+
+                await transaction.CommitAsync();
             }
-            foreach (var task in allTasks.Where(t => !orderedIds.Contains(t.Id)))
+            catch
             {
-                task.DisplayOrder = order;
-                order++;
+                await transaction.RollbackAsync();
+                throw;
             }
-            await _context.SaveChangesAsync();
+        }
+
+        // Новые методы для оптимизации календаря
+        public async Task<List<ProductionTask>> GetActiveTasksWithIntervalsByEmployeeAsync(string employeeName)
+        {
+            return await _context.ProductionTasks
+                .Where(t => t.EmployeeName == employeeName && t.Status != JobStatus.Completed)
+                .ToListAsync();
+        }
+
+        public async Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end)
+        {
+            return await _context.WorkIntervals
+                .Include(i => i.Task)
+                .Where(i => i.Task.EmployeeName == employeeName &&
+                            i.StartTime >= start && i.StartTime <= end)
+                .ToListAsync();
+        }
+
+        public async Task<List<ProductionTask>> GetEmployeeTasksAsync(string employeeName)
+        {
+            return await _context.ProductionTasks
+                .Where(t => t.EmployeeName == employeeName)
+                .ToListAsync();
         }
     }
 }

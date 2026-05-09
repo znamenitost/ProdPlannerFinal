@@ -1,12 +1,12 @@
 // ./frontend/src/components/EditTaskRow.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { TableRow, TableCell, TextField, Select, MenuItem, IconButton, Tooltip, Box } from '@mui/material';
 import { Save, Cancel } from '@mui/icons-material';
 import { WORK_TIME_OPTIONS, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
 
 export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, employees }) {
-  // Локальное состояние для редактируемых полей
-  const [localTask, setLocalTask] = useState({
+  // Инициализируем состояние только один раз при монтировании или при изменении id задачи
+  const [localTask, setLocalTask] = useState(() => ({
     id: task.id,
     folderPath: task.folderPath || '',
     fileName: task.fileName || '',
@@ -17,23 +17,27 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
     employeeName: task.employeeName || '',
     parentRowNumber: task.parentRowNumber,
     statusText: task.statusText || ''
-  });
+  }));
 
-  // Если задача изменится снаружи (например, после обновления), синхронизируем
+  // Если открыли редактирование другой задачи (id изменился), обновляем локальное состояние
+  const prevIdRef = useRef(task.id);
   useEffect(() => {
-    setLocalTask({
-      id: task.id,
-      folderPath: task.folderPath || '',
-      fileName: task.fileName || '',
-      comment: task.comment || '',
-      deadline: task.deadline,
-      estimateHours: task.estimateHours || 0,
-      type: task.type || '',
-      employeeName: task.employeeName || '',
-      parentRowNumber: task.parentRowNumber,
-      statusText: task.statusText || ''
-    });
-  }, [task]);
+    if (task.id !== prevIdRef.current) {
+      setLocalTask({
+        id: task.id,
+        folderPath: task.folderPath || '',
+        fileName: task.fileName || '',
+        comment: task.comment || '',
+        deadline: task.deadline,
+        estimateHours: task.estimateHours || 0,
+        type: task.type || '',
+        employeeName: task.employeeName || '',
+        parentRowNumber: task.parentRowNumber,
+        statusText: task.statusText || ''
+      });
+      prevIdRef.current = task.id;
+    }
+  }, [task.id, task]);
 
   const handleFieldChange = (field, value) => {
     setLocalTask(prev => ({ ...prev, [field]: value }));
