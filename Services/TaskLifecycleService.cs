@@ -25,6 +25,21 @@ namespace ProductionPlanner.Services
             _timeService = timeService;
         }
 
+        /// <summary>
+        /// Закрывает все незакрытые WorkInterval для указанной задачи.
+        /// Используется как защита от дублирующихся открытых интервалов.
+        /// </summary>
+        private async Task CloseAllOpenIntervalsAsync(ProductionTask task, DateTime closedAt)
+        {
+            var openIntervals = task.WorkIntervals.Where(i => i.EndTime == null).ToList();
+            foreach (var interval in openIntervals)
+            {
+                interval.EndTime = closedAt;
+                await _repo.UpdateWorkIntervalAsync(interval);
+                Console.WriteLine($"[DEBUG] Закрыт 'висящий' интервал {interval.Id} для задачи {task.Id} в {closedAt}");
+            }
+        }
+
         public async Task StartTaskAsync(int taskId, DateTime now)
         {
             Console.WriteLine($"[DEBUG] StartTaskAsync called with time: {now}");
@@ -35,6 +50,9 @@ namespace ProductionPlanner.Services
 
             if (task.Status != JobStatus.Assigned)
                 throw new Exception($"Невозможно запустить задачу в статусе {task.Status}. Используйте Resume для паузы.");
+
+            // Защита: закрываем все существующие открытые интервалы (на случай сбоев)
+            await CloseAllOpenIntervalsAsync(task, now);
 
             var startTime = _workHours.GetNextWorkStart(now);
             task.Status = JobStatus.InProgress;
@@ -64,13 +82,8 @@ namespace ProductionPlanner.Services
             if (task.Status != JobStatus.InProgress)
                 throw new Exception($"Невозможно поставить на паузу задачу в статусе {task.Status}");
 
-            var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
-            if (openInterval != null)
-            {
-                openInterval.EndTime = now;
-                await _repo.UpdateWorkIntervalAsync(openInterval);
-                Console.WriteLine($"[DEBUG] Closed interval for task {taskId} at {now}");
-            }
+            // Закрываем открытый интервал (должен быть один, но для надёжности закрываем все)
+            await CloseAllOpenIntervalsAsync(task, now);
 
             task.Status = JobStatus.Paused;
             task.UpdatedAt = now;
@@ -87,6 +100,9 @@ namespace ProductionPlanner.Services
 
             if (task.Status != JobStatus.Paused)
                 throw new Exception($"Невозможно возобновить задачу в статусе {task.Status}");
+
+            // Защита: закрываем все висящие интервалы (если вдруг остались)
+            await CloseAllOpenIntervalsAsync(task, now);
 
             var startTime = _workHours.GetNextWorkStart(now);
             task.Status = JobStatus.InProgress;
@@ -143,14 +159,10 @@ namespace ProductionPlanner.Services
                 if (task == null) return;
             }
 
-            var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
-            if (openInterval != null)
-            {
-                openInterval.EndTime = now;
-                await _repo.UpdateWorkIntervalAsync(openInterval);
-                Console.WriteLine($"[DEBUG] Closed interval for task {taskId} at {now}");
-            }
+            // Закрываем все открытые интервалы (в норме один, но на всякий случай)
+            await CloseAllOpenIntervalsAsync(task, now);
 
+            // Пересчёт фактического времени по всем закрытым интервалам
             double actual = 0;
             foreach (var interval in task.WorkIntervals)
             {
@@ -189,6 +201,7 @@ namespace ProductionPlanner.Services
             var task = await _repo.GetTaskByIdAsync(taskId);
             if (task == null || task.Status != JobStatus.Completed) return;
 
+            // При возврате задачи все интервалы остаются закрытыми, но нужно обнулить прогресс
             task.Status = JobStatus.Assigned;
             task.CompletedAt = null;
             task.Progress = 0;
