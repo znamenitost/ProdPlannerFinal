@@ -27,14 +27,27 @@ namespace ProductionPlanner.Services
 
         public DateTime GetNextWorkStart(DateTime from)
         {
-            DateTime next = from;
-            while (!IsWorkingHour(next))
+            var t = from;
+            // Если время в выходной – переходим к понедельнику 10:00
+            if (t.DayOfWeek == DayOfWeek.Saturday)
+                t = t.Date.AddDays(2).Add(workStart);
+            else if (t.DayOfWeek == DayOfWeek.Sunday)
+                t = t.Date.AddDays(1).Add(workStart);
+            else
             {
-                Console.WriteLine($"[WorkHours] {next} - not working hour, incrementing");
-                next = next.AddMinutes(1);
+                var tod = t.TimeOfDay;
+                if (tod < workStart)
+                    t = t.Date + workStart;
+                else if (tod >= lunchStart && tod < lunchEnd)
+                    t = t.Date + lunchEnd;
+                else if (tod >= workEnd)
+                    t = t.Date.AddDays(1).Add(workStart);
+                // иначе уже рабочий час – оставляем как есть
             }
-            Console.WriteLine($"[WorkHours] Next work start: {next}");
-            return next;
+            // Рекурсивно проверяем, что не попали на выходной (если перенос на понедельник)
+            if (t.DayOfWeek == DayOfWeek.Saturday || t.DayOfWeek == DayOfWeek.Sunday)
+                return GetNextWorkStart(t);
+            return t;
         }
 
         public DateTime AddWorkHours(DateTime start, double hours)

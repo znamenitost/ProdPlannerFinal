@@ -10,7 +10,6 @@ import {
   TableRow,
   Chip,
   Box,
-  Stack,
   Card,
   CardContent,
   Grid,
@@ -52,15 +51,34 @@ export default function CompletedTasksList({ employee, refresh }) {
     ? (stats.totalActual / stats.totalEstimate) * 100 
     : 0;
 
-  // Форматирование интервала выполнения
+  // Отображаемое имя задачи (последний сегмент FolderPath или FileName)
+  const getTaskDisplayName = (task) => {
+    if (task.folderPath && task.folderPath.trim() !== '') {
+      const segments = task.folderPath.split(/[\/\\]/).filter(s => s !== '');
+      if (segments.length > 0) return segments[segments.length - 1];
+    }
+    return task.fileName || 'Без названия';
+  };
+
+  // Форматирование интервала выполнения с учётом дат
   const formatWorkPeriod = (intervals) => {
     if (!intervals || intervals.length === 0) return '—';
+    
+    const formatTime = (date) => date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const formatDate = (date) => date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
     
     const periods = intervals.map(interval => {
       const start = new Date(interval.startTime);
       const end = interval.endTime ? new Date(interval.endTime) : null;
-      if (!end) return `${start.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} - ...`;
-      return `${start.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+      if (!end) return `${formatTime(start)} - ...`;
+      
+      const startDateStr = formatDate(start);
+      const endDateStr = formatDate(end);
+      
+      if (startDateStr !== endDateStr) {
+        return `${startDateStr} ${formatTime(start)} - ${endDateStr} ${formatTime(end)}`;
+      }
+      return `${formatTime(start)} - ${formatTime(end)}`;
     });
     
     return periods.join(', ');
@@ -75,7 +93,6 @@ export default function CompletedTasksList({ employee, refresh }) {
         </Typography>
       </Box>
 
-      {/* Статистика в виде карточек */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ bgcolor: '#f0fdf4', border: '1px solid #dcfce7' }}>
@@ -145,7 +162,6 @@ export default function CompletedTasksList({ employee, refresh }) {
         </Grid>
       </Grid>
 
-      {/* Прогресс эффективности */}
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
           <Typography variant="body2" color="text.secondary">Эффективность</Typography>
@@ -168,7 +184,6 @@ export default function CompletedTasksList({ employee, refresh }) {
         />
       </Box>
 
-      {/* Таблица выполненных задач */}
       <TableContainer>
         <Table sx={{ minWidth: 800 }}>
           <TableHead>
@@ -186,6 +201,7 @@ export default function CompletedTasksList({ employee, refresh }) {
               const diff = task.estimateHours - task.actualHours;
               const isPositive = diff >= 0;
               const workPeriod = formatWorkPeriod(task.workIntervals);
+              const displayName = getTaskDisplayName(task);
               
               return (
                 <TableRow key={task.id} hover>
@@ -193,7 +209,7 @@ export default function CompletedTasksList({ employee, refresh }) {
                     <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
                       <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} />
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {task.title}
+                        {displayName}
                       </Typography>
                     </Box>
                   </TableCell>

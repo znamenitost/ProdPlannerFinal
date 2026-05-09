@@ -71,5 +71,23 @@ namespace ProductionPlanner.Models
             get => FullPath;
             set { /* для совместимости */ }
         }
+
+        /// <summary>
+        /// Отображаемое имя задачи – последний сегмент FolderPath (название заказа/клиента),
+        /// а если FolderPath пуст, то FileName.
+        /// </summary>
+        public string TaskDisplayName
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(FolderPath))
+                {
+                    var segments = FolderPath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (segments.Length > 0)
+                        return segments[^1]; // последняя папка
+                }
+                return FileName;
+            }
+        }
     }
 }
