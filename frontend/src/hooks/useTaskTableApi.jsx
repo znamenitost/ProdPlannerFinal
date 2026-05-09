@@ -12,11 +12,15 @@ export default function useTaskTableApi() {
     return response.json();
   }, []);
 
-  const loadRows = useCallback(async (page = 1, pageSize = 50) => {
+  const loadRows = useCallback(async (page = 1, pageSize = 50, selectedEmployee = '') => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/tasks/table?page=${page}&pageSize=${pageSize}`);
+      let url = `/api/tasks/table?page=${page}&pageSize=${pageSize}`;
+      if (selectedEmployee) {
+        url += `&employee=${encodeURIComponent(selectedEmployee)}`;
+      }
+      const response = await fetch(url);
       const data = await handleResponse(response);
       if (data.items && data.totalCount !== undefined) {
         return { items: data.items, totalCount: data.totalCount, page: data.page, pageSize: data.pageSize };

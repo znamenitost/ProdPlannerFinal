@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Paper,
   Table,
@@ -15,10 +15,10 @@ import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
 import useTaskTableApi from '../hooks/useTaskTableApi';
 
-export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser }) {
+export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser, selectedEmployeeForHighlight }) {
   const [rows, setRows] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(0);      // 0-index для MUI TablePagination
+  const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
   const [editingId, setEditingId] = useState(null);
   const [newRow, setNewRow] = useState(null);
@@ -33,27 +33,24 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
   const isAdmin = userRole === 'Admin';
   const api = useTaskTableApi();
 
-  // Expanded rows (Set of parent IDs)
   const [expandedRows, setExpandedRows] = useState(new Set());
-  const [childrenCache, setChildrenCache] = useState(new Map()); // parentId -> children[]
+  const [childrenCache, setChildrenCache] = useState(new Map());
   const [loadingChildren, setLoadingChildren] = useState(new Set());
 
-  // Загрузка родительских задач с пагинацией
   const loadRows = useCallback(async () => {
     try {
-      const result = await api.loadRows(page + 1, rowsPerPage);
+      const result = await api.loadRows(page + 1, rowsPerPage, selectedEmployeeForHighlight || '');
       setRows(result.items);
       setTotalCount(result.totalCount);
     } catch (err) {
       console.error('Ошибка загрузки задач:', err);
     }
-  }, [api, page, rowsPerPage]);
+  }, [api, page, rowsPerPage, selectedEmployeeForHighlight]);
 
   useEffect(() => {
     loadRows();
-  }, [refreshTrigger, page, rowsPerPage, loadRows]);
+  }, [refreshTrigger, page, rowsPerPage, selectedEmployeeForHighlight, loadRows]);
 
-  // Подгрузка детей при разворачивании
   const loadChildrenForParent = async (parentId) => {
     if (childrenCache.has(parentId)) return childrenCache.get(parentId);
     if (loadingChildren.has(parentId)) return;
@@ -90,8 +87,6 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
 
   const refresh = () => {
     loadRows();
-    // Очищаем кэш детей, чтобы при следующем разворачивании получить свежие данные
-    setChildrenCache(new Map());
     if (onTaskUpdate) onTaskUpdate();
   };
 
@@ -140,10 +135,8 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.startTask(row.id);
       refresh();
-      setTimeout(() => refresh(), 100);
     } catch (err) { 
       console.error(err);
-      alert('Ошибка при начале задачи: ' + (err.message || 'неизвестная ошибка'));
     }
   };
 
@@ -151,10 +144,8 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.pauseTask(row.id);
       refresh();
-      setTimeout(() => refresh(), 100);
     } catch (err) { 
       console.error(err);
-      alert('Ошибка при паузе задачи: ' + (err.message || 'неизвестная ошибка'));
     }
   };
 
@@ -162,10 +153,8 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.resumeTask(row.id);
       refresh();
-      setTimeout(() => refresh(), 100);
     } catch (err) { 
       console.error(err);
-      alert('Ошибка при возобновлении задачи: ' + (err.message || 'неизвестная ошибка'));
     }
   };
 
@@ -173,10 +162,8 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.completeTask(row.id);
       refresh();
-      setTimeout(() => refresh(), 100);
     } catch (err) { 
       console.error(err);
-      alert('Ошибка при завершении задачи: ' + (err.message || 'неизвестная ошибка'));
     }
   };
 
@@ -219,10 +206,6 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     }
   };
 
-  const handleFieldChange = (task, field, value) => {
-    setRows(prevRows => prevRows.map(r => r.id === task.id ? { ...r, [field]: value } : r));
-  };
-
   const handleAddNewRow = () => {
     setNewRow({
       folderPath: '',
@@ -237,7 +220,6 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
   };
 
   const toggleHighlight = () => setHighlightMyTasks(!highlightMyTasks);
-
   const handleChangePage = (event, newPage) => setPage(newPage);
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
@@ -270,7 +252,16 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
             {rows.map(parent => {
               const children = childrenCache.get(parent.id) || [];
               const isExpanded = expandedRows.has(parent.id);
-              return (
+              return editingId === parent.id ? (
+                <EditTaskRow
+                  key={parent.id}
+                  task={parent}
+                  onUpdate={handleUpdateRow}
+                  onCancel={() => setEditingId(null)}
+                  taskTypes={taskTypes}
+                  employees={employees}
+                />
+              ) : (
                 <ParentTaskRow
                   key={parent.id}
                   task={parent}
@@ -292,6 +283,7 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                   canChangeStatus={!isAdmin}
                   currentUser={currentUser}
                   highlightMyTasks={highlightMyTasks}
+                  selectedEmployeeForHighlight={selectedEmployeeForHighlight}
                 />
               );
             })}

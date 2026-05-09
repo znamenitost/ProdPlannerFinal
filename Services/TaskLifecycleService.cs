@@ -25,10 +25,6 @@ namespace ProductionPlanner.Services
             _timeService = timeService;
         }
 
-        /// <summary>
-        /// Закрывает все незакрытые WorkInterval для указанной задачи.
-        /// Используется как защита от дублирующихся открытых интервалов.
-        /// </summary>
         private async Task CloseAllOpenIntervalsAsync(ProductionTask task, DateTime closedAt)
         {
             var openIntervals = task.WorkIntervals.Where(i => i.EndTime == null).ToList();
@@ -37,6 +33,33 @@ namespace ProductionPlanner.Services
                 interval.EndTime = closedAt;
                 await _repo.UpdateWorkIntervalAsync(interval);
                 Console.WriteLine($"[DEBUG] Закрыт 'висящий' интервал {interval.Id} для задачи {task.Id} в {closedAt}");
+            }
+        }
+
+        private async Task UpdateParentStatusAsync(int childTaskId)
+        {
+            var child = await _repo.GetTaskByIdAsync(childTaskId);
+            if (child?.ParentRowNumber == null) return;
+
+            var parent = await _repo.GetTaskByIdAsync(child.ParentRowNumber.Value);
+            if (parent == null || !parent.IsSplitTask) return;
+
+            var allChildren = await _repo.GetChildTasksAsync(parent.Id);
+            if (!allChildren.Any()) return;
+
+            JobStatus newStatus;
+            if (allChildren.All(c => c.Status == JobStatus.Completed))
+                newStatus = JobStatus.Completed;
+            else if (allChildren.Any(c => c.Status == JobStatus.Completed || c.Status == JobStatus.InProgress || c.Status == JobStatus.Paused))
+                newStatus = JobStatus.InProgress;
+            else
+                newStatus = JobStatus.Assigned;
+
+            if (parent.Status != newStatus)
+            {
+                parent.Status = newStatus;
+                parent.UpdatedAt = _timeService.Now;
+                await _repo.UpdateTaskAsync(parent);
             }
         }
 
@@ -51,7 +74,6 @@ namespace ProductionPlanner.Services
             if (task.Status != JobStatus.Assigned)
                 throw new Exception($"Невозможно запустить задачу в статусе {task.Status}. Используйте Resume для паузы.");
 
-            // Защита: закрываем все существующие открытые интервалы (на случай сбоев)
             await CloseAllOpenIntervalsAsync(task, now);
 
             var startTime = _workHours.GetNextWorkStart(now);
@@ -67,6 +89,10 @@ namespace ProductionPlanner.Services
 
             await _repo.AddWorkIntervalAsync(interval);
             await _repo.UpdateTaskAsync(task);
+
+            // Обновляем статус родителя, если это дочерняя задача
+            if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+                await UpdateParentStatusAsync(task.Id);
 
             Console.WriteLine($"[DEBUG] Task {taskId} started, interval start: {startTime}");
         }
@@ -82,12 +108,14 @@ namespace ProductionPlanner.Services
             if (task.Status != JobStatus.InProgress)
                 throw new Exception($"Невозможно поставить на паузу задачу в статусе {task.Status}");
 
-            // Закрываем открытый интервал (должен быть один, но для надёжности закрываем все)
             await CloseAllOpenIntervalsAsync(task, now);
 
             task.Status = JobStatus.Paused;
             task.UpdatedAt = now;
             await _repo.UpdateTaskAsync(task);
+
+            if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+                await UpdateParentStatusAsync(task.Id);
         }
 
         public async Task ResumeTaskAsync(int taskId, DateTime now)
@@ -101,7 +129,6 @@ namespace ProductionPlanner.Services
             if (task.Status != JobStatus.Paused)
                 throw new Exception($"Невозможно возобновить задачу в статусе {task.Status}");
 
-            // Защита: закрываем все висящие интервалы (если вдруг остались)
             await CloseAllOpenIntervalsAsync(task, now);
 
             var startTime = _workHours.GetNextWorkStart(now);
@@ -117,6 +144,9 @@ namespace ProductionPlanner.Services
 
             await _repo.AddWorkIntervalAsync(interval);
             await _repo.UpdateTaskAsync(task);
+
+            if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+                await UpdateParentStatusAsync(task.Id);
 
             Console.WriteLine($"[DEBUG] Task {taskId} resumed, interval start: {startTime}");
         }
@@ -151,18 +181,27 @@ namespace ProductionPlanner.Services
             var task = await _repo.GetTaskByIdAsync(taskId);
             if (task == null || task.Status == JobStatus.Completed) return;
 
+            // Если задача не была запущена, не создаём интервал
             if (task.Status == JobStatus.Assigned)
             {
-                Console.WriteLine($"[DEBUG] Task {taskId} was not started, auto-starting before completion");
-                await StartTaskAsync(taskId, now);
-                task = await _repo.GetTaskByIdAsync(taskId);
-                if (task == null) return;
+                task.Status = JobStatus.Completed;
+                task.CompletedAt = now;
+                task.Progress = 1;
+                task.UpdatedAt = now;
+                await _repo.UpdateTaskAsync(task);
+                
+                double savedHours = task.EstimateHours - 0;  // ← переименовано
+                await _statsService.AddSavedHoursAsync(task.EmployeeName, savedHours, now);
+
+                if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+                    await UpdateParentStatusAsync(task.Id);
+
+                return;
             }
 
-            // Закрываем все открытые интервалы (в норме один, но на всякий случай)
+            // В противном случае закрываем все интервалы и считаем фактическое время
             await CloseAllOpenIntervalsAsync(task, now);
 
-            // Пересчёт фактического времени по всем закрытым интервалам
             double actual = 0;
             foreach (var interval in task.WorkIntervals)
             {
@@ -178,11 +217,12 @@ namespace ProductionPlanner.Services
             task.UpdatedAt = now;
             await _repo.UpdateTaskAsync(task);
 
-            double saved = task.EstimateHours - actual;
+            double saved = task.EstimateHours - actual;  // ← оставлено как было
             await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
 
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
             {
+                await UpdateParentStatusAsync(task.Id);
                 var parentId = task.ParentRowNumber.Value;
                 var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId);
                 if (allCompleted)
@@ -201,7 +241,6 @@ namespace ProductionPlanner.Services
             var task = await _repo.GetTaskByIdAsync(taskId);
             if (task == null || task.Status != JobStatus.Completed) return;
 
-            // При возврате задачи все интервалы остаются закрытыми, но нужно обнулить прогресс
             task.Status = JobStatus.Assigned;
             task.CompletedAt = null;
             task.Progress = 0;

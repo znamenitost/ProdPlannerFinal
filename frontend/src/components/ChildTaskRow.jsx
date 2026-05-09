@@ -1,4 +1,3 @@
-// ./frontend/src/components/ChildTaskRow.jsx
 import { TableRow, TableCell, Box, IconButton, Tooltip, Typography, Chip } from '@mui/material';
 import { PlayArrow, Pause, CheckCircle, Person, Comment as CommentIcon } from '@mui/icons-material';
 import {
@@ -6,7 +5,6 @@ import {
   getStatusColor,
   getStatusIcon,
   isOverdue,
-  getLastPathSegment,
   isTaskBelongsToUser
 } from '../utils/taskHelpers';
 
@@ -20,16 +18,20 @@ export default function ChildTaskRow({
   onOpenComment,
   canChangeStatus,
   currentUser,
-  highlightMyTasks
+  highlightMyTasks,
+  selectedEmployeeForHighlight
 }) {
   const overdue = isOverdue(task.deadline, task.statusText);
   const displayStatusIcon = getStatusIcon(task.statusText);
   const displayStatusColor = getStatusColor(task.statusText);
 
-  // Подсветка задач текущего пользователя
-  const isMine = isTaskBelongsToUser(task, currentUser, false);
+  let isMine = false;
+  if (currentUser?.role === 'Admin' && selectedEmployeeForHighlight) {
+    isMine = task.employeeName === selectedEmployeeForHighlight && task.statusText !== 'Готово';
+  } else if (currentUser?.role !== 'Admin') {
+    isMine = task.employeeName === currentUser?.fullName && task.statusText !== 'Готово';
+  }
 
-  // Проверка, может ли текущий пользователь управлять этой задачей
   const canUserManage = () => {
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
@@ -59,7 +61,6 @@ export default function ChildTaskRow({
 
   return (
     <TableRow sx={getRowStyle()}>
-      {/* Колонка с иконками и L-образной линией связи */}
       <TableCell sx={{ width: '3%', p: 0, position: 'relative' }}>
         <Box
           sx={{
@@ -83,13 +84,9 @@ export default function ChildTaskRow({
         />
       </TableCell>
       
-      {/* Колонка "Задача" – пустая */}
       <TableCell sx={{ width: '15%' }} />
-      
-      {/* Колонка "Файл" – пустая */}
       <TableCell sx={{ width: '10%' }} />
       
-      {/* Колонка "Комментарий" */}
       <TableCell sx={{ width: '20%' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <Tooltip title={task.comment || 'Нет комментария'} arrow placement="top"
@@ -116,34 +113,28 @@ export default function ChildTaskRow({
         </Box>
       </TableCell>
       
-      {/* Колонка "Дедлайн" – скрыта */}
       <TableCell sx={{ width: '10%', display: 'none' }} />
       
-      {/* Колонка "Часы" */}
       <TableCell align="center" sx={{ width: '6%' }}>
         <Typography variant="body2" sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
           {task.estimateHours.toFixed(1)} ч
         </Typography>
       </TableCell>
       
-      {/* Колонка "Тип" */}
       <TableCell sx={{ width: '8%' }}>
         <Tooltip title={task.type} arrow>
           <Chip label={truncate(task.type, 20)} size="small" variant="outlined" sx={{ fontSize: '0.7rem', maxWidth: '100%' }} />
         </Tooltip>
       </TableCell>
       
-      {/* Колонка "Сотрудник" */}
       <TableCell sx={{ width: '8%' }}>
         <Chip icon={<Person sx={{ fontSize: 14 }} />} label={task.employeeName} size="small" variant="outlined" sx={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
       </TableCell>
       
-      {/* Колонка "Статус" */}
       <TableCell sx={{ width: '8%' }}>
         <Chip icon={displayStatusIcon} label={task.statusText || "Назначена"} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
       </TableCell>
       
-      {/* Колонка "Действия" */}
       <TableCell sx={{ width: canChangeStatus ? '12%' : '10%' }}>
         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
           {showActionButtons && (

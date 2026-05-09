@@ -1,4 +1,3 @@
-// ./frontend/src/components/ParentTaskRow.jsx
 import { Fragment } from 'react';
 import {
   TableRow,
@@ -27,11 +26,9 @@ import {
   truncate,
   getStatusColor,
   getStatusIcon,
-  getParentStatus,
   getUniqueEmployeesFromChildren,
   isOverdue,
-  getLastPathSegment,
-  isTaskBelongsToUser
+  getLastPathSegment
 } from '../utils/taskHelpers';
 import ChildTaskRow from './ChildTaskRow';
 
@@ -54,30 +51,44 @@ export default function ParentTaskRow({
   canSplit,
   canChangeStatus,
   currentUser,
-  highlightMyTasks
+  highlightMyTasks,
+  selectedEmployeeForHighlight
 }) {
   const overdue = isOverdue(task.deadline, task.statusText);
-  // Важно: даже если childrenTasks ещё не загружены, но задача помечена как split – показываем кнопку
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
 
-  // Статус для отображения (если есть дети – вычисляем составной статус)
-  let displayStatus = task.statusText;
+  let displayStatus = task.statusText || "Назначена";
   let displayStatusIcon = getStatusIcon(displayStatus);
   let displayStatusColor = getStatusColor(displayStatus);
 
-  if (hasChildren && childrenTasks && childrenTasks.length > 0) {
-    displayStatus = getParentStatus({ ...task, children: childrenTasks });
-    displayStatusIcon = getStatusIcon(displayStatus);
-    displayStatusColor = getStatusColor(displayStatus);
+  // ========== КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ПОДСВЕТКА ДЛЯ АДМИНИСТРАТОРА ==========
+  let isMine = false;
+
+  if (highlightMyTasks) {
+    // Администратор с выбранным сотрудником
+    if (currentUser?.role === 'Admin' && selectedEmployeeForHighlight) {
+      if (hasChildren) {
+        // Для сплит-родителя используем hasCurrentUserSubtask (приходит с бэкенда)
+        isMine = task.hasCurrentUserSubtask === true;
+      } else {
+        // Для обычной задачи сравниваем employeeName
+        isMine = task.employeeName === selectedEmployeeForHighlight && task.statusText !== 'Готово';
+      }
+    }
+    // Обычный сотрудник (не администратор)
+    else if (currentUser?.role !== 'Admin') {
+      if (hasChildren) {
+        isMine = task.hasCurrentUserSubtask === true;
+      } else {
+        isMine = task.employeeName === currentUser?.fullName && task.statusText !== 'Готово';
+      }
+    }
   }
 
-  // Кто отображается в колонке "Сотрудник"
   const employeeDisplay = (hasChildren && childrenTasks && childrenTasks.length > 0)
     ? getUniqueEmployeesFromChildren(childrenTasks)
     : task.employeeName;
 
-  // Подсветка задач текущего пользователя
-  const isMine = task.hasChildrenForCurrentUser || isTaskBelongsToUser({ ...task, children: childrenTasks }, currentUser, hasChildren);
   const fullFilePath = `${task.folderPath || ''}/${task.fileName || ''}`.replace(/\/\//g, '/');
   const shortFolderPath = getLastPathSegment(task.folderPath);
 
@@ -96,15 +107,13 @@ export default function ParentTaskRow({
       borderLeft: 'none'
     };
     let bgColor = overdue && task.statusText !== 'Готово' ? '#fef2f2' : 'inherit';
-    if (highlightMyTasks) {
-      if (isMine) {
-        bgColor = '#e6f7ff';
-        style.boxShadow = 'inset 0 0 0 2px #1890ff';
-        style.borderRadius = '4px';
-      } else {
-        style.opacity = '0.65';
-        style['&:hover'] = { bgcolor: '#f8fafc', opacity: '0.85' };
-      }
+    if (highlightMyTasks && isMine) {
+      bgColor = '#e6f7ff';
+      style.boxShadow = 'inset 0 0 0 2px #1890ff';
+      style.borderRadius = '4px';
+    } else if (highlightMyTasks && !isMine) {
+      style.opacity = '0.65';
+      style['&:hover'] = { bgcolor: '#f8fafc', opacity: '0.85' };
     }
     return { ...style, bgcolor: bgColor };
   };
@@ -130,7 +139,6 @@ export default function ParentTaskRow({
           </Box>
         </TableCell>
 
-        {/* остальные ячейки без изменений */}
         <TableCell sx={{ width: '15%' }}>
           <Tooltip title={task.folderPath || ''} arrow>
             <Typography variant="body2" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -186,7 +194,7 @@ export default function ParentTaskRow({
 
         <TableCell align="center" sx={{ width: '6%' }}>
           <Typography variant="body2" sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
-            {task.estimateHours.toFixed(1)} ч
+            {task.estimateHours?.toFixed(1) || '0.0'} ч
           </Typography>
         </TableCell>
 
@@ -293,6 +301,7 @@ export default function ParentTaskRow({
                       canChangeStatus={canChangeStatus}
                       currentUser={currentUser}
                       highlightMyTasks={highlightMyTasks}
+                      selectedEmployeeForHighlight={selectedEmployeeForHighlight}
                     />
                   ))}
                 </tbody>

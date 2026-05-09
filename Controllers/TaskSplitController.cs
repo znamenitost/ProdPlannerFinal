@@ -41,7 +41,6 @@ namespace ProductionPlanner.Controllers
             var currentUser = await _userManager.GetUserAsync(User);
             if (currentUser == null) return Unauthorized();
 
-            // Получаем всех детей без фильтрации по сотруднику (для таблицы)
             var children = await _splitService.GetChildTasksAsync(parentRowNumber);
 
             var result = children.Select(c => new

@@ -312,7 +312,13 @@ function App() {
           )}
 
           {activeTab === 1 && (
-            <TaskTable refreshTrigger={refresh} onTaskUpdate={refreshAll} userRole={user?.role} currentUser={user} />
+            <TaskTable 
+              refreshTrigger={refresh} 
+              onTaskUpdate={refreshAll} 
+              userRole={user?.role} 
+              currentUser={user}
+              selectedEmployeeForHighlight={employee}
+            />
           )}
 
           <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />

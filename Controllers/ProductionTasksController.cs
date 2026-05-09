@@ -44,12 +44,22 @@ public class ProductionTasksController : ControllerBase
     }
 
     [HttpGet("table")]
-    public async Task<IActionResult> GetTableRows([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+    public async Task<IActionResult> GetTableRows(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? employee = null)
     {
         try
         {
             var currentUser = await _userManager.GetUserAsync(User);
             if (currentUser == null) return Unauthorized();
+
+            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+
+            // Для кого считаем подсветку (hasCurrentUserSubtask)
+            string targetEmployeeName = (isAdmin && !string.IsNullOrEmpty(employee))
+                ? employee
+                : currentUser.FullName;
 
             var query = _context.ProductionTasks
                 .Where(t => t.ParentRowNumber == null)
@@ -62,27 +72,43 @@ public class ProductionTasksController : ControllerBase
                 .Take(pageSize)
                 .ToListAsync();
 
-            // Для каждого родителя узнаём, есть ли у текущего пользователя дочерние задачи-сплиты
-            // (это нужно для подсветки, даже если дети ещё не загружены)
             var resultItems = new List<object>();
+
             foreach (var parent in items)
             {
-                bool hasChildrenForCurrentUser = false;
+                bool hasChildForTargetEmployee = false;
+                string aggregatedStatusText = MapStatusToText(parent.Status);
+
                 if (parent.IsSplitTask)
                 {
-                    // Проверяем, есть ли хотя бы одна дочерняя задача, назначенная на currentUser.FullName
-                    hasChildrenForCurrentUser = await _context.ProductionTasks
-                        .AnyAsync(c => c.ParentRowNumber == parent.Id && c.EmployeeName == currentUser.FullName);
+                    // Есть ли у родителя дочерняя задача на целевого сотрудника?
+                    hasChildForTargetEmployee = await _context.ProductionTasks
+    .AnyAsync(c => c.ParentRowNumber == parent.Id && c.EmployeeName == targetEmployeeName && c.Status != JobStatus.Completed);
+
+                    // Агрегированный статус родителя на основе всех детей
+                    var children = await _context.ProductionTasks
+                        .Where(c => c.ParentRowNumber == parent.Id && c.IsSplitTask)
+                        .ToListAsync();
+
+                    if (children.Any())
+                    {
+                        if (children.All(c => c.Status == JobStatus.Completed))
+                            aggregatedStatusText = "Готово";
+                        else if (children.Any(c => c.Status == JobStatus.Completed || c.Status == JobStatus.InProgress || c.Status == JobStatus.Paused))
+                            aggregatedStatusText = "Начал";
+                        else
+                            aggregatedStatusText = "";
+                    }
                 }
 
-                resultItems.Add((object)new
+                resultItems.Add(new
                 {
                     parent.Id,
                     parent.DisplayOrder,
                     parent.FolderPath,
                     parent.FileName,
                     parent.Comment,
-                    StatusText = MapStatusToText(parent.Status),
+                    StatusText = aggregatedStatusText,
                     parent.Deadline,
                     parent.EstimateHours,
                     parent.Type,
@@ -92,7 +118,7 @@ public class ProductionTasksController : ControllerBase
                     parent.ParentRowNumber,
                     parent.IsSplitTask,
                     parent.Progress,
-                    HasChildrenForCurrentUser = hasChildrenForCurrentUser // новое поле
+                    HasCurrentUserSubtask = hasChildForTargetEmployee
                 });
             }
 
@@ -110,7 +136,6 @@ public class ProductionTasksController : ControllerBase
             return StatusCode(500, new { error = ex.Message });
         }
     }
-
 
     [HttpPost("table/row")]
     public async Task<IActionResult> CreateTableRow([FromBody] CreateTaskRequest request)
@@ -436,7 +461,7 @@ public class ProductionTasksController : ControllerBase
         return new
         {
             task.Id,
-            Title = task.FileName ?? string.Empty,
+            Title = task.TaskDisplayName,   // ← только эта строка изменена
             File = task.FullPath ?? string.Empty,
             task.Type,
             task.Deadline,

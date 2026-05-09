@@ -333,7 +333,7 @@ export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
     </>
   );
 }=== ./frontend/src/components/TaskTable.jsx ===
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Paper,
   Table,
@@ -350,10 +350,10 @@ import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
 import useTaskTableApi from '../hooks/useTaskTableApi';
 
-export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser }) {
+export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser, selectedEmployeeForHighlight }) {
   const [rows, setRows] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(0);      // 0-index для MUI TablePagination
+  const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
   const [editingId, setEditingId] = useState(null);
   const [newRow, setNewRow] = useState(null);
@@ -368,27 +368,24 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
   const isAdmin = userRole === 'Admin';
   const api = useTaskTableApi();
 
-  // Expanded rows (Set of parent IDs)
   const [expandedRows, setExpandedRows] = useState(new Set());
-  const [childrenCache, setChildrenCache] = useState(new Map()); // parentId -> children[]
+  const [childrenCache, setChildrenCache] = useState(new Map());
   const [loadingChildren, setLoadingChildren] = useState(new Set());
 
-  // Загрузка родительских задач с пагинацией
   const loadRows = useCallback(async () => {
     try {
-      const result = await api.loadRows(page + 1, rowsPerPage);
+      const result = await api.loadRows(page + 1, rowsPerPage, selectedEmployeeForHighlight || '');
       setRows(result.items);
       setTotalCount(result.totalCount);
     } catch (err) {
       console.error('Ошибка загрузки задач:', err);
     }
-  }, [api, page, rowsPerPage]);
+  }, [api, page, rowsPerPage, selectedEmployeeForHighlight]);
 
   useEffect(() => {
     loadRows();
-  }, [refreshTrigger, page, rowsPerPage, loadRows]);
+  }, [refreshTrigger, page, rowsPerPage, selectedEmployeeForHighlight, loadRows]);
 
-  // Подгрузка детей при разворачивании
   const loadChildrenForParent = async (parentId) => {
     if (childrenCache.has(parentId)) return childrenCache.get(parentId);
     if (loadingChildren.has(parentId)) return;
@@ -425,8 +422,6 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
 
   const refresh = () => {
     loadRows();
-    // Очищаем кэш детей, чтобы при следующем разворачивании получить свежие данные
-    setChildrenCache(new Map());
     if (onTaskUpdate) onTaskUpdate();
   };
 
@@ -475,10 +470,8 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.startTask(row.id);
       refresh();
-      setTimeout(() => refresh(), 100);
     } catch (err) { 
       console.error(err);
-      alert('Ошибка при начале задачи: ' + (err.message || 'неизвестная ошибка'));
     }
   };
 
@@ -486,10 +479,8 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.pauseTask(row.id);
       refresh();
-      setTimeout(() => refresh(), 100);
     } catch (err) { 
       console.error(err);
-      alert('Ошибка при паузе задачи: ' + (err.message || 'неизвестная ошибка'));
     }
   };
 
@@ -497,10 +488,8 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.resumeTask(row.id);
       refresh();
-      setTimeout(() => refresh(), 100);
     } catch (err) { 
       console.error(err);
-      alert('Ошибка при возобновлении задачи: ' + (err.message || 'неизвестная ошибка'));
     }
   };
 
@@ -508,10 +497,8 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.completeTask(row.id);
       refresh();
-      setTimeout(() => refresh(), 100);
     } catch (err) { 
       console.error(err);
-      alert('Ошибка при завершении задачи: ' + (err.message || 'неизвестная ошибка'));
     }
   };
 
@@ -554,10 +541,6 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     }
   };
 
-  const handleFieldChange = (task, field, value) => {
-    setRows(prevRows => prevRows.map(r => r.id === task.id ? { ...r, [field]: value } : r));
-  };
-
   const handleAddNewRow = () => {
     setNewRow({
       folderPath: '',
@@ -572,7 +555,6 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
   };
 
   const toggleHighlight = () => setHighlightMyTasks(!highlightMyTasks);
-
   const handleChangePage = (event, newPage) => setPage(newPage);
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
@@ -605,7 +587,16 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
             {rows.map(parent => {
               const children = childrenCache.get(parent.id) || [];
               const isExpanded = expandedRows.has(parent.id);
-              return (
+              return editingId === parent.id ? (
+                <EditTaskRow
+                  key={parent.id}
+                  task={parent}
+                  onUpdate={handleUpdateRow}
+                  onCancel={() => setEditingId(null)}
+                  taskTypes={taskTypes}
+                  employees={employees}
+                />
+              ) : (
                 <ParentTaskRow
                   key={parent.id}
                   task={parent}
@@ -627,6 +618,7 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                   canChangeStatus={!isAdmin}
                   currentUser={currentUser}
                   highlightMyTasks={highlightMyTasks}
+                  selectedEmployeeForHighlight={selectedEmployeeForHighlight}
                 />
               );
             })}
@@ -662,7 +654,6 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     </Paper>
   );
 }=== ./frontend/src/components/ParentTaskRow.jsx ===
-// ./frontend/src/components/ParentTaskRow.jsx
 import { Fragment } from 'react';
 import {
   TableRow,
@@ -691,11 +682,9 @@ import {
   truncate,
   getStatusColor,
   getStatusIcon,
-  getParentStatus,
   getUniqueEmployeesFromChildren,
   isOverdue,
-  getLastPathSegment,
-  isTaskBelongsToUser
+  getLastPathSegment
 } from '../utils/taskHelpers';
 import ChildTaskRow from './ChildTaskRow';
 
@@ -718,33 +707,47 @@ export default function ParentTaskRow({
   canSplit,
   canChangeStatus,
   currentUser,
-  highlightMyTasks
+  highlightMyTasks,
+  selectedEmployeeForHighlight
 }) {
   const overdue = isOverdue(task.deadline, task.statusText);
-  const hasChildren = childrenTasks && childrenTasks.length > 0;
+  const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
 
-  // Статус для отображения (если есть дети — вычисляем составной статус)
-  let displayStatus = task.statusText;
+  let displayStatus = task.statusText || "Назначена";
   let displayStatusIcon = getStatusIcon(displayStatus);
   let displayStatusColor = getStatusColor(displayStatus);
 
-  if (hasChildren) {
-    displayStatus = getParentStatus({ ...task, children: childrenTasks });
-    displayStatusIcon = getStatusIcon(displayStatus);
-    displayStatusColor = getStatusColor(displayStatus);
+  // ========== КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ПОДСВЕТКА ДЛЯ АДМИНИСТРАТОРА ==========
+  let isMine = false;
+
+  if (highlightMyTasks) {
+    // Администратор с выбранным сотрудником
+    if (currentUser?.role === 'Admin' && selectedEmployeeForHighlight) {
+      if (hasChildren) {
+        // Для сплит-родителя используем hasCurrentUserSubtask (приходит с бэкенда)
+        isMine = task.hasCurrentUserSubtask === true;
+      } else {
+        // Для обычной задачи сравниваем employeeName
+        isMine = task.employeeName === selectedEmployeeForHighlight && task.statusText !== 'Готово';
+      }
+    }
+    // Обычный сотрудник (не администратор)
+    else if (currentUser?.role !== 'Admin') {
+      if (hasChildren) {
+        isMine = task.hasCurrentUserSubtask === true;
+      } else {
+        isMine = task.employeeName === currentUser?.fullName && task.statusText !== 'Готово';
+      }
+    }
   }
 
-  // Кто отображается в колонке "Сотрудник"
-  const employeeDisplay = hasChildren
+  const employeeDisplay = (hasChildren && childrenTasks && childrenTasks.length > 0)
     ? getUniqueEmployeesFromChildren(childrenTasks)
     : task.employeeName;
 
-  // Подсветка задач текущего пользователя
-  const isMine = isTaskBelongsToUser({ ...task, children: childrenTasks }, currentUser, hasChildren);
   const fullFilePath = `${task.folderPath || ''}/${task.fileName || ''}`.replace(/\/\//g, '/');
   const shortFolderPath = getLastPathSegment(task.folderPath);
 
-  // Проверка, может ли текущий пользователь управлять этой задачей
   const canUserManage = () => {
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
@@ -760,15 +763,13 @@ export default function ParentTaskRow({
       borderLeft: 'none'
     };
     let bgColor = overdue && task.statusText !== 'Готово' ? '#fef2f2' : 'inherit';
-    if (highlightMyTasks) {
-      if (isMine) {
-        bgColor = '#e6f7ff';
-        style.boxShadow = 'inset 0 0 0 2px #1890ff';
-        style.borderRadius = '4px';
-      } else {
-        style.opacity = '0.65';
-        style['&:hover'] = { bgcolor: '#f8fafc', opacity: '0.85' };
-      }
+    if (highlightMyTasks && isMine) {
+      bgColor = '#e6f7ff';
+      style.boxShadow = 'inset 0 0 0 2px #1890ff';
+      style.borderRadius = '4px';
+    } else if (highlightMyTasks && !isMine) {
+      style.opacity = '0.65';
+      style['&:hover'] = { bgcolor: '#f8fafc', opacity: '0.85' };
     }
     return { ...style, bgcolor: bgColor };
   };
@@ -777,7 +778,6 @@ export default function ParentTaskRow({
 
   return (
     <Fragment>
-      {/* Основная строка */}
       <TableRow sx={getRowStyle()}>
         <TableCell sx={{ width: '3%' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
@@ -850,7 +850,7 @@ export default function ParentTaskRow({
 
         <TableCell align="center" sx={{ width: '6%' }}>
           <Typography variant="body2" sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
-            {task.estimateHours.toFixed(1)} ч
+            {task.estimateHours?.toFixed(1) || '0.0'} ч
           </Typography>
         </TableCell>
 
@@ -944,7 +944,7 @@ export default function ParentTaskRow({
             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
               <table style={{ width: '100%', paddingLeft: '48px' }}>
                 <tbody>
-                  {childrenTasks.map(child => (
+                  {(childrenTasks || []).map(child => (
                     <ChildTaskRow
                       key={child.id}
                       task={child}
@@ -957,6 +957,7 @@ export default function ParentTaskRow({
                       canChangeStatus={canChangeStatus}
                       currentUser={currentUser}
                       highlightMyTasks={highlightMyTasks}
+                      selectedEmployeeForHighlight={selectedEmployeeForHighlight}
                     />
                   ))}
                 </tbody>
@@ -968,7 +969,6 @@ export default function ParentTaskRow({
     </Fragment>
   );
 }=== ./frontend/src/components/ChildTaskRow.jsx ===
-// ./frontend/src/components/ChildTaskRow.jsx
 import { TableRow, TableCell, Box, IconButton, Tooltip, Typography, Chip } from '@mui/material';
 import { PlayArrow, Pause, CheckCircle, Person, Comment as CommentIcon } from '@mui/icons-material';
 import {
@@ -976,7 +976,6 @@ import {
   getStatusColor,
   getStatusIcon,
   isOverdue,
-  getLastPathSegment,
   isTaskBelongsToUser
 } from '../utils/taskHelpers';
 
@@ -990,16 +989,20 @@ export default function ChildTaskRow({
   onOpenComment,
   canChangeStatus,
   currentUser,
-  highlightMyTasks
+  highlightMyTasks,
+  selectedEmployeeForHighlight
 }) {
   const overdue = isOverdue(task.deadline, task.statusText);
   const displayStatusIcon = getStatusIcon(task.statusText);
   const displayStatusColor = getStatusColor(task.statusText);
 
-  // Подсветка задач текущего пользователя
-  const isMine = isTaskBelongsToUser(task, currentUser, false);
+  let isMine = false;
+  if (currentUser?.role === 'Admin' && selectedEmployeeForHighlight) {
+    isMine = task.employeeName === selectedEmployeeForHighlight && task.statusText !== 'Готово';
+  } else if (currentUser?.role !== 'Admin') {
+    isMine = task.employeeName === currentUser?.fullName && task.statusText !== 'Готово';
+  }
 
-  // Проверка, может ли текущий пользователь управлять этой задачей
   const canUserManage = () => {
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
@@ -1029,7 +1032,6 @@ export default function ChildTaskRow({
 
   return (
     <TableRow sx={getRowStyle()}>
-      {/* Колонка с иконками и L-образной линией связи */}
       <TableCell sx={{ width: '3%', p: 0, position: 'relative' }}>
         <Box
           sx={{
@@ -1053,13 +1055,9 @@ export default function ChildTaskRow({
         />
       </TableCell>
       
-      {/* Колонка "Задача" – пустая */}
       <TableCell sx={{ width: '15%' }} />
-      
-      {/* Колонка "Файл" – пустая */}
       <TableCell sx={{ width: '10%' }} />
       
-      {/* Колонка "Комментарий" */}
       <TableCell sx={{ width: '20%' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <Tooltip title={task.comment || 'Нет комментария'} arrow placement="top"
@@ -1086,34 +1084,28 @@ export default function ChildTaskRow({
         </Box>
       </TableCell>
       
-      {/* Колонка "Дедлайн" – скрыта */}
       <TableCell sx={{ width: '10%', display: 'none' }} />
       
-      {/* Колонка "Часы" */}
       <TableCell align="center" sx={{ width: '6%' }}>
         <Typography variant="body2" sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
           {task.estimateHours.toFixed(1)} ч
         </Typography>
       </TableCell>
       
-      {/* Колонка "Тип" */}
       <TableCell sx={{ width: '8%' }}>
         <Tooltip title={task.type} arrow>
           <Chip label={truncate(task.type, 20)} size="small" variant="outlined" sx={{ fontSize: '0.7rem', maxWidth: '100%' }} />
         </Tooltip>
       </TableCell>
       
-      {/* Колонка "Сотрудник" */}
       <TableCell sx={{ width: '8%' }}>
         <Chip icon={<Person sx={{ fontSize: 14 }} />} label={task.employeeName} size="small" variant="outlined" sx={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
       </TableCell>
       
-      {/* Колонка "Статус" */}
       <TableCell sx={{ width: '8%' }}>
         <Chip icon={displayStatusIcon} label={task.statusText || "Назначена"} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
       </TableCell>
       
-      {/* Колонка "Действия" */}
       <TableCell sx={{ width: canChangeStatus ? '12%' : '10%' }}>
         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
           {showActionButtons && (
@@ -2031,59 +2023,104 @@ function getMonday(date) {
   return d;
 }=== ./frontend/src/components/EditTaskRow.jsx ===
 // ./frontend/src/components/EditTaskRow.jsx
+import { useState, useEffect } from 'react';
 import { TableRow, TableCell, TextField, Select, MenuItem, IconButton, Tooltip, Box } from '@mui/material';
 import { Save, Cancel } from '@mui/icons-material';
 import { WORK_TIME_OPTIONS, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
 
-export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, taskTypes, employees }) {
-  const { date, time } = parseDateTime(task.deadline);
+export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, employees }) {
+  // Локальное состояние для редактируемых полей
+  const [localTask, setLocalTask] = useState({
+    id: task.id,
+    folderPath: task.folderPath || '',
+    fileName: task.fileName || '',
+    comment: task.comment || '',
+    deadline: task.deadline,
+    estimateHours: task.estimateHours || 0,
+    type: task.type || '',
+    employeeName: task.employeeName || '',
+    parentRowNumber: task.parentRowNumber,
+    statusText: task.statusText || ''
+  });
+
+  // Если задача изменится снаружи (например, после обновления), синхронизируем
+  useEffect(() => {
+    setLocalTask({
+      id: task.id,
+      folderPath: task.folderPath || '',
+      fileName: task.fileName || '',
+      comment: task.comment || '',
+      deadline: task.deadline,
+      estimateHours: task.estimateHours || 0,
+      type: task.type || '',
+      employeeName: task.employeeName || '',
+      parentRowNumber: task.parentRowNumber,
+      statusText: task.statusText || ''
+    });
+  }, [task]);
+
+  const handleFieldChange = (field, value) => {
+    setLocalTask(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = () => {
+    onUpdate(localTask);
+  };
+
+  // Преобразуем дедлайн для отображения
+  let date = '', time = '10:00';
+  if (localTask.deadline) {
+    const parsed = parseDateTime(localTask.deadline);
+    date = parsed.date;
+    time = parsed.time;
+  }
 
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
-      <TableCell>✏️</TableCell>
+      <TableCell sx={{ width: '3%' }}>✏️</TableCell>
 
-      <TableCell>
+      <TableCell sx={{ width: '15%' }}>
         <TextField
           size="small"
-          value={task.folderPath || ''}
-          onChange={(e) => onFieldChange(task, 'folderPath', e.target.value)}
+          value={localTask.folderPath}
+          onChange={(e) => handleFieldChange('folderPath', e.target.value)}
           fullWidth
           placeholder="Путь к папке"
         />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={{ width: '10%' }}>
         <TextField
           size="small"
-          value={task.fileName || ''}
-          onChange={(e) => onFieldChange(task, 'fileName', e.target.value)}
+          value={localTask.fileName}
+          onChange={(e) => handleFieldChange('fileName', e.target.value)}
           fullWidth
           placeholder="Имя файла"
         />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={{ width: '20%' }}>
         <TextField
           size="small"
-          value={task.comment || ''}
-          onChange={(e) => onFieldChange(task, 'comment', e.target.value)}
+          value={localTask.comment}
+          onChange={(e) => handleFieldChange('comment', e.target.value)}
           fullWidth
         />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={{ width: '10%' }}>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <TextField
             size="small"
             type="date"
             value={date}
-            onChange={(e) => onFieldChange(task, 'deadline', combineDateTime(e.target.value, time))}
+            onChange={(e) => handleFieldChange('deadline', combineDateTime(e.target.value, time))}
             sx={{ width: 130 }}
           />
           <Select
             size="small"
             value={time}
-            onChange={(e) => onFieldChange(task, 'deadline', combineDateTime(date, e.target.value))}
+            onChange={(e) => handleFieldChange('deadline', combineDateTime(date, e.target.value))}
             sx={{ width: 85 }}
           >
             {WORK_TIME_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
@@ -2091,23 +2128,23 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
         </Box>
       </TableCell>
 
-      <TableCell>
+      <TableCell align="center" sx={{ width: '6%' }}>
         <TextField
           size="small"
           type="number"
-          value={task.estimateHours || 0}
-          onChange={(e) => onFieldChange(task, 'estimateHours', parseFloat(e.target.value) || 0)}
+          value={localTask.estimateHours}
+          onChange={(e) => handleFieldChange('estimateHours', parseFloat(e.target.value) || 0)}
           slotProps={{ htmlInput: { step: 0.5, min: 0 } }}
           sx={{ width: 80 }}
         />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={{ width: '8%' }}>
         <Select
           size="small"
           multiple
-          value={task.type ? task.type.split(', ') : []}
-          onChange={(e) => onFieldChange(task, 'type', e.target.value.join(', '))}
+          value={localTask.type ? localTask.type.split(', ') : []}
+          onChange={(e) => handleFieldChange('type', e.target.value.join(', '))}
           renderValue={(selected) => selected.join(', ')}
           fullWidth
         >
@@ -2115,25 +2152,25 @@ export default function EditTaskRow({ task, onUpdate, onCancel, onFieldChange, t
         </Select>
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={{ width: '8%' }}>
         <Select
           size="small"
-          value={task.employeeName || ''}
-          onChange={(e) => onFieldChange(task, 'employeeName', e.target.value)}
+          value={localTask.employeeName}
+          onChange={(e) => handleFieldChange('employeeName', e.target.value)}
           fullWidth
         >
           {employees.map(emp => <MenuItem key={emp} value={emp}>{emp}</MenuItem>)}
         </Select>
       </TableCell>
 
-      <TableCell>
-        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{task.statusText || 'Назначена'}</span>
+      <TableCell sx={{ width: '8%' }}>
+        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{localTask.statusText || 'Назначена'}</span>
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={{ width: '12%' }}>
         <Box sx={{ display: 'flex', gap: 0.5 }}>
           <Tooltip title="Сохранить">
-            <IconButton size="small" color="primary" onClick={() => onUpdate(task)}>
+            <IconButton size="small" color="primary" onClick={handleSave}>
               <Save fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -3128,11 +3165,15 @@ export default function useTaskTableApi() {
     return response.json();
   }, []);
 
-  const loadRows = useCallback(async (page = 1, pageSize = 50) => {
+  const loadRows = useCallback(async (page = 1, pageSize = 50, selectedEmployee = '') => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/tasks/table?page=${page}&pageSize=${pageSize}`);
+      let url = `/api/tasks/table?page=${page}&pageSize=${pageSize}`;
+      if (selectedEmployee) {
+        url += `&employee=${encodeURIComponent(selectedEmployee)}`;
+      }
+      const response = await fetch(url);
       const data = await handleResponse(response);
       if (data.items && data.totalCount !== undefined) {
         return { items: data.items, totalCount: data.totalCount, page: data.page, pageSize: data.pageSize };
@@ -3668,7 +3709,13 @@ function App() {
           )}
 
           {activeTab === 1 && (
-            <TaskTable refreshTrigger={refresh} onTaskUpdate={refreshAll} userRole={user?.role} currentUser={user} />
+            <TaskTable 
+              refreshTrigger={refresh} 
+              onTaskUpdate={refreshAll} 
+              userRole={user?.role} 
+              currentUser={user}
+              selectedEmployeeForHighlight={employee}
+            />
           )}
 
           <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />
