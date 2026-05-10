@@ -986,8 +986,8 @@ public class CalendarController : ControllerBase
 
             var weekEnd = weekStart.AddDays(7);
 
-            // Загружаем только активные задачи сотрудника (без интервалов)
-            var tasksForCalendar = await _repo.GetActiveTasksWithIntervalsByEmployeeAsync(employee);
+            // Загружаем ВСЕ задачи сотрудника (включая завершённые)
+            var allEmployeeTasks = await _repo.GetEmployeeTasksAsync(employee);
             // Загружаем интервалы за неделю
             var intervals = await _repo.GetWorkIntervalsForDateRangeAsync(employee, weekStart, weekEnd);
 
@@ -995,7 +995,7 @@ public class CalendarController : ControllerBase
             var intervalsByTask = intervals.GroupBy(i => i.ProductionTaskId)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            foreach (var task in tasksForCalendar)
+            foreach (var task in allEmployeeTasks)
             {
                 if (intervalsByTask.TryGetValue(task.Id, out var taskIntervals))
                     task.WorkIntervals = taskIntervals;
@@ -1003,8 +1003,12 @@ public class CalendarController : ControllerBase
                     task.WorkIntervals = new List<WorkInterval>();
             }
 
-            var slots = _scheduler.GetSchedule(tasksForCalendar, currentTime);
-            var employeeTasks = tasksForCalendar; // теперь только задачи этого сотрудника
+            // Активные задачи для плановых блоков (только не завершённые)
+            var activeTasksForSchedule = allEmployeeTasks.Where(t => t.Status != JobStatus.Completed).ToList();
+            var slots = _scheduler.GetSchedule(activeTasksForSchedule, currentTime);
+
+            // Для таймлайна используем все задачи (чтобы отобразить интервалы завершённых)
+            var employeeTasks = allEmployeeTasks;
 
             var days = new List<object>();
             for (var day = weekStart; day < weekEnd; day = day.AddDays(1))
@@ -1013,7 +1017,7 @@ public class CalendarController : ControllerBase
                 var dayEndTime = day.Date.AddHours(19);
                 var totalWorkHours = (dayEndTime - dayStartTime).TotalHours;
 
-                // ПЛАНОВЫЕ БЛОКИ
+                // ПЛАНОВЫЕ БЛОКИ (только активные задачи)
                 var taskBlocks = new List<object>();
                 var daySlots = slots.Where(s => s.PlannedStart.Date == day.Date).ToList();
                 foreach (var slot in daySlots)
@@ -1039,7 +1043,7 @@ public class CalendarController : ControllerBase
                     });
                 }
 
-                // РЕАЛЬНЫЙ ТАЙМЛАЙН
+                // РЕАЛЬНЫЙ ТАЙМЛАЙН (все задачи, включая завершённые)
                 var timeline = new List<object>();
                 var dayDate = day.Date;
                 var currentDate = currentTime.Date;
@@ -1679,6 +1683,9 @@ namespace ProductionPlanner.Data
         // Новые методы для оптимизации календаря
         Task<List<ProductionTask>> GetActiveTasksWithIntervalsByEmployeeAsync(string employeeName);
         Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end);
+        
+        // Новый метод – все задачи сотрудника (без фильтра по статусу)
+        Task<List<ProductionTask>> GetEmployeeTasksAsync(string employeeName);
     }
 }=== ./Data/ProductionTaskRepository.cs ===
 using Microsoft.EntityFrameworkCore;
@@ -1894,6 +1901,13 @@ namespace ProductionPlanner.Data
                 .Include(i => i.Task)
                 .Where(i => i.Task.EmployeeName == employeeName &&
                             i.StartTime >= start && i.StartTime <= end)
+                .ToListAsync();
+        }
+
+        public async Task<List<ProductionTask>> GetEmployeeTasksAsync(string employeeName)
+        {
+            return await _context.ProductionTasks
+                .Where(t => t.EmployeeName == employeeName)
                 .ToListAsync();
         }
     }

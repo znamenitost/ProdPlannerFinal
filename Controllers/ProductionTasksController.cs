@@ -43,99 +43,124 @@ public class ProductionTasksController : ControllerBase
         _context = context;
     }
 
-    [HttpGet("table")]
-    public async Task<IActionResult> GetTableRows(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50,
-        [FromQuery] string? employee = null)
+    // ./Controllers/ProductionTasksController.cs (изменённый метод GetTableRows)
+
+[HttpGet("table")]
+public async Task<IActionResult> GetTableRows(
+    [FromQuery] int page = 1,
+    [FromQuery] int pageSize = 50,
+    [FromQuery] string? employee = null)
+{
+    try
     {
-        try
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser == null) return Unauthorized();
+
+        var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+
+        // Для кого считаем подсветку (hasCurrentUserSubtask)
+        string targetEmployeeName = (isAdmin && !string.IsNullOrEmpty(employee))
+            ? employee
+            : currentUser.FullName;
+
+        var query = _context.ProductionTasks
+            .Where(t => t.ParentRowNumber == null)
+            .OrderBy(t => t.DisplayOrder)
+            .AsQueryable();
+
+        var totalCount = await query.CountAsync();
+        var parents = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        if (parents.Count == 0)
         {
-            var currentUser = await _userManager.GetUserAsync(User);
-            if (currentUser == null) return Unauthorized();
-
-            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
-
-            // Для кого считаем подсветку (hasCurrentUserSubtask)
-            string targetEmployeeName = (isAdmin && !string.IsNullOrEmpty(employee))
-                ? employee
-                : currentUser.FullName;
-
-            var query = _context.ProductionTasks
-                .Where(t => t.ParentRowNumber == null)
-                .OrderBy(t => t.DisplayOrder)
-                .AsQueryable();
-
-            var totalCount = await query.CountAsync();
-            var items = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-
-            var resultItems = new List<object>();
-
-            foreach (var parent in items)
-            {
-                bool hasChildForTargetEmployee = false;
-                string aggregatedStatusText = MapStatusToText(parent.Status);
-
-                if (parent.IsSplitTask)
-                {
-                    // Есть ли у родителя дочерняя задача на целевого сотрудника?
-                    hasChildForTargetEmployee = await _context.ProductionTasks
-    .AnyAsync(c => c.ParentRowNumber == parent.Id && c.EmployeeName == targetEmployeeName && c.Status != JobStatus.Completed);
-
-                    // Агрегированный статус родителя на основе всех детей
-                    var children = await _context.ProductionTasks
-                        .Where(c => c.ParentRowNumber == parent.Id && c.IsSplitTask)
-                        .ToListAsync();
-
-                    if (children.Any())
-                    {
-                        if (children.All(c => c.Status == JobStatus.Completed))
-                            aggregatedStatusText = "Готово";
-                        else if (children.Any(c => c.Status == JobStatus.Completed || c.Status == JobStatus.InProgress || c.Status == JobStatus.Paused))
-                            aggregatedStatusText = "Начал";
-                        else
-                            aggregatedStatusText = "";
-                    }
-                }
-
-                resultItems.Add(new
-                {
-                    parent.Id,
-                    parent.DisplayOrder,
-                    parent.FolderPath,
-                    parent.FileName,
-                    parent.Comment,
-                    StatusText = aggregatedStatusText,
-                    parent.Deadline,
-                    parent.EstimateHours,
-                    parent.Type,
-                    parent.EmployeeName,
-                    parent.CreatedAt,
-                    parent.UpdatedAt,
-                    parent.ParentRowNumber,
-                    parent.IsSplitTask,
-                    parent.Progress,
-                    HasCurrentUserSubtask = hasChildForTargetEmployee
-                });
-            }
-
             return Ok(new PaginatedResult<object>
             {
-                Items = resultItems,
+                Items = new List<object>(),
                 TotalCount = totalCount,
                 Page = page,
                 PageSize = pageSize
             });
         }
-        catch (Exception ex)
+
+        // --- ОДИН ЗАПРОС: загружаем всех детей для всех родителей на текущей странице ---
+        var parentIds = parents.Select(p => p.Id).ToList();
+        var allChildren = await _context.ProductionTasks
+            .Where(c => parentIds.Contains(c.ParentRowNumber.Value) && c.IsSplitTask)
+            .ToListAsync();
+
+        // Группируем детей по ParentRowNumber для быстрого доступа
+        var childrenByParent = allChildren
+            .GroupBy(c => c.ParentRowNumber.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var resultItems = new List<object>();
+
+        foreach (var parent in parents)
         {
-            _logger.LogError(ex, "Ошибка в GetTableRows");
-            return StatusCode(500, new { error = ex.Message });
+            bool hasChildForTargetEmployee = false;
+            string aggregatedStatusText = MapStatusToText(parent.Status);
+
+            if (parent.IsSplitTask && childrenByParent.TryGetValue(parent.Id, out var children))
+            {
+                // Есть ли у родителя дочерняя задача на целевого сотрудника (и не завершена)
+                hasChildForTargetEmployee = children.Any(c => 
+                    c.EmployeeName == targetEmployeeName && c.Status != JobStatus.Completed);
+
+                // Агрегированный статус родителя на основе всех детей
+                if (children.All(c => c.Status == JobStatus.Completed))
+                    aggregatedStatusText = "Готово";
+                else if (children.Any(c => c.Status == JobStatus.Completed || 
+                                          c.Status == JobStatus.InProgress || 
+                                          c.Status == JobStatus.Paused))
+                    aggregatedStatusText = "Начал";
+                else
+                    aggregatedStatusText = "";
+            }
+            else if (parent.IsSplitTask)
+            {
+                // Нет детей (не должно быть, но на всякий случай)
+                hasChildForTargetEmployee = false;
+                aggregatedStatusText = "";
+            }
+
+            resultItems.Add(new
+            {
+                parent.Id,
+                parent.DisplayOrder,
+                parent.FolderPath,
+                parent.FileName,
+                parent.Comment,
+                StatusText = aggregatedStatusText,
+                parent.Deadline,
+                parent.EstimateHours,
+                parent.Type,
+                parent.EmployeeName,
+                parent.CreatedAt,
+                parent.UpdatedAt,
+                parent.ParentRowNumber,
+                parent.IsSplitTask,
+                parent.Progress,
+                HasCurrentUserSubtask = hasChildForTargetEmployee
+            });
         }
+
+        return Ok(new PaginatedResult<object>
+        {
+            Items = resultItems,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        });
     }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Ошибка в GetTableRows");
+        return StatusCode(500, new { error = ex.Message });
+    }
+}
 
     [HttpPost("table/row")]
     public async Task<IActionResult> CreateTableRow([FromBody] CreateTaskRequest request)
