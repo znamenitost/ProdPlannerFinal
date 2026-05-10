@@ -1,3 +1,4 @@
+// ./frontend/src/components/ActiveTasksList.jsx
 import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../services/api';
 import { Warning, Error, FolderOpen, AccessTime, Event, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
 import { Tooltip, Chip, IconButton, Box, Typography } from '@mui/material';
@@ -10,7 +11,6 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       else if (action === 'resume') await resumeTask(id);
       else if (action === 'progress') await setProgress(id, progress);
       else if (action === 'complete') await completeTask(id);
-      // Двойное обновление для гарантии
       await onUpdate();
       setTimeout(() => onUpdate(), 100);
     } catch (err) {
@@ -58,8 +58,10 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     return title.split('\\').pop().split('/').pop();
   };
 
-  const isStarted = (status) => {
-    return status === 1 || status === 2;
+  const getBorderColor = (status) => {
+    if (status === 1) return '#3b82f6';
+    if (status === 2) return '#f59e0b';
+    return '#cbd5e1';
   };
 
   return (
@@ -70,7 +72,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tasks.map(task => {
           const risk = getRiskProps(task.riskLevel);
-          const started = isStarted(task.status);
+          const borderColor = getBorderColor(task.status);
           
           return (
             <Box 
@@ -81,7 +83,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                 p: 2,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                 transition: 'all 0.2s ease',
-                borderLeft: started ? '4px solid #22c55e' : '4px solid #cbd5e1',
+                borderLeft: `4px solid ${borderColor}`,
                 '&:hover': { 
                   boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
                   transform: 'translateY(-2px)'
@@ -98,7 +100,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                     <FolderOpen fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Typography variant="body2" sx={{ fontWeight: started ? 600 : 400 }}>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
                   {getShortTitle(task.title)}
                 </Typography>
                 <Typography variant="caption" sx={{ color: '#6b7c93' }}>
@@ -142,7 +144,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                   sx={{ 
                     width: `${(task.progress || 0) * 100}%`,
                     height: '100%',
-                    bgcolor: started ? '#22c55e' : '#cbd5e1',
+                    bgcolor: task.status === 1 ? '#3b82f6' : (task.status === 2 ? '#f59e0b' : '#cbd5e1'),
                     transition: 'width 0.3s ease',
                     borderRadius: 1
                   }} 
@@ -162,7 +164,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                       '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                     }}
                   >
-                    <PlayArrow sx={{ fontSize: 16 }} /> Начал
+                    <PlayArrow sx={{ fontSize: 16, color: '#3b82f6' }} /> Начал
                   </Box>
                 )}
                 
@@ -179,7 +181,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                         '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                       }}
                     >
-                      <Pause sx={{ fontSize: 16 }} /> Пауза
+                      <Pause sx={{ fontSize: 16, color: '#f59e0b' }} /> Пауза
                     </Box>
                     <Box 
                       component="button"
@@ -187,12 +189,12 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                       sx={{ 
                         px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
                         cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
+                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
                         display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                       }}
                     >
-                      <CheckCircle sx={{ fontSize: 16 }} /> Готово
+                      <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} /> Готово
                     </Box>
                   </>
                 )}
@@ -218,12 +220,12 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                       sx={{ 
                         px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
                         cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
+                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
                         display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                       }}
                     >
-                      <CheckCircle sx={{ fontSize: 16 }} /> Готово
+                      <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} /> Готово
                     </Box>
                   </>
                 )}
