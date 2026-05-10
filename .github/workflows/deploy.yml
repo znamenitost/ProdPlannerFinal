@@ -2,8 +2,7 @@ name: Build and Deploy to SmarterASP.NET
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
+    branches: [ "test/субботавечер" ]
 
 jobs:
   build_and_deploy:
