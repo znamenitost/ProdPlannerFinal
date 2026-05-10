@@ -20,7 +20,8 @@ import {
   ChevronRight,
   CallSplit,
   Person,
-  Comment as CommentIcon
+  Comment as CommentIcon,
+  PeopleAlt    // <-- добавлено для индикатора общей задачи
 } from '@mui/icons-material';
 import {
   truncate,
@@ -54,7 +55,6 @@ export default function ParentTaskRow({
   highlightMyTasks,
   selectedEmployeeForHighlight
 }) {
-  console.log('[ParentTaskRow] id:', task.id, 'isExpanded:', isExpanded, 'childrenCount:', childrenTasks?.length);
   const overdue = isOverdue(task.deadline, task.statusText);
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
 
@@ -62,21 +62,17 @@ export default function ParentTaskRow({
   let displayStatusIcon = getStatusIcon(displayStatus);
   let displayStatusColor = getStatusColor(displayStatus);
 
-  // ========== КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ПОДСВЕТКА ДЛЯ АДМИНИСТРАТОРА ==========
+  // ========== ПОДСВЕТКА ДЛЯ АДМИНИСТРАТОРА И СОТРУДНИКА ==========
   let isMine = false;
 
   if (highlightMyTasks) {
-    // Администратор с выбранным сотрудником
     if (currentUser?.role === 'Admin' && selectedEmployeeForHighlight) {
       if (hasChildren) {
-        // Для сплит-родителя используем hasCurrentUserSubtask (приходит с бэкенда)
         isMine = task.hasCurrentUserSubtask === true;
       } else {
-        // Для обычной задачи сравниваем employeeName
         isMine = task.employeeName === selectedEmployeeForHighlight && task.statusText !== 'Готово';
       }
     }
-    // Обычный сотрудник (не администратор)
     else if (currentUser?.role !== 'Admin') {
       if (hasChildren) {
         isMine = task.hasCurrentUserSubtask === true;
@@ -124,6 +120,7 @@ export default function ParentTaskRow({
   return (
     <Fragment>
       <TableRow sx={getRowStyle()}>
+        {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}
         <TableCell sx={{ width: '3%' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
             {hasChildren && (
@@ -132,6 +129,14 @@ export default function ParentTaskRow({
               </IconButton>
             )}
             {!hasChildren && <Box sx={{ width: 28 }} />}
+            
+            {/* Индикатор: общая задача (сплит) */}
+            {task.isSplitTask && (
+              <Tooltip title="Общая задача (разделена между сотрудниками)" arrow>
+                <PeopleAlt fontSize="small" sx={{ color: '#8b5cf6' }} />
+              </Tooltip>
+            )}
+            
             <Tooltip title={`Открыть файл: ${fullFilePath}`} arrow>
               <IconButton size="small" onClick={() => onOpenFile(task)} sx={{ color: '#7c9ebf' }}>
                 <FolderOpen fontSize="small" />

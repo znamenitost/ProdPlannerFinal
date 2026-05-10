@@ -13,7 +13,6 @@ import {
   Card,
   CardContent,
   Grid,
-  LinearProgress,
   Tooltip
 } from '@mui/material';
 import { 
@@ -47,9 +46,6 @@ export default function CompletedTasksList({ employee, refresh }) {
   }, [employee, refresh]);
 
   const totalDifference = stats.totalEstimate - stats.totalActual;
-  const efficiencyPercent = stats.totalEstimate > 0 
-    ? (stats.totalActual / stats.totalEstimate) * 100 
-    : 0;
 
   // Отображаемое имя задачи (последний сегмент FolderPath или FileName)
   const getTaskDisplayName = (task) => {
@@ -161,28 +157,6 @@ export default function CompletedTasksList({ employee, refresh }) {
           </Card>
         </Grid>
       </Grid>
-
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="body2" color="text.secondary">Эффективность</Typography>
-          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-            {efficiencyPercent.toFixed(1)}% от плана
-          </Typography>
-        </Box>
-        <LinearProgress 
-          variant="determinate" 
-          value={Math.min(efficiencyPercent, 100)} 
-          sx={{ 
-            height: 8, 
-            borderRadius: 4,
-            bgcolor: '#e2e8f0',
-            '& .MuiLinearProgress-bar': {
-              bgcolor: efficiencyPercent <= 100 ? '#22c55e' : '#ef4444',
-              borderRadius: 4
-            }
-          }}
-        />
-      </Box>
 
       <TableContainer>
         <Table sx={{ minWidth: 800 }}>
