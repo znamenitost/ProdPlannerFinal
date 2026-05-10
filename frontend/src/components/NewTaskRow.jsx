@@ -1,11 +1,25 @@
 // ./frontend/src/components/NewTaskRow.jsx
 import { TableRow, TableCell, TextField, Select, MenuItem, FormControl, InputLabel, Box, Chip, IconButton, Tooltip, Button } from '@mui/material';
 import { Save, Cancel, AutoAwesome } from '@mui/icons-material';
-import { WORK_TIME_OPTIONS, DEFAULT_TIME, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
+import { WORK_TIME_OPTIONS, combineDateTime } from '../utils/dateTimeHelpers';
+
+const DEFAULT_TIME = '15:00'; // локальная константа
 
 export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, onSave, onCancel }) {
+  // Текущая дата из newRow.deadline (если есть) или пустая строка
   const currentDate = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(0, 10) : '';
+  // Текущее время из newRow.deadline (если есть) или DEFAULT_TIME
   const currentTime = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(11, 16) : DEFAULT_TIME;
+
+  const handleDateChange = (e) => {
+    // ✅ При смене даты ВСЕГДА ставим время DEFAULT_TIME (15:00)
+    setNewRow({ ...newRow, deadline: combineDateTime(e.target.value, DEFAULT_TIME) });
+  };
+
+  const handleTimeChange = (e) => {
+    // При смене времени оставляем текущую дату
+    setNewRow({ ...newRow, deadline: combineDateTime(currentDate, e.target.value) });
+  };
 
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
@@ -49,13 +63,13 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
             size="small"
             type="date"
             value={currentDate}
-            onChange={(e) => setNewRow({ ...newRow, deadline: combineDateTime(e.target.value, currentTime) })}
+            onChange={handleDateChange}
             sx={{ width: 130 }}
           />
           <Select
             size="small"
             value={currentTime}
-            onChange={(e) => setNewRow({ ...newRow, deadline: combineDateTime(currentDate, e.target.value) })}
+            onChange={handleTimeChange}
             sx={{ width: 85 }}
           >
             {WORK_TIME_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}

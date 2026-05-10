@@ -198,6 +198,7 @@ public class ProductionTasksController : ControllerBase
             var task = await _repo.GetTaskByIdAsync(id);
             if (task == null) return NotFound();
 
+            // Обновляем поля
             task.FolderPath = request.FolderPath ?? task.FolderPath;
             task.FileName = request.FileName ?? task.FileName;
             task.Comment = request.Comment ?? task.Comment;
@@ -208,6 +209,7 @@ public class ProductionTasksController : ControllerBase
             task.ParentRowNumber = request.ParentRowNumber;
             task.UpdatedAt = _timeService.Now;
 
+            // Обновляем детей, если это сплит-родитель
             if (task.IsSplitTask && task.ParentRowNumber == null)
             {
                 var childTasks = await _repo.GetChildTasksAsync(task.Id);
@@ -219,6 +221,7 @@ public class ProductionTasksController : ControllerBase
                 }
             }
 
+            // Обработка изменения статуса (если нужно)
             if (!string.IsNullOrEmpty(request.StatusText))
             {
                 var newStatus = MapStatusFromText(request.StatusText);
@@ -229,12 +232,12 @@ public class ProductionTasksController : ControllerBase
                     else
                     {
                         task.Status = newStatus;
-                        await _repo.UpdateTaskAsync(task);
                     }
                 }
             }
-            else
-                await _repo.UpdateTaskAsync(task);
+
+            // ✅ ВСЕГДА сохраняем задачу после всех изменений
+            await _repo.UpdateTaskAsync(task);
 
             return Ok(task);
         }

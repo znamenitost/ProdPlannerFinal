@@ -57,8 +57,14 @@ namespace ProductionPlanner.Data
         {
             task.UpdatedAt = _timeService.Now;
             _context.ProductionTasks.Update(task);
+
+            Console.WriteLine($"[REPO] UpdateTaskAsync: Id={task.Id}, Deadline={task.Deadline}");
+
             await _context.SaveChangesAsync();
+
+            Console.WriteLine($"[REPO] Сохранение завершено для задачи {task.Id}");
         }
+        
 
         // ./Data/ProductionTaskRepository.cs
 // Полный метод DeleteTaskAsync

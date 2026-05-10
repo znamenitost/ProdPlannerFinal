@@ -349,6 +349,8 @@ import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
 import useTaskTableApi from '../hooks/useTaskTableApi';
+import { combineDateTime, DEFAULT_TIME } from '../utils/dateTimeHelpers';
+
 
 export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser, selectedEmployeeForHighlight }) {
   const [rows, setRows] = useState([]);
@@ -386,7 +388,7 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     loadRows();
   }, [refreshTrigger, page, rowsPerPage, selectedEmployeeForHighlight, loadRows]);
 
-  const loadChildrenForParent = async (parentId) => {
+  const loadChildrenForParent = useCallback(async (parentId) => {
     if (childrenCache.has(parentId)) return childrenCache.get(parentId);
     if (loadingChildren.has(parentId)) return;
     
@@ -405,7 +407,34 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
         return newSet;
       });
     }
-  };
+  }, [api, childrenCache, loadingChildren]);
+
+  // ========== НОВАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ КЕША ДЕТЕЙ ==========
+  const refreshChildren = useCallback(async (parentId) => {
+  if (expandedRows.has(parentId)) {
+    // Родитель раскрыт — обновляем детей без удаления кеша (чтобы не схлопывалось)
+    setLoadingChildren(prev => new Set(prev).add(parentId));
+    try {
+      const children = await api.loadChildren(parentId);
+      setChildrenCache(prev => new Map(prev).set(parentId, children));
+    } catch (err) {
+      console.error('Ошибка обновления детей', err);
+    } finally {
+      setLoadingChildren(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(parentId);
+        return newSet;
+      });
+    }
+  } else {
+    // Родитель свёрнут — можно удалить кеш, чтобы при разворачивании загрузить свежее
+    setChildrenCache(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(parentId);
+      return newMap;
+    });
+  }
+}, [expandedRows, api.loadChildren]);
 
   const toggleExpand = async (parentId) => {
     if (expandedRows.has(parentId)) {
@@ -466,10 +495,14 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     }
   };
 
+  // ========== ИСПРАВЛЕННЫЕ ОБРАБОТЧИКИ С ВЫЗОВОМ refreshChildren ==========
   const handleStartTask = async (row) => {
     try {
       await api.startTask(row.id);
       refresh();
+      if (row.parentRowNumber) {
+        await refreshChildren(row.parentRowNumber);
+      }
     } catch (err) { 
       console.error(err);
     }
@@ -479,6 +512,9 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.pauseTask(row.id);
       refresh();
+      if (row.parentRowNumber) {
+        await refreshChildren(row.parentRowNumber);
+      }
     } catch (err) { 
       console.error(err);
     }
@@ -488,6 +524,9 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.resumeTask(row.id);
       refresh();
+      if (row.parentRowNumber) {
+        await refreshChildren(row.parentRowNumber);
+      }
     } catch (err) { 
       console.error(err);
     }
@@ -497,6 +536,9 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.completeTask(row.id);
       refresh();
+      if (row.parentRowNumber) {
+        await refreshChildren(row.parentRowNumber);
+      }
     } catch (err) { 
       console.error(err);
     }
@@ -541,18 +583,20 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     }
   };
 
-  const handleAddNewRow = () => {
-    setNewRow({
-      folderPath: '',
-      fileName: '',
-      comment: '',
-      deadline: new Date().toISOString().slice(0, 16),
-      estimateHours: 1,
-      types: [taskTypes[0]],
-      employeeName: employees[0],
-      parentRowNumber: null
-    });
-  };
+
+    const handleAddNewRow = () => {
+      const today = new Date().toISOString().slice(0, 10);
+      setNewRow({
+        folderPath: '',
+        fileName: '',
+        comment: '',
+        deadline: combineDateTime(today, DEFAULT_TIME), // сегодня, 15:00
+        estimateHours: 1,
+        types: [taskTypes[0]],
+        employeeName: employees[0],
+        parentRowNumber: null
+      });
+    };
 
   const toggleHighlight = () => setHighlightMyTasks(!highlightMyTasks);
   const handleChangePage = (event, newPage) => setPage(newPage);
@@ -676,7 +720,8 @@ import {
   ChevronRight,
   CallSplit,
   Person,
-  Comment as CommentIcon
+  Comment as CommentIcon,
+  PeopleAlt    // <-- добавлено для индикатора общей задачи
 } from '@mui/icons-material';
 import {
   truncate,
@@ -717,21 +762,17 @@ export default function ParentTaskRow({
   let displayStatusIcon = getStatusIcon(displayStatus);
   let displayStatusColor = getStatusColor(displayStatus);
 
-  // ========== КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ПОДСВЕТКА ДЛЯ АДМИНИСТРАТОРА ==========
+  // ========== ПОДСВЕТКА ДЛЯ АДМИНИСТРАТОРА И СОТРУДНИКА ==========
   let isMine = false;
 
   if (highlightMyTasks) {
-    // Администратор с выбранным сотрудником
     if (currentUser?.role === 'Admin' && selectedEmployeeForHighlight) {
       if (hasChildren) {
-        // Для сплит-родителя используем hasCurrentUserSubtask (приходит с бэкенда)
         isMine = task.hasCurrentUserSubtask === true;
       } else {
-        // Для обычной задачи сравниваем employeeName
         isMine = task.employeeName === selectedEmployeeForHighlight && task.statusText !== 'Готово';
       }
     }
-    // Обычный сотрудник (не администратор)
     else if (currentUser?.role !== 'Admin') {
       if (hasChildren) {
         isMine = task.hasCurrentUserSubtask === true;
@@ -779,6 +820,7 @@ export default function ParentTaskRow({
   return (
     <Fragment>
       <TableRow sx={getRowStyle()}>
+        {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}
         <TableCell sx={{ width: '3%' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
             {hasChildren && (
@@ -787,6 +829,14 @@ export default function ParentTaskRow({
               </IconButton>
             )}
             {!hasChildren && <Box sx={{ width: 28 }} />}
+            
+            {/* Индикатор: общая задача (сплит) */}
+            {task.isSplitTask && (
+              <Tooltip title="Общая задача (разделена между сотрудниками)" arrow>
+                <PeopleAlt fontSize="small" sx={{ color: '#8b5cf6' }} />
+              </Tooltip>
+            )}
+            
             <Tooltip title={`Открыть файл: ${fullFilePath}`} arrow>
               <IconButton size="small" onClick={() => onOpenFile(task)} sx={{ color: '#7c9ebf' }}>
                 <FolderOpen fontSize="small" />
@@ -1167,7 +1217,6 @@ import {
   Card,
   CardContent,
   Grid,
-  LinearProgress,
   Tooltip
 } from '@mui/material';
 import { 
@@ -1179,7 +1228,8 @@ import {
   TaskAlt,
   HourglassEmpty,
   PlayArrow,
-  Stop
+  Stop,
+  EventNote  // добавлена для иконки периода выполнения (опционально)
 } from '@mui/icons-material';
 import { getCompletedTasks } from '../services/api';
 
@@ -1201,11 +1251,7 @@ export default function CompletedTasksList({ employee, refresh }) {
   }, [employee, refresh]);
 
   const totalDifference = stats.totalEstimate - stats.totalActual;
-  const efficiencyPercent = stats.totalEstimate > 0 
-    ? (stats.totalActual / stats.totalEstimate) * 100 
-    : 0;
 
-  // Отображаемое имя задачи (последний сегмент FolderPath или FileName)
   const getTaskDisplayName = (task) => {
     if (task.folderPath && task.folderPath.trim() !== '') {
       const segments = task.folderPath.split(/[\/\\]/).filter(s => s !== '');
@@ -1214,7 +1260,6 @@ export default function CompletedTasksList({ employee, refresh }) {
     return task.fileName || 'Без названия';
   };
 
-  // Форматирование интервала выполнения с учётом дат
   const formatWorkPeriod = (intervals) => {
     if (!intervals || intervals.length === 0) return '—';
     
@@ -1316,28 +1361,6 @@ export default function CompletedTasksList({ employee, refresh }) {
         </Grid>
       </Grid>
 
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="body2" color="text.secondary">Эффективность</Typography>
-          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-            {efficiencyPercent.toFixed(1)}% от плана
-          </Typography>
-        </Box>
-        <LinearProgress 
-          variant="determinate" 
-          value={Math.min(efficiencyPercent, 100)} 
-          sx={{ 
-            height: 8, 
-            borderRadius: 4,
-            bgcolor: '#e2e8f0',
-            '& .MuiLinearProgress-bar': {
-              bgcolor: efficiencyPercent <= 100 ? '#22c55e' : '#ef4444',
-              borderRadius: 4
-            }
-          }}
-        />
-      </Box>
-
       <TableContainer>
         <Table sx={{ minWidth: 800 }}>
           <TableHead>
@@ -1361,6 +1384,7 @@ export default function CompletedTasksList({ employee, refresh }) {
                 <TableRow key={task.id} hover>
                   <TableCell>
                     <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
+                      {/* Иконка вместо текстового эмодзи ✅ */}
                       <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} />
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {displayName}
@@ -1427,16 +1451,32 @@ export default function CompletedTasksList({ employee, refresh }) {
 }=== ./frontend/src/components/NewTaskRow.jsx ===
 // ./frontend/src/components/NewTaskRow.jsx
 import { TableRow, TableCell, TextField, Select, MenuItem, FormControl, InputLabel, Box, Chip, IconButton, Tooltip, Button } from '@mui/material';
-import { Save, Cancel } from '@mui/icons-material';
-import { WORK_TIME_OPTIONS, DEFAULT_TIME, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
+import { Save, Cancel, AutoAwesome } from '@mui/icons-material';
+import { WORK_TIME_OPTIONS, combineDateTime } from '../utils/dateTimeHelpers';
+
+const DEFAULT_TIME = '15:00'; // ← явно здесь, чтобы не зависеть от импорта
 
 export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, onSave, onCancel }) {
   const currentDate = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(0, 10) : '';
   const currentTime = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(11, 16) : DEFAULT_TIME;
 
+  const handleDateChange = (e) => {
+    const newDate = e.target.value;
+    // При изменении даты оставляем текущее выбранное время (или DEFAULT_TIME, если время не задано)
+    const timeToUse = currentTime || DEFAULT_TIME;
+    setNewRow({ ...newRow, deadline: combineDateTime(newDate, timeToUse) });
+  };
+
+  const handleTimeChange = (e) => {
+    const newTime = e.target.value;
+    setNewRow({ ...newRow, deadline: combineDateTime(currentDate, newTime) });
+  };
+
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
-      <TableCell>✨</TableCell>
+      <TableCell>
+        <AutoAwesome color="warning" fontSize="small" />
+      </TableCell>
       
       <TableCell>
         <TextField
@@ -1474,13 +1514,13 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
             size="small"
             type="date"
             value={currentDate}
-            onChange={(e) => setNewRow({ ...newRow, deadline: combineDateTime(e.target.value, currentTime) })}
+            onChange={handleDateChange}
             sx={{ width: 130 }}
           />
           <Select
             size="small"
             value={currentTime}
-            onChange={(e) => setNewRow({ ...newRow, deadline: combineDateTime(currentDate, e.target.value) })}
+            onChange={handleTimeChange}
             sx={{ width: 85 }}
           >
             {WORK_TIME_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
@@ -1543,12 +1583,15 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
 }=== ./frontend/src/components/TaskTableToolbar.jsx ===
 // ./frontend/src/components/TaskTableToolbar.jsx
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
-import { Add, Lightbulb } from '@mui/icons-material';
+import { Add, Lightbulb, TableChart } from '@mui/icons-material';
 
 export default function TaskTableToolbar({ isAdmin, onAddNew, highlightMyTasks, onToggleHighlight }) {
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-      <Typography variant="h2" sx={{ fontWeight: 600 }}>📋 Таблица задач</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <TableChart color="primary" />
+        <Typography variant="h2" sx={{ fontWeight: 600 }}>Таблица задач</Typography>
+      </Box>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
         <Tooltip title={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}>
           <IconButton 
@@ -2025,11 +2068,10 @@ function getMonday(date) {
 // ./frontend/src/components/EditTaskRow.jsx
 import { useState, useEffect, useRef } from 'react';
 import { TableRow, TableCell, TextField, Select, MenuItem, IconButton, Tooltip, Box } from '@mui/material';
-import { Save, Cancel } from '@mui/icons-material';
+import { Save, Cancel, Edit } from '@mui/icons-material';
 import { WORK_TIME_OPTIONS, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
 
 export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, employees }) {
-  // Инициализируем состояние только один раз при монтировании или при изменении id задачи
   const [localTask, setLocalTask] = useState(() => ({
     id: task.id,
     folderPath: task.folderPath || '',
@@ -2043,7 +2085,6 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
     statusText: task.statusText || ''
   }));
 
-  // Если открыли редактирование другой задачи (id изменился), обновляем локальное состояние
   const prevIdRef = useRef(task.id);
   useEffect(() => {
     if (task.id !== prevIdRef.current) {
@@ -2068,10 +2109,13 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
   };
 
   const handleSave = () => {
+
+      console.log('[EditTaskRow] Сохраняем задачу:', localTask);
+      console.log('[EditTaskRow] Дедлайн (ISO):', localTask.deadline);
+
     onUpdate(localTask);
   };
 
-  // Преобразуем дедлайн для отображения
   let date = '', time = '10:00';
   if (localTask.deadline) {
     const parsed = parseDateTime(localTask.deadline);
@@ -2081,7 +2125,9 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
 
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
-      <TableCell sx={{ width: '3%' }}>✏️</TableCell>
+      <TableCell sx={{ width: '3%' }}>
+        <Edit color="warning" fontSize="small" />
+      </TableCell>
 
       <TableCell sx={{ width: '15%' }}>
         <TextField
@@ -2188,9 +2234,21 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
     </TableRow>
   );
 }=== ./frontend/src/components/DayColumn.jsx ===
+// ./frontend/src/components/DayColumn.jsx
 import { useState } from 'react';
 import { Paper, Typography, Box, Tooltip } from '@mui/material';
-import { CheckCircle, Warning, Restaurant, PlayArrow, Schedule, Pause, Assignment, DoneAll } from '@mui/icons-material';
+import { 
+  CheckCircle, 
+  Warning, 
+  Restaurant, 
+  PlayArrow, 
+  Schedule, 
+  Pause, 
+  Assignment, 
+  DoneAll,
+  Event,
+  HourglassEmpty
+} from '@mui/icons-material';
 
 const tooltipSx = {
   bgcolor: '#1e293b',
@@ -2205,8 +2263,7 @@ const tooltipSx = {
 
 export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover }) {
   const date = new Date(day.date);
-  const netSaved = day.netSaved;
-  const savedText = netSaved >= 0 ? `🌱 +${netSaved.toFixed(1)} ч` : `🔴 ${netSaved.toFixed(1)} ч`;
+  const netSaved = day.netSaved; // не используется, но оставлено для совместимости
 
   const isWorkingDay = date.getDay() >= 1 && date.getDay() <= 5;
 
@@ -2337,7 +2394,11 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
           );
         })}
         {isWorkingDay && (
-          <Tooltip title="🍽 Обед (14:00–15:00)" arrow placement="top" slotProps={{ tooltip: { sx: tooltipSx } }}>
+          <Tooltip title={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Restaurant fontSize="small" /> Обед (14:00–15:00)
+            </Box>
+          } arrow placement="top" slotProps={{ tooltip: { sx: tooltipSx } }}>
             <Box sx={{ position: 'absolute', left: '44.444%', width: '11.111%', height: '100%', top: 0, backgroundColor: '#fef3c7', opacity: 0.8, zIndex: 1, cursor: 'pointer', borderRight: '1px solid rgba(0,0,0,0.05)', '&:hover': { opacity: 1 } }} />
           </Tooltip>
         )}
@@ -2355,17 +2416,75 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
           leftPos = Math.min(100, Math.max(0, leftPos));
           const taskInfoObj = getTaskInfoForDeadline(dl.taskId, dl.taskTitle, dl.status);
           let tooltipContent = <></>;
+          
           if (dl.status === 'Completed') {
-            tooltipContent = (<Box><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><DoneAll sx={{ fontSize: 16, color: '#10b981' }} /><strong>{taskInfoObj?.title || dl.taskTitle}</strong></Box><Box sx={{ fontSize: 12, mt: 0.5 }}>✅ Выполнена</Box><Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box></Box>);
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <DoneAll sx={{ fontSize: 16, color: '#10b981' }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <CheckCircle sx={{ fontSize: 12, color: '#10b981' }} /> Выполнена
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {new Date(dl.deadline).toLocaleString()}
+                </Box>
+              </Box>
+            );
           } else if (dl.status === 'InProgress') {
-            tooltipContent = (<Box><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><PlayArrow sx={{ fontSize: 16, color: '#3b82f6' }} /><strong>{taskInfoObj?.title || dl.taskTitle}</strong></Box><Box sx={{ fontSize: 12, mt: 0.5 }}>⏱ В процессе выполнения</Box><Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box></Box>);
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <PlayArrow sx={{ fontSize: 16, color: '#3b82f6' }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Schedule sx={{ fontSize: 12, color: '#f59e0b' }} /> В процессе выполнения
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {new Date(dl.deadline).toLocaleString()}
+                </Box>
+              </Box>
+            );
           } else if (dl.status === 'Assigned') {
-            tooltipContent = (<Box><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Assignment sx={{ fontSize: 16, color: '#f59e0b' }} /><strong>{taskInfoObj?.title || dl.taskTitle}</strong></Box><Box sx={{ fontSize: 12, mt: 0.5 }}>⏳ Назначена</Box><Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box></Box>);
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Assignment sx={{ fontSize: 16, color: '#f59e0b' }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <HourglassEmpty sx={{ fontSize: 12, color: '#94a3b8' }} /> Назначена
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {new Date(dl.deadline).toLocaleString()}
+                </Box>
+              </Box>
+            );
           } else if (dl.status === 'Paused') {
-            tooltipContent = (<Box><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Pause sx={{ fontSize: 16, color: '#f59e0b' }} /><strong>{taskInfoObj?.title || dl.taskTitle}</strong></Box><Box sx={{ fontSize: 12, mt: 0.5 }}>⏸ Приостановлена</Box><Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box></Box>);
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Pause sx={{ fontSize: 16, color: '#f59e0b' }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Pause sx={{ fontSize: 12 }} /> Приостановлена
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {new Date(dl.deadline).toLocaleString()}
+                </Box>
+              </Box>
+            );
           } else {
-            tooltipContent = (<Box>Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box>);
+            tooltipContent = (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12 }}>
+                <Event sx={{ fontSize: 12 }} /> Дедлайн: {new Date(dl.deadline).toLocaleString()}
+              </Box>
+            );
           }
+
           return (
             <Tooltip key={idx} title={tooltipContent} arrow placement="top" slotProps={{ tooltip: { sx: tooltipSx } }}>
               <Box
@@ -2378,16 +2497,19 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
         })}
       </Box>
 
-      {/* Таймлайн реального выполнения с динамической высотой от бэкенда */}
+      {/* Таймлайн реального выполнения */}
       <Box sx={{ position: 'relative', bgcolor: '#f1f5f9', height: 36, borderRadius: 2, mb: 2, overflow: 'hidden', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
         {isWorkingDay && (
-          <Tooltip title="🍽 Обед (14:00–15:00)" arrow placement="top" slotProps={{ tooltip: { sx: tooltipSx } }}>
+          <Tooltip title={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Restaurant fontSize="small" /> Обед (14:00–15:00)
+            </Box>
+          } arrow placement="top" slotProps={{ tooltip: { sx: tooltipSx } }}>
             <Box sx={{ position: 'absolute', left: '44.444%', width: '11.111%', height: '100%', top: 0, backgroundColor: '#fef3c7', opacity: 0.7, zIndex: 1, cursor: 'pointer', borderRight: '1px solid rgba(0,0,0,0.05)', '&:hover': { opacity: 0.9 } }} />
           </Tooltip>
         )}
         
         {workSegments.map((segment, idx) => {
-          // Используем данные с бэкенда: layer и maxDepth
           const layer = segment.layer ?? 0;
           const maxDepth = segment.maxDepth ?? 1;
           const layerHeight = 36 / maxDepth;
@@ -2422,7 +2544,6 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
         })}
         
         {rawTimelineSegments.filter(s => s.type === 'idle').map((segment, idx) => {
-          // Показываем idle, если в этом промежутке нет работы
           const hasWorkOverlap = workSegments.some(ws => ws.start < segment.end && ws.end > segment.start);
           if (hasWorkOverlap) return null;
           const idleTop = 36 - 4;
@@ -2869,6 +2990,7 @@ export default function StatsCards({ stats }) {
     </Grid>
   );
 }=== ./frontend/src/components/ActiveTasksList.jsx ===
+// ./frontend/src/components/ActiveTasksList.jsx
 import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../services/api';
 import { Warning, Error, FolderOpen, AccessTime, Event, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
 import { Tooltip, Chip, IconButton, Box, Typography } from '@mui/material';
@@ -2881,7 +3003,6 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       else if (action === 'resume') await resumeTask(id);
       else if (action === 'progress') await setProgress(id, progress);
       else if (action === 'complete') await completeTask(id);
-      // Двойное обновление для гарантии
       await onUpdate();
       setTimeout(() => onUpdate(), 100);
     } catch (err) {
@@ -2929,8 +3050,10 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     return title.split('\\').pop().split('/').pop();
   };
 
-  const isStarted = (status) => {
-    return status === 1 || status === 2;
+  const getBorderColor = (status) => {
+    if (status === 1) return '#3b82f6';
+    if (status === 2) return '#f59e0b';
+    return '#cbd5e1';
   };
 
   return (
@@ -2941,7 +3064,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tasks.map(task => {
           const risk = getRiskProps(task.riskLevel);
-          const started = isStarted(task.status);
+          const borderColor = getBorderColor(task.status);
           
           return (
             <Box 
@@ -2952,7 +3075,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                 p: 2,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                 transition: 'all 0.2s ease',
-                borderLeft: started ? '4px solid #22c55e' : '4px solid #cbd5e1',
+                borderLeft: `4px solid ${borderColor}`,
                 '&:hover': { 
                   boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
                   transform: 'translateY(-2px)'
@@ -2969,7 +3092,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                     <FolderOpen fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Typography variant="body2" sx={{ fontWeight: started ? 600 : 400 }}>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
                   {getShortTitle(task.title)}
                 </Typography>
                 <Typography variant="caption" sx={{ color: '#6b7c93' }}>
@@ -3013,7 +3136,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                   sx={{ 
                     width: `${(task.progress || 0) * 100}%`,
                     height: '100%',
-                    bgcolor: started ? '#22c55e' : '#cbd5e1',
+                    bgcolor: task.status === 1 ? '#3b82f6' : (task.status === 2 ? '#f59e0b' : '#cbd5e1'),
                     transition: 'width 0.3s ease',
                     borderRadius: 1
                   }} 
@@ -3033,7 +3156,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                       '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                     }}
                   >
-                    <PlayArrow sx={{ fontSize: 16 }} /> Начал
+                    <PlayArrow sx={{ fontSize: 16, color: '#3b82f6' }} /> Начал
                   </Box>
                 )}
                 
@@ -3050,7 +3173,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                         '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                       }}
                     >
-                      <Pause sx={{ fontSize: 16 }} /> Пауза
+                      <Pause sx={{ fontSize: 16, color: '#f59e0b' }} /> Пауза
                     </Box>
                     <Box 
                       component="button"
@@ -3058,12 +3181,12 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                       sx={{ 
                         px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
                         cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
+                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
                         display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                       }}
                     >
-                      <CheckCircle sx={{ fontSize: 16 }} /> Готово
+                      <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} /> Готово
                     </Box>
                   </>
                 )}
@@ -3089,12 +3212,12 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
                       sx={{ 
                         px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
                         cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
+                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
                         display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
+                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
                       }}
                     >
-                      <CheckCircle sx={{ fontSize: 16 }} /> Готово
+                      <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} /> Готово
                     </Box>
                   </>
                 )}

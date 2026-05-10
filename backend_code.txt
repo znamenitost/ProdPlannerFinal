@@ -462,7 +462,9 @@ public class ProductionTasksController : ControllerBase
         _context = context;
     }
 
-    [HttpGet("table")]
+    // ./Controllers/ProductionTasksController.cs (изменённый метод GetTableRows)
+
+[HttpGet("table")]
     public async Task<IActionResult> GetTableRows(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
@@ -475,7 +477,6 @@ public class ProductionTasksController : ControllerBase
 
             var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
 
-            // Для кого считаем подсветку (hasCurrentUserSubtask)
             string targetEmployeeName = (isAdmin && !string.IsNullOrEmpty(employee))
                 ? employee
                 : currentUser.FullName;
@@ -486,38 +487,55 @@ public class ProductionTasksController : ControllerBase
                 .AsQueryable();
 
             var totalCount = await query.CountAsync();
-            var items = await query
+            var parents = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
 
+            if (parents.Count == 0)
+            {
+                return Ok(new PaginatedResult<object>
+                {
+                    Items = new List<object>(),
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize
+                });
+            }
+
+            var parentIds = parents.Select(p => p.Id).ToList();
+
+            // ✅ Безопасный запрос: проверяем HasValue и используем Value только после этого
+            var allChildren = await _context.ProductionTasks
+                .Where(c => c.ParentRowNumber.HasValue && 
+                            parentIds.Contains(c.ParentRowNumber.Value) && 
+                            c.IsSplitTask)
+                .ToListAsync();
+
+            var childrenByParent = allChildren
+                .GroupBy(c => c.ParentRowNumber!.Value) // ! после проверки HasValue в Where
+                .ToDictionary(g => g.Key, g => g.ToList());
+
             var resultItems = new List<object>();
 
-            foreach (var parent in items)
+            foreach (var parent in parents)
             {
                 bool hasChildForTargetEmployee = false;
                 string aggregatedStatusText = MapStatusToText(parent.Status);
 
-                if (parent.IsSplitTask)
+                if (parent.IsSplitTask && childrenByParent.TryGetValue(parent.Id, out var children))
                 {
-                    // Есть ли у родителя дочерняя задача на целевого сотрудника?
-                    hasChildForTargetEmployee = await _context.ProductionTasks
-    .AnyAsync(c => c.ParentRowNumber == parent.Id && c.EmployeeName == targetEmployeeName && c.Status != JobStatus.Completed);
+                    hasChildForTargetEmployee = children.Any(c => 
+                        c.EmployeeName == targetEmployeeName && c.Status != JobStatus.Completed);
 
-                    // Агрегированный статус родителя на основе всех детей
-                    var children = await _context.ProductionTasks
-                        .Where(c => c.ParentRowNumber == parent.Id && c.IsSplitTask)
-                        .ToListAsync();
-
-                    if (children.Any())
-                    {
-                        if (children.All(c => c.Status == JobStatus.Completed))
-                            aggregatedStatusText = "Готово";
-                        else if (children.Any(c => c.Status == JobStatus.Completed || c.Status == JobStatus.InProgress || c.Status == JobStatus.Paused))
-                            aggregatedStatusText = "Начал";
-                        else
-                            aggregatedStatusText = "";
-                    }
+                    if (children.All(c => c.Status == JobStatus.Completed))
+                        aggregatedStatusText = "Готово";
+                    else if (children.Any(c => c.Status == JobStatus.Completed || 
+                                            c.Status == JobStatus.InProgress || 
+                                            c.Status == JobStatus.Paused))
+                        aggregatedStatusText = "Начал";
+                    else
+                        aggregatedStatusText = "";
                 }
 
                 resultItems.Add(new
@@ -599,6 +617,7 @@ public class ProductionTasksController : ControllerBase
             var task = await _repo.GetTaskByIdAsync(id);
             if (task == null) return NotFound();
 
+            // Обновляем поля
             task.FolderPath = request.FolderPath ?? task.FolderPath;
             task.FileName = request.FileName ?? task.FileName;
             task.Comment = request.Comment ?? task.Comment;
@@ -609,6 +628,7 @@ public class ProductionTasksController : ControllerBase
             task.ParentRowNumber = request.ParentRowNumber;
             task.UpdatedAt = _timeService.Now;
 
+            // Обновляем детей, если это сплит-родитель
             if (task.IsSplitTask && task.ParentRowNumber == null)
             {
                 var childTasks = await _repo.GetChildTasksAsync(task.Id);
@@ -620,6 +640,7 @@ public class ProductionTasksController : ControllerBase
                 }
             }
 
+            // Обработка изменения статуса (если нужно)
             if (!string.IsNullOrEmpty(request.StatusText))
             {
                 var newStatus = MapStatusFromText(request.StatusText);
@@ -630,12 +651,12 @@ public class ProductionTasksController : ControllerBase
                     else
                     {
                         task.Status = newStatus;
-                        await _repo.UpdateTaskAsync(task);
                     }
                 }
             }
-            else
-                await _repo.UpdateTaskAsync(task);
+
+            // ✅ ВСЕГДА сохраняем задачу после всех изменений
+            await _repo.UpdateTaskAsync(task);
 
             return Ok(task);
         }
@@ -1747,18 +1768,46 @@ namespace ProductionPlanner.Data
         {
             task.UpdatedAt = _timeService.Now;
             _context.ProductionTasks.Update(task);
-            await _context.SaveChangesAsync();
-        }
 
-        public async Task DeleteTaskAsync(int id)
+            Console.WriteLine($"[REPO] UpdateTaskAsync: Id={task.Id}, Deadline={task.Deadline}");
+
+            await _context.SaveChangesAsync();
+
+            Console.WriteLine($"[REPO] Сохранение завершено для задачи {task.Id}");
+        }
+        
+
+        // ./Data/ProductionTaskRepository.cs
+// Полный метод DeleteTaskAsync
+
+public async Task DeleteTaskAsync(int id)
+{
+    var task = await GetTaskByIdAsync(id);
+    if (task != null)
+    {
+        // Если задача является родительской для сплита (IsSplitTask = true), удаляем всех детей
+        if (task.IsSplitTask)
         {
-            var task = await GetTaskByIdAsync(id);
-            if (task != null)
+            var children = await _context.ProductionTasks
+                .Where(t => t.ParentRowNumber == task.Id)
+                .ToListAsync();
+            if (children.Any())
             {
-                _context.ProductionTasks.Remove(task);
-                await _context.SaveChangesAsync();
+                _context.ProductionTasks.RemoveRange(children);
+                Console.WriteLine($"[DEBUG] Удалено {children.Count} дочерних задач сплита для родителя {id}");
             }
         }
+        // Также удаляем записи TaskSplit, связанные с этим родителем (если есть)
+        var splits = await _context.TaskSplits.Where(ts => ts.ParentRowNumber == task.Id).ToListAsync();
+        if (splits.Any())
+        {
+            _context.TaskSplits.RemoveRange(splits);
+        }
+
+        _context.ProductionTasks.Remove(task);
+        await _context.SaveChangesAsync();
+    }
+}
 
         public async Task DeleteAllTasksAsync()
         {
@@ -2243,67 +2292,77 @@ namespace ProductionPlanner.Services
             await _repo.UpdateTaskAsync(task);
         }
 
-        public async Task CompleteTaskAsync(int taskId, DateTime now)
+        // ./Services/TaskLifecycleService.cs
+// Полный метод CompleteTaskAsync (изменена только секция сплита)
+
+public async Task CompleteTaskAsync(int taskId, DateTime now)
+{
+    Console.WriteLine($"[DEBUG] CompleteTaskAsync called with time: {now}");
+
+    var task = await _repo.GetTaskByIdAsync(taskId);
+    if (task == null || task.Status == JobStatus.Completed) return;
+
+    // Если задача не была запущена, не создаём интервал
+    if (task.Status == JobStatus.Assigned)
+    {
+        task.Status = JobStatus.Completed;
+        task.CompletedAt = now;
+        task.Progress = 1;
+        task.UpdatedAt = now;
+        await _repo.UpdateTaskAsync(task);
+        
+        double savedHours = task.EstimateHours - 0;
+        await _statsService.AddSavedHoursAsync(task.EmployeeName, savedHours, now);
+
+        if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+            await UpdateParentStatusAsync(task.Id);
+
+        return;
+    }
+
+    // Закрываем все открытые интервалы и считаем фактическое время
+    await CloseAllOpenIntervalsAsync(task, now);
+
+    double actual = 0;
+    foreach (var interval in task.WorkIntervals)
+    {
+        if (interval.EndTime.HasValue)
         {
-            Console.WriteLine($"[DEBUG] CompleteTaskAsync called with time: {now}");
+            actual += (interval.EndTime.Value - interval.StartTime).TotalHours;
+        }
+    }
+    task.ActualHours = actual;
+    task.Status = JobStatus.Completed;
+    task.CompletedAt = now;
+    task.Progress = 1;
+    task.UpdatedAt = now;
+    await _repo.UpdateTaskAsync(task);
 
-            var task = await _repo.GetTaskByIdAsync(taskId);
-            if (task == null || task.Status == JobStatus.Completed) return;
+    double saved = task.EstimateHours - actual;
+    await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
 
-            // Если задача не была запущена, не создаём интервал
-            if (task.Status == JobStatus.Assigned)
+    // --- ИСПРАВЛЕНИЕ: при завершении последнего ребёнка НЕ УДАЛЯЕМ родителя, а переводим в Completed ---
+    if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+    {
+        await UpdateParentStatusAsync(task.Id);
+        var parentId = task.ParentRowNumber.Value;
+        var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId);
+        if (allCompleted)
+        {
+            var parentTask = await _repo.GetTaskByIdAsync(parentId);
+            if (parentTask != null && parentTask.IsSplitTask && parentTask.Status != JobStatus.Completed)
             {
-                task.Status = JobStatus.Completed;
-                task.CompletedAt = now;
-                task.Progress = 1;
-                task.UpdatedAt = now;
-                await _repo.UpdateTaskAsync(task);
-                
-                double savedHours = task.EstimateHours - 0;  // ← переименовано
-                await _statsService.AddSavedHoursAsync(task.EmployeeName, savedHours, now);
-
-                if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-                    await UpdateParentStatusAsync(task.Id);
-
-                return;
-            }
-
-            // В противном случае закрываем все интервалы и считаем фактическое время
-            await CloseAllOpenIntervalsAsync(task, now);
-
-            double actual = 0;
-            foreach (var interval in task.WorkIntervals)
-            {
-                if (interval.EndTime.HasValue)
-                {
-                    actual += (interval.EndTime.Value - interval.StartTime).TotalHours;
-                }
-            }
-            task.ActualHours = actual;
-            task.Status = JobStatus.Completed;
-            task.CompletedAt = now;
-            task.Progress = 1;
-            task.UpdatedAt = now;
-            await _repo.UpdateTaskAsync(task);
-
-            double saved = task.EstimateHours - actual;  // ← оставлено как было
-            await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
-
-            if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-            {
-                await UpdateParentStatusAsync(task.Id);
-                var parentId = task.ParentRowNumber.Value;
-                var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId);
-                if (allCompleted)
-                {
-                    var parentTask = await _repo.GetTaskByIdAsync(parentId);
-                    if (parentTask != null && parentTask.IsSplitTask)
-                    {
-                        await _repo.DeleteTaskAsync(parentId);
-                    }
-                }
+                // Переводим родителя в Completed
+                parentTask.Status = JobStatus.Completed;
+                parentTask.Progress = 1;
+                parentTask.CompletedAt = now;
+                parentTask.UpdatedAt = now;
+                await _repo.UpdateTaskAsync(parentTask);
+                Console.WriteLine($"[DEBUG] Родительская задача {parentId} переведена в Completed после завершения всех детей");
             }
         }
+    }
+}
 
         public async Task ReturnTaskAsync(int taskId, DateTime now)
         {

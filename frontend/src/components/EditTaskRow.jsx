@@ -42,6 +42,10 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
   };
 
   const handleSave = () => {
+
+      console.log('[EditTaskRow] Сохраняем задачу:', localTask);
+      console.log('[EditTaskRow] Дедлайн (ISO):', localTask.deadline);
+
     onUpdate(localTask);
   };
 

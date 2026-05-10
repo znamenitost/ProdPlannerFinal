@@ -14,6 +14,8 @@ import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
 import useTaskTableApi from '../hooks/useTaskTableApi';
+import { combineDateTime, DEFAULT_TIME } from '../utils/dateTimeHelpers';
+
 
 export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser, selectedEmployeeForHighlight }) {
   const [rows, setRows] = useState([]);
@@ -246,18 +248,20 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     }
   };
 
-  const handleAddNewRow = () => {
-    setNewRow({
-      folderPath: '',
-      fileName: '',
-      comment: '',
-      deadline: new Date().toISOString().slice(0, 16),
-      estimateHours: 1,
-      types: [taskTypes[0]],
-      employeeName: employees[0],
-      parentRowNumber: null
-    });
-  };
+
+    const handleAddNewRow = () => {
+      const today = new Date().toISOString().slice(0, 10);
+      setNewRow({
+        folderPath: '',
+        fileName: '',
+        comment: '',
+        deadline: combineDateTime(today, DEFAULT_TIME), // сегодня, 15:00
+        estimateHours: 1,
+        types: [taskTypes[0]],
+        employeeName: employees[0],
+        parentRowNumber: null
+      });
+    };
 
   const toggleHighlight = () => setHighlightMyTasks(!highlightMyTasks);
   const handleChangePage = (event, newPage) => setPage(newPage);
