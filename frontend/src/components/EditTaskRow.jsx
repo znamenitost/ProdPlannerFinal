@@ -1,11 +1,10 @@
 // ./frontend/src/components/EditTaskRow.jsx
 import { useState, useEffect, useRef } from 'react';
 import { TableRow, TableCell, TextField, Select, MenuItem, IconButton, Tooltip, Box } from '@mui/material';
-import { Save, Cancel } from '@mui/icons-material';
+import { Save, Cancel, Edit } from '@mui/icons-material';
 import { WORK_TIME_OPTIONS, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
 
 export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, employees }) {
-  // Инициализируем состояние только один раз при монтировании или при изменении id задачи
   const [localTask, setLocalTask] = useState(() => ({
     id: task.id,
     folderPath: task.folderPath || '',
@@ -19,7 +18,6 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
     statusText: task.statusText || ''
   }));
 
-  // Если открыли редактирование другой задачи (id изменился), обновляем локальное состояние
   const prevIdRef = useRef(task.id);
   useEffect(() => {
     if (task.id !== prevIdRef.current) {
@@ -47,7 +45,6 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
     onUpdate(localTask);
   };
 
-  // Преобразуем дедлайн для отображения
   let date = '', time = '10:00';
   if (localTask.deadline) {
     const parsed = parseDateTime(localTask.deadline);
@@ -57,7 +54,9 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
 
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
-      <TableCell sx={{ width: '3%' }}>✏️</TableCell>
+      <TableCell sx={{ width: '3%' }}>
+        <Edit color="warning" fontSize="small" />
+      </TableCell>
 
       <TableCell sx={{ width: '15%' }}>
         <TextField

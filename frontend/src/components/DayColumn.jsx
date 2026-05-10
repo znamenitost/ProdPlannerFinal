@@ -1,6 +1,18 @@
+// ./frontend/src/components/DayColumn.jsx
 import { useState } from 'react';
 import { Paper, Typography, Box, Tooltip } from '@mui/material';
-import { CheckCircle, Warning, Restaurant, PlayArrow, Schedule, Pause, Assignment, DoneAll } from '@mui/icons-material';
+import { 
+  CheckCircle, 
+  Warning, 
+  Restaurant, 
+  PlayArrow, 
+  Schedule, 
+  Pause, 
+  Assignment, 
+  DoneAll,
+  Event,
+  HourglassEmpty
+} from '@mui/icons-material';
 
 const tooltipSx = {
   bgcolor: '#1e293b',
@@ -15,8 +27,7 @@ const tooltipSx = {
 
 export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover }) {
   const date = new Date(day.date);
-  const netSaved = day.netSaved;
-  const savedText = netSaved >= 0 ? `🌱 +${netSaved.toFixed(1)} ч` : `🔴 ${netSaved.toFixed(1)} ч`;
+  const netSaved = day.netSaved; // не используется, но оставлено для совместимости
 
   const isWorkingDay = date.getDay() >= 1 && date.getDay() <= 5;
 
@@ -147,7 +158,11 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
           );
         })}
         {isWorkingDay && (
-          <Tooltip title="🍽 Обед (14:00–15:00)" arrow placement="top" slotProps={{ tooltip: { sx: tooltipSx } }}>
+          <Tooltip title={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Restaurant fontSize="small" /> Обед (14:00–15:00)
+            </Box>
+          } arrow placement="top" slotProps={{ tooltip: { sx: tooltipSx } }}>
             <Box sx={{ position: 'absolute', left: '44.444%', width: '11.111%', height: '100%', top: 0, backgroundColor: '#fef3c7', opacity: 0.8, zIndex: 1, cursor: 'pointer', borderRight: '1px solid rgba(0,0,0,0.05)', '&:hover': { opacity: 1 } }} />
           </Tooltip>
         )}
@@ -165,17 +180,75 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
           leftPos = Math.min(100, Math.max(0, leftPos));
           const taskInfoObj = getTaskInfoForDeadline(dl.taskId, dl.taskTitle, dl.status);
           let tooltipContent = <></>;
+          
           if (dl.status === 'Completed') {
-            tooltipContent = (<Box><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><DoneAll sx={{ fontSize: 16, color: '#10b981' }} /><strong>{taskInfoObj?.title || dl.taskTitle}</strong></Box><Box sx={{ fontSize: 12, mt: 0.5 }}>✅ Выполнена</Box><Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box></Box>);
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <DoneAll sx={{ fontSize: 16, color: '#10b981' }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <CheckCircle sx={{ fontSize: 12, color: '#10b981' }} /> Выполнена
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {new Date(dl.deadline).toLocaleString()}
+                </Box>
+              </Box>
+            );
           } else if (dl.status === 'InProgress') {
-            tooltipContent = (<Box><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><PlayArrow sx={{ fontSize: 16, color: '#3b82f6' }} /><strong>{taskInfoObj?.title || dl.taskTitle}</strong></Box><Box sx={{ fontSize: 12, mt: 0.5 }}>⏱ В процессе выполнения</Box><Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box></Box>);
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <PlayArrow sx={{ fontSize: 16, color: '#3b82f6' }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Schedule sx={{ fontSize: 12, color: '#f59e0b' }} /> В процессе выполнения
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {new Date(dl.deadline).toLocaleString()}
+                </Box>
+              </Box>
+            );
           } else if (dl.status === 'Assigned') {
-            tooltipContent = (<Box><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Assignment sx={{ fontSize: 16, color: '#f59e0b' }} /><strong>{taskInfoObj?.title || dl.taskTitle}</strong></Box><Box sx={{ fontSize: 12, mt: 0.5 }}>⏳ Назначена</Box><Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box></Box>);
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Assignment sx={{ fontSize: 16, color: '#f59e0b' }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <HourglassEmpty sx={{ fontSize: 12, color: '#94a3b8' }} /> Назначена
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {new Date(dl.deadline).toLocaleString()}
+                </Box>
+              </Box>
+            );
           } else if (dl.status === 'Paused') {
-            tooltipContent = (<Box><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Pause sx={{ fontSize: 16, color: '#f59e0b' }} /><strong>{taskInfoObj?.title || dl.taskTitle}</strong></Box><Box sx={{ fontSize: 12, mt: 0.5 }}>⏸ Приостановлена</Box><Box sx={{ fontSize: 12, mt: 0.5 }}>📅 Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box></Box>);
+            tooltipContent = (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Pause sx={{ fontSize: 16, color: '#f59e0b' }} />
+                  <strong>{taskInfoObj?.title || dl.taskTitle}</strong>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Pause sx={{ fontSize: 12 }} /> Приостановлена
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
+                  <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {new Date(dl.deadline).toLocaleString()}
+                </Box>
+              </Box>
+            );
           } else {
-            tooltipContent = (<Box>Дедлайн: {new Date(dl.deadline).toLocaleString()}</Box>);
+            tooltipContent = (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12 }}>
+                <Event sx={{ fontSize: 12 }} /> Дедлайн: {new Date(dl.deadline).toLocaleString()}
+              </Box>
+            );
           }
+
           return (
             <Tooltip key={idx} title={tooltipContent} arrow placement="top" slotProps={{ tooltip: { sx: tooltipSx } }}>
               <Box
@@ -188,16 +261,19 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
         })}
       </Box>
 
-      {/* Таймлайн реального выполнения с динамической высотой от бэкенда */}
+      {/* Таймлайн реального выполнения */}
       <Box sx={{ position: 'relative', bgcolor: '#f1f5f9', height: 36, borderRadius: 2, mb: 2, overflow: 'hidden', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
         {isWorkingDay && (
-          <Tooltip title="🍽 Обед (14:00–15:00)" arrow placement="top" slotProps={{ tooltip: { sx: tooltipSx } }}>
+          <Tooltip title={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Restaurant fontSize="small" /> Обед (14:00–15:00)
+            </Box>
+          } arrow placement="top" slotProps={{ tooltip: { sx: tooltipSx } }}>
             <Box sx={{ position: 'absolute', left: '44.444%', width: '11.111%', height: '100%', top: 0, backgroundColor: '#fef3c7', opacity: 0.7, zIndex: 1, cursor: 'pointer', borderRight: '1px solid rgba(0,0,0,0.05)', '&:hover': { opacity: 0.9 } }} />
           </Tooltip>
         )}
         
         {workSegments.map((segment, idx) => {
-          // Используем данные с бэкенда: layer и maxDepth
           const layer = segment.layer ?? 0;
           const maxDepth = segment.maxDepth ?? 1;
           const layerHeight = 36 / maxDepth;
@@ -232,7 +308,6 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
         })}
         
         {rawTimelineSegments.filter(s => s.type === 'idle').map((segment, idx) => {
-          // Показываем idle, если в этом промежутке нет работы
           const hasWorkOverlap = workSegments.some(ws => ws.start < segment.end && ws.end > segment.start);
           if (hasWorkOverlap) return null;
           const idleTop = 36 - 4;

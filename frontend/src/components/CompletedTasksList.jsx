@@ -24,7 +24,8 @@ import {
   TaskAlt,
   HourglassEmpty,
   PlayArrow,
-  Stop
+  Stop,
+  EventNote  // добавлена для иконки периода выполнения (опционально)
 } from '@mui/icons-material';
 import { getCompletedTasks } from '../services/api';
 
@@ -47,7 +48,6 @@ export default function CompletedTasksList({ employee, refresh }) {
 
   const totalDifference = stats.totalEstimate - stats.totalActual;
 
-  // Отображаемое имя задачи (последний сегмент FolderPath или FileName)
   const getTaskDisplayName = (task) => {
     if (task.folderPath && task.folderPath.trim() !== '') {
       const segments = task.folderPath.split(/[\/\\]/).filter(s => s !== '');
@@ -56,7 +56,6 @@ export default function CompletedTasksList({ employee, refresh }) {
     return task.fileName || 'Без названия';
   };
 
-  // Форматирование интервала выполнения с учётом дат
   const formatWorkPeriod = (intervals) => {
     if (!intervals || intervals.length === 0) return '—';
     
@@ -181,6 +180,7 @@ export default function CompletedTasksList({ employee, refresh }) {
                 <TableRow key={task.id} hover>
                   <TableCell>
                     <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
+                      {/* Иконка вместо текстового эмодзи ✅ */}
                       <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} />
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {displayName}

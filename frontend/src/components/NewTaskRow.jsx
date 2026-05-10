@@ -1,6 +1,6 @@
 // ./frontend/src/components/NewTaskRow.jsx
 import { TableRow, TableCell, TextField, Select, MenuItem, FormControl, InputLabel, Box, Chip, IconButton, Tooltip, Button } from '@mui/material';
-import { Save, Cancel } from '@mui/icons-material';
+import { Save, Cancel, AutoAwesome } from '@mui/icons-material';
 import { WORK_TIME_OPTIONS, DEFAULT_TIME, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
 
 export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, onSave, onCancel }) {
@@ -9,7 +9,9 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
 
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
-      <TableCell>✨</TableCell>
+      <TableCell>
+        <AutoAwesome color="warning" fontSize="small" />
+      </TableCell>
       
       <TableCell>
         <TextField
