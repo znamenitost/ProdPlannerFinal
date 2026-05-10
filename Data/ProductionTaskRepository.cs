@@ -60,15 +60,37 @@ namespace ProductionPlanner.Data
             await _context.SaveChangesAsync();
         }
 
-        public async Task DeleteTaskAsync(int id)
+        // ./Data/ProductionTaskRepository.cs
+// Полный метод DeleteTaskAsync
+
+public async Task DeleteTaskAsync(int id)
+{
+    var task = await GetTaskByIdAsync(id);
+    if (task != null)
+    {
+        // Если задача является родительской для сплита (IsSplitTask = true), удаляем всех детей
+        if (task.IsSplitTask)
         {
-            var task = await GetTaskByIdAsync(id);
-            if (task != null)
+            var children = await _context.ProductionTasks
+                .Where(t => t.ParentRowNumber == task.Id)
+                .ToListAsync();
+            if (children.Any())
             {
-                _context.ProductionTasks.Remove(task);
-                await _context.SaveChangesAsync();
+                _context.ProductionTasks.RemoveRange(children);
+                Console.WriteLine($"[DEBUG] Удалено {children.Count} дочерних задач сплита для родителя {id}");
             }
         }
+        // Также удаляем записи TaskSplit, связанные с этим родителем (если есть)
+        var splits = await _context.TaskSplits.Where(ts => ts.ParentRowNumber == task.Id).ToListAsync();
+        if (splits.Any())
+        {
+            _context.TaskSplits.RemoveRange(splits);
+        }
+
+        _context.ProductionTasks.Remove(task);
+        await _context.SaveChangesAsync();
+    }
+}
 
         public async Task DeleteAllTasksAsync()
         {

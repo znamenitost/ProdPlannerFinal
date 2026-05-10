@@ -174,67 +174,77 @@ namespace ProductionPlanner.Services
             await _repo.UpdateTaskAsync(task);
         }
 
-        public async Task CompleteTaskAsync(int taskId, DateTime now)
+        // ./Services/TaskLifecycleService.cs
+// Полный метод CompleteTaskAsync (изменена только секция сплита)
+
+public async Task CompleteTaskAsync(int taskId, DateTime now)
+{
+    Console.WriteLine($"[DEBUG] CompleteTaskAsync called with time: {now}");
+
+    var task = await _repo.GetTaskByIdAsync(taskId);
+    if (task == null || task.Status == JobStatus.Completed) return;
+
+    // Если задача не была запущена, не создаём интервал
+    if (task.Status == JobStatus.Assigned)
+    {
+        task.Status = JobStatus.Completed;
+        task.CompletedAt = now;
+        task.Progress = 1;
+        task.UpdatedAt = now;
+        await _repo.UpdateTaskAsync(task);
+        
+        double savedHours = task.EstimateHours - 0;
+        await _statsService.AddSavedHoursAsync(task.EmployeeName, savedHours, now);
+
+        if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+            await UpdateParentStatusAsync(task.Id);
+
+        return;
+    }
+
+    // Закрываем все открытые интервалы и считаем фактическое время
+    await CloseAllOpenIntervalsAsync(task, now);
+
+    double actual = 0;
+    foreach (var interval in task.WorkIntervals)
+    {
+        if (interval.EndTime.HasValue)
         {
-            Console.WriteLine($"[DEBUG] CompleteTaskAsync called with time: {now}");
+            actual += (interval.EndTime.Value - interval.StartTime).TotalHours;
+        }
+    }
+    task.ActualHours = actual;
+    task.Status = JobStatus.Completed;
+    task.CompletedAt = now;
+    task.Progress = 1;
+    task.UpdatedAt = now;
+    await _repo.UpdateTaskAsync(task);
 
-            var task = await _repo.GetTaskByIdAsync(taskId);
-            if (task == null || task.Status == JobStatus.Completed) return;
+    double saved = task.EstimateHours - actual;
+    await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
 
-            // Если задача не была запущена, не создаём интервал
-            if (task.Status == JobStatus.Assigned)
+    // --- ИСПРАВЛЕНИЕ: при завершении последнего ребёнка НЕ УДАЛЯЕМ родителя, а переводим в Completed ---
+    if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+    {
+        await UpdateParentStatusAsync(task.Id);
+        var parentId = task.ParentRowNumber.Value;
+        var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId);
+        if (allCompleted)
+        {
+            var parentTask = await _repo.GetTaskByIdAsync(parentId);
+            if (parentTask != null && parentTask.IsSplitTask && parentTask.Status != JobStatus.Completed)
             {
-                task.Status = JobStatus.Completed;
-                task.CompletedAt = now;
-                task.Progress = 1;
-                task.UpdatedAt = now;
-                await _repo.UpdateTaskAsync(task);
-                
-                double savedHours = task.EstimateHours - 0;  // ← переименовано
-                await _statsService.AddSavedHoursAsync(task.EmployeeName, savedHours, now);
-
-                if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-                    await UpdateParentStatusAsync(task.Id);
-
-                return;
-            }
-
-            // В противном случае закрываем все интервалы и считаем фактическое время
-            await CloseAllOpenIntervalsAsync(task, now);
-
-            double actual = 0;
-            foreach (var interval in task.WorkIntervals)
-            {
-                if (interval.EndTime.HasValue)
-                {
-                    actual += (interval.EndTime.Value - interval.StartTime).TotalHours;
-                }
-            }
-            task.ActualHours = actual;
-            task.Status = JobStatus.Completed;
-            task.CompletedAt = now;
-            task.Progress = 1;
-            task.UpdatedAt = now;
-            await _repo.UpdateTaskAsync(task);
-
-            double saved = task.EstimateHours - actual;  // ← оставлено как было
-            await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
-
-            if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-            {
-                await UpdateParentStatusAsync(task.Id);
-                var parentId = task.ParentRowNumber.Value;
-                var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId);
-                if (allCompleted)
-                {
-                    var parentTask = await _repo.GetTaskByIdAsync(parentId);
-                    if (parentTask != null && parentTask.IsSplitTask)
-                    {
-                        await _repo.DeleteTaskAsync(parentId);
-                    }
-                }
+                // Переводим родителя в Completed
+                parentTask.Status = JobStatus.Completed;
+                parentTask.Progress = 1;
+                parentTask.CompletedAt = now;
+                parentTask.UpdatedAt = now;
+                await _repo.UpdateTaskAsync(parentTask);
+                Console.WriteLine($"[DEBUG] Родительская задача {parentId} переведена в Completed после завершения всех детей");
             }
         }
+    }
+}
 
         public async Task ReturnTaskAsync(int taskId, DateTime now)
         {

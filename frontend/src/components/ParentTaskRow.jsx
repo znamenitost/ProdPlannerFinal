@@ -54,6 +54,7 @@ export default function ParentTaskRow({
   highlightMyTasks,
   selectedEmployeeForHighlight
 }) {
+  console.log('[ParentTaskRow] id:', task.id, 'isExpanded:', isExpanded, 'childrenCount:', childrenTasks?.length);
   const overdue = isOverdue(task.deadline, task.statusText);
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
 

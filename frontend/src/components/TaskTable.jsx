@@ -51,7 +51,7 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     loadRows();
   }, [refreshTrigger, page, rowsPerPage, selectedEmployeeForHighlight, loadRows]);
 
-  const loadChildrenForParent = async (parentId) => {
+  const loadChildrenForParent = useCallback(async (parentId) => {
     if (childrenCache.has(parentId)) return childrenCache.get(parentId);
     if (loadingChildren.has(parentId)) return;
     
@@ -70,7 +70,34 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
         return newSet;
       });
     }
-  };
+  }, [api, childrenCache, loadingChildren]);
+
+  // ========== НОВАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ КЕША ДЕТЕЙ ==========
+  const refreshChildren = useCallback(async (parentId) => {
+  if (expandedRows.has(parentId)) {
+    // Родитель раскрыт — обновляем детей без удаления кеша (чтобы не схлопывалось)
+    setLoadingChildren(prev => new Set(prev).add(parentId));
+    try {
+      const children = await api.loadChildren(parentId);
+      setChildrenCache(prev => new Map(prev).set(parentId, children));
+    } catch (err) {
+      console.error('Ошибка обновления детей', err);
+    } finally {
+      setLoadingChildren(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(parentId);
+        return newSet;
+      });
+    }
+  } else {
+    // Родитель свёрнут — можно удалить кеш, чтобы при разворачивании загрузить свежее
+    setChildrenCache(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(parentId);
+      return newMap;
+    });
+  }
+}, [expandedRows, api.loadChildren]);
 
   const toggleExpand = async (parentId) => {
     if (expandedRows.has(parentId)) {
@@ -131,10 +158,14 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     }
   };
 
+  // ========== ИСПРАВЛЕННЫЕ ОБРАБОТЧИКИ С ВЫЗОВОМ refreshChildren ==========
   const handleStartTask = async (row) => {
     try {
       await api.startTask(row.id);
       refresh();
+      if (row.parentRowNumber) {
+        await refreshChildren(row.parentRowNumber);
+      }
     } catch (err) { 
       console.error(err);
     }
@@ -144,6 +175,9 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.pauseTask(row.id);
       refresh();
+      if (row.parentRowNumber) {
+        await refreshChildren(row.parentRowNumber);
+      }
     } catch (err) { 
       console.error(err);
     }
@@ -153,6 +187,9 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.resumeTask(row.id);
       refresh();
+      if (row.parentRowNumber) {
+        await refreshChildren(row.parentRowNumber);
+      }
     } catch (err) { 
       console.error(err);
     }
@@ -162,6 +199,9 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     try {
       await api.completeTask(row.id);
       refresh();
+      if (row.parentRowNumber) {
+        await refreshChildren(row.parentRowNumber);
+      }
     } catch (err) { 
       console.error(err);
     }
