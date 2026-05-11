@@ -78,13 +78,11 @@ function App() {
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   
-  // Состояние для накопленных уведомлений
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
   useEffect(() => { checkAuth(); }, []);
 
-  // Обновление времени каждую секунду
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -92,7 +90,6 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Подключение к SignalR
   useEffect(() => {
     if (!user) return;
 
@@ -108,19 +105,34 @@ function App() {
       })
       .catch(err => console.error('SignalR start error:', err));
 
-    connection.on('TaskDeleted', (taskId) => {
-    console.log('Task deleted:', taskId);
-    refreshAll(); // перезагружает активные задачи и календарь
-    });
-
     connection.on('NewTask', (taskId, taskTitle, deadline) => {
-    const id = Date.now();
-    setNotifications(prev => [...prev, {
+      const id = Date.now();
+      setNotifications(prev => [...prev, {
         id,
         title: taskTitle,
         deadline: new Date(deadline).toLocaleString(),
-    }]);
-    refreshAll();   // <-- добавить эту строку
+      }]);
+      refreshAll();
+    });
+
+    connection.on('TaskDeleted', (taskId) => {
+      console.log('Task deleted:', taskId);
+      refreshAll();
+    });
+
+    connection.on('TaskUpdated', (taskId, taskTitle, deadline) => {
+      console.log(`Task updated: ${taskId}`);
+      refreshAll();
+    });
+
+    connection.on('TaskStatusChanged', (taskId, newStatus) => {
+      console.log(`Task ${taskId} status changed to ${newStatus}`);
+      refreshAll();
+    });
+
+    connection.on('TaskProgressChanged', (taskId, progress) => {
+      console.log(`Task ${taskId} progress updated to ${progress}`);
+      refreshAll();
     });
 
     return () => {
@@ -267,7 +279,6 @@ function App() {
   const handleTabChange = (event, newValue) => setActiveTab(newValue);
   const isAdmin = user?.role === 'Admin';
 
-  // Форматирование времени
   const formatTime = (date) => {
     return date.toLocaleTimeString('ru-RU', { 
       hour: '2-digit', 
@@ -302,7 +313,6 @@ function App() {
                 <Typography variant="h1" component="h1" sx={{ fontSize: '1.6rem', fontWeight: 600 }}>Mainstream Assistant</Typography>
               </Box>
               
-              {/* Блок с текущим временем */}
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, bgcolor: '#f0f4f8', px: 2, py: 1, borderRadius: 3 }}>
                 <Schedule sx={{ color: '#7c9ebf' }} />
                 <Box sx={{ textAlign: 'center' }}>

@@ -1,5 +1,9 @@
 using ProductionPlanner.Models;
 using ProductionPlanner.Data;
+using ProductionPlanner.Hubs;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace ProductionPlanner.Services
 {
@@ -10,19 +14,25 @@ namespace ProductionPlanner.Services
         private readonly IWorkHoursCalculator _workHours;
         private readonly ITaskSplitService _splitService;
         private readonly IAppTimeService _timeService;
+        private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly UserManager<User> _userManager;
 
         public TaskLifecycleService(
             IProductionTaskRepository repo,
             IEmployeeStatsService statsService,
             IWorkHoursCalculator workHours,
             ITaskSplitService splitService,
-            IAppTimeService timeService)
+            IAppTimeService timeService,
+            IHubContext<NotificationHub> hubContext,
+            UserManager<User> userManager)
         {
             _repo = repo;
             _statsService = statsService;
             _workHours = workHours;
             _splitService = splitService;
             _timeService = timeService;
+            _hubContext = hubContext;
+            _userManager = userManager;
         }
 
         private async Task CloseAllOpenIntervalsAsync(ProductionTask task, DateTime closedAt)
@@ -63,6 +73,32 @@ namespace ProductionPlanner.Services
             }
         }
 
+        private async Task<string?> GetUserIdByFullName(string fullName)
+        {
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FullName == fullName);
+            return user?.Id;
+        }
+
+        private async Task NotifyStatusChangeAsync(ProductionTask task, string newStatus)
+        {
+            var userId = await GetUserIdByFullName(task.EmployeeName);
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await _hubContext.Clients.Group(userId).SendAsync("TaskStatusChanged", task.Id, newStatus);
+                Console.WriteLine($"[NOTIFY] TaskStatusChanged sent to {task.EmployeeName} for task {task.Id}: {newStatus}");
+            }
+        }
+
+        private async Task NotifyProgressChangeAsync(ProductionTask task, double progress)
+        {
+            var userId = await GetUserIdByFullName(task.EmployeeName);
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await _hubContext.Clients.Group(userId).SendAsync("TaskProgressChanged", task.Id, progress);
+                Console.WriteLine($"[NOTIFY] TaskProgressChanged sent to {task.EmployeeName} for task {task.Id}: {progress}");
+            }
+        }
+
         public async Task StartTaskAsync(int taskId, DateTime now)
         {
             Console.WriteLine($"[DEBUG] StartTaskAsync called with time: {now}");
@@ -94,6 +130,8 @@ namespace ProductionPlanner.Services
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
                 await UpdateParentStatusAsync(task.Id);
 
+            await NotifyStatusChangeAsync(task, "InProgress");
+
             Console.WriteLine($"[DEBUG] Task {taskId} started, interval start: {startTime}");
         }
 
@@ -116,6 +154,8 @@ namespace ProductionPlanner.Services
 
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
                 await UpdateParentStatusAsync(task.Id);
+
+            await NotifyStatusChangeAsync(task, "Paused");
         }
 
         public async Task ResumeTaskAsync(int taskId, DateTime now)
@@ -148,6 +188,8 @@ namespace ProductionPlanner.Services
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
                 await UpdateParentStatusAsync(task.Id);
 
+            await NotifyStatusChangeAsync(task, "InProgress");
+
             Console.WriteLine($"[DEBUG] Task {taskId} resumed, interval start: {startTime}");
         }
 
@@ -172,79 +214,81 @@ namespace ProductionPlanner.Services
                 task.Status = JobStatus.InProgress;
 
             await _repo.UpdateTaskAsync(task);
+
+            await NotifyProgressChangeAsync(task, newProgress);
         }
 
-        // ./Services/TaskLifecycleService.cs
-// Полный метод CompleteTaskAsync (изменена только секция сплита)
-
-public async Task CompleteTaskAsync(int taskId, DateTime now)
-{
-    Console.WriteLine($"[DEBUG] CompleteTaskAsync called with time: {now}");
-
-    var task = await _repo.GetTaskByIdAsync(taskId);
-    if (task == null || task.Status == JobStatus.Completed) return;
-
-    // Если задача не была запущена, не создаём интервал
-    if (task.Status == JobStatus.Assigned)
-    {
-        task.Status = JobStatus.Completed;
-        task.CompletedAt = now;
-        task.Progress = 1;
-        task.UpdatedAt = now;
-        await _repo.UpdateTaskAsync(task);
-        
-        double savedHours = task.EstimateHours - 0;
-        await _statsService.AddSavedHoursAsync(task.EmployeeName, savedHours, now);
-
-        if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-            await UpdateParentStatusAsync(task.Id);
-
-        return;
-    }
-
-    // Закрываем все открытые интервалы и считаем фактическое время
-    await CloseAllOpenIntervalsAsync(task, now);
-
-    double actual = 0;
-    foreach (var interval in task.WorkIntervals)
-    {
-        if (interval.EndTime.HasValue)
+        public async Task CompleteTaskAsync(int taskId, DateTime now)
         {
-            actual += (interval.EndTime.Value - interval.StartTime).TotalHours;
-        }
-    }
-    task.ActualHours = actual;
-    task.Status = JobStatus.Completed;
-    task.CompletedAt = now;
-    task.Progress = 1;
-    task.UpdatedAt = now;
-    await _repo.UpdateTaskAsync(task);
+            Console.WriteLine($"[DEBUG] CompleteTaskAsync called with time: {now}");
 
-    double saved = task.EstimateHours - actual;
-    await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
+            var task = await _repo.GetTaskByIdAsync(taskId);
+            if (task == null || task.Status == JobStatus.Completed) return;
 
-    // --- ИСПРАВЛЕНИЕ: при завершении последнего ребёнка НЕ УДАЛЯЕМ родителя, а переводим в Completed ---
-    if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-    {
-        await UpdateParentStatusAsync(task.Id);
-        var parentId = task.ParentRowNumber.Value;
-        var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId);
-        if (allCompleted)
-        {
-            var parentTask = await _repo.GetTaskByIdAsync(parentId);
-            if (parentTask != null && parentTask.IsSplitTask && parentTask.Status != JobStatus.Completed)
+            // Если задача не была запущена, не создаём интервал
+            if (task.Status == JobStatus.Assigned)
             {
-                // Переводим родителя в Completed
-                parentTask.Status = JobStatus.Completed;
-                parentTask.Progress = 1;
-                parentTask.CompletedAt = now;
-                parentTask.UpdatedAt = now;
-                await _repo.UpdateTaskAsync(parentTask);
-                Console.WriteLine($"[DEBUG] Родительская задача {parentId} переведена в Completed после завершения всех детей");
+                task.Status = JobStatus.Completed;
+                task.CompletedAt = now;
+                task.Progress = 1;
+                task.UpdatedAt = now;
+                await _repo.UpdateTaskAsync(task);
+                
+                double savedHours = task.EstimateHours - 0;
+                await _statsService.AddSavedHoursAsync(task.EmployeeName, savedHours, now);
+
+                if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+                    await UpdateParentStatusAsync(task.Id);
+
+                await NotifyStatusChangeAsync(task, "Completed");
+                return;
             }
+
+            // Закрываем все открытые интервалы и считаем фактическое время
+            await CloseAllOpenIntervalsAsync(task, now);
+
+            double actual = 0;
+            foreach (var interval in task.WorkIntervals)
+            {
+                if (interval.EndTime.HasValue)
+                {
+                    actual += (interval.EndTime.Value - interval.StartTime).TotalHours;
+                }
+            }
+            task.ActualHours = actual;
+            task.Status = JobStatus.Completed;
+            task.CompletedAt = now;
+            task.Progress = 1;
+            task.UpdatedAt = now;
+            await _repo.UpdateTaskAsync(task);
+
+            double saved = task.EstimateHours - actual;
+            await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
+
+            // --- ИСПРАВЛЕНИЕ: при завершении последнего ребёнка НЕ УДАЛЯЕМ родителя, а переводим в Completed ---
+            if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+            {
+                await UpdateParentStatusAsync(task.Id);
+                var parentId = task.ParentRowNumber.Value;
+                var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId);
+                if (allCompleted)
+                {
+                    var parentTask = await _repo.GetTaskByIdAsync(parentId);
+                    if (parentTask != null && parentTask.IsSplitTask && parentTask.Status != JobStatus.Completed)
+                    {
+                        // Переводим родителя в Completed
+                        parentTask.Status = JobStatus.Completed;
+                        parentTask.Progress = 1;
+                        parentTask.CompletedAt = now;
+                        parentTask.UpdatedAt = now;
+                        await _repo.UpdateTaskAsync(parentTask);
+                        Console.WriteLine($"[DEBUG] Родительская задача {parentId} переведена в Completed после завершения всех детей");
+                    }
+                }
+            }
+
+            await NotifyStatusChangeAsync(task, "Completed");
         }
-    }
-}
 
         public async Task ReturnTaskAsync(int taskId, DateTime now)
         {
@@ -256,6 +300,7 @@ public async Task CompleteTaskAsync(int taskId, DateTime now)
             task.Progress = 0;
             task.UpdatedAt = now;
             await _repo.UpdateTaskAsync(task);
+            await NotifyStatusChangeAsync(task, "Assigned");
         }
     }
 }

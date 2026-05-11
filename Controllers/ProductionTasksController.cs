@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
-
 using ProductionPlanner.Hubs;
 using Microsoft.AspNetCore.SignalR;
 
@@ -23,7 +22,6 @@ public class ProductionTasksController : ControllerBase
     private readonly ILogger<ProductionTasksController> _logger;
     private readonly UserManager<User> _userManager;
     private readonly ApplicationDbContext _context;
-
     private readonly IHubContext<NotificationHub> _hubContext;
 
     public ProductionTasksController(
@@ -49,7 +47,6 @@ public class ProductionTasksController : ControllerBase
         _context = context;
         _hubContext = hubContext;
     }
-
 
     [HttpGet("table")]
     public async Task<IActionResult> GetTableRows(
@@ -92,7 +89,6 @@ public class ProductionTasksController : ControllerBase
 
             var parentIds = parents.Select(p => p.Id).ToList();
 
-            // ✅ Безопасный запрос: проверяем HasValue и используем Value только после этого
             var allChildren = await _context.ProductionTasks
                 .Where(c => c.ParentRowNumber.HasValue && 
                             parentIds.Contains(c.ParentRowNumber.Value) && 
@@ -100,7 +96,7 @@ public class ProductionTasksController : ControllerBase
                 .ToListAsync();
 
             var childrenByParent = allChildren
-                .GroupBy(c => c.ParentRowNumber!.Value) // ! после проверки HasValue в Where
+                .GroupBy(c => c.ParentRowNumber!.Value)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
             var resultItems = new List<object>();
@@ -190,12 +186,11 @@ public class ProductionTasksController : ControllerBase
             var allRootIds = (await _repo.GetRootTasksAsync()).OrderBy(t => t.DisplayOrder).Select(t => t.Id).ToList();
             await _repo.ReorderTasksAsync(allRootIds);
             
-            // --- Отправка уведомления через SignalR ---
             var userId = await GetUserIdByFullName(newTask.EmployeeName);
             if (!string.IsNullOrEmpty(userId))
             {
-                // Предполагаем, что _hubContext — это IHubContext<NotificationHub>, внедрённый в конструктор
                 await _hubContext.Clients.Group(userId).SendAsync("NewTask", newTask.Id, newTask.TaskDisplayName, newTask.Deadline);
+                Console.WriteLine($"[NOTIFY] NewTask sent to {newTask.EmployeeName} for task {newTask.Id}");
             }
             
             return Ok(newTask);
@@ -215,6 +210,7 @@ public class ProductionTasksController : ControllerBase
             var task = await _repo.GetTaskByIdAsync(id);
             if (task == null) return NotFound();
 
+            string oldEmployeeName = task.EmployeeName;
             // Обновляем поля
             task.FolderPath = request.FolderPath ?? task.FolderPath;
             task.FileName = request.FileName ?? task.FileName;
@@ -253,8 +249,10 @@ public class ProductionTasksController : ControllerBase
                 }
             }
 
-            // ✅ ВСЕГДА сохраняем задачу после всех изменений
             await _repo.UpdateTaskAsync(task);
+
+            // Уведомление об обновлении задачи
+            await NotifyTaskUpdatedAsync(task, oldEmployeeName);
 
             return Ok(task);
         }
@@ -273,14 +271,9 @@ public class ProductionTasksController : ControllerBase
             var task = await _repo.GetTaskByIdAsync(id);
             if (task == null) return NotFound();
 
-            // Собираем уникальные имена сотрудников, связанных с задачей
             var employeeNames = new HashSet<string>();
-
-            // Добавляем сотрудника из родительской задачи (если есть)
             if (!string.IsNullOrEmpty(task.EmployeeName))
                 employeeNames.Add(task.EmployeeName);
-
-            // Если это сплит-родитель, добавляем сотрудников из дочерних задач
             if (task.IsSplitTask)
             {
                 var children = await _repo.GetChildTasksAsync(task.Id);
@@ -291,10 +284,8 @@ public class ProductionTasksController : ControllerBase
                 }
             }
 
-            // Удаляем задачу (каскадно удаляются дети, если есть)
             await _repo.DeleteTaskAsync(id);
 
-            // Отправляем уведомление об удалении каждому сотруднику
             foreach (var empName in employeeNames)
             {
                 var userId = await GetUserIdByFullName(empName);
@@ -531,7 +522,7 @@ public class ProductionTasksController : ControllerBase
         return new
         {
             task.Id,
-            Title = task.TaskDisplayName,   // ← только эта строка изменена
+            Title = task.TaskDisplayName,
             File = task.FullPath ?? string.Empty,
             task.Type,
             task.Deadline,
@@ -543,10 +534,29 @@ public class ProductionTasksController : ControllerBase
         };
     }
 
-        private async Task<string?> GetUserIdByFullName(string fullName)
+    private async Task<string?> GetUserIdByFullName(string fullName)
     {
         var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FullName == fullName);
         return user?.Id;
+    }
+
+    private async Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null)
+    {
+        var usersToNotify = new HashSet<string>();
+        if (!string.IsNullOrEmpty(task.EmployeeName))
+            usersToNotify.Add(task.EmployeeName);
+        if (!string.IsNullOrEmpty(oldEmployeeName) && oldEmployeeName != task.EmployeeName)
+            usersToNotify.Add(oldEmployeeName);
+
+        foreach (var empName in usersToNotify)
+        {
+            var userId = await GetUserIdByFullName(empName);
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await _hubContext.Clients.Group(userId).SendAsync("TaskUpdated", task.Id, task.TaskDisplayName, task.Deadline);
+                Console.WriteLine($"[NOTIFY] TaskUpdated sent to {empName} for task {task.Id}");
+            }
+        }
     }
 
     private string MapStatusToText(JobStatus status) => status switch
