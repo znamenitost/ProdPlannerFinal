@@ -1,4 +1,7 @@
 using ProductionPlanner.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace ProductionPlanner.Services
 {
@@ -14,32 +17,71 @@ namespace ProductionPlanner.Services
         public List<ScheduledSlot> GetSchedule(List<ProductionTask> activeTasks, DateTime now)
         {
             var tasks = activeTasks
-            .Where(t => t.Status == JobStatus.Assigned || t.Status == JobStatus.InProgress || t.Status == JobStatus.Paused)
-            .OrderBy(t => t.Deadline)
-            .ToList();
+                .Where(t => t.Status == JobStatus.Assigned || t.Status == JobStatus.InProgress || t.Status == JobStatus.Paused)
+                .OrderBy(t => t.Deadline)
+                .ToList();
 
-            var slots = new List<ScheduledSlot>();
-            var currentStart = _workHours.GetNextWorkStart(now);
+            var result = new List<ScheduledSlot>();
+            var currentTime = _workHours.GetNextWorkStart(now);
 
             foreach (var task in tasks)
             {
-                // Пропускаем обед
-                while (_workHours.IsLunchTime(currentStart))
-                {
-                    currentStart = currentStart.AddMinutes(1);
-                }
-
                 var remaining = task.EstimateHours * (1 - task.Progress);
                 if (remaining <= 0.01) continue;
 
-                // Планируем, даже если дедлайн уже прошёл
-                var start = currentStart;
-                var end = _workHours.AddWorkHours(start, remaining);
-                slots.Add(new ScheduledSlot { Task = task, PlannedStart = start, PlannedEnd = end });
-                currentStart = end;
+                double remainingMinutes = remaining * 60;
+                var current = currentTime;
+
+                while (remainingMinutes > 0.001)
+                {
+                    var dayStart = current.Date.AddHours(10);
+                    var dayEnd = current.Date.AddHours(19);
+                    var lunchStart = current.Date.AddHours(14);
+                    var lunchEnd = current.Date.AddHours(15);
+
+                    // Если мы внутри обеда — перескакиваем
+                    if (current >= lunchStart && current < lunchEnd)
+                    {
+                        current = lunchEnd;
+                        continue;
+                    }
+
+                    DateTime blockEnd;
+                    if (current < lunchStart)
+                        blockEnd = lunchStart;
+                    else if (current >= lunchEnd)
+                        blockEnd = dayEnd;
+                    else
+                        blockEnd = dayEnd; // fallback
+
+                    var minutesAvailable = (blockEnd - current).TotalMinutes;
+                    if (minutesAvailable <= 0)
+                    {
+                        current = _workHours.GetNextWorkStart(current.Date.AddDays(1));
+                        continue;
+                    }
+
+                    var minutesToAdd = Math.Min(remainingMinutes, minutesAvailable);
+                    var segmentEnd = current.AddMinutes(minutesToAdd);
+                    result.Add(new ScheduledSlot
+                    {
+                        Task = task,
+                        PlannedStart = current,
+                        PlannedEnd = segmentEnd
+                    });
+
+                    remainingMinutes -= minutesToAdd;
+                    current = segmentEnd;
+
+                    if (remainingMinutes > 0.001 && current >= dayEnd)
+                    {
+                        current = _workHours.GetNextWorkStart(current.Date.AddDays(1));
+                    }
+                }
+                currentTime = current;
             }
 
-            return slots;
+            return result;
         }
 
         public List<DeadlineRisk> CheckDeadlineRisks(List<ProductionTask> activeTasks, DateTime now)
