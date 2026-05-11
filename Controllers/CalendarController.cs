@@ -50,12 +50,9 @@ public class CalendarController : ControllerBase
 
             var weekEnd = weekStart.AddDays(7);
 
-            // Загружаем ВСЕ задачи сотрудника (включая завершённые)
             var allEmployeeTasks = await _repo.GetEmployeeTasksAsync(employee);
-            // Загружаем интервалы за неделю
             var intervals = await _repo.GetWorkIntervalsForDateRangeAsync(employee, weekStart, weekEnd);
 
-            // Привязываем интервалы к задачам
             var intervalsByTask = intervals.GroupBy(i => i.ProductionTaskId)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -67,11 +64,11 @@ public class CalendarController : ControllerBase
                     task.WorkIntervals = new List<WorkInterval>();
             }
 
-            // Активные задачи для плановых блоков (только не завершённые)
-            var activeTasksForSchedule = allEmployeeTasks.Where(t => t.Status != JobStatus.Completed).ToList();
+            
+            var activeTasksForSchedule = allEmployeeTasks
+                .Where(t => t.Status != JobStatus.Completed && !(t.IsSplitTask && t.ParentRowNumber == null))
+                .ToList();
             var slots = _scheduler.GetSchedule(activeTasksForSchedule, currentTime);
-
-            // Для таймлайна используем все задачи (чтобы отобразить интервалы завершённых)
             var employeeTasks = allEmployeeTasks;
 
             var days = new List<object>();
@@ -79,11 +76,14 @@ public class CalendarController : ControllerBase
             {
                 var dayStartTime = day.Date.AddHours(10);
                 var dayEndTime = day.Date.AddHours(19);
+                var lunchStart = day.Date.AddHours(14);
+                var lunchEnd = day.Date.AddHours(15);
                 var totalWorkHours = (dayEndTime - dayStartTime).TotalHours;
 
-                // ПЛАНОВЫЕ БЛОКИ (только активные задачи)
+                // ПЛАНОВЫЕ БЛОКИ
                 var taskBlocks = new List<object>();
                 var daySlots = slots.Where(s => s.PlannedStart.Date == day.Date).ToList();
+                
                 foreach (var slot in daySlots)
                 {
                     var start = slot.PlannedStart;
@@ -93,21 +93,35 @@ public class CalendarController : ControllerBase
                     if (end > dayEndTime) end = dayEndTime;
                     if (start >= end) continue;
 
-                    var leftPercent = (start - dayStartTime).TotalHours / totalWorkHours * 100;
-                    var widthPercent = (end - start).TotalHours / totalWorkHours * 100;
-
-                    taskBlocks.Add(new
+                    void AddSegment(DateTime segmentStart, DateTime segmentEnd)
                     {
-                        leftPercent = Math.Round(leftPercent, 2),
-                        widthPercent = Math.Round(widthPercent, 2),
-                        hours = Math.Round((end - start).TotalHours, 1),
-                        fullTitle = slot.Task.TaskDisplayName,
-                        taskId = slot.Task.Id,
-                        title = slot.Task.TaskDisplayName
-                    });
+                        if (segmentStart >= segmentEnd) return;
+                        var leftPercent = (segmentStart - dayStartTime).TotalHours / totalWorkHours * 100;
+                        var widthPercent = (segmentEnd - segmentStart).TotalHours / totalWorkHours * 100;
+                        var hours = (segmentEnd - segmentStart).TotalHours;
+
+                        taskBlocks.Add(new
+                        {
+                            leftPercent = Math.Round(leftPercent, 2),
+                            widthPercent = Math.Round(widthPercent, 2),
+                            hours = Math.Round(hours, 1),
+                            fullTitle = slot.Task.TaskDisplayName,
+                            taskId = slot.Task.Id,
+                            title = slot.Task.TaskDisplayName
+                        });
+                    }
+
+                    if (start < lunchStart && end > lunchStart)
+                        AddSegment(start, lunchStart);
+                    if (start < lunchEnd && end > lunchEnd)
+                        AddSegment(lunchEnd, end);
+                    if (start >= dayStartTime && end <= lunchStart)
+                        AddSegment(start, end);
+                    if (start >= lunchEnd && end <= dayEndTime)
+                        AddSegment(start, end);
                 }
 
-                // РЕАЛЬНЫЙ ТАЙМЛАЙН (все задачи, включая завершённые)
+                // РЕАЛЬНЫЙ ТАЙМЛАЙН
                 var timeline = new List<object>();
                 var dayDate = day.Date;
                 var currentDate = currentTime.Date;
@@ -121,6 +135,7 @@ public class CalendarController : ControllerBase
                         timelineEnd = dayEndTime;
 
                     var intervalsForDay = new List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)>();
+                    
                     foreach (var task in employeeTasks)
                     {
                         foreach (var interval in task.WorkIntervals)
@@ -132,7 +147,6 @@ public class CalendarController : ControllerBase
 
                             if (interval.EndTime == null && dayDate < currentDate)
                                 intervalEnd = dayEndTime;
-
                             if (intervalEnd > dayEndTime)
                                 intervalEnd = dayEndTime;
 
@@ -140,7 +154,25 @@ public class CalendarController : ControllerBase
                             {
                                 var startInDay = intervalStart > dayStartTime ? intervalStart : dayStartTime;
                                 var endInDay = intervalEnd < timelineEnd ? intervalEnd : timelineEnd;
-                                if (startInDay < endInDay)
+                                if (startInDay >= endInDay) continue;
+
+                                var lunchStartToday = dayDate.AddHours(14);
+                                var lunchEndToday = dayDate.AddHours(15);
+
+                                // Разбиваем на сегменты до и после обеда
+                                if (startInDay < lunchStartToday && endInDay > lunchStartToday)
+                                {
+                                    var segmentEnd = endInDay < lunchStartToday ? endInDay : lunchStartToday;
+                                    if (startInDay < segmentEnd)
+                                        intervalsForDay.Add((startInDay, segmentEnd, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
+                                }
+                                if (startInDay < lunchEndToday && endInDay > lunchEndToday)
+                                {
+                                    var segmentStart = startInDay > lunchEndToday ? startInDay : lunchEndToday;
+                                    if (segmentStart < endInDay)
+                                        intervalsForDay.Add((segmentStart, endInDay, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
+                                }
+                                if (endInDay <= lunchStartToday || startInDay >= lunchEndToday)
                                 {
                                     intervalsForDay.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
                                 }
@@ -209,7 +241,7 @@ public class CalendarController : ControllerBase
                         }
                     }
 
-                    // Простой (idle) – логика без изменений
+                    // Простой (idle)
                     var idleSegments = new List<object>();
                     var workPeriods = new[] { (TimeSpan.FromHours(10), TimeSpan.FromHours(14)), (TimeSpan.FromHours(15), TimeSpan.FromHours(19)) };
                     foreach (var (workStart, workEndPeriod) in workPeriods)
@@ -251,7 +283,6 @@ public class CalendarController : ControllerBase
                     timeline = timeline.OrderBy(t => ((DateTime)t.GetType().GetProperty("start")!.GetValue(t)!).Ticks).ToList();
                 }
 
-                // Статистика и дедлайны
                 var completedTasks = await _repo.GetCompletedTasksAsync(employee);
                 var completedThisDay = completedTasks.Where(t => t.CompletedAt?.Date == day);
                 double netSaved = completedThisDay.Sum(t => t.EstimateHours - t.ActualHours);

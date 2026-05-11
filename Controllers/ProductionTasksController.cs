@@ -5,6 +5,9 @@ using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
 
+using ProductionPlanner.Hubs;
+using Microsoft.AspNetCore.SignalR;
+
 namespace ProductionPlanner.Controllers;
 
 [ApiController]
@@ -21,6 +24,8 @@ public class ProductionTasksController : ControllerBase
     private readonly UserManager<User> _userManager;
     private readonly ApplicationDbContext _context;
 
+    private readonly IHubContext<NotificationHub> _hubContext;
+
     public ProductionTasksController(
         IProductionTaskRepository repo,
         ITaskLifecycleService lifecycle,
@@ -30,7 +35,8 @@ public class ProductionTasksController : ControllerBase
         IAppTimeService timeService,
         ILogger<ProductionTasksController> logger,
         UserManager<User> userManager,
-        ApplicationDbContext context)
+        ApplicationDbContext context,
+        IHubContext<NotificationHub> hubContext)
     {
         _repo = repo;
         _lifecycle = lifecycle;
@@ -41,11 +47,11 @@ public class ProductionTasksController : ControllerBase
         _logger = logger;
         _userManager = userManager;
         _context = context;
+        _hubContext = hubContext;
     }
 
-    // ./Controllers/ProductionTasksController.cs (изменённый метод GetTableRows)
 
-[HttpGet("table")]
+    [HttpGet("table")]
     public async Task<IActionResult> GetTableRows(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
@@ -178,9 +184,20 @@ public class ProductionTasksController : ControllerBase
                 CreatedAt = _timeService.Now,
                 UpdatedAt = _timeService.Now
             };
+            
             await _repo.AddTaskAsync(newTask);
+            
             var allRootIds = (await _repo.GetRootTasksAsync()).OrderBy(t => t.DisplayOrder).Select(t => t.Id).ToList();
             await _repo.ReorderTasksAsync(allRootIds);
+            
+            // --- Отправка уведомления через SignalR ---
+            var userId = await GetUserIdByFullName(newTask.EmployeeName);
+            if (!string.IsNullOrEmpty(userId))
+            {
+                // Предполагаем, что _hubContext — это IHubContext<NotificationHub>, внедрённый в конструктор
+                await _hubContext.Clients.Group(userId).SendAsync("NewTask", newTask.Id, newTask.TaskDisplayName, newTask.Deadline);
+            }
+            
             return Ok(newTask);
         }
         catch (Exception ex)
@@ -255,7 +272,39 @@ public class ProductionTasksController : ControllerBase
         {
             var task = await _repo.GetTaskByIdAsync(id);
             if (task == null) return NotFound();
+
+            // Собираем уникальные имена сотрудников, связанных с задачей
+            var employeeNames = new HashSet<string>();
+
+            // Добавляем сотрудника из родительской задачи (если есть)
+            if (!string.IsNullOrEmpty(task.EmployeeName))
+                employeeNames.Add(task.EmployeeName);
+
+            // Если это сплит-родитель, добавляем сотрудников из дочерних задач
+            if (task.IsSplitTask)
+            {
+                var children = await _repo.GetChildTasksAsync(task.Id);
+                foreach (var child in children)
+                {
+                    if (!string.IsNullOrEmpty(child.EmployeeName))
+                        employeeNames.Add(child.EmployeeName);
+                }
+            }
+
+            // Удаляем задачу (каскадно удаляются дети, если есть)
             await _repo.DeleteTaskAsync(id);
+
+            // Отправляем уведомление об удалении каждому сотруднику
+            foreach (var empName in employeeNames)
+            {
+                var userId = await GetUserIdByFullName(empName);
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    await _hubContext.Clients.Group(userId).SendAsync("TaskDeleted", id);
+                    Console.WriteLine($"[NOTIFY] TaskDeleted sent to {empName} (task {id})");
+                }
+            }
+
             return Ok();
         }
         catch (Exception ex)
@@ -492,6 +541,12 @@ public class ProductionTasksController : ControllerBase
             RowNumber = task.Id,
             RiskLevel = riskLevel
         };
+    }
+
+        private async Task<string?> GetUserIdByFullName(string fullName)
+    {
+        var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FullName == fullName);
+        return user?.Id;
     }
 
     private string MapStatusToText(JobStatus status) => status switch

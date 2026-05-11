@@ -18,7 +18,8 @@ import {
   Avatar,
   Menu,
   IconButton,
-  Divider
+  Divider,
+  Icon
 } from '@mui/material';
 import { 
   Today, 
@@ -30,8 +31,13 @@ import {
   Person,
   CloudUpload,
   Delete,
-  Schedule
+  Schedule,
+  Assignment,
+  AccessTime,
+  Close
 } from '@mui/icons-material';
+import * as signalR from '@microsoft/signalr';
+
 import WeekCalendar from './components/WeekCalendar';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
@@ -71,6 +77,9 @@ function App() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  
+  // Состояние для накопленных уведомлений
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
   useEffect(() => { checkAuth(); }, []);
@@ -82,6 +91,46 @@ function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Подключение к SignalR
+  useEffect(() => {
+    if (!user) return;
+
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl('/notificationHub')
+      .withAutomaticReconnect()
+      .build();
+
+    connection.start()
+      .then(() => {
+        console.log('SignalR connected');
+        connection.invoke('JoinUserGroup', user.id).catch(err => console.error('JoinGroup error:', err));
+      })
+      .catch(err => console.error('SignalR start error:', err));
+
+    connection.on('TaskDeleted', (taskId) => {
+    console.log('Task deleted:', taskId);
+    refreshAll(); // перезагружает активные задачи и календарь
+    });
+
+    connection.on('NewTask', (taskId, taskTitle, deadline) => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, {
+        id,
+        title: taskTitle,
+        deadline: new Date(deadline).toLocaleString(),
+    }]);
+    refreshAll();   // <-- добавить эту строку
+    });
+
+    return () => {
+      connection.stop();
+    };
+  }, [user]);
+
+  const closeNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
 
   const checkAuth = async () => {
     try {
@@ -354,6 +403,46 @@ function App() {
           <Logout sx={{ mr: 1, fontSize: 20 }} /> Выйти
         </MenuItem>
       </Menu>
+
+      {/* Стек уведомлений в стиле тултипов календаря */}
+      <Box sx={{ position: 'fixed', bottom: 16, right: 16, zIndex: 2000, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {notifications.map(notification => (
+          <Paper
+            key={notification.id}
+            elevation={3}
+            sx={{
+              bgcolor: '#1e293b',
+              color: 'white',
+              borderRadius: 2,
+              p: 1.5,
+              minWidth: 280,
+              maxWidth: 350,
+              position: 'relative',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+            }}
+          >
+            <IconButton
+              size="small"
+              onClick={() => closeNotification(notification.id)}
+              sx={{ position: 'absolute', top: 4, right: 4, color: '#94a3b8' }}
+            >
+              <Close fontSize="small" />
+            </IconButton>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+              <Assignment sx={{ fontSize: 18, color: '#7c9ebf' }} />
+              <Typography variant="body2" sx={{ fontWeight: 500, pr: 3 }}>
+                {notification.title}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <AccessTime sx={{ fontSize: 14, color: '#7c9ebf' }} />
+              <Typography variant="caption" sx={{ color: '#cbd5e1' }}>
+                Дедлайн: {notification.deadline}
+              </Typography>
+            </Box>
+          </Paper>
+        ))}
+      </Box>
     </ThemeProvider>
   );
 }

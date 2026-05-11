@@ -47,10 +47,6 @@ namespace ProductionPlanner.Services
             return t;
         }
 
-        /// <summary>
-        /// Эффективное вычисление количества рабочих часов между двумя моментами.
-        /// Без поминутных циклов, только арифметика по дням.
-        /// </summary>
         public double GetWorkHoursBetween(DateTime start, DateTime end)
         {
             if (start >= end) return 0;
@@ -61,23 +57,18 @@ namespace ProductionPlanner.Services
 
             while (currentDate <= endDate)
             {
-                // Выходные пропускаем
                 if (currentDate.DayOfWeek != DayOfWeek.Saturday && currentDate.DayOfWeek != DayOfWeek.Sunday)
                 {
-                    // Определяем границы рабочего дня
                     var dayStart = currentDate + workStart;
                     var dayEnd = currentDate + workEnd;
 
-                    // Интервал для текущего дня с учётом глобальных start/end
                     var intervalStart = start > dayStart ? start : dayStart;
                     var intervalEnd = end < dayEnd ? end : dayEnd;
 
                     if (intervalStart < intervalEnd)
                     {
-                        // Рабочие минуты без учёта обеда
                         var workMinutes = (intervalEnd - intervalStart).TotalMinutes;
 
-                        // Вычитаем обеденное время (14:00-15:00), если оно попадает в интервал
                         var lunchStartToday = currentDate + lunchStart;
                         var lunchEndToday = currentDate + lunchEnd;
 
@@ -91,17 +82,12 @@ namespace ProductionPlanner.Services
                         totalMinutes += Math.Max(0, workMinutes);
                     }
                 }
-
                 currentDate = currentDate.AddDays(1);
             }
 
             return Math.Round(totalMinutes / 60.0, 2);
         }
 
-        /// <summary>
-        /// Добавляет заданное количество рабочих часов к начальному моменту.
-        /// Эффективно перебирает дни, не используя поминутные циклы.
-        /// </summary>
         public DateTime AddWorkHours(DateTime start, double hours)
         {
             if (hours <= 0) return start;
@@ -111,13 +97,11 @@ namespace ProductionPlanner.Services
 
             while (remainingMinutes > 0.001)
             {
-                // Определяем остаток рабочих минут в текущем дне после current
                 var date = current.Date;
                 var minutesLeftToday = GetRemainingWorkMinutesInDay(current, date);
 
                 if (minutesLeftToday <= 0)
                 {
-                    // Переход на следующий рабочий день
                     current = GetNextWorkStart(date.AddDays(1));
                     continue;
                 }
@@ -128,18 +112,13 @@ namespace ProductionPlanner.Services
 
                 if (remainingMinutes > 0.001)
                 {
-                    // Переходим на следующий рабочий день
-                    current = GetNextWorkStart(current.Date.AddDays(1));
+                    current = GetNextWorkStart(current);
                 }
             }
 
             return current;
         }
 
-        /// <summary>
-        /// Возвращает количество рабочих минут, оставшихся в указанном дне после момента 'current'.
-        /// Учитывается только рабочее время (10-14, 15-19), без обеда.
-        /// </summary>
         private double GetRemainingWorkMinutesInDay(DateTime current, DateTime day)
         {
             var dayStart = day + workStart;
@@ -149,29 +128,15 @@ namespace ProductionPlanner.Services
 
             if (current >= dayEnd) return 0;
 
-            var remaining = 0.0;
-
-            // Первый рабочий блок: 10:00 – 14:00
-            var block1Start = dayStart;
-            var block1End = lunchStartToday;
-            if (current < block1End)
+            if (current < lunchStartToday)
             {
-                var start = current > block1Start ? current : block1Start;
-                if (start < block1End)
-                    remaining += (block1End - start).TotalMinutes;
+                return (lunchStartToday - current).TotalMinutes;
             }
-
-            // Второй рабочий блок: 15:00 – 19:00
-            var block2Start = lunchEndToday;
-            var block2End = dayEnd;
-            if (current < block2End)
+            else if (current >= lunchEndToday && current < dayEnd)
             {
-                var start = current > block2Start ? current : block2Start;
-                if (start < block2End)
-                    remaining += (block2End - start).TotalMinutes;
+                return (dayEnd - current).TotalMinutes;
             }
-
-            return remaining;
+            return 0;
         }
     }
 }

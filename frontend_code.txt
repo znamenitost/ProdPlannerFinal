@@ -1454,22 +1454,22 @@ import { TableRow, TableCell, TextField, Select, MenuItem, FormControl, InputLab
 import { Save, Cancel, AutoAwesome } from '@mui/icons-material';
 import { WORK_TIME_OPTIONS, combineDateTime } from '../utils/dateTimeHelpers';
 
-const DEFAULT_TIME = '15:00'; // ← явно здесь, чтобы не зависеть от импорта
+const DEFAULT_TIME = '15:00'; // локальная константа
 
 export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, onSave, onCancel }) {
+  // Текущая дата из newRow.deadline (если есть) или пустая строка
   const currentDate = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(0, 10) : '';
+  // Текущее время из newRow.deadline (если есть) или DEFAULT_TIME
   const currentTime = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(11, 16) : DEFAULT_TIME;
 
   const handleDateChange = (e) => {
-    const newDate = e.target.value;
-    // При изменении даты оставляем текущее выбранное время (или DEFAULT_TIME, если время не задано)
-    const timeToUse = currentTime || DEFAULT_TIME;
-    setNewRow({ ...newRow, deadline: combineDateTime(newDate, timeToUse) });
+    // ✅ При смене даты ВСЕГДА ставим время DEFAULT_TIME (15:00)
+    setNewRow({ ...newRow, deadline: combineDateTime(e.target.value, DEFAULT_TIME) });
   };
 
   const handleTimeChange = (e) => {
-    const newTime = e.target.value;
-    setNewRow({ ...newRow, deadline: combineDateTime(currentDate, newTime) });
+    // При смене времени оставляем текущую дату
+    setNewRow({ ...newRow, deadline: combineDateTime(currentDate, e.target.value) });
   };
 
   return (
@@ -2263,7 +2263,7 @@ const tooltipSx = {
 
 export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover }) {
   const date = new Date(day.date);
-  const netSaved = day.netSaved; // не используется, но оставлено для совместимости
+  const netSaved = day.netSaved;
 
   const isWorkingDay = date.getDay() >= 1 && date.getDay() <= 5;
 
@@ -2409,7 +2409,7 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
         ))}
       </Box>
 
-      {/* Дедлайны */}
+      {/* Дедлайны и таймлайн... (оставляем как было, они не менялись) */}
       <Box sx={{ position: 'relative', height: 20, mb: 2 }}>
         {day.deadlines?.map((dl, idx) => {
           let leftPos = getLeft(dl.deadline);
@@ -3542,7 +3542,8 @@ import {
   Avatar,
   Menu,
   IconButton,
-  Divider
+  Divider,
+  Icon
 } from '@mui/material';
 import { 
   Today, 
@@ -3554,8 +3555,13 @@ import {
   Person,
   CloudUpload,
   Delete,
-  Schedule
+  Schedule,
+  Assignment,
+  AccessTime,
+  Close
 } from '@mui/icons-material';
+import * as signalR from '@microsoft/signalr';
+
 import WeekCalendar from './components/WeekCalendar';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
@@ -3595,6 +3601,9 @@ function App() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  
+  // Состояние для накопленных уведомлений
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
   useEffect(() => { checkAuth(); }, []);
@@ -3606,6 +3615,46 @@ function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Подключение к SignalR
+  useEffect(() => {
+    if (!user) return;
+
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl('/notificationHub')
+      .withAutomaticReconnect()
+      .build();
+
+    connection.start()
+      .then(() => {
+        console.log('SignalR connected');
+        connection.invoke('JoinUserGroup', user.id).catch(err => console.error('JoinGroup error:', err));
+      })
+      .catch(err => console.error('SignalR start error:', err));
+
+    connection.on('TaskDeleted', (taskId) => {
+    console.log('Task deleted:', taskId);
+    refreshAll(); // перезагружает активные задачи и календарь
+    });
+
+    connection.on('NewTask', (taskId, taskTitle, deadline) => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, {
+        id,
+        title: taskTitle,
+        deadline: new Date(deadline).toLocaleString(),
+    }]);
+    refreshAll();   // <-- добавить эту строку
+    });
+
+    return () => {
+      connection.stop();
+    };
+  }, [user]);
+
+  const closeNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
 
   const checkAuth = async () => {
     try {
@@ -3878,6 +3927,46 @@ function App() {
           <Logout sx={{ mr: 1, fontSize: 20 }} /> Выйти
         </MenuItem>
       </Menu>
+
+      {/* Стек уведомлений в стиле тултипов календаря */}
+      <Box sx={{ position: 'fixed', bottom: 16, right: 16, zIndex: 2000, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {notifications.map(notification => (
+          <Paper
+            key={notification.id}
+            elevation={3}
+            sx={{
+              bgcolor: '#1e293b',
+              color: 'white',
+              borderRadius: 2,
+              p: 1.5,
+              minWidth: 280,
+              maxWidth: 350,
+              position: 'relative',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+            }}
+          >
+            <IconButton
+              size="small"
+              onClick={() => closeNotification(notification.id)}
+              sx={{ position: 'absolute', top: 4, right: 4, color: '#94a3b8' }}
+            >
+              <Close fontSize="small" />
+            </IconButton>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+              <Assignment sx={{ fontSize: 18, color: '#7c9ebf' }} />
+              <Typography variant="body2" sx={{ fontWeight: 500, pr: 3 }}>
+                {notification.title}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <AccessTime sx={{ fontSize: 14, color: '#7c9ebf' }} />
+              <Typography variant="caption" sx={{ color: '#cbd5e1' }}>
+                Дедлайн: {notification.deadline}
+              </Typography>
+            </Box>
+          </Paper>
+        ))}
+      </Box>
     </ThemeProvider>
   );
 }

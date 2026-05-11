@@ -26,6 +26,17 @@ public class DebugController : ControllerBase
         _lifecycle = lifecycle;
     }
 
+
+    [HttpGet("memory")]
+    public IActionResult GetMemory()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long memory = GC.GetTotalMemory(true);
+        return Ok(new { Bytes = memory, MB = memory / 1024.0 / 1024.0 });
+    }
+
     [HttpGet("get-time")]
     public IActionResult GetTime()
     {
@@ -129,9 +140,12 @@ public class DebugController : ControllerBase
         if (task == null) return NotFound();
         return Ok(task.WorkIntervals.Select(i => new { i.Id, i.StartTime, i.EndTime }));
     }
+
+    
 }
 
 public class SetTimeRequest
 {
     public string MockDateTime { get; set; } = "";
 }
+

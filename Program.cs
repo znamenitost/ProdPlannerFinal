@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
+using ProductionPlanner.Hubs;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using System.Text.Json.Serialization;
@@ -66,6 +67,7 @@ builder.Services.AddScoped<IEmployeeStatsService, EmployeeStatsService>();
 builder.Services.AddScoped<IProductionTaskRepository, ProductionTaskRepository>();
 builder.Services.AddScoped<ITaskSplitService, TaskSplitService>();
 builder.Services.AddScoped<IAppTimeService, AppTimeService>();
+builder.Services.AddSignalR();
 
 builder.Services.AddCors(options =>
 {
@@ -144,7 +146,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapFallbackToFile("index.html");
-
+app.UseWebSockets();
+app.MapHub<NotificationHub>("/notificationHub");
 app.Run();
 
 async Task InitializeUsersAsync(IServiceProvider serviceProvider)

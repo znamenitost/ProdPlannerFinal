@@ -1,6 +1,9 @@
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
+using ProductionPlanner.Hubs;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Identity;
 
 namespace ProductionPlanner.Services
 {
@@ -9,12 +12,21 @@ namespace ProductionPlanner.Services
         private readonly IProductionTaskRepository _repo;
         private readonly ApplicationDbContext _context;
         private readonly IAppTimeService _timeService;
+        private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly UserManager<User> _userManager;
 
-        public TaskSplitService(IProductionTaskRepository repo, ApplicationDbContext context, IAppTimeService timeService)
+        public TaskSplitService(
+            IProductionTaskRepository repo,
+            ApplicationDbContext context,
+            IAppTimeService timeService,
+            IHubContext<NotificationHub> hubContext,
+            UserManager<User> userManager)
         {
             _repo = repo;
             _context = context;
             _timeService = timeService;
+            _hubContext = hubContext;
+            _userManager = userManager;
         }
 
         public async Task<ProductionTask> SplitTaskAsync(int parentTaskId, List<SplitPart> parts)
@@ -59,6 +71,19 @@ namespace ProductionPlanner.Services
                     AllocatedHours = part.AllocatedHours
                 };
                 await _context.TaskSplits.AddAsync(split);
+
+                // Отправка уведомления сотруднику, которому назначена эта часть
+                var userId = await GetUserIdByFullName(part.EmployeeName);
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var taskTitle = $"{parentTask.TaskDisplayName} [{part.TaskType}]";
+                    await _hubContext.Clients.Group(userId).SendAsync("NewTask", childTask.Id, taskTitle, childTask.Deadline);
+                    Console.WriteLine($"[NOTIFY] Split notification sent to {part.EmployeeName} (user {userId}) for task {childTask.Id}");
+                }
+                else
+                {
+                    Console.WriteLine($"[NOTIFY] User not found for {part.EmployeeName}");
+                }
             }
 
             parentTask.IsSplitTask = true;
@@ -73,6 +98,13 @@ namespace ProductionPlanner.Services
             return parentTask;
         }
 
+        private async Task<string?> GetUserIdByFullName(string fullName)
+        {
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FullName == fullName);
+            return user?.Id;
+        }
+
+        // Остальные методы без изменений
         public async Task<bool> AreAllSubtasksCompletedAsync(int parentRowNumber)
         {
             var allTasks = await _repo.GetAllTasksAsync();

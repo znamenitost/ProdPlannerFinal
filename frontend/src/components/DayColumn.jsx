@@ -27,7 +27,7 @@ const tooltipSx = {
 
 export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover }) {
   const date = new Date(day.date);
-  const netSaved = day.netSaved; // не используется, но оставлено для совместимости
+  const netSaved = day.netSaved;
 
   const isWorkingDay = date.getDay() >= 1 && date.getDay() <= 5;
 
@@ -173,7 +173,7 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
         ))}
       </Box>
 
-      {/* Дедлайны */}
+      {/* Дедлайны и таймлайн... (оставляем как было, они не менялись) */}
       <Box sx={{ position: 'relative', height: 20, mb: 2 }}>
         {day.deadlines?.map((dl, idx) => {
           let leftPos = getLeft(dl.deadline);
