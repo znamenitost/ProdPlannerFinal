@@ -1,44 +1,59 @@
+using System;
 using System.Threading;
 
-namespace ProductionPlanner.Services;
-
-public interface IAppTimeService
+namespace ProductionPlanner.Services
 {
-    DateTime Now { get; }
-    void SetMock(DateTime? mock);
-    void ResetMock();
-}
-
-public class AppTimeService : IAppTimeService
-{
-    private static readonly AsyncLocal<DateTime?> _mockDateTime = new();
-    private static DateTime? _globalMock;
-
-    public DateTime Now
+    public interface IAppTimeService
     {
-        get
+        DateTime Now { get; }
+        void SetMock(DateTime? mock);
+        void ResetMock();
+    }
+
+    public class AppTimeService : IAppTimeService
+    {
+        private static readonly TimeZoneInfo MoscowTimeZone = GetMoscowTimeZone();
+        private static readonly AsyncLocal<DateTime?> _mockDateTime = new();
+        private static DateTime? _globalMock;
+
+        private static TimeZoneInfo GetMoscowTimeZone()
         {
-            if (_mockDateTime.Value.HasValue)
-                return _mockDateTime.Value.Value;
-            
-            if (_globalMock.HasValue)
-                return _globalMock.Value;
-            
-            return DateTime.Now;
+            try
+            {
+                // Windows
+                return TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                // Linux / macOS
+                return TimeZoneInfo.FindSystemTimeZoneById("Europe/Moscow");
+            }
         }
-    }
 
-    public void SetMock(DateTime? mock)
-    {
-        _globalMock = mock;
-        _mockDateTime.Value = mock;
-        Console.WriteLine($"[AppTimeService] Mock set to: {mock}");
-    }
+        public DateTime Now
+        {
+            get
+            {
+                if (_mockDateTime.Value.HasValue)
+                    return _mockDateTime.Value.Value;
+                if (_globalMock.HasValue)
+                    return _globalMock.Value;
+                
+                // Всегда возвращаем московское время (преобразуем UTC+0 в UTC+3)
+                return TimeZoneInfo.ConvertTime(DateTime.UtcNow, MoscowTimeZone);
+            }
+        }
 
-    public void ResetMock()
-    {
-        _globalMock = null;
-        _mockDateTime.Value = null;
-        Console.WriteLine("[AppTimeService] Mock reset");
+        public void SetMock(DateTime? mock)
+        {
+            _globalMock = mock;
+            _mockDateTime.Value = mock;
+        }
+
+        public void ResetMock()
+        {
+            _globalMock = null;
+            _mockDateTime.Value = null;
+        }
     }
 }
