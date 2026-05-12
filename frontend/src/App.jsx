@@ -77,6 +77,7 @@ function App() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [avatarKey, setAvatarKey] = useState(Date.now()); // Добавляем ключ для принудительного обновления
   
   const [notifications, setNotifications] = useState([]);
 
@@ -200,13 +201,27 @@ function App() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
-      setUser(prev => ({ ...prev, avatarUrl: data.avatarUrl }));
+      
+      // Обновляем пользователя с новым аватаром
+      setUser(prev => ({ 
+        ...prev, 
+        avatarUrl: data.avatarUrl
+      }));
+      
+      // Обновляем ключ для принудительной перезагрузки аватара
+      setAvatarKey(Date.now());
+      
       alert('Аватар успешно загружен!');
     } catch (err) {
       alert(err.message || 'Ошибка загрузки');
     } finally {
       setUploadingAvatar(false);
     }
+  };
+
+  const handleAvatarError = (e) => {
+    console.log('Avatar failed to load, showing initials instead');
+    e.target.style.display = 'none';
   };
 
   const handleDeleteAvatar = async () => {
@@ -217,6 +232,7 @@ function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
       setUser(prev => ({ ...prev, avatarUrl: null }));
+      setAvatarKey(Date.now()); // Обновляем ключ
       alert('Аватар удалён');
     } catch (err) {
       alert(err.message || 'Ошибка удаления');
@@ -299,7 +315,8 @@ function App() {
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Typography>Загрузка...</Typography></Box>;
   if (!user) return <LoginForm onLogin={handleLogin} />;
 
-  const avatarUrl = user?.avatarUrl ? user.avatarUrl : null;
+  // Формируем URL аватара с ключом для сброса кэша
+  const avatarUrl = user?.id ? `/api/auth/avatar/${user.id}?t=${avatarKey}` : null;
 
   return (
     <ThemeProvider theme={theme}>
@@ -344,8 +361,12 @@ function App() {
                   <Button variant="outlined" startIcon={<Notifications />} onClick={testNotification} sx={{ color: '#7c9ebf', borderColor: '#7c9ebf' }} size="medium">Тест уведомлений</Button>
                 )}
                 <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
-                  <Avatar src={avatarUrl} sx={{ width: 40, height: 40, bgcolor: 'primary.main' }}>
-                    {!avatarUrl && (user?.fullName?.[0] || 'U')}
+                  <Avatar 
+                    src={avatarUrl} 
+                    sx={{ width: 40, height: 40, bgcolor: 'primary.main' }}
+                    onError={handleAvatarError}
+                  >
+                    {(!user?.avatarUrl) && (user?.fullName?.[0] || 'U')}
                   </Avatar>
                 </IconButton>
               </Box>

@@ -82,6 +82,18 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// ========== НАСТРОЙКА ПУТИ К СТАТИЧЕСКИМ ФАЙЛАМ ДЛЯ АВАТАРОВ ==========
+// Принудительно указываем wwwroot в корне проекта, если он не задан
+if (string.IsNullOrEmpty(app.Environment.WebRootPath))
+{
+    app.Environment.WebRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+}
+
+// Создаём папку avatars, если её нет
+var avatarsDir = Path.Combine(app.Environment.WebRootPath, "avatars");
+if (!Directory.Exists(avatarsDir))
+    Directory.CreateDirectory(avatarsDir);
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
