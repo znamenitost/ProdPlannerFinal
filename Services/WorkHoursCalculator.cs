@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ProductionPlanner.Services
 {
@@ -92,23 +93,33 @@ namespace ProductionPlanner.Services
         {
             if (hours <= 0) return start;
 
+            var segments = AllocateWorkTime(start, hours);
+            return segments.Count > 0 ? segments[^1].End : GetNextWorkStart(start);
+        }
+
+        public IReadOnlyList<WorkTimeSegment> AllocateWorkTime(DateTime start, double hours)
+        {
+            if (hours <= 0) return Array.Empty<WorkTimeSegment>();
+
+            var segments = new List<WorkTimeSegment>();
             var remainingMinutes = hours * 60.0;
             var current = GetNextWorkStart(start);
 
             while (remainingMinutes > 0.001)
             {
-                var date = current.Date;
-                var minutesLeftToday = GetRemainingWorkMinutesInDay(current, date);
-
-                if (minutesLeftToday <= 0)
+                var minutesLeftInBlock = GetRemainingWorkMinutesInDay(current, current.Date);
+                if (minutesLeftInBlock <= 0)
                 {
-                    current = GetNextWorkStart(date.AddDays(1));
+                    current = GetNextWorkStart(current.Date.AddDays(1));
                     continue;
                 }
 
-                var minutesToAdd = Math.Min(remainingMinutes, minutesLeftToday);
-                current = current.AddMinutes(minutesToAdd);
+                var minutesToAdd = Math.Min(remainingMinutes, minutesLeftInBlock);
+                var segmentEnd = current.AddMinutes(minutesToAdd);
+                segments.Add(new WorkTimeSegment(current, segmentEnd));
+
                 remainingMinutes -= minutesToAdd;
+                current = segmentEnd;
 
                 if (remainingMinutes > 0.001)
                 {
@@ -116,7 +127,7 @@ namespace ProductionPlanner.Services
                 }
             }
 
-            return current;
+            return segments;
         }
 
         private double GetRemainingWorkMinutesInDay(DateTime current, DateTime day)

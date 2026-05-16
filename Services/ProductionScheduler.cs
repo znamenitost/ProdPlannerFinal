@@ -22,63 +22,28 @@ namespace ProductionPlanner.Services
                 .ToList();
 
             var result = new List<ScheduledSlot>();
-            var currentTime = _workHours.GetNextWorkStart(now);
+            var cursor = _workHours.GetNextWorkStart(now);
 
             foreach (var task in tasks)
             {
-                var remaining = task.EstimateHours * (1 - task.Progress);
-                if (remaining <= 0.01) continue;
+                var remainingHours = task.EstimateHours * (1 - task.Progress);
+                if (remainingHours <= 0.01) continue;
 
-                double remainingMinutes = remaining * 60;
-                var current = currentTime;
-
-                while (remainingMinutes > 0.001)
+                var segments = _workHours.AllocateWorkTime(cursor, remainingHours);
+                foreach (var segment in segments)
                 {
-                    var dayStart = current.Date.AddHours(10);
-                    var dayEnd = current.Date.AddHours(19);
-                    var lunchStart = current.Date.AddHours(14);
-                    var lunchEnd = current.Date.AddHours(15);
-
-                    // Если мы внутри обеда — перескакиваем
-                    if (current >= lunchStart && current < lunchEnd)
-                    {
-                        current = lunchEnd;
-                        continue;
-                    }
-
-                    DateTime blockEnd;
-                    if (current < lunchStart)
-                        blockEnd = lunchStart;
-                    else if (current >= lunchEnd)
-                        blockEnd = dayEnd;
-                    else
-                        blockEnd = dayEnd; // fallback
-
-                    var minutesAvailable = (blockEnd - current).TotalMinutes;
-                    if (minutesAvailable <= 0)
-                    {
-                        current = _workHours.GetNextWorkStart(current.Date.AddDays(1));
-                        continue;
-                    }
-
-                    var minutesToAdd = Math.Min(remainingMinutes, minutesAvailable);
-                    var segmentEnd = current.AddMinutes(minutesToAdd);
                     result.Add(new ScheduledSlot
                     {
                         Task = task,
-                        PlannedStart = current,
-                        PlannedEnd = segmentEnd
+                        PlannedStart = segment.Start,
+                        PlannedEnd = segment.End
                     });
-
-                    remainingMinutes -= minutesToAdd;
-                    current = segmentEnd;
-
-                    if (remainingMinutes > 0.001 && current >= dayEnd)
-                    {
-                        current = _workHours.GetNextWorkStart(current.Date.AddDays(1));
-                    }
                 }
-                currentTime = current;
+
+                if (segments.Count > 0)
+                {
+                    cursor = segments[^1].End;
+                }
             }
 
             return result;
