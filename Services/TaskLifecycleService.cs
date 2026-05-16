@@ -1,9 +1,5 @@
 using ProductionPlanner.Models;
 using ProductionPlanner.Data;
-using ProductionPlanner.Hubs;
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 
 namespace ProductionPlanner.Services
 {
@@ -14,8 +10,7 @@ namespace ProductionPlanner.Services
         private readonly IWorkHoursCalculator _workHours;
         private readonly ITaskSplitService _splitService;
         private readonly IAppTimeService _timeService;
-        private readonly IHubContext<NotificationHub> _hubContext;
-        private readonly UserManager<User> _userManager;
+        private readonly ITaskNotificationService _notificationService;
 
         public TaskLifecycleService(
             IProductionTaskRepository repo,
@@ -23,16 +18,14 @@ namespace ProductionPlanner.Services
             IWorkHoursCalculator workHours,
             ITaskSplitService splitService,
             IAppTimeService timeService,
-            IHubContext<NotificationHub> hubContext,
-            UserManager<User> userManager)
+            ITaskNotificationService notificationService)
         {
             _repo = repo;
             _statsService = statsService;
             _workHours = workHours;
             _splitService = splitService;
             _timeService = timeService;
-            _hubContext = hubContext;
-            _userManager = userManager;
+            _notificationService = notificationService;
         }
 
         private async Task CloseAllOpenIntervalsAsync(ProductionTask task, DateTime closedAt)
@@ -73,32 +66,6 @@ namespace ProductionPlanner.Services
             }
         }
 
-        private async Task<string?> GetUserIdByFullName(string fullName)
-        {
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FullName == fullName);
-            return user?.Id;
-        }
-
-        private async Task NotifyStatusChangeAsync(ProductionTask task, string newStatus)
-        {
-            var userId = await GetUserIdByFullName(task.EmployeeName);
-            if (!string.IsNullOrEmpty(userId))
-            {
-                await _hubContext.Clients.Group(userId).SendAsync("TaskStatusChanged", task.Id, newStatus);
-                Console.WriteLine($"[NOTIFY] TaskStatusChanged sent to {task.EmployeeName} for task {task.Id}: {newStatus}");
-            }
-        }
-
-        private async Task NotifyProgressChangeAsync(ProductionTask task, double progress)
-        {
-            var userId = await GetUserIdByFullName(task.EmployeeName);
-            if (!string.IsNullOrEmpty(userId))
-            {
-                await _hubContext.Clients.Group(userId).SendAsync("TaskProgressChanged", task.Id, progress);
-                Console.WriteLine($"[NOTIFY] TaskProgressChanged sent to {task.EmployeeName} for task {task.Id}: {progress}");
-            }
-        }
-
         public async Task StartTaskAsync(int taskId, DateTime now)
         {
             Console.WriteLine($"[DEBUG] StartTaskAsync called with time: {now}");
@@ -130,7 +97,7 @@ namespace ProductionPlanner.Services
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
                 await UpdateParentStatusAsync(task.Id);
 
-            await NotifyStatusChangeAsync(task, "InProgress");
+            await _notificationService.NotifyStatusChangedAsync(task, "InProgress");
 
             Console.WriteLine($"[DEBUG] Task {taskId} started, interval start: {startTime}");
         }
@@ -155,7 +122,7 @@ namespace ProductionPlanner.Services
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
                 await UpdateParentStatusAsync(task.Id);
 
-            await NotifyStatusChangeAsync(task, "Paused");
+            await _notificationService.NotifyStatusChangedAsync(task, "Paused");
         }
 
         public async Task ResumeTaskAsync(int taskId, DateTime now)
@@ -188,7 +155,7 @@ namespace ProductionPlanner.Services
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
                 await UpdateParentStatusAsync(task.Id);
 
-            await NotifyStatusChangeAsync(task, "InProgress");
+            await _notificationService.NotifyStatusChangedAsync(task, "InProgress");
 
             Console.WriteLine($"[DEBUG] Task {taskId} resumed, interval start: {startTime}");
         }
@@ -215,7 +182,7 @@ namespace ProductionPlanner.Services
 
             await _repo.UpdateTaskAsync(task);
 
-            await NotifyProgressChangeAsync(task, newProgress);
+            await _notificationService.NotifyProgressChangedAsync(task, newProgress);
         }
 
         public async Task CompleteTaskAsync(int taskId, DateTime now)
@@ -240,7 +207,7 @@ namespace ProductionPlanner.Services
                 if (task.ParentRowNumber.HasValue && task.IsSplitTask)
                     await UpdateParentStatusAsync(task.Id);
 
-                await NotifyStatusChangeAsync(task, "Completed");
+                await _notificationService.NotifyStatusChangedAsync(task, "Completed");
                 return;
             }
 
@@ -252,7 +219,7 @@ namespace ProductionPlanner.Services
             {
                 if (interval.EndTime.HasValue)
                 {
-                    actual += (interval.EndTime.Value - interval.StartTime).TotalHours;
+                    actual += _workHours.GetWorkHoursBetween(interval.StartTime, interval.EndTime.Value);
                 }
             }
             task.ActualHours = actual;
@@ -287,7 +254,7 @@ namespace ProductionPlanner.Services
                 }
             }
 
-            await NotifyStatusChangeAsync(task, "Completed");
+            await _notificationService.NotifyStatusChangedAsync(task, "Completed");
         }
 
         public async Task ReturnTaskAsync(int taskId, DateTime now)
@@ -300,7 +267,7 @@ namespace ProductionPlanner.Services
             task.Progress = 0;
             task.UpdatedAt = now;
             await _repo.UpdateTaskAsync(task);
-            await NotifyStatusChangeAsync(task, "Assigned");
+            await _notificationService.NotifyStatusChangedAsync(task, "Assigned");
         }
     }
 }

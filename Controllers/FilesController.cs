@@ -1,85 +1,90 @@
 using Microsoft.AspNetCore.Mvc;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+using Microsoft.AspNetCore.Authorization;
 
 namespace ProductionPlanner.Controllers
 {
     [ApiController]
     [Route("api/files")]
+    [Authorize]
     public class FilesController : ControllerBase
     {
-        private const string SmbHost = "MINIMARKER";      // Имя или IP Windows-ПК в сети
-        private const string ShareName = "Клиенты";       // Имя расшаренной папки
+        private readonly IConfiguration _configuration;
+
+        public FilesController(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
 
         [HttpPost("open")]
-public IActionResult OpenFile([FromBody] OpenFileRequest request)
-{
-    if (string.IsNullOrEmpty(request.FilePath))
-        return BadRequest(new { message = "Путь к файлу не указан" });
-
-    var rawPath = request.FilePath.Replace('\\', '/');
-    
-    var clientIdx = rawPath.LastIndexOf(ShareName, StringComparison.OrdinalIgnoreCase);
-    if (clientIdx < 0)
-        return BadRequest(new { message = "Не удалось определить путь к файлу" });
-
-    // Относительный путь после "Клиенты"
-    var relativePath = rawPath.Substring(clientIdx + ShareName.Length).TrimStart('/');
-    var parts = relativePath.Split('/');
-    var cleanFileName = parts[parts.Length - 1].Split('[')[0].Trim();
-    
-    // Добавляем расширение, если его нет
-    if (!cleanFileName.EndsWith(".cdr") && 
-        !cleanFileName.EndsWith(".ai") && 
-        !cleanFileName.EndsWith(".pdf") &&
-        !cleanFileName.EndsWith(".eps"))
-    {
-        cleanFileName += ".cdr";
-    }
-    
-    parts[parts.Length - 1] = cleanFileName;
-    var correctedPath = string.Join("/", parts);
-    
-    // macOS формат: smb://MINIMARKER/Клиенты/...
-    var smbUrl = $"smb://{SmbHost}/{ShareName}/{correctedPath}";
-    
-    // Windows формат: \\MINIMARKER\Клиенты\...
-    var uncPath = $@"\\{SmbHost}\{ShareName}\{correctedPath.Replace("/", "\\")}";
-    
-    try
-    {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        public IActionResult OpenFile([FromBody] OpenFileRequest request)
         {
-            // macOS: открываем через open (работает с smb://)
-            Process.Start("open", $"\"{smbUrl}\"");
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            // Windows: используем shell execute для UNC-пути
-            var psi = new ProcessStartInfo
+            if (string.IsNullOrWhiteSpace(request.FilePath))
+                return BadRequest(new { message = "Путь к файлу не указан" });
+
+            var shareName = _configuration["FileOpen:ShareName"] ?? "Клиенты";
+            var macSmbHost = _configuration["FileOpen:MacSmbHost"] ?? "MINIMARKER";
+            var windowsHost = _configuration["FileOpen:WindowsHost"] ?? "192.168.1.119";
+            var netOpenScheme = _configuration["FileOpen:NetOpenScheme"] ?? "netopen";
+            var netOpenShareName = _configuration["FileOpen:NetOpenShareName"] ?? shareName.ToLowerInvariant();
+
+            var correctedPath = NormalizeRelativePath(request.FilePath, shareName);
+            if (string.IsNullOrWhiteSpace(correctedPath))
+                return BadRequest(new { message = "Не удалось определить путь к файлу" });
+
+            var smbUrl = $"smb://{macSmbHost}/{shareName}/{correctedPath}";
+            var netOpenUrl = $"{netOpenScheme}://{windowsHost}/{netOpenShareName}/{correctedPath}";
+            var clientPlatform = request.ClientPlatform ?? string.Empty;
+            var downloadUrl = clientPlatform.Contains("Win", StringComparison.OrdinalIgnoreCase)
+                ? netOpenUrl
+                : smbUrl;
+
+            return Ok(new
             {
-                FileName = uncPath,
-                UseShellExecute = true
-            };
-            Process.Start(psi);
+                message = "Ссылка на файл сформирована",
+                downloadUrl,
+                smbUrl,
+                netOpenUrl
+            });
         }
-        else
+
+        private static string NormalizeRelativePath(string filePath, string shareName)
         {
-            // Linux: возвращаем ссылку (не поддерживается напрямую)
-            return Ok(new { downloadUrl = smbUrl });
+            var rawPath = filePath.Replace('\\', '/').Trim();
+            while (rawPath.Contains("//"))
+                rawPath = rawPath.Replace("//", "/");
+
+            rawPath = rawPath.Trim('/');
+            var sharePrefix = shareName.Trim('/');
+            if (rawPath.StartsWith(sharePrefix + "/", StringComparison.OrdinalIgnoreCase))
+                rawPath = rawPath[(sharePrefix.Length + 1)..];
+
+            var parts = rawPath
+                .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToArray();
+
+            if (parts.Length == 0)
+                return string.Empty;
+
+            var cleanFileName = parts[^1].Split('[')[0].Trim();
+            if (!HasSupportedExtension(cleanFileName))
+                cleanFileName += ".cdr";
+
+            parts[^1] = cleanFileName;
+            return string.Join("/", parts);
         }
-        
-        return Ok(new { message = "Файл открывается", downloadUrl = smbUrl, uncPath });
-    }
-    catch (Exception ex)
-    {
-        return StatusCode(500, new { message = $"Ошибка: {ex.Message}", downloadUrl = smbUrl, uncPath });
-    }
-}
+
+        private static bool HasSupportedExtension(string fileName)
+        {
+            return fileName.EndsWith(".cdr", StringComparison.OrdinalIgnoreCase)
+                || fileName.EndsWith(".ai", StringComparison.OrdinalIgnoreCase)
+                || fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
+                || fileName.EndsWith(".eps", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     public class OpenFileRequest
     {
         public string FilePath { get; set; } = "";
+        public string? ClientPlatform { get; set; }
     }
 }

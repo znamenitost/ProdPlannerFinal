@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
@@ -8,6 +9,7 @@ namespace ProductionPlanner.Controllers;
 
 [ApiController]
 [Route("api/calendar")]
+[Authorize]
 public class CalendarController : ControllerBase
 {
     private readonly IProductionTaskRepository _repo;
@@ -70,6 +72,9 @@ public class CalendarController : ControllerBase
                 .ToList();
             var slots = _scheduler.GetSchedule(activeTasksForSchedule, currentTime);
             var employeeTasks = allEmployeeTasks;
+            var completedTasks = employeeTasks
+                .Where(t => t.Status == JobStatus.Completed)
+                .ToList();
 
             var days = new List<object>();
             for (var day = weekStart; day < weekEnd; day = day.AddDays(1))
@@ -283,7 +288,6 @@ public class CalendarController : ControllerBase
                     timeline = timeline.OrderBy(t => ((DateTime)t.GetType().GetProperty("start")!.GetValue(t)!).Ticks).ToList();
                 }
 
-                var completedTasks = await _repo.GetCompletedTasksAsync(employee);
                 var completedThisDay = completedTasks.Where(t => t.CompletedAt?.Date == day);
                 double netSaved = completedThisDay.Sum(t => t.EstimateHours - t.ActualHours);
 

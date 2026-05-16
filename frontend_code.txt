@@ -3123,11 +3123,18 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       const response = await fetch('/api/files/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath })
+        body: JSON.stringify({
+          filePath,
+          clientPlatform: navigator.platform || navigator.userAgent
+        })
       });
       const data = await response.json();
       if (!response.ok) {
         alert(data.message || 'Ошибка открытия файла');
+        return;
+      }
+      if (data.downloadUrl) {
+        window.open(data.downloadUrl, '_blank');
       }
     } catch (err) {
       console.error('Ошибка открытия файла:', err);
@@ -3528,7 +3535,10 @@ export default function useTaskTableApi() {
     const response = await fetch('/api/files/open', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePath: relativePath })
+      body: JSON.stringify({
+        filePath: relativePath,
+        clientPlatform: navigator.platform || navigator.userAgent
+      })
     });
     const data = await handleResponse(response);
     if (data.downloadUrl) {
@@ -3625,7 +3635,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>,
 )=== ./frontend/src/App.jsx ===
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Typography,
   Container,
@@ -3704,11 +3714,21 @@ function App() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [avatarKey, setAvatarKey] = useState(Date.now()); // Добавляем ключ для принудительного обновления
   
   const [notifications, setNotifications] = useState([]);
+  const signalRRefreshTimeoutRef = useRef(null);
+  const refreshRetryTimeoutRef = useRef(null);
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
   useEffect(() => { checkAuth(); }, []);
+
+  useEffect(() => {
+    return () => {
+      if (signalRRefreshTimeoutRef.current) clearTimeout(signalRRefreshTimeoutRef.current);
+      if (refreshRetryTimeoutRef.current) clearTimeout(refreshRetryTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -3719,53 +3739,68 @@ function App() {
 
   useEffect(() => {
     if (!user) return;
+    let isMounted = true;
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl('/notificationHub')
       .withAutomaticReconnect()
       .build();
 
+    const refreshFromSignalR = () => {
+      if (signalRRefreshTimeoutRef.current) {
+        clearTimeout(signalRRefreshTimeoutRef.current);
+      }
+      signalRRefreshTimeoutRef.current = setTimeout(() => {
+        if (isMounted) refreshAll();
+      }, 300);
+    };
+
+    const handleNewTask = (taskId, taskTitle, deadline) => {
+      if (!isMounted) return;
+      const id = `${taskId}-${Date.now()}`;
+      setNotifications(prev => [
+        ...prev.slice(-19),
+        {
+          id,
+          title: taskTitle,
+          deadline: new Date(deadline).toLocaleString(),
+        }
+      ]);
+      refreshFromSignalR();
+    };
+
+    const handleRefreshEvent = () => {
+      refreshFromSignalR();
+    };
+
     connection.start()
       .then(() => {
-        console.log('SignalR connected');
-        connection.invoke('JoinUserGroup', user.id).catch(err => console.error('JoinGroup error:', err));
+        if (isMounted) {
+          connection.invoke('JoinUserGroup', user.id).catch(err => console.error('JoinGroup error:', err));
+        }
       })
       .catch(err => console.error('SignalR start error:', err));
 
-    connection.on('NewTask', (taskId, taskTitle, deadline) => {
-      const id = Date.now();
-      setNotifications(prev => [...prev, {
-        id,
-        title: taskTitle,
-        deadline: new Date(deadline).toLocaleString(),
-      }]);
-      refreshAll();
-    });
-
-    connection.on('TaskDeleted', (taskId) => {
-      console.log('Task deleted:', taskId);
-      refreshAll();
-    });
-
-    connection.on('TaskUpdated', (taskId, taskTitle, deadline) => {
-      console.log(`Task updated: ${taskId}`);
-      refreshAll();
-    });
-
-    connection.on('TaskStatusChanged', (taskId, newStatus) => {
-      console.log(`Task ${taskId} status changed to ${newStatus}`);
-      refreshAll();
-    });
-
-    connection.on('TaskProgressChanged', (taskId, progress) => {
-      console.log(`Task ${taskId} progress updated to ${progress}`);
-      refreshAll();
-    });
+    connection.on('NewTask', handleNewTask);
+    connection.on('TaskDeleted', handleRefreshEvent);
+    connection.on('TaskUpdated', handleRefreshEvent);
+    connection.on('TaskStatusChanged', handleRefreshEvent);
+    connection.on('TaskProgressChanged', handleRefreshEvent);
 
     return () => {
-      connection.stop();
+      isMounted = false;
+      if (signalRRefreshTimeoutRef.current) {
+        clearTimeout(signalRRefreshTimeoutRef.current);
+        signalRRefreshTimeoutRef.current = null;
+      }
+      connection.off('NewTask', handleNewTask);
+      connection.off('TaskDeleted', handleRefreshEvent);
+      connection.off('TaskUpdated', handleRefreshEvent);
+      connection.off('TaskStatusChanged', handleRefreshEvent);
+      connection.off('TaskProgressChanged', handleRefreshEvent);
+      connection.stop().catch(err => console.error('SignalR stop error:', err));
     };
-  }, [user]);
+  }, [user, employee]);
 
   const closeNotification = (id) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
@@ -3827,13 +3862,27 @@ function App() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
-      setUser(prev => ({ ...prev, avatarUrl: data.avatarUrl }));
+      
+      // Обновляем пользователя с новым аватаром
+      setUser(prev => ({ 
+        ...prev, 
+        avatarUrl: data.avatarUrl
+      }));
+      
+      // Обновляем ключ для принудительной перезагрузки аватара
+      setAvatarKey(Date.now());
+      
       alert('Аватар успешно загружен!');
     } catch (err) {
       alert(err.message || 'Ошибка загрузки');
     } finally {
       setUploadingAvatar(false);
     }
+  };
+
+  const handleAvatarError = (e) => {
+    console.log('Avatar failed to load, showing initials instead');
+    e.target.style.display = 'none';
   };
 
   const handleDeleteAvatar = async () => {
@@ -3844,6 +3893,7 @@ function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
       setUser(prev => ({ ...prev, avatarUrl: null }));
+      setAvatarKey(Date.now()); // Обновляем ключ
       alert('Аватар удалён');
     } catch (err) {
       alert(err.message || 'Ошибка удаления');
@@ -3873,9 +3923,13 @@ function App() {
   const refreshAll = () => {
     loadActiveTasks();
     setRefresh(r => r + 1);
-    setTimeout(() => {
+    if (refreshRetryTimeoutRef.current) {
+      clearTimeout(refreshRetryTimeoutRef.current);
+    }
+    refreshRetryTimeoutRef.current = setTimeout(() => {
       loadActiveTasks();
       setRefresh(r => r + 1);
+      refreshRetryTimeoutRef.current = null;
     }, 200);
   };
 
@@ -3926,7 +3980,8 @@ function App() {
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Typography>Загрузка...</Typography></Box>;
   if (!user) return <LoginForm onLogin={handleLogin} />;
 
-  const avatarUrl = user?.avatarUrl ? user.avatarUrl : null;
+  // Формируем URL аватара с ключом для сброса кэша
+  const avatarUrl = user?.id ? `/api/auth/avatar/${user.id}?t=${avatarKey}` : null;
 
   return (
     <ThemeProvider theme={theme}>
@@ -3971,8 +4026,12 @@ function App() {
                   <Button variant="outlined" startIcon={<Notifications />} onClick={testNotification} sx={{ color: '#7c9ebf', borderColor: '#7c9ebf' }} size="medium">Тест уведомлений</Button>
                 )}
                 <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
-                  <Avatar src={avatarUrl} sx={{ width: 40, height: 40, bgcolor: 'primary.main' }}>
-                    {!avatarUrl && (user?.fullName?.[0] || 'U')}
+                  <Avatar 
+                    src={avatarUrl} 
+                    sx={{ width: 40, height: 40, bgcolor: 'primary.main' }}
+                    onError={handleAvatarError}
+                  >
+                    {(!user?.avatarUrl) && (user?.fullName?.[0] || 'U')}
                   </Avatar>
                 </IconButton>
               </Box>
@@ -4007,7 +4066,7 @@ function App() {
             />
           )}
 
-          <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />
+          {isAdmin && <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />}
           <SplitTaskModal open={splitModalOpen} task={selectedTaskForSplit} onClose={() => setSplitModalOpen(false)} onSuccess={handleSplitSuccess} />
         </Container>
       </Box>

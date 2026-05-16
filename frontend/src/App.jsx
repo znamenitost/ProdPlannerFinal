@@ -18,8 +18,7 @@ import {
   Avatar,
   Menu,
   IconButton,
-  Divider,
-  Icon
+  Divider
 } from '@mui/material';
 import { 
   Today, 
@@ -36,8 +35,6 @@ import {
   AccessTime,
   Close
 } from '@mui/icons-material';
-import * as signalR from '@microsoft/signalr';
-
 import WeekCalendar from './components/WeekCalendar';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
@@ -46,7 +43,9 @@ import DebugPanel from './components/DebugPanel';
 import SplitTaskModal from './components/SplitTaskModal';
 import TaskTable from './components/TaskTable';
 import LoginForm from './components/LoginForm';
-import { getActiveTasks } from './services/api';
+import useActiveTasksRefresh from './hooks/useActiveTasksRefresh';
+import useAuth from './hooks/useAuth';
+import useNotificationsHub from './hooks/useNotificationsHub';
 
 const theme = createTheme({
   palette: {
@@ -66,11 +65,7 @@ const theme = createTheme({
 });
 
 function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [employee, setEmployee] = useState('Дима');
-  const [activeTasks, setActiveTasks] = useState([]);
-  const [refresh, setRefresh] = useState(0);
+  const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
   const [splitModalOpen, setSplitModalOpen] = useState(false);
   const [selectedTaskForSplit, setSelectedTaskForSplit] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
@@ -78,11 +73,10 @@ function App() {
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [avatarKey, setAvatarKey] = useState(Date.now()); // Добавляем ключ для принудительного обновления
-  
-  const [notifications, setNotifications] = useState([]);
+  const { activeTasks, refresh, refreshAll } = useActiveTasksRefresh(user, employee);
+  const { notifications, closeNotification } = useNotificationsHub(user, refreshAll);
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
-  useEffect(() => { checkAuth(); }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -90,86 +84,6 @@ function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl('/notificationHub')
-      .withAutomaticReconnect()
-      .build();
-
-    connection.start()
-      .then(() => {
-        console.log('SignalR connected');
-        connection.invoke('JoinUserGroup', user.id).catch(err => console.error('JoinGroup error:', err));
-      })
-      .catch(err => console.error('SignalR start error:', err));
-
-    connection.on('NewTask', (taskId, taskTitle, deadline) => {
-      const id = Date.now();
-      setNotifications(prev => [...prev, {
-        id,
-        title: taskTitle,
-        deadline: new Date(deadline).toLocaleString(),
-      }]);
-      refreshAll();
-    });
-
-    connection.on('TaskDeleted', (taskId) => {
-      console.log('Task deleted:', taskId);
-      refreshAll();
-    });
-
-    connection.on('TaskUpdated', (taskId, taskTitle, deadline) => {
-      console.log(`Task updated: ${taskId}`);
-      refreshAll();
-    });
-
-    connection.on('TaskStatusChanged', (taskId, newStatus) => {
-      console.log(`Task ${taskId} status changed to ${newStatus}`);
-      refreshAll();
-    });
-
-    connection.on('TaskProgressChanged', (taskId, progress) => {
-      console.log(`Task ${taskId} progress updated to ${progress}`);
-      refreshAll();
-    });
-
-    return () => {
-      connection.stop();
-    };
-  }, [user]);
-
-  const closeNotification = (id) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
-  const checkAuth = async () => {
-    try {
-      const response = await fetch('/api/auth/me', { credentials: 'include' });
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data);
-        if (data.role !== 'Admin') setEmployee(data.fullName);
-      }
-    } catch (err) {
-      console.error('Ошибка проверки авторизации:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogin = (userData) => {
-    setUser(userData);
-    if (userData.role !== 'Admin') setEmployee(userData.fullName);
-  };
-
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-    setUser(null);
-    setEmployee('Дима');
-  };
 
   const handleOpenUserMenu = (event) => setAnchorElUser(event.currentTarget);
   const handleCloseUserMenu = () => setAnchorElUser(null);
@@ -242,32 +156,6 @@ function App() {
     }
   };
 
-  useEffect(() => {
-    if (user) {
-      loadActiveTasks();
-      const interval = setInterval(() => setRefresh(r => r + 1), 60000);
-      return () => clearInterval(interval);
-    }
-  }, [employee, user]);
-
-  const loadActiveTasks = async () => {
-    try {
-      const tasks = await getActiveTasks(employee);
-      setActiveTasks(tasks);
-    } catch (err) {
-      console.error('Ошибка загрузки активных задач:', err);
-    }
-  };
-
-  const refreshAll = () => {
-    loadActiveTasks();
-    setRefresh(r => r + 1);
-    setTimeout(() => {
-      loadActiveTasks();
-      setRefresh(r => r + 1);
-    }, 200);
-  };
-
   const handleReset = async () => {
     if (window.confirm('Очистить всю базу данных?')) {
       await fetch('/api/debug/reset-db', { method: 'POST' });
@@ -316,7 +204,7 @@ function App() {
   if (!user) return <LoginForm onLogin={handleLogin} />;
 
   // Формируем URL аватара с ключом для сброса кэша
-  const avatarUrl = user?.id ? `/api/auth/avatar/${user.id}?t=${avatarKey}` : null;
+  const avatarUrl = user?.avatarUrl && user?.id ? `/api/auth/avatar/${user.id}?t=${avatarKey}` : null;
 
   return (
     <ThemeProvider theme={theme}>
@@ -401,7 +289,7 @@ function App() {
             />
           )}
 
-          <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />
+          {isAdmin && <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />}
           <SplitTaskModal open={splitModalOpen} task={selectedTaskForSplit} onClose={() => setSplitModalOpen(false)} onSuccess={handleSplitSuccess} />
         </Container>
       </Box>

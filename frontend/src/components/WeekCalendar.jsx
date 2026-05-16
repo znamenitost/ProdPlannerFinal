@@ -11,9 +11,11 @@ export default function WeekCalendar({ employee, refresh }) {
   const [showWeekend, setShowWeekend] = useState(false);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchData = async () => {
       try {
-        const data = await getWeekCalendar(employee, currentMonday);
+        const data = await getWeekCalendar(employee, currentMonday, { signal: controller.signal });
         setWeekData(data);
         if (data && data.start) {
           const serverMonday = new Date(data.start);
@@ -22,11 +24,14 @@ export default function WeekCalendar({ employee, refresh }) {
           }
         }
       } catch (err) {
-        console.error('Ошибка загрузки календаря:', err);
-        setWeekData(null);
+        if (err.name !== 'AbortError') {
+          console.error('Ошибка загрузки календаря:', err);
+          setWeekData(null);
+        }
       }
     };
     fetchData();
+    return () => controller.abort();
   }, [employee, refresh, currentMonday]);
 
   const prevWeek = () => {

@@ -129,13 +129,13 @@ namespace ProductionPlanner.Controllers
         {
             if (!User.Identity?.IsAuthenticated == true)
             {
-                return Unauthorized(new { message = "Не авторизован" });
+                return Ok(new { isAuthenticated = false });
             }
 
             var user = await _userManager.GetUserAsync(User);
             if (user == null)
             {
-                return Unauthorized(new { message = "Пользователь не найден" });
+                return Ok(new { isAuthenticated = false });
             }
 
             var roles = await _userManager.GetRolesAsync(user);

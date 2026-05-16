@@ -1,51 +1,48 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
-using ProductionPlanner.Hubs;
-using Microsoft.AspNetCore.SignalR;
 
 namespace ProductionPlanner.Controllers;
 
 [ApiController]
 [Route("api/tasks")]
+[Authorize]
 public class ProductionTasksController : ControllerBase
 {
     private readonly IProductionTaskRepository _repo;
     private readonly ITaskLifecycleService _lifecycle;
     private readonly IProductionScheduler _scheduler;
     private readonly IWorkHoursCalculator _workHours;
-    private readonly ITaskSplitService _splitService;
     private readonly IAppTimeService _timeService;
     private readonly ILogger<ProductionTasksController> _logger;
     private readonly UserManager<User> _userManager;
     private readonly ApplicationDbContext _context;
-    private readonly IHubContext<NotificationHub> _hubContext;
+    private readonly ITaskNotificationService _notificationService;
 
     public ProductionTasksController(
         IProductionTaskRepository repo,
         ITaskLifecycleService lifecycle,
         IProductionScheduler scheduler,
         IWorkHoursCalculator workHours,
-        ITaskSplitService splitService,
         IAppTimeService timeService,
         ILogger<ProductionTasksController> logger,
         UserManager<User> userManager,
         ApplicationDbContext context,
-        IHubContext<NotificationHub> hubContext)
+        ITaskNotificationService notificationService)
     {
         _repo = repo;
         _lifecycle = lifecycle;
         _scheduler = scheduler;
         _workHours = workHours;
-        _splitService = splitService;
         _timeService = timeService;
         _logger = logger;
         _userManager = userManager;
         _context = context;
-        _hubContext = hubContext;
+        _notificationService = notificationService;
     }
 
     [HttpGet("table")]
@@ -186,12 +183,7 @@ public class ProductionTasksController : ControllerBase
             var allRootIds = (await _repo.GetRootTasksAsync()).OrderBy(t => t.DisplayOrder).Select(t => t.Id).ToList();
             await _repo.ReorderTasksAsync(allRootIds);
             
-            var userId = await GetUserIdByFullName(newTask.EmployeeName);
-            if (!string.IsNullOrEmpty(userId))
-            {
-                await _hubContext.Clients.Group(userId).SendAsync("NewTask", newTask.Id, newTask.TaskDisplayName, newTask.Deadline);
-                Console.WriteLine($"[NOTIFY] NewTask sent to {newTask.EmployeeName} for task {newTask.Id}");
-            }
+            await _notificationService.NotifyNewTaskAsync(newTask);
             
             return Ok(newTask);
         }
@@ -252,7 +244,7 @@ public class ProductionTasksController : ControllerBase
             await _repo.UpdateTaskAsync(task);
 
             // Уведомление об обновлении задачи
-            await NotifyTaskUpdatedAsync(task, oldEmployeeName);
+            await _notificationService.NotifyTaskUpdatedAsync(task, oldEmployeeName);
 
             return Ok(task);
         }
@@ -286,15 +278,7 @@ public class ProductionTasksController : ControllerBase
 
             await _repo.DeleteTaskAsync(id);
 
-            foreach (var empName in employeeNames)
-            {
-                var userId = await GetUserIdByFullName(empName);
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    await _hubContext.Clients.Group(userId).SendAsync("TaskDeleted", id);
-                    Console.WriteLine($"[NOTIFY] TaskDeleted sent to {empName} (task {id})");
-                }
-            }
+            await _notificationService.NotifyTaskDeletedAsync(id, employeeNames);
 
             return Ok();
         }
@@ -534,31 +518,6 @@ public class ProductionTasksController : ControllerBase
         };
     }
 
-    private async Task<string?> GetUserIdByFullName(string fullName)
-    {
-        var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FullName == fullName);
-        return user?.Id;
-    }
-
-    private async Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null)
-    {
-        var usersToNotify = new HashSet<string>();
-        if (!string.IsNullOrEmpty(task.EmployeeName))
-            usersToNotify.Add(task.EmployeeName);
-        if (!string.IsNullOrEmpty(oldEmployeeName) && oldEmployeeName != task.EmployeeName)
-            usersToNotify.Add(oldEmployeeName);
-
-        foreach (var empName in usersToNotify)
-        {
-            var userId = await GetUserIdByFullName(empName);
-            if (!string.IsNullOrEmpty(userId))
-            {
-                await _hubContext.Clients.Group(userId).SendAsync("TaskUpdated", task.Id, task.TaskDisplayName, task.Deadline);
-                Console.WriteLine($"[NOTIFY] TaskUpdated sent to {empName} for task {task.Id}");
-            }
-        }
-    }
-
     private string MapStatusToText(JobStatus status) => status switch
     {
         JobStatus.Assigned => "",
@@ -575,29 +534,4 @@ public class ProductionTasksController : ControllerBase
         "Пауза" => JobStatus.Paused,
         _ => JobStatus.Assigned
     };
-}
-
-public class CreateTaskRequest
-{
-    public string? FolderPath { get; set; }
-    public string? FileName { get; set; }
-    public string? Comment { get; set; }
-    public DateTime Deadline { get; set; }
-    public double EstimateHours { get; set; }
-    public string? Type { get; set; }
-    public string? EmployeeName { get; set; }
-    public int? ParentRowNumber { get; set; }
-}
-
-public class UpdateTaskRequest
-{
-    public string? FolderPath { get; set; }
-    public string? FileName { get; set; }
-    public string? Comment { get; set; }
-    public DateTime Deadline { get; set; }
-    public double EstimateHours { get; set; }
-    public string? Type { get; set; }
-    public string? EmployeeName { get; set; }
-    public int? ParentRowNumber { get; set; }
-    public string? StatusText { get; set; }
 }

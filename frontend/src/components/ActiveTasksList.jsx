@@ -28,11 +28,18 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       const response = await fetch('/api/files/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath })
+        body: JSON.stringify({
+          filePath,
+          clientPlatform: navigator.platform || navigator.userAgent
+        })
       });
       const data = await response.json();
       if (!response.ok) {
         alert(data.message || 'Ошибка открытия файла');
+        return;
+      }
+      if (data.downloadUrl) {
+        window.open(data.downloadUrl, '_blank');
       }
     } catch (err) {
       console.error('Ошибка открытия файла:', err);

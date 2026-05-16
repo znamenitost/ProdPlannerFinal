@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
@@ -8,6 +9,7 @@ namespace ProductionPlanner.Controllers
 {
     [ApiController]
     [Route("api/tasks/split")]
+    [Authorize]
     public class TaskSplitController : ControllerBase
     {
         private readonly ITaskSplitService _splitService;
@@ -22,6 +24,7 @@ namespace ProductionPlanner.Controllers
         }
 
         [HttpPost]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> SplitTask([FromBody] SplitTaskRequest request)
         {
             try

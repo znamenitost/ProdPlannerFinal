@@ -66,6 +66,7 @@ builder.Services.AddScoped<ITaskLifecycleService, TaskLifecycleService>();
 builder.Services.AddScoped<IEmployeeStatsService, EmployeeStatsService>();
 builder.Services.AddScoped<IProductionTaskRepository, ProductionTaskRepository>();
 builder.Services.AddScoped<ITaskSplitService, TaskSplitService>();
+builder.Services.AddScoped<ITaskNotificationService, TaskNotificationService>();
 builder.Services.AddScoped<IAppTimeService, AppTimeService>();
 builder.Services.AddSignalR();
 

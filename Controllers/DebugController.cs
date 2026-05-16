@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
@@ -7,6 +8,7 @@ namespace ProductionPlanner.Controllers;
 
 [ApiController]
 [Route("api/debug")]
+[Authorize(Roles = "Admin")]
 public class DebugController : ControllerBase
 {
     private readonly IProductionTaskRepository _repo;

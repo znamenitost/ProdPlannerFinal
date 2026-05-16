@@ -2,17 +2,18 @@
 const API_BASE = '/api';
 
 // Получить активные задачи сотрудника
-export async function getActiveTasks(employee) {
+export async function getActiveTasks(employee, options = {}) {
   const res = await fetch(`${API_BASE}/tasks/active?employee=${encodeURIComponent(employee)}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
+    signal: options.signal
   });
   if (!res.ok) throw new Error('Ошибка загрузки активных задач');
   return res.json();
 }
 
 // Получить календарь на неделю (передаём дату понедельника в формате YYYY-MM-DD)
-export async function getWeekCalendar(employee, startDate) {
+export async function getWeekCalendar(employee, startDate, options = {}) {
   let url = `${API_BASE}/calendar/week?employee=${encodeURIComponent(employee)}`;
   if (startDate) {
     const year = startDate.getFullYear();
@@ -22,7 +23,8 @@ export async function getWeekCalendar(employee, startDate) {
   }
   const res = await fetch(url, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
+    signal: options.signal
   });
   if (!res.ok) throw new Error('Ошибка загрузки календаря');
   return res.json();
