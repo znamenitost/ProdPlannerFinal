@@ -29,19 +29,23 @@ export default function useTaskTableApi() {
   }, [handleResponse]);
 
   const createRow = useCallback(async (rowData) => {
+    const body = {
+      folderPath: rowData.folderPath,
+      fileName: rowData.fileName,
+      comment: rowData.comment,
+      deadline: rowData.deadline,
+      estimateHours: rowData.estimateHours,
+      type: rowData.type,
+      employeeName: rowData.employeeName,
+      parentRowNumber: rowData.parentRowNumber || null
+    };
+    if (rowData.parts?.length) {
+      body.parts = rowData.parts;
+    }
     const response = await fetch('/api/tasks/table/row', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        folderPath: rowData.folderPath,
-        fileName: rowData.fileName,
-        comment: rowData.comment,
-        deadline: rowData.deadline,
-        estimateHours: rowData.estimateHours,
-        type: rowData.type,
-        employeeName: rowData.employeeName,
-        parentRowNumber: rowData.parentRowNumber || null
-      })
+      body: JSON.stringify(body)
     });
     return await handleResponse(response);
   }, [handleResponse]);

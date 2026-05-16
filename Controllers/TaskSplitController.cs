@@ -38,6 +38,21 @@ namespace ProductionPlanner.Controllers
             }
         }
 
+        [HttpPut("{parentTaskId}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdateSplit(int parentTaskId, [FromBody] SplitTaskRequest request)
+        {
+            try
+            {
+                await _splitService.UpdateSplitAsync(parentTaskId, request.Parts);
+                return Ok(new { message = "Назначения обновлены" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpGet("children/{parentRowNumber}")]
         public async Task<IActionResult> GetChildTasks(int parentRowNumber)
         {

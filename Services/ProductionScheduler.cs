@@ -104,7 +104,7 @@ namespace ProductionPlanner.Services
                 if (deadline < now)
                 {
                     riskLevel = "overdue";
-                    message = $"❌ Дедлайн сорван! Задача должна была быть выполнена {deadline:dd.MM HH:mm}";
+                    message = $"Дедлайн сорван! Задача должна была быть выполнена {deadline:dd.MM HH:mm}";
                 }
                 else if (workHoursUntilDeadline < hoursNeeded)
                 {
@@ -115,12 +115,12 @@ namespace ProductionPlanner.Services
                     var deficitText = deficitHours > 0 
                         ? $"{deficitHours} ч {deficitMinutes:F0} мин" 
                         : $"{deficitMinutes:F0} мин";
-                    message = $"🔴 Критично! Не хватает {deficitText} рабочих часов до дедлайна. Требуется {hoursNeeded:F1} ч, осталось {workHoursUntilDeadline:F1} ч.";
+                    message = $"Критично! Не хватает {deficitText} рабочих часов до дедлайна. Требуется {hoursNeeded:F1} ч, осталось {workHoursUntilDeadline:F1} ч.";
                 }
                 else if (workHoursUntilDeadline < hoursNeeded + 2)
                 {
                     riskLevel = "warning";
-                    message = $"🟡 Внимание! До дедлайна осталось {workHoursUntilDeadline:F1} рабочих ч, требуется {hoursNeeded:F1} ч. Нужно торопиться!";
+                    message = $"Внимание! До дедлайна осталось {workHoursUntilDeadline:F1} рабочих ч, требуется {hoursNeeded:F1} ч. Нужно торопиться!";
                 }
                 
                 if (riskLevel != "ok")

@@ -22,6 +22,7 @@ public class ProductionTasksController : ControllerBase
     private readonly UserManager<User> _userManager;
     private readonly ApplicationDbContext _context;
     private readonly ITaskNotificationService _notificationService;
+    private readonly ITaskSplitService _splitService;
 
     public ProductionTasksController(
         IProductionTaskRepository repo,
@@ -32,7 +33,8 @@ public class ProductionTasksController : ControllerBase
         ILogger<ProductionTasksController> logger,
         UserManager<User> userManager,
         ApplicationDbContext context,
-        ITaskNotificationService notificationService)
+        ITaskNotificationService notificationService,
+        ITaskSplitService splitService)
     {
         _repo = repo;
         _lifecycle = lifecycle;
@@ -43,6 +45,7 @@ public class ProductionTasksController : ControllerBase
         _userManager = userManager;
         _context = context;
         _notificationService = notificationService;
+        _splitService = splitService;
     }
 
     [HttpGet("table")]
@@ -159,16 +162,59 @@ public class ProductionTasksController : ControllerBase
     {
         try
         {
-            var newTask = new ProductionTask
+            var parts = request.Parts?
+                .Where(p => !string.IsNullOrWhiteSpace(p.EmployeeName) && p.AllocatedHours > 0)
+                .ToList() ?? new List<SplitPart>();
+
+            if (parts.Count >= 2)
+            {
+                var totalAllocated = parts.Sum(p => p.AllocatedHours);
+                if (Math.Abs(totalAllocated - request.EstimateHours) > 0.01)
+                    return BadRequest(new { error = $"Сумма часов по сотрудникам ({totalAllocated}) должна равняться общему времени ({request.EstimateHours})" });
+
+                var combinedTypes = string.Join(", ",
+                    parts.Select(p => p.TaskType).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct());
+
+                var newTask = new ProductionTask
+                {
+                    DisplayOrder = -1,
+                    FolderPath = request.FolderPath ?? "",
+                    FileName = request.FileName ?? "",
+                    Comment = request.Comment ?? "",
+                    Deadline = request.Deadline,
+                    EstimateHours = request.EstimateHours,
+                    Type = string.IsNullOrWhiteSpace(combinedTypes) ? "Резка" : combinedTypes,
+                    EmployeeName = "",
+                    Status = JobStatus.Assigned,
+                    Progress = 0,
+                    ActualHours = 0,
+                    ParentRowNumber = null,
+                    IsSplitTask = false,
+                    CreatedAt = _timeService.Now,
+                    UpdatedAt = _timeService.Now
+                };
+
+                await _repo.AddTaskAsync(newTask);
+                await _splitService.SplitTaskAsync(newTask.Id, parts);
+
+                return Ok(newTask);
+            }
+
+            var singlePart = parts.Count == 1 ? parts[0] : null;
+            var employeeName = singlePart?.EmployeeName ?? request.EmployeeName ?? "";
+            var taskType = singlePart?.TaskType ?? request.Type ?? "Резка";
+            var estimateHours = singlePart?.AllocatedHours > 0 ? singlePart.AllocatedHours : request.EstimateHours;
+
+            var task = new ProductionTask
             {
                 DisplayOrder = -1,
                 FolderPath = request.FolderPath ?? "",
                 FileName = request.FileName ?? "",
                 Comment = request.Comment ?? "",
                 Deadline = request.Deadline,
-                EstimateHours = request.EstimateHours,
-                Type = request.Type ?? "Резка",
-                EmployeeName = request.EmployeeName ?? "Дима",
+                EstimateHours = estimateHours,
+                Type = taskType,
+                EmployeeName = employeeName,
                 Status = JobStatus.Assigned,
                 Progress = 0,
                 ActualHours = 0,
@@ -177,15 +223,15 @@ public class ProductionTasksController : ControllerBase
                 CreatedAt = _timeService.Now,
                 UpdatedAt = _timeService.Now
             };
-            
-            await _repo.AddTaskAsync(newTask);
-            
+
+            await _repo.AddTaskAsync(task);
+
             var allRootIds = (await _repo.GetRootTasksAsync()).OrderBy(t => t.DisplayOrder).Select(t => t.Id).ToList();
             await _repo.ReorderTasksAsync(allRootIds);
-            
-            await _notificationService.NotifyNewTaskAsync(newTask);
-            
-            return Ok(newTask);
+
+            await _notificationService.NotifyNewTaskAsync(task);
+
+            return Ok(task);
         }
         catch (Exception ex)
         {
@@ -210,7 +256,10 @@ public class ProductionTasksController : ControllerBase
             task.Deadline = request.Deadline;
             task.EstimateHours = request.EstimateHours;
             task.Type = request.Type ?? task.Type;
-            task.EmployeeName = request.EmployeeName ?? task.EmployeeName;
+            if (!(task.IsSplitTask && task.ParentRowNumber == null))
+                task.EmployeeName = request.EmployeeName ?? task.EmployeeName;
+            else
+                task.EmployeeName = "";
             task.ParentRowNumber = request.ParentRowNumber;
             task.UpdatedAt = _timeService.Now;
 

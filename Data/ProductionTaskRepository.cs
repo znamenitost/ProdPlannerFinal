@@ -19,7 +19,9 @@ namespace ProductionPlanner.Data
         {
             return await _context.ProductionTasks
                 .Include(t => t.WorkIntervals)
-                .Where(t => t.EmployeeName == employeeName && t.Status != JobStatus.Completed)
+                .Where(t => t.EmployeeName == employeeName
+                            && t.Status != JobStatus.Completed
+                            && !(t.IsSplitTask && t.ParentRowNumber == null))
                 .ToListAsync();
         }
 

@@ -6,7 +6,7 @@ import {
   TableContainer,
   TablePagination,
 } from '@mui/material';
-import SplitTaskModal from './SplitTaskModal';
+import SplitTaskModal, { childrenToModalParts, apiPartsToModalParts } from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
 import NewTaskRow from './NewTaskRow';
 import EditTaskRow from './EditTaskRow';
@@ -14,6 +14,7 @@ import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
 import useTaskTableApi from '../hooks/useTaskTableApi';
+import { useUiFeedback } from '../context/UiFeedbackContext';
 import { combineDateTime, DEFAULT_TIME } from '../utils/dateTimeHelpers';
 
 
@@ -25,7 +26,9 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
   const [editingId, setEditingId] = useState(null);
   const [newRow, setNewRow] = useState(null);
   const [splitModalOpen, setSplitModalOpen] = useState(false);
-  const [selectedTaskForSplit, setSelectedTaskForSplit] = useState(null);
+  const [splitModalMode, setSplitModalMode] = useState('split');
+  const [splitModalTask, setSplitModalTask] = useState(null);
+  const [splitModalInitialParts, setSplitModalInitialParts] = useState(null);
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [selectedCommentTask, setSelectedCommentTask] = useState(null);
   const [highlightMyTasks, setHighlightMyTasks] = useState(false);
@@ -34,6 +37,7 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
 
   const isAdmin = userRole === 'Admin';
   const api = useTaskTableApi();
+  const { showError, showWarning, confirm } = useUiFeedback();
 
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [childrenCache, setChildrenCache] = useState(new Map());
@@ -119,24 +123,97 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
     if (onTaskUpdate) onTaskUpdate();
   };
 
+  const closeSplitModal = () => {
+    setSplitModalOpen(false);
+    setSplitModalTask(null);
+    setSplitModalInitialParts(null);
+  };
+
   const handleSaveNewRow = async () => {
+    if (!newRow.isSharedTask && !newRow.employeeName) {
+      showWarning('Выберите сотрудника или настройте общую задачу');
+      return;
+    }
+
+    const payload = {
+      folderPath: newRow.folderPath,
+      fileName: newRow.fileName,
+      comment: newRow.comment,
+      deadline: newRow.deadline,
+      estimateHours: newRow.estimateHours,
+      parentRowNumber: null
+    };
+
+    if (newRow.isSharedTask && newRow.assigneeParts?.length >= 2) {
+      payload.parts = newRow.assigneeParts;
+      payload.estimateHours = newRow.assigneeParts.reduce(
+        (s, p) => s + (p.allocatedHours || 0),
+        0
+      );
+    } else {
+      const hours = parseFloat(newRow.estimateHours);
+      if (!hours || hours <= 0) {
+        showWarning('Укажите количество часов');
+        return;
+      }
+      payload.estimateHours = hours;
+      payload.type = (newRow.types || []).join(', ');
+      payload.employeeName = newRow.employeeName;
+    }
+
     try {
-      await api.createRow({
-        folderPath: newRow.folderPath,
-        fileName: newRow.fileName,
-        comment: newRow.comment,
-        deadline: newRow.deadline,
-        estimateHours: newRow.estimateHours,
-        type: (newRow.types || []).join(', '),
-        employeeName: newRow.employeeName,
-        parentRowNumber: null
-      });
+      const created = await api.createRow(payload);
       setNewRow(null);
       refresh();
+      if (newRow.isSharedTask && created?.id) {
+        setExpandedRows(prev => new Set(prev).add(created.id));
+        await loadChildrenForParent(created.id);
+      }
     } catch (err) {
       console.error('Ошибка сохранения:', err);
-      alert('Ошибка сохранения задачи');
+      showError(err.message || 'Ошибка сохранения задачи');
     }
+  };
+
+  const handleOpenNewSharedModal = () => {
+    setSplitModalMode('draft');
+    setSplitModalTask({
+      estimateHours: newRow.estimateHours,
+      fileName: newRow.fileName,
+      folderPath: newRow.folderPath
+    });
+    setSplitModalInitialParts(
+      apiPartsToModalParts(newRow.assigneeParts, employees, taskTypes)
+    );
+    setSplitModalOpen(true);
+  };
+
+  const handleDraftApply = (apiParts) => {
+    const isShared = apiParts.length >= 2;
+    const totalFromParts = apiParts.reduce((s, p) => s + (p.allocatedHours || 0), 0);
+    setNewRow(prev => ({
+      ...prev,
+      assigneeParts: isShared ? apiParts : null,
+      isSharedTask: isShared,
+      estimateHours: isShared ? totalFromParts : (prev.estimateHours === '' ? '' : prev.estimateHours)
+    }));
+  };
+
+  const handleOpenEditSharedModal = async (task) => {
+    let children = childrenCache.get(task.id);
+    if (!children?.length) {
+      children = await api.loadChildren(task.id);
+      setChildrenCache(prev => new Map(prev).set(task.id, children));
+    }
+    setSplitModalMode('edit');
+    setSplitModalTask({
+      id: task.id,
+      estimateHours: task.estimateHours,
+      fileName: task.fileName,
+      folderPath: task.folderPath
+    });
+    setSplitModalInitialParts(childrenToModalParts(children, employees, taskTypes));
+    setSplitModalOpen(true);
   };
 
   const handleUpdateRow = async (row) => {
@@ -156,7 +233,7 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
       refresh();
     } catch (err) {
       console.error('Ошибка обновления:', err);
-      alert('Ошибка обновления задачи');
+      showError('Ошибка обновления задачи');
     }
   };
 
@@ -210,7 +287,13 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
   };
 
   const handleDeleteRow = async (id) => {
-    if (!window.confirm('Удалить задачу?')) return;
+    const confirmed = await confirm({
+      title: 'Удалить задачу?',
+      message: 'Задача будет удалена без возможности восстановления.',
+      confirmLabel: 'Удалить',
+      confirmColor: 'error',
+    });
+    if (!confirmed) return;
     try {
       await api.deleteRow(id);
       refresh();
@@ -220,14 +303,40 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
   const handleSplitTask = async (row) => {
     try {
       const task = await api.getTaskForSplit(row.employeeName, row.id);
-      setSelectedTaskForSplit(task);
+      setSplitModalMode('split');
+      setSplitModalTask({
+        id: task.id,
+        estimateHours: task.estimateHours,
+        fileName: row.fileName,
+        folderPath: row.folderPath
+      });
+      setSplitModalInitialParts(null);
       setSplitModalOpen(true);
     } catch (err) {
-      alert(err.message);
+      showError(err.message);
     }
   };
 
-  const handleSplitSuccess = () => refresh();
+  const handleSplitSuccess = async () => {
+    const parentId = splitModalTask?.id;
+    if (splitModalMode === 'edit' && editingId === parentId) {
+      const children = await api.loadChildren(parentId);
+      setChildrenCache(prev => new Map(prev).set(parentId, children));
+    }
+    refresh();
+    if (parentId) {
+      if (splitModalMode !== 'edit') {
+        setChildrenCache(prev => {
+          const next = new Map(prev);
+          next.delete(parentId);
+          return next;
+        });
+      }
+      if (expandedRows.has(parentId)) {
+        await loadChildrenForParent(parentId);
+      }
+    }
+  };
 
   const handleOpenComment = (row) => {
     setSelectedCommentTask(row);
@@ -244,7 +353,7 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
       refresh();
     } catch (err) {
       console.error(err);
-      alert('Ошибка сохранения комментария');
+      showError('Ошибка сохранения комментария');
     }
   };
 
@@ -255,10 +364,12 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
         folderPath: '',
         fileName: '',
         comment: '',
-        deadline: combineDateTime(today, DEFAULT_TIME), // сегодня, 15:00
-        estimateHours: 1,
-        types: [taskTypes[0]],
-        employeeName: employees[0],
+        deadline: combineDateTime(today, DEFAULT_TIME),
+        estimateHours: '',
+        types: [],
+        employeeName: '',
+        assigneeParts: null,
+        isSharedTask: false,
         parentRowNumber: null
       });
     };
@@ -291,6 +402,7 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                 employees={employees}
                 onSave={handleSaveNewRow}
                 onCancel={() => setNewRow(null)}
+                onOpenSharedModal={handleOpenNewSharedModal}
               />
             )}
             {rows.map(parent => {
@@ -304,6 +416,7 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                   onCancel={() => setEditingId(null)}
                   taskTypes={taskTypes}
                   employees={employees}
+                  onOpenSharedModal={handleOpenEditSharedModal}
                 />
               ) : (
                 <ParentTaskRow
@@ -356,9 +469,14 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
 
       <SplitTaskModal
         open={splitModalOpen}
-        task={selectedTaskForSplit}
-        onClose={() => setSplitModalOpen(false)}
+        mode={splitModalMode}
+        task={splitModalTask}
+        initialParts={splitModalInitialParts}
+        employees={employees}
+        taskTypes={taskTypes}
+        onClose={closeSplitModal}
         onSuccess={handleSplitSuccess}
+        onDraftApply={handleDraftApply}
       />
     </Paper>
   );

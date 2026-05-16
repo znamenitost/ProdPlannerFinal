@@ -28,12 +28,10 @@ import {
   CalendarMonth, 
   Logout, 
   Person,
+  AdminPanelSettings,
   CloudUpload,
   Delete,
   Schedule,
-  Assignment,
-  AccessTime,
-  Close
 } from '@mui/icons-material';
 import WeekCalendar from './components/WeekCalendar';
 import ActiveTasksList from './components/ActiveTasksList';
@@ -43,6 +41,9 @@ import DebugPanel from './components/DebugPanel';
 import SplitTaskModal from './components/SplitTaskModal';
 import TaskTable from './components/TaskTable';
 import LoginForm from './components/LoginForm';
+import PushNotificationSnackbars from './components/PushNotificationSnackbars';
+import { LoadingState } from './components/LoadingState';
+import { UiFeedbackProvider, useUiFeedback } from './context/UiFeedbackContext';
 import useActiveTasksRefresh from './hooks/useActiveTasksRefresh';
 import useAuth from './hooks/useAuth';
 import useNotificationsHub from './hooks/useNotificationsHub';
@@ -64,15 +65,16 @@ const theme = createTheme({
   shape: { borderRadius: 12 },
 });
 
-function App() {
+function AppContent() {
   const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
+  const { showSuccess, showError, showWarning, showInfo, confirm } = useUiFeedback();
   const [splitModalOpen, setSplitModalOpen] = useState(false);
   const [selectedTaskForSplit, setSelectedTaskForSplit] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [avatarKey, setAvatarKey] = useState(Date.now()); // Добавляем ключ для принудительного обновления
+  const [avatarKey, setAvatarKey] = useState(Date.now());
   const { activeTasks, refresh, refreshAll } = useActiveTasksRefresh(user, employee);
   const { notifications, closeNotification } = useNotificationsHub(user, refreshAll);
 
@@ -100,8 +102,14 @@ function App() {
   const handleAvatarUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) return alert('Пожалуйста, выберите изображение');
-    if (file.size > 2 * 1024 * 1024) return alert('Размер файла не должен превышать 2MB');
+    if (!file.type.startsWith('image/')) {
+      showWarning('Пожалуйста, выберите изображение');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      showWarning('Размер файла не должен превышать 2MB');
+      return;
+    }
 
     setUploadingAvatar(true);
     const formData = new FormData();
@@ -115,41 +123,43 @@ function App() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
-      
-      // Обновляем пользователя с новым аватаром
-      setUser(prev => ({ 
-        ...prev, 
+
+      setUser(prev => ({
+        ...prev,
         avatarUrl: data.avatarUrl
       }));
-      
-      // Обновляем ключ для принудительной перезагрузки аватара
       setAvatarKey(Date.now());
-      
-      alert('Аватар успешно загружен!');
+      showSuccess('Аватар успешно загружен');
     } catch (err) {
-      alert(err.message || 'Ошибка загрузки');
+      showError(err.message || 'Ошибка загрузки');
     } finally {
       setUploadingAvatar(false);
     }
   };
 
   const handleAvatarError = (e) => {
-    console.log('Avatar failed to load, showing initials instead');
     e.target.style.display = 'none';
   };
 
   const handleDeleteAvatar = async () => {
-    if (!confirm('Вы уверены, что хотите удалить аватар?')) return;
+    const confirmed = await confirm({
+      title: 'Удалить аватар?',
+      message: 'Вы уверены, что хотите удалить фото профиля?',
+      confirmLabel: 'Удалить',
+      confirmColor: 'error',
+    });
+    if (!confirmed) return;
+
     setUploadingAvatar(true);
     try {
       const response = await fetch('/api/auth/avatar', { method: 'DELETE', credentials: 'include' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
       setUser(prev => ({ ...prev, avatarUrl: null }));
-      setAvatarKey(Date.now()); // Обновляем ключ
-      alert('Аватар удалён');
+      setAvatarKey(Date.now());
+      showSuccess('Аватар удалён');
     } catch (err) {
-      alert(err.message || 'Ошибка удаления');
+      showError(err.message || 'Ошибка удаления');
     } finally {
       setUploadingAvatar(false);
       handleCloseUserMenu();
@@ -157,20 +167,31 @@ function App() {
   };
 
   const handleReset = async () => {
-    if (window.confirm('Очистить всю базу данных?')) {
-      await fetch('/api/debug/reset-db', { method: 'POST' });
-      refreshAll();
-    }
+    const confirmed = await confirm({
+      title: 'Сброс базы данных',
+      message: 'Очистить всю базу данных? Это действие необратимо.',
+      confirmLabel: 'Очистить',
+      confirmColor: 'error',
+    });
+    if (!confirmed) return;
+    await fetch('/api/debug/reset-db', { method: 'POST' });
+    refreshAll();
+    showSuccess('База данных очищена');
   };
 
   const testNotification = () => {
-    if (!('Notification' in window)) return alert('Ваш браузер не поддерживает уведомления');
+    if (!('Notification' in window)) {
+      showWarning('Ваш браузер не поддерживает уведомления');
+      return;
+    }
     if (Notification.permission === 'granted') {
-      new Notification('✅ Уведомления работают!');
+      new Notification('Уведомления работают!');
+      showSuccess('Системное уведомление отправлено');
     } else if (Notification.permission === 'denied') {
-      alert('Уведомления заблокированы.');
+      showWarning('Уведомления заблокированы в настройках браузера');
     } else {
       Notification.requestPermission();
+      showInfo('Разрешите уведомления в запросе браузера');
     }
   };
 
@@ -180,7 +201,7 @@ function App() {
   };
 
   const handleSplitSuccess = () => refreshAll();
-  const handleTabChange = (event, newValue) => setActiveTab(newValue);
+  const handleTabChange = (_event, newValue) => setActiveTab(newValue);
   const isAdmin = user?.role === 'Admin';
 
   const formatTime = (date) => {
@@ -200,15 +221,13 @@ function App() {
     });
   };
 
-  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Typography>Загрузка...</Typography></Box>;
+  if (loading) return <LoadingState fullScreen />;
   if (!user) return <LoginForm onLogin={handleLogin} />;
 
-  // Формируем URL аватара с ключом для сброса кэша
   const avatarUrl = user?.avatarUrl && user?.id ? `/api/auth/avatar/${user.id}?t=${avatarKey}` : null;
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <>
       <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: 3 }}>
         <Container maxWidth="xl">
           <Paper elevation={0} sx={{ p: 2, mb: 3, borderRadius: 3 }}>
@@ -233,11 +252,16 @@ function App() {
               <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                 {isAdmin && (
                   <FormControl size="small" sx={{ minWidth: 130 }}>
-                    <InputLabel><Person sx={{ fontSize: 18 }} /> Сотрудник</InputLabel>
-                    <Select value={employee} label="Сотрудник" onChange={(e) => setEmployee(e.target.value)}>
-                      <MenuItem value="Дима">👤 Дима</MenuItem>
-                      <MenuItem value="Яромир">👤 Яромир</MenuItem>
-                      <MenuItem value="Павел">👤 Павел</MenuItem>
+                    <InputLabel id="admin-employee-label">Сотрудник</InputLabel>
+                    <Select
+                      labelId="admin-employee-label"
+                      value={employee}
+                      label="Сотрудник"
+                      onChange={(e) => setEmployee(e.target.value)}
+                    >
+                      <MenuItem value="Дима">Дима</MenuItem>
+                      <MenuItem value="Яромир">Яромир</MenuItem>
+                      <MenuItem value="Павел">Павел</MenuItem>
                     </Select>
                   </FormControl>
                 )}
@@ -305,7 +329,12 @@ function App() {
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{user?.fullName}</Typography>
             <Typography variant="caption" color="text.secondary">{user?.email}</Typography>
-            <Chip size="small" label={isAdmin ? '👑 Администратор' : '👤 Сотрудник'} sx={{ mt: 0.5, fontSize: '0.65rem', bgcolor: isAdmin ? '#fef3c7' : '#e0e7ff', color: isAdmin ? '#92400e' : '#3730a3', width: 'fit-content' }} />
+            <Chip
+              size="small"
+              icon={isAdmin ? <AdminPanelSettings sx={{ fontSize: '0.85rem !important' }} /> : <Person sx={{ fontSize: '0.85rem !important' }} />}
+              label={isAdmin ? 'Администратор' : 'Сотрудник'}
+              sx={{ mt: 0.5, fontSize: '0.65rem', bgcolor: isAdmin ? '#fef3c7' : '#e0e7ff', color: isAdmin ? '#92400e' : '#3730a3', width: 'fit-content' }}
+            />
           </Box>
         </MenuItem>
         <Divider />
@@ -323,45 +352,21 @@ function App() {
         </MenuItem>
       </Menu>
 
-      {/* Стек уведомлений в стиле тултипов календаря */}
-      <Box sx={{ position: 'fixed', bottom: 16, right: 16, zIndex: 2000, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {notifications.map(notification => (
-          <Paper
-            key={notification.id}
-            elevation={3}
-            sx={{
-              bgcolor: '#1e293b',
-              color: 'white',
-              borderRadius: 2,
-              p: 1.5,
-              minWidth: 280,
-              maxWidth: 350,
-              position: 'relative',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-            }}
-          >
-            <IconButton
-              size="small"
-              onClick={() => closeNotification(notification.id)}
-              sx={{ position: 'absolute', top: 4, right: 4, color: '#94a3b8' }}
-            >
-              <Close fontSize="small" />
-            </IconButton>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-              <Assignment sx={{ fontSize: 18, color: '#7c9ebf' }} />
-              <Typography variant="body2" sx={{ fontWeight: 500, pr: 3 }}>
-                {notification.title}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <AccessTime sx={{ fontSize: 14, color: '#7c9ebf' }} />
-              <Typography variant="caption" sx={{ color: '#cbd5e1' }}>
-                Дедлайн: {notification.deadline}
-              </Typography>
-            </Box>
-          </Paper>
-        ))}
-      </Box>
+      <PushNotificationSnackbars
+        notifications={notifications}
+        onClose={closeNotification}
+      />
+    </>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <UiFeedbackProvider>
+        <AppContent />
+      </UiFeedbackProvider>
     </ThemeProvider>
   );
 }

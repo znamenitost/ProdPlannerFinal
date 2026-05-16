@@ -1,10 +1,18 @@
-// ./frontend/src/components/EditTaskRow.jsx
 import { useState, useEffect, useRef } from 'react';
 import { TableRow, TableCell, TextField, Select, MenuItem, IconButton, Tooltip, Box } from '@mui/material';
-import { Save, Cancel, Edit } from '@mui/icons-material';
+import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
 import { WORK_TIME_OPTIONS, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
 
-export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, employees }) {
+export default function EditTaskRow({
+  task,
+  onUpdate,
+  onCancel,
+  taskTypes,
+  employees,
+  onOpenSharedModal
+}) {
+  const isShared = task.isSplitTask;
+
   const [localTask, setLocalTask] = useState(() => ({
     id: task.id,
     folderPath: task.folderPath || '',
@@ -15,7 +23,8 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
     type: task.type || '',
     employeeName: task.employeeName || '',
     parentRowNumber: task.parentRowNumber,
-    statusText: task.statusText || ''
+    statusText: task.statusText || '',
+    isSplitTask: task.isSplitTask
   }));
 
   const prevIdRef = useRef(task.id);
@@ -31,7 +40,8 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
         type: task.type || '',
         employeeName: task.employeeName || '',
         parentRowNumber: task.parentRowNumber,
-        statusText: task.statusText || ''
+        statusText: task.statusText || '',
+        isSplitTask: task.isSplitTask
       });
       prevIdRef.current = task.id;
     }
@@ -42,10 +52,6 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
   };
 
   const handleSave = () => {
-
-      console.log('[EditTaskRow] Сохраняем задачу:', localTask);
-      console.log('[EditTaskRow] Дедлайн (ISO):', localTask.deadline);
-
     onUpdate(localTask);
   };
 
@@ -59,7 +65,16 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
       <TableCell sx={{ width: '3%' }}>
-        <Edit color="warning" fontSize="small" />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Edit color="warning" fontSize="small" />
+          {isShared && (
+            <Tooltip title="Общая задача — редактировать назначения" arrow>
+              <IconButton size="small" onClick={() => onOpenSharedModal(localTask)}>
+                <PeopleAlt fontSize="small" sx={{ color: '#8b5cf6' }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
       </TableCell>
 
       <TableCell sx={{ width: '15%' }}>
@@ -126,6 +141,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
         <Select
           size="small"
           multiple
+          disabled={isShared}
           value={localTask.type ? localTask.type.split(', ') : []}
           onChange={(e) => handleFieldChange('type', e.target.value.join(', '))}
           renderValue={(selected) => selected.join(', ')}
@@ -138,6 +154,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
       <TableCell sx={{ width: '8%' }}>
         <Select
           size="small"
+          disabled={isShared}
           value={localTask.employeeName}
           onChange={(e) => handleFieldChange('employeeName', e.target.value)}
           fullWidth

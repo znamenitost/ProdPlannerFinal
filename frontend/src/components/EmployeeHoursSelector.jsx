@@ -1,4 +1,5 @@
 import { Box, Checkbox, FormControlLabel, TextField, Typography, Button, Grid } from '@mui/material';
+import { CheckCircle } from '@mui/icons-material';
 import { useState, useEffect } from 'react';
 
 export default function EmployeeHoursSelector({ employees, totalHours, onChange, initialAssignments = [] }) {
@@ -93,8 +94,13 @@ export default function EmployeeHoursSelector({ employees, totalHours, onChange,
           <Button size="small" onClick={distributeEqually} variant="outlined" sx={{ mr: 2 }}>
             Разделить поровну
           </Button>
-          <Typography variant="caption" color={remaining < -0.01 ? 'error' : 'textSecondary'}>
-            Распределено: {totalAssigned.toFixed(1)} / {totalHours} ч. {remaining > 0.01 ? `Осталось: ${remaining.toFixed(1)} ч` : remaining < -0.01 ? `Перебор: ${(-remaining).toFixed(1)} ч` : '✓'}
+          <Typography variant="caption" color={remaining < -0.01 ? 'error' : 'textSecondary'} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+            Распределено: {totalAssigned.toFixed(1)} / {totalHours} ч.{' '}
+            {remaining > 0.01
+              ? `Осталось: ${remaining.toFixed(1)} ч`
+              : remaining < -0.01
+                ? `Перебор: ${(-remaining).toFixed(1)} ч`
+                : <CheckCircle sx={{ fontSize: 14, color: 'success.main' }} />}
           </Typography>
         </Box>
       )}

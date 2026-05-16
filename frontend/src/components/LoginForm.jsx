@@ -9,7 +9,8 @@ import {
   Container,
   Avatar,
   Card,
-  CardContent
+  CardContent,
+  CircularProgress
 } from '@mui/material';
 import { Login as LoginIcon, Person, AdminPanelSettings } from '@mui/icons-material';
 
@@ -189,9 +190,10 @@ export default function LoginForm({ onLogin }) {
                 variant="contained"
                 size="large"
                 disabled={loading}
+                startIcon={loading ? <CircularProgress size={18} color="inherit" /> : null}
                 sx={{ mt: 2 }}
               >
-                {loading ? 'Загрузка...' : 'Войти'}
+                {loading ? 'Вход...' : 'Войти'}
               </Button>
             </Box>
           </form>

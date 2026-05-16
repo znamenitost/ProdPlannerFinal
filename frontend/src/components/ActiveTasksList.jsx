@@ -2,8 +2,10 @@
 import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../services/api';
 import { Warning, Error, FolderOpen, AccessTime, Event, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
 import { Tooltip, Chip, IconButton, Box, Typography } from '@mui/material';
+import { useUiFeedback } from '../context/UiFeedbackContext';
 
 export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
+  const { showError, showWarning } = useUiFeedback();
   const handleAction = async (id, action, progress = null) => {
     try {
       if (action === 'start') await startTask(id);
@@ -15,13 +17,13 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       setTimeout(() => onUpdate(), 100);
     } catch (err) {
       console.error('Ошибка действия:', err);
-      alert('Не удалось выполнить действие. Проверьте консоль.');
+      showError('Не удалось выполнить действие. Проверьте консоль.');
     }
   };
 
   const openFile = async (filePath) => {
     if (!filePath) {
-      alert('Путь к файлу не указан');
+      showWarning('Путь к файлу не указан');
       return;
     }
     try {
@@ -35,7 +37,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       });
       const data = await response.json();
       if (!response.ok) {
-        alert(data.message || 'Ошибка открытия файла');
+        showError(data.message || 'Ошибка открытия файла');
         return;
       }
       if (data.downloadUrl) {
@@ -43,7 +45,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       }
     } catch (err) {
       console.error('Ошибка открытия файла:', err);
-      alert('Не удалось открыть файл');
+      showError('Не удалось открыть файл');
     }
   };
 

@@ -2,6 +2,8 @@ import { Fragment } from 'react';
 import {
   TableRow,
   TableCell,
+  Table,
+  TableBody,
   Box,
   IconButton,
   Tooltip,
@@ -292,8 +294,8 @@ export default function ParentTaskRow({
         <TableRow>
           <TableCell colSpan={10} sx={{ p: 0 }}>
             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-              <table style={{ width: '100%', paddingLeft: '48px' }}>
-                <tbody>
+              <Table size="small" sx={{ width: '100%', pl: 6 }}>
+                <TableBody>
                   {(childrenTasks || []).map(child => (
                     <ChildTaskRow
                       key={child.id}
@@ -310,8 +312,8 @@ export default function ParentTaskRow({
                       selectedEmployeeForHighlight={selectedEmployeeForHighlight}
                     />
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </Collapse>
           </TableCell>
         </TableRow>

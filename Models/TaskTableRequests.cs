@@ -10,6 +10,8 @@ public class CreateTaskRequest
     public string? Type { get; set; }
     public string? EmployeeName { get; set; }
     public int? ParentRowNumber { get; set; }
+    /// <summary>Назначения для общей задачи (2+ сотрудника — создаётся родитель и дочерние).</summary>
+    public List<SplitPart>? Parts { get; set; }
 }
 
 public class UpdateTaskRequest

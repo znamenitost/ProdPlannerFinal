@@ -1,23 +1,39 @@
-// ./frontend/src/components/NewTaskRow.jsx
-import { TableRow, TableCell, TextField, Select, MenuItem, FormControl, InputLabel, Box, Chip, IconButton, Tooltip, Button } from '@mui/material';
-import { Save, Cancel, AutoAwesome } from '@mui/icons-material';
+import {
+  TableRow,
+  TableCell,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Box,
+  Chip,
+  IconButton,
+  Tooltip
+} from '@mui/material';
+import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
 import { WORK_TIME_OPTIONS, combineDateTime } from '../utils/dateTimeHelpers';
 
-const DEFAULT_TIME = '15:00'; // локальная константа
+const DEFAULT_TIME = '15:00';
 
-export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, onSave, onCancel }) {
-  // Текущая дата из newRow.deadline (если есть) или пустая строка
+export default function NewTaskRow({
+  newRow,
+  setNewRow,
+  taskTypes,
+  employees,
+  onSave,
+  onCancel,
+  onOpenSharedModal
+}) {
   const currentDate = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(0, 10) : '';
-  // Текущее время из newRow.deadline (если есть) или DEFAULT_TIME
   const currentTime = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(11, 16) : DEFAULT_TIME;
+  const isShared = newRow.isSharedTask && (newRow.assigneeParts?.length ?? 0) >= 2;
 
   const handleDateChange = (e) => {
-    // ✅ При смене даты ВСЕГДА ставим время DEFAULT_TIME (15:00)
     setNewRow({ ...newRow, deadline: combineDateTime(e.target.value, DEFAULT_TIME) });
   };
 
   const handleTimeChange = (e) => {
-    // При смене времени оставляем текущую дату
     setNewRow({ ...newRow, deadline: combineDateTime(currentDate, e.target.value) });
   };
 
@@ -26,7 +42,7 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
       <TableCell>
         <AutoAwesome color="warning" fontSize="small" />
       </TableCell>
-      
+
       <TableCell>
         <TextField
           size="small"
@@ -36,7 +52,7 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
           fullWidth
         />
       </TableCell>
-      
+
       <TableCell>
         <TextField
           size="small"
@@ -46,7 +62,7 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
           fullWidth
         />
       </TableCell>
-      
+
       <TableCell>
         <TextField
           size="small"
@@ -56,7 +72,7 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
           fullWidth
         />
       </TableCell>
-      
+
       <TableCell>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <TextField
@@ -76,19 +92,28 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
           </Select>
         </Box>
       </TableCell>
-      
+
       <TableCell>
         <TextField
           type="number"
           size="small"
-          value={newRow.estimateHours}
-          onChange={(e) => setNewRow({ ...newRow, estimateHours: parseFloat(e.target.value) })}
+          value={newRow.estimateHours === '' || newRow.estimateHours == null ? '' : newRow.estimateHours}
+          onChange={(e) => {
+            const v = e.target.value;
+            setNewRow({
+              ...newRow,
+              estimateHours: v === '' ? '' : parseFloat(v) || 0
+            });
+          }}
+          disabled={isShared}
+          placeholder={isShared ? '' : 'ч'}
+          slotProps={{ htmlInput: { step: 0.5, min: 0 } }}
           sx={{ width: 80 }}
         />
       </TableCell>
-      
+
       <TableCell>
-        <FormControl size="small" fullWidth>
+        <FormControl size="small" fullWidth disabled={isShared}>
           <InputLabel>Типы работ</InputLabel>
           <Select
             multiple
@@ -101,22 +126,42 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
           </Select>
         </FormControl>
       </TableCell>
-      
+
       <TableCell>
-        <FormControl size="small" fullWidth>
-          <Select
-            value={newRow.employeeName}
-            onChange={(e) => setNewRow({ ...newRow, employeeName: e.target.value })}
-          >
-            {employees.map(e => <MenuItem key={e} value={e}>{e}</MenuItem>)}
-          </Select>
-        </FormControl>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <FormControl size="small" sx={{ flex: 1 }} disabled={isShared}>
+            <InputLabel id="new-task-employee-label">Сотрудник</InputLabel>
+            <Select
+              labelId="new-task-employee-label"
+              value={newRow.employeeName ?? ''}
+              label="Сотрудник"
+              displayEmpty
+              onChange={(e) => setNewRow({ ...newRow, employeeName: e.target.value })}
+            >
+              {employees.map((e) => (
+                <MenuItem key={e} value={e}>
+                  {e}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Tooltip title={isShared ? 'Общая задача — изменить назначения' : 'Сделать общей задачей'} arrow>
+            <IconButton size="small" onClick={onOpenSharedModal} sx={{ flexShrink: 0 }}>
+              <PeopleAlt fontSize="small" sx={{ color: isShared ? '#8b5cf6' : '#94a3b8' }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </TableCell>
-      
+
       <TableCell>
-        <Chip label="Новая" size="small" color="warning" />
+        <Chip
+          label={isShared ? `Общая · ${newRow.assigneeParts.length}` : 'Новая'}
+          size="small"
+          color={isShared ? 'secondary' : 'warning'}
+          variant={isShared ? 'outlined' : 'filled'}
+        />
       </TableCell>
-      
+
       <TableCell>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <IconButton size="small" color="primary" onClick={onSave}>
