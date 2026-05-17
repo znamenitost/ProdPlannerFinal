@@ -191,6 +191,22 @@ public async Task DeleteTaskAsync(int id)
             };
         }
 
+        public async Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(IReadOnlyList<int> parentIds)
+        {
+            if (parentIds.Count == 0)
+                return new Dictionary<int, List<ProductionTask>>();
+
+            var allChildren = await _context.ProductionTasks
+                .Where(c => c.ParentRowNumber.HasValue &&
+                            parentIds.Contains(c.ParentRowNumber.Value) &&
+                            c.IsSplitTask)
+                .ToListAsync();
+
+            return allChildren
+                .GroupBy(c => c.ParentRowNumber!.Value)
+                .ToDictionary(g => g.Key, g => g.ToList());
+        }
+
         // Оптимизированный метод ReorderTasksAsync без загрузки всех задач в память
         public async Task ReorderTasksAsync(List<int> orderedIds)
         {

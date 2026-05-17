@@ -1,3 +1,133 @@
+=== ./frontend/src/context/UiFeedbackContext.jsx ===
+import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import {
+  Alert,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  Snackbar,
+} from '@mui/material';
+
+const UiFeedbackContext = createContext(null);
+
+const defaultConfirmState = {
+  open: false,
+  title: 'Подтверждение',
+  message: '',
+  confirmLabel: 'Подтвердить',
+  cancelLabel: 'Отмена',
+  confirmColor: 'primary',
+};
+
+export function UiFeedbackProvider({ children }) {
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'info',
+  });
+  const [confirmState, setConfirmState] = useState(defaultConfirmState);
+  const confirmResolverRef = useRef(null);
+
+  const showSnackbar = useCallback((message, severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  }, []);
+
+  const showSuccess = useCallback((message) => showSnackbar(message, 'success'), [showSnackbar]);
+  const showError = useCallback((message) => showSnackbar(message, 'error'), [showSnackbar]);
+  const showWarning = useCallback((message) => showSnackbar(message, 'warning'), [showSnackbar]);
+  const showInfo = useCallback((message) => showSnackbar(message, 'info'), [showSnackbar]);
+
+  const confirm = useCallback((options = {}) => {
+    return new Promise((resolve) => {
+      confirmResolverRef.current = resolve;
+      setConfirmState({
+        open: true,
+        title: options.title ?? 'Подтверждение',
+        message: options.message ?? '',
+        confirmLabel: options.confirmLabel ?? 'Подтвердить',
+        cancelLabel: options.cancelLabel ?? 'Отмена',
+        confirmColor: options.confirmColor ?? 'primary',
+      });
+    });
+  }, []);
+
+  const resolveConfirm = useCallback((confirmed) => {
+    setConfirmState((prev) => ({ ...prev, open: false }));
+    confirmResolverRef.current?.(confirmed);
+    confirmResolverRef.current = null;
+  }, []);
+
+  const handleSnackbarClose = (_event, reason) => {
+    if (reason === 'clickaway') return;
+    setSnackbar((prev) => ({ ...prev, open: false }));
+  };
+
+  const value = {
+    showSnackbar,
+    showSuccess,
+    showError,
+    showWarning,
+    showInfo,
+    confirm,
+  };
+
+  return (
+    <UiFeedbackContext.Provider value={value}>
+      {children}
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={handleSnackbarClose}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+
+      <Dialog
+        open={confirmState.open}
+        onClose={() => resolveConfirm(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{confirmState.title}</DialogTitle>
+        {confirmState.message && (
+          <DialogContent>
+            <DialogContentText>{confirmState.message}</DialogContentText>
+          </DialogContent>
+        )}
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => resolveConfirm(false)}>{confirmState.cancelLabel}</Button>
+          <Button
+            variant="contained"
+            color={confirmState.confirmColor}
+            onClick={() => resolveConfirm(true)}
+          >
+            {confirmState.confirmLabel}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </UiFeedbackContext.Provider>
+  );
+}
+
+export function useUiFeedback() {
+  const context = useContext(UiFeedbackContext);
+  if (!context) {
+    throw new Error('useUiFeedback must be used within UiFeedbackProvider');
+  }
+  return context;
+}
 === ./frontend/src/utils/taskHelpers.jsx ===
 // ./frontend/src/utils/taskHelpers.js
 import { PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
@@ -333,7 +463,6 @@ export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
     </>
   );
 }=== ./frontend/src/components/TaskTable.jsx ===
-import { useState, useEffect, useCallback } from 'react';
 import {
   Paper,
   Table,
@@ -348,297 +477,58 @@ import EditTaskRow from './EditTaskRow';
 import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
-import useTaskTableApi from '../hooks/useTaskTableApi';
-import { combineDateTime, DEFAULT_TIME } from '../utils/dateTimeHelpers';
+import useTaskTableController from '../hooks/taskTable/useTaskTableController';
 
-
-export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, currentUser, selectedEmployeeForHighlight }) {
-  const [rows, setRows] = useState([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(50);
-  const [editingId, setEditingId] = useState(null);
-  const [newRow, setNewRow] = useState(null);
-  const [splitModalOpen, setSplitModalOpen] = useState(false);
-  const [selectedTaskForSplit, setSelectedTaskForSplit] = useState(null);
-  const [commentDialogOpen, setCommentDialogOpen] = useState(false);
-  const [selectedCommentTask, setSelectedCommentTask] = useState(null);
-  const [highlightMyTasks, setHighlightMyTasks] = useState(false);
-  const [employees] = useState(['Дима', 'Яромир', 'Павел']);
-  const [taskTypes] = useState(['Резка', 'УФ печать', 'Монтаж', 'Дизайн', 'Сборка', 'Упаковка']);
-
+export default function TaskTable({
+  refreshTrigger,
+  onTaskUpdate,
+  userRole,
+  currentUser,
+  selectedEmployeeForHighlight
+}) {
   const isAdmin = userRole === 'Admin';
-  const api = useTaskTableApi();
-
-  const [expandedRows, setExpandedRows] = useState(new Set());
-  const [childrenCache, setChildrenCache] = useState(new Map());
-  const [loadingChildren, setLoadingChildren] = useState(new Set());
-
-  const loadRows = useCallback(async () => {
-    try {
-      const result = await api.loadRows(page + 1, rowsPerPage, selectedEmployeeForHighlight || '');
-      setRows(result.items);
-      setTotalCount(result.totalCount);
-    } catch (err) {
-      console.error('Ошибка загрузки задач:', err);
-    }
-  }, [api, page, rowsPerPage, selectedEmployeeForHighlight]);
-
-  useEffect(() => {
-    loadRows();
-  }, [refreshTrigger, page, rowsPerPage, selectedEmployeeForHighlight, loadRows]);
-
-  const loadChildrenForParent = useCallback(async (parentId) => {
-    if (childrenCache.has(parentId)) return childrenCache.get(parentId);
-    if (loadingChildren.has(parentId)) return;
-    
-    setLoadingChildren(prev => new Set(prev).add(parentId));
-    try {
-      const children = await api.loadChildren(parentId);
-      setChildrenCache(prev => new Map(prev).set(parentId, children));
-      return children;
-    } catch (err) {
-      console.error('Ошибка загрузки детей', err);
-      return [];
-    } finally {
-      setLoadingChildren(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(parentId);
-        return newSet;
-      });
-    }
-  }, [api, childrenCache, loadingChildren]);
-
-  // ========== НОВАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ КЕША ДЕТЕЙ ==========
-  const refreshChildren = useCallback(async (parentId) => {
-  if (expandedRows.has(parentId)) {
-    // Родитель раскрыт — обновляем детей без удаления кеша (чтобы не схлопывалось)
-    setLoadingChildren(prev => new Set(prev).add(parentId));
-    try {
-      const children = await api.loadChildren(parentId);
-      setChildrenCache(prev => new Map(prev).set(parentId, children));
-    } catch (err) {
-      console.error('Ошибка обновления детей', err);
-    } finally {
-      setLoadingChildren(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(parentId);
-        return newSet;
-      });
-    }
-  } else {
-    // Родитель свёрнут — можно удалить кеш, чтобы при разворачивании загрузить свежее
-    setChildrenCache(prev => {
-      const newMap = new Map(prev);
-      newMap.delete(parentId);
-      return newMap;
-    });
-  }
-}, [expandedRows, api.loadChildren]);
-
-  const toggleExpand = async (parentId) => {
-    if (expandedRows.has(parentId)) {
-      setExpandedRows(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(parentId);
-        return newSet;
-      });
-    } else {
-      await loadChildrenForParent(parentId);
-      setExpandedRows(prev => new Set(prev).add(parentId));
-    }
-  };
-
-  const refresh = () => {
-    loadRows();
-    if (onTaskUpdate) onTaskUpdate();
-  };
-
-  const handleSaveNewRow = async () => {
-    try {
-      await api.createRow({
-        folderPath: newRow.folderPath,
-        fileName: newRow.fileName,
-        comment: newRow.comment,
-        deadline: newRow.deadline,
-        estimateHours: newRow.estimateHours,
-        type: (newRow.types || []).join(', '),
-        employeeName: newRow.employeeName,
-        parentRowNumber: null
-      });
-      setNewRow(null);
-      refresh();
-    } catch (err) {
-      console.error('Ошибка сохранения:', err);
-      alert('Ошибка сохранения задачи');
-    }
-  };
-
-  const handleUpdateRow = async (row) => {
-    try {
-      await api.updateRow(row.id, {
-        folderPath: row.folderPath,
-        fileName: row.fileName,
-        comment: row.comment,
-        deadline: row.deadline,
-        estimateHours: row.estimateHours,
-        type: row.type,
-        employeeName: row.employeeName,
-        parentRowNumber: row.parentRowNumber,
-        statusText: row.statusText
-      });
-      setEditingId(null);
-      refresh();
-    } catch (err) {
-      console.error('Ошибка обновления:', err);
-      alert('Ошибка обновления задачи');
-    }
-  };
-
-  // ========== ИСПРАВЛЕННЫЕ ОБРАБОТЧИКИ С ВЫЗОВОМ refreshChildren ==========
-  const handleStartTask = async (row) => {
-    try {
-      await api.startTask(row.id);
-      refresh();
-      if (row.parentRowNumber) {
-        await refreshChildren(row.parentRowNumber);
-      }
-    } catch (err) { 
-      console.error(err);
-    }
-  };
-
-  const handlePauseTask = async (row) => {
-    try {
-      await api.pauseTask(row.id);
-      refresh();
-      if (row.parentRowNumber) {
-        await refreshChildren(row.parentRowNumber);
-      }
-    } catch (err) { 
-      console.error(err);
-    }
-  };
-
-  const handleResumeTask = async (row) => {
-    try {
-      await api.resumeTask(row.id);
-      refresh();
-      if (row.parentRowNumber) {
-        await refreshChildren(row.parentRowNumber);
-      }
-    } catch (err) { 
-      console.error(err);
-    }
-  };
-
-  const handleCompleteTask = async (row) => {
-    try {
-      await api.completeTask(row.id);
-      refresh();
-      if (row.parentRowNumber) {
-        await refreshChildren(row.parentRowNumber);
-      }
-    } catch (err) { 
-      console.error(err);
-    }
-  };
-
-  const handleDeleteRow = async (id) => {
-    if (!window.confirm('Удалить задачу?')) return;
-    try {
-      await api.deleteRow(id);
-      refresh();
-    } catch (err) { console.error(err); }
-  };
-
-  const handleSplitTask = async (row) => {
-    try {
-      const task = await api.getTaskForSplit(row.employeeName, row.id);
-      setSelectedTaskForSplit(task);
-      setSplitModalOpen(true);
-    } catch (err) {
-      alert(err.message);
-    }
-  };
-
-  const handleSplitSuccess = () => refresh();
-
-  const handleOpenComment = (row) => {
-    setSelectedCommentTask(row);
-    setCommentDialogOpen(true);
-  };
-
-  const handleSaveComment = async (newComment) => {
-    if (!selectedCommentTask) return;
-    const updatedTask = { ...selectedCommentTask, comment: newComment };
-    try {
-      await api.updateRow(updatedTask.id, updatedTask);
-      setCommentDialogOpen(false);
-      setSelectedCommentTask(null);
-      refresh();
-    } catch (err) {
-      console.error(err);
-      alert('Ошибка сохранения комментария');
-    }
-  };
-
-
-    const handleAddNewRow = () => {
-      const today = new Date().toISOString().slice(0, 10);
-      setNewRow({
-        folderPath: '',
-        fileName: '',
-        comment: '',
-        deadline: combineDateTime(today, DEFAULT_TIME), // сегодня, 15:00
-        estimateHours: 1,
-        types: [taskTypes[0]],
-        employeeName: employees[0],
-        parentRowNumber: null
-      });
-    };
-
-  const toggleHighlight = () => setHighlightMyTasks(!highlightMyTasks);
-  const handleChangePage = (event, newPage) => setPage(newPage);
-  const handleChangeRowsPerPage = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
+  const table = useTaskTableController({
+    refreshTrigger,
+    onTaskUpdate,
+    selectedEmployeeForHighlight
+  });
 
   return (
     <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
       <TaskTableToolbar
         isAdmin={isAdmin}
-        onAddNew={handleAddNewRow}
-        highlightMyTasks={highlightMyTasks}
-        onToggleHighlight={toggleHighlight}
+        onAddNew={table.handleAddNewRow}
+        highlightMyTasks={table.highlightMyTasks}
+        onToggleHighlight={table.toggleHighlight}
       />
 
       <TableContainer sx={{ maxHeight: '70vh', overflow: 'auto' }}>
         <Table stickyHeader size="small">
           <TaskTableHead isAdmin={isAdmin} />
           <TableBody>
-            {newRow && isAdmin && (
+            {table.newRow && isAdmin && (
               <NewTaskRow
-                newRow={newRow}
-                setNewRow={setNewRow}
-                taskTypes={taskTypes}
-                employees={employees}
-                onSave={handleSaveNewRow}
-                onCancel={() => setNewRow(null)}
+                newRow={table.newRow}
+                setNewRow={table.setNewRow}
+                taskTypes={table.taskTypes}
+                employees={table.employees}
+                onSave={table.handleSaveNewRow}
+                onCancel={() => table.setNewRow(null)}
+                onOpenSharedModal={table.handleOpenNewSharedModal}
               />
             )}
-            {rows.map(parent => {
-              const children = childrenCache.get(parent.id) || [];
-              const isExpanded = expandedRows.has(parent.id);
-              return editingId === parent.id ? (
+            {table.rows.map(parent => {
+              const children = table.childrenCache.get(parent.id) || [];
+              const isExpanded = table.expandedRows.has(parent.id);
+              return table.editingId === parent.id ? (
                 <EditTaskRow
                   key={parent.id}
                   task={parent}
-                  onUpdate={handleUpdateRow}
-                  onCancel={() => setEditingId(null)}
-                  taskTypes={taskTypes}
-                  employees={employees}
+                  onUpdate={table.handleUpdateRow}
+                  onCancel={() => table.setEditingId(null)}
+                  taskTypes={table.taskTypes}
+                  employees={table.employees}
+                  onOpenSharedModal={table.handleOpenEditSharedModal}
                 />
               ) : (
                 <ParentTaskRow
@@ -646,22 +536,22 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
                   task={parent}
                   childrenTasks={children}
                   isExpanded={isExpanded}
-                  onToggleExpand={toggleExpand}
-                  onOpenFile={api.openFile}
-                  onStart={handleStartTask}
-                  onPause={handlePauseTask}
-                  onResume={handleResumeTask}
-                  onComplete={handleCompleteTask}
-                  onEdit={() => setEditingId(parent.id)}
-                  onDelete={handleDeleteRow}
-                  onSplit={handleSplitTask}
-                  onOpenComment={handleOpenComment}
+                  onToggleExpand={table.toggleExpand}
+                  onOpenFile={table.api.openFile}
+                  onStart={table.handleStartTask}
+                  onPause={table.handlePauseTask}
+                  onResume={table.handleResumeTask}
+                  onComplete={table.handleCompleteTask}
+                  onEdit={() => table.setEditingId(parent.id)}
+                  onDelete={table.handleDeleteRow}
+                  onSplit={table.handleSplitTask}
+                  onOpenComment={table.handleOpenComment}
                   canEdit={isAdmin}
                   canDelete={isAdmin}
                   canSplit={isAdmin}
                   canChangeStatus={!isAdmin}
                   currentUser={currentUser}
-                  highlightMyTasks={highlightMyTasks}
+                  highlightMyTasks={table.highlightMyTasks}
                   selectedEmployeeForHighlight={selectedEmployeeForHighlight}
                 />
               );
@@ -674,34 +564,84 @@ export default function TaskTable({ refreshTrigger, onTaskUpdate, userRole, curr
         <TablePagination
           rowsPerPageOptions={[25, 50, 100]}
           component="div"
-          count={totalCount}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
+          count={table.totalCount}
+          rowsPerPage={table.rowsPerPage}
+          page={table.page}
+          onPageChange={table.handleChangePage}
+          onRowsPerPageChange={table.handleChangeRowsPerPage}
         />
       )}
 
       <CommentDialog
-        open={commentDialogOpen}
-        comment={selectedCommentTask?.comment || ''}
-        onSave={handleSaveComment}
-        onClose={() => setCommentDialogOpen(false)}
+        open={table.commentDialogOpen}
+        comment={table.selectedCommentTask?.comment || ''}
+        onSave={table.handleSaveComment}
+        onClose={() => table.setCommentDialogOpen(false)}
       />
 
       <SplitTaskModal
-        open={splitModalOpen}
-        task={selectedTaskForSplit}
-        onClose={() => setSplitModalOpen(false)}
-        onSuccess={handleSplitSuccess}
+        open={table.splitModalOpen}
+        mode={table.splitModalMode}
+        task={table.splitModalTask}
+        initialParts={table.splitModalInitialParts}
+        employees={table.employees}
+        taskTypes={table.taskTypes}
+        onClose={table.closeSplitModal}
+        onSuccess={table.handleSplitSuccess}
+        onDraftApply={table.handleDraftApply}
       />
     </Paper>
   );
-}=== ./frontend/src/components/ParentTaskRow.jsx ===
+}
+=== ./frontend/src/components/LoadingState.jsx ===
+import { Box, CircularProgress, Skeleton, Typography } from '@mui/material';
+
+export function LoadingState({ message = 'Загрузка...', fullScreen = false, size = 40 }) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 2,
+        py: fullScreen ? 0 : 4,
+        ...(fullScreen && { minHeight: '100vh' }),
+      }}
+    >
+      <CircularProgress size={size} color="primary" />
+      {message && (
+        <Typography variant="body2" color="text.secondary">
+          {message}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+export function CalendarLoadingSkeleton() {
+  return (
+    <Box sx={{ py: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 3 }}>
+        <Skeleton variant="circular" width={40} height={40} />
+        <Skeleton variant="text" width={220} height={32} />
+        <Skeleton variant="circular" width={40} height={40} />
+      </Box>
+      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+        {[1, 2, 3, 4, 5].map((i) => (
+          <Skeleton key={i} variant="rounded" width={160} height={320} sx={{ borderRadius: 2 }} />
+        ))}
+      </Box>
+    </Box>
+  );
+}
+=== ./frontend/src/components/ParentTaskRow.jsx ===
 import { Fragment } from 'react';
 import {
   TableRow,
   TableCell,
+  Table,
+  TableBody,
   Box,
   IconButton,
   Tooltip,
@@ -992,8 +932,8 @@ export default function ParentTaskRow({
         <TableRow>
           <TableCell colSpan={10} sx={{ p: 0 }}>
             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-              <table style={{ width: '100%', paddingLeft: '48px' }}>
-                <tbody>
+              <Table size="small" sx={{ width: '100%', pl: 6 }}>
+                <TableBody>
                   {(childrenTasks || []).map(child => (
                     <ChildTaskRow
                       key={child.id}
@@ -1010,8 +950,8 @@ export default function ParentTaskRow({
                       selectedEmployeeForHighlight={selectedEmployeeForHighlight}
                     />
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </Collapse>
           </TableCell>
         </TableRow>
@@ -1384,7 +1324,6 @@ export default function CompletedTasksList({ employee, refresh }) {
                 <TableRow key={task.id} hover>
                   <TableCell>
                     <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-                      {/* Иконка вместо текстового эмодзи ✅ */}
                       <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} />
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {displayName}
@@ -1448,27 +1387,89 @@ export default function CompletedTasksList({ employee, refresh }) {
       )}
     </Paper>
   );
-}=== ./frontend/src/components/NewTaskRow.jsx ===
-// ./frontend/src/components/NewTaskRow.jsx
-import { TableRow, TableCell, TextField, Select, MenuItem, FormControl, InputLabel, Box, Chip, IconButton, Tooltip, Button } from '@mui/material';
-import { Save, Cancel, AutoAwesome } from '@mui/icons-material';
+}=== ./frontend/src/components/CurrentDateTime.jsx ===
+import { useState, useEffect } from 'react';
+import { Box, Typography } from '@mui/material';
+import { Schedule } from '@mui/icons-material';
+
+const MOSCOW_TZ = 'Europe/Moscow';
+
+function formatTime(date) {
+  return date.toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: MOSCOW_TZ,
+  });
+}
+
+function formatDate(date) {
+  return date.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: MOSCOW_TZ,
+  });
+}
+
+export default function CurrentDateTime() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, bgcolor: '#f0f4f8', px: 2, py: 1, borderRadius: 3 }}>
+      <Schedule sx={{ color: '#7c9ebf' }} />
+      <Box sx={{ textAlign: 'center' }}>
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+          {formatDate(now)}
+        </Typography>
+        <Typography variant="h6" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+          {formatTime(now)}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+=== ./frontend/src/components/NewTaskRow.jsx ===
+import {
+  TableRow,
+  TableCell,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Box,
+  Chip,
+  IconButton,
+  Tooltip
+} from '@mui/material';
+import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
 import { WORK_TIME_OPTIONS, combineDateTime } from '../utils/dateTimeHelpers';
 
-const DEFAULT_TIME = '15:00'; // локальная константа
+const DEFAULT_TIME = '15:00';
 
-export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, onSave, onCancel }) {
-  // Текущая дата из newRow.deadline (если есть) или пустая строка
+export default function NewTaskRow({
+  newRow,
+  setNewRow,
+  taskTypes,
+  employees,
+  onSave,
+  onCancel,
+  onOpenSharedModal
+}) {
   const currentDate = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(0, 10) : '';
-  // Текущее время из newRow.deadline (если есть) или DEFAULT_TIME
   const currentTime = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(11, 16) : DEFAULT_TIME;
+  const isShared = newRow.isSharedTask && (newRow.assigneeParts?.length ?? 0) >= 2;
 
   const handleDateChange = (e) => {
-    // ✅ При смене даты ВСЕГДА ставим время DEFAULT_TIME (15:00)
     setNewRow({ ...newRow, deadline: combineDateTime(e.target.value, DEFAULT_TIME) });
   };
 
   const handleTimeChange = (e) => {
-    // При смене времени оставляем текущую дату
     setNewRow({ ...newRow, deadline: combineDateTime(currentDate, e.target.value) });
   };
 
@@ -1477,7 +1478,7 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
       <TableCell>
         <AutoAwesome color="warning" fontSize="small" />
       </TableCell>
-      
+
       <TableCell>
         <TextField
           size="small"
@@ -1487,7 +1488,7 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
           fullWidth
         />
       </TableCell>
-      
+
       <TableCell>
         <TextField
           size="small"
@@ -1497,7 +1498,7 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
           fullWidth
         />
       </TableCell>
-      
+
       <TableCell>
         <TextField
           size="small"
@@ -1507,7 +1508,7 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
           fullWidth
         />
       </TableCell>
-      
+
       <TableCell>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <TextField
@@ -1527,19 +1528,28 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
           </Select>
         </Box>
       </TableCell>
-      
+
       <TableCell>
         <TextField
           type="number"
           size="small"
-          value={newRow.estimateHours}
-          onChange={(e) => setNewRow({ ...newRow, estimateHours: parseFloat(e.target.value) })}
+          value={newRow.estimateHours === '' || newRow.estimateHours == null ? '' : newRow.estimateHours}
+          onChange={(e) => {
+            const v = e.target.value;
+            setNewRow({
+              ...newRow,
+              estimateHours: v === '' ? '' : parseFloat(v) || 0
+            });
+          }}
+          disabled={isShared}
+          placeholder={isShared ? '' : 'ч'}
+          slotProps={{ htmlInput: { step: 0.5, min: 0 } }}
           sx={{ width: 80 }}
         />
       </TableCell>
-      
+
       <TableCell>
-        <FormControl size="small" fullWidth>
+        <FormControl size="small" fullWidth disabled={isShared}>
           <InputLabel>Типы работ</InputLabel>
           <Select
             multiple
@@ -1552,22 +1562,42 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
           </Select>
         </FormControl>
       </TableCell>
-      
+
       <TableCell>
-        <FormControl size="small" fullWidth>
-          <Select
-            value={newRow.employeeName}
-            onChange={(e) => setNewRow({ ...newRow, employeeName: e.target.value })}
-          >
-            {employees.map(e => <MenuItem key={e} value={e}>{e}</MenuItem>)}
-          </Select>
-        </FormControl>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <FormControl size="small" sx={{ flex: 1 }} disabled={isShared}>
+            <InputLabel id="new-task-employee-label">Сотрудник</InputLabel>
+            <Select
+              labelId="new-task-employee-label"
+              value={newRow.employeeName ?? ''}
+              label="Сотрудник"
+              displayEmpty
+              onChange={(e) => setNewRow({ ...newRow, employeeName: e.target.value })}
+            >
+              {employees.map((e) => (
+                <MenuItem key={e} value={e}>
+                  {e}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Tooltip title={isShared ? 'Общая задача — изменить назначения' : 'Сделать общей задачей'} arrow>
+            <IconButton size="small" onClick={onOpenSharedModal} sx={{ flexShrink: 0 }}>
+              <PeopleAlt fontSize="small" sx={{ color: isShared ? '#8b5cf6' : '#94a3b8' }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </TableCell>
-      
+
       <TableCell>
-        <Chip label="Новая" size="small" color="warning" />
+        <Chip
+          label={isShared ? `Общая · ${newRow.assigneeParts.length}` : 'Новая'}
+          size="small"
+          color={isShared ? 'secondary' : 'warning'}
+          variant={isShared ? 'outlined' : 'filled'}
+        />
       </TableCell>
-      
+
       <TableCell>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <IconButton size="small" color="primary" onClick={onSave}>
@@ -1580,7 +1610,8 @@ export default function NewTaskRow({ newRow, setNewRow, taskTypes, employees, on
       </TableCell>
     </TableRow>
   );
-}=== ./frontend/src/components/TaskTableToolbar.jsx ===
+}
+=== ./frontend/src/components/TaskTableToolbar.jsx ===
 // ./frontend/src/components/TaskTableToolbar.jsx
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { Add, Lightbulb, TableChart } from '@mui/icons-material';
@@ -1742,7 +1773,8 @@ import {
   Container,
   Avatar,
   Card,
-  CardContent
+  CardContent,
+  CircularProgress
 } from '@mui/material';
 import { Login as LoginIcon, Person, AdminPanelSettings } from '@mui/icons-material';
 
@@ -1922,9 +1954,10 @@ export default function LoginForm({ onLogin }) {
                 variant="contained"
                 size="large"
                 disabled={loading}
+                startIcon={loading ? <CircularProgress size={18} color="inherit" /> : null}
                 sx={{ mt: 2 }}
               >
-                {loading ? 'Загрузка...' : 'Войти'}
+                {loading ? 'Вход...' : 'Войти'}
               </Button>
             </Box>
           </form>
@@ -1944,6 +1977,7 @@ import { Box, Paper, IconButton, Typography, Button, alpha } from '@mui/material
 import { ChevronLeft, ChevronRight, CalendarMonth, Weekend } from '@mui/icons-material';
 import { getWeekCalendar } from '../services/api';
 import DayColumn from './DayColumn';
+import { CalendarLoadingSkeleton } from './LoadingState';
 
 export default function WeekCalendar({ employee, refresh }) {
   const [weekData, setWeekData] = useState(null);
@@ -1952,9 +1986,11 @@ export default function WeekCalendar({ employee, refresh }) {
   const [showWeekend, setShowWeekend] = useState(false);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchData = async () => {
       try {
-        const data = await getWeekCalendar(employee, currentMonday);
+        const data = await getWeekCalendar(employee, currentMonday, { signal: controller.signal });
         setWeekData(data);
         if (data && data.start) {
           const serverMonday = new Date(data.start);
@@ -1963,11 +1999,14 @@ export default function WeekCalendar({ employee, refresh }) {
           }
         }
       } catch (err) {
-        console.error('Ошибка загрузки календаря:', err);
-        setWeekData(null);
+        if (err.name !== 'AbortError') {
+          console.error('Ошибка загрузки календаря:', err);
+          setWeekData(null);
+        }
       }
     };
     fetchData();
+    return () => controller.abort();
   }, [employee, refresh, currentMonday]);
 
   const prevWeek = () => {
@@ -1982,7 +2021,7 @@ export default function WeekCalendar({ employee, refresh }) {
     setCurrentMonday(newMonday);
   };
 
-  if (!weekData) return <Box sx={{ textAlign: 'center', py: 4 }}>Загрузка календаря...</Box>;
+  if (!weekData) return <CalendarLoadingSkeleton />;
 
   const start = new Date(weekData.start);
   const end = new Date(start);
@@ -2065,13 +2104,21 @@ function getMonday(date) {
   d.setHours(0, 0, 0, 0);
   return d;
 }=== ./frontend/src/components/EditTaskRow.jsx ===
-// ./frontend/src/components/EditTaskRow.jsx
 import { useState, useEffect, useRef } from 'react';
 import { TableRow, TableCell, TextField, Select, MenuItem, IconButton, Tooltip, Box } from '@mui/material';
-import { Save, Cancel, Edit } from '@mui/icons-material';
+import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
 import { WORK_TIME_OPTIONS, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
 
-export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, employees }) {
+export default function EditTaskRow({
+  task,
+  onUpdate,
+  onCancel,
+  taskTypes,
+  employees,
+  onOpenSharedModal
+}) {
+  const isShared = task.isSplitTask;
+
   const [localTask, setLocalTask] = useState(() => ({
     id: task.id,
     folderPath: task.folderPath || '',
@@ -2082,7 +2129,8 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
     type: task.type || '',
     employeeName: task.employeeName || '',
     parentRowNumber: task.parentRowNumber,
-    statusText: task.statusText || ''
+    statusText: task.statusText || '',
+    isSplitTask: task.isSplitTask
   }));
 
   const prevIdRef = useRef(task.id);
@@ -2098,7 +2146,8 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
         type: task.type || '',
         employeeName: task.employeeName || '',
         parentRowNumber: task.parentRowNumber,
-        statusText: task.statusText || ''
+        statusText: task.statusText || '',
+        isSplitTask: task.isSplitTask
       });
       prevIdRef.current = task.id;
     }
@@ -2109,10 +2158,6 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
   };
 
   const handleSave = () => {
-
-      console.log('[EditTaskRow] Сохраняем задачу:', localTask);
-      console.log('[EditTaskRow] Дедлайн (ISO):', localTask.deadline);
-
     onUpdate(localTask);
   };
 
@@ -2126,7 +2171,16 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
       <TableCell sx={{ width: '3%' }}>
-        <Edit color="warning" fontSize="small" />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Edit color="warning" fontSize="small" />
+          {isShared && (
+            <Tooltip title="Общая задача — редактировать назначения" arrow>
+              <IconButton size="small" onClick={() => onOpenSharedModal(localTask)}>
+                <PeopleAlt fontSize="small" sx={{ color: '#8b5cf6' }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
       </TableCell>
 
       <TableCell sx={{ width: '15%' }}>
@@ -2193,6 +2247,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
         <Select
           size="small"
           multiple
+          disabled={isShared}
           value={localTask.type ? localTask.type.split(', ') : []}
           onChange={(e) => handleFieldChange('type', e.target.value.join(', '))}
           renderValue={(selected) => selected.join(', ')}
@@ -2205,6 +2260,7 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
       <TableCell sx={{ width: '8%' }}>
         <Select
           size="small"
+          disabled={isShared}
           value={localTask.employeeName}
           onChange={(e) => handleFieldChange('employeeName', e.target.value)}
           fullWidth
@@ -2233,7 +2289,8 @@ export default function EditTaskRow({ task, onUpdate, onCancel, taskTypes, emplo
       </TableCell>
     </TableRow>
   );
-}=== ./frontend/src/components/DayColumn.jsx ===
+}
+=== ./frontend/src/components/DayColumn.jsx ===
 // ./frontend/src/components/DayColumn.jsx
 import { useState } from 'react';
 import { Paper, Typography, Box, Tooltip } from '@mui/material';
@@ -2598,6 +2655,7 @@ function getDuration(start, end) {
   return ((e - s) / (1000 * 60 * 60)).toFixed(1);
 }=== ./frontend/src/components/EmployeeHoursSelector.jsx ===
 import { Box, Checkbox, FormControlLabel, TextField, Typography, Button, Grid } from '@mui/material';
+import { CheckCircle } from '@mui/icons-material';
 import { useState, useEffect } from 'react';
 
 export default function EmployeeHoursSelector({ employees, totalHours, onChange, initialAssignments = [] }) {
@@ -2692,14 +2750,69 @@ export default function EmployeeHoursSelector({ employees, totalHours, onChange,
           <Button size="small" onClick={distributeEqually} variant="outlined" sx={{ mr: 2 }}>
             Разделить поровну
           </Button>
-          <Typography variant="caption" color={remaining < -0.01 ? 'error' : 'textSecondary'}>
-            Распределено: {totalAssigned.toFixed(1)} / {totalHours} ч. {remaining > 0.01 ? `Осталось: ${remaining.toFixed(1)} ч` : remaining < -0.01 ? `Перебор: ${(-remaining).toFixed(1)} ч` : '✓'}
+          <Typography variant="caption" color={remaining < -0.01 ? 'error' : 'textSecondary'} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+            Распределено: {totalAssigned.toFixed(1)} / {totalHours} ч.{' '}
+            {remaining > 0.01
+              ? `Осталось: ${remaining.toFixed(1)} ч`
+              : remaining < -0.01
+                ? `Перебор: ${(-remaining).toFixed(1)} ч`
+                : <CheckCircle sx={{ fontSize: 14, color: 'success.main' }} />}
           </Typography>
         </Box>
       )}
     </Box>
   );
-}=== ./frontend/src/components/CompletedTaskRow.jsx ===
+}=== ./frontend/src/components/PushNotificationSnackbars.jsx ===
+import { Snackbar, Alert, Box, Typography } from '@mui/material';
+import { Assignment, AccessTime } from '@mui/icons-material';
+
+const SNACKBAR_HEIGHT = 88;
+
+export default function PushNotificationSnackbars({ notifications, onClose }) {
+  return (
+    <>
+      {notifications.map((notification, index) => (
+        <Snackbar
+          key={notification.id}
+          open
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          sx={{
+            bottom: { xs: 16 + index * SNACKBAR_HEIGHT, sm: 24 + index * SNACKBAR_HEIGHT },
+            right: { xs: 16, sm: 24 },
+            left: 'auto',
+            zIndex: (theme) => theme.zIndex.snackbar + index,
+          }}
+        >
+          <Alert
+            severity="info"
+            variant="filled"
+            onClose={() => onClose(notification.id)}
+            icon={<Assignment fontSize="small" />}
+            sx={{
+              width: '100%',
+              minWidth: 280,
+              maxWidth: 360,
+              alignItems: 'flex-start',
+              bgcolor: '#1e293b',
+              '& .MuiAlert-icon': { color: '#7c9ebf', mt: 0.25 },
+            }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+              {notification.title}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <AccessTime sx={{ fontSize: 14, opacity: 0.85 }} />
+              <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                Дедлайн: {notification.deadline}
+              </Typography>
+            </Box>
+          </Alert>
+        </Snackbar>
+      ))}
+    </>
+  );
+}
+=== ./frontend/src/components/CompletedTaskRow.jsx ===
 import { TableRow, TableCell, Box, Typography, Chip, Tooltip } from '@mui/material';
 import { CheckCircle, PlayArrow, Stop, TrendingUp, TrendingDown, CalendarToday } from '@mui/icons-material';
 
@@ -2848,39 +2961,101 @@ import {
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
 
-export default function SplitTaskModal({ open, task, onClose, onSuccess }) {
+function partsToApi(parts) {
+  return parts.map(p => ({
+    childTaskId: p.childTaskId || null,
+    employeeName: p.employeeName,
+    taskType: p.taskTypes.join(', '),
+    allocatedHours: parseFloat(p.hours)
+  }));
+}
+
+function parseTypeToArray(type) {
+  if (!type) return [];
+  return type.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+export function childrenToModalParts(children, employees, taskTypes) {
+  if (!children?.length) return null;
+  return children.map(c => ({
+    childTaskId: c.id,
+    employeeName: c.employeeName || employees[0],
+    taskTypes: parseTypeToArray(c.type).length ? parseTypeToArray(c.type) : [taskTypes[0]],
+    hours: c.estimateHours ?? 0
+  }));
+}
+
+export function apiPartsToModalParts(parts, employees, taskTypes) {
+  if (!parts?.length) return null;
+  return parts.map(p => ({
+    employeeName: p.employeeName,
+    taskTypes: parseTypeToArray(p.taskType).length ? parseTypeToArray(p.taskType) : [taskTypes[0]],
+    hours: p.allocatedHours ?? 0
+  }));
+}
+
+export default function SplitTaskModal({
+  open,
+  mode = 'split',
+  task,
+  initialParts,
+  employees,
+  taskTypes,
+  onClose,
+  onSuccess,
+  onDraftApply
+}) {
   const [parts, setParts] = useState([]);
   const [error, setError] = useState('');
-  const [totalHours, setTotalHours] = useState(0);
-  
-  const employees = ['Дима', 'Яромир', 'Павел'];
-  const taskTypes = ['Резка', 'УФ печать', 'Монтаж', 'Дизайн', 'Сборка', 'Упаковка'];
+  const parentHours = task?.estimateHours;
+  const hasParentHours = parentHours !== '' && parentHours != null && !Number.isNaN(Number(parentHours)) && Number(parentHours) > 0;
+  const totalHours = hasParentHours ? Number(parentHours) : 0;
+
+  const isDraft = mode === 'draft';
+  const isEdit = mode === 'edit';
 
   useEffect(() => {
-    if (task && open) {
-      setParts([{ employeeName: employees[0], taskTypes: [taskTypes[0]], hours: 0 }]);
-      setTotalHours(task.estimateHours);
-      setError('');
+    if (!open) return;
+
+    const defaultPart = { employeeName: employees[0], taskTypes: [taskTypes[0]], hours: 0 };
+
+    if (initialParts?.length) {
+      setParts(initialParts.map(p => ({
+        childTaskId: p.childTaskId,
+        employeeName: p.employeeName,
+        taskTypes: p.taskTypes?.length ? p.taskTypes : [taskTypes[0]],
+        hours: p.hours ?? 0
+      })));
+    } else if (isDraft) {
+      const secondEmployee = employees[1] ?? employees[0];
+      setParts([
+        { ...defaultPart, hours: 0 },
+        { employeeName: secondEmployee, taskTypes: [taskTypes[0]], hours: 0 }
+      ]);
+    } else {
+      setParts([defaultPart]);
     }
-  }, [task, open]);
+    setError('');
+  }, [open, task, initialParts, mode, employees, taskTypes, totalHours, isDraft]);
 
-  const addPart = () => {
-    setParts([...parts, { employeeName: employees[0], taskTypes: [taskTypes[0]], hours: 0 }]);
-  };
-
-  const removePart = (index) => {
-    const newParts = parts.filter((_, i) => i !== index);
-    setParts(newParts);
-  };
-
-  const updatePart = (index, field, value) => {
-    const newParts = [...parts];
-    newParts[index][field] = value;
-    setParts(newParts);
-    
+  const revalidateHours = (newParts) => {
     const sum = newParts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
+    if (isEdit) {
+      setError(sum > 0 ? '' : 'Укажите часы для назначений');
+      return;
+    }
+    if (isDraft) {
+      if (newParts.length < 2) {
+        setError('Добавьте минимум двух сотрудников');
+      } else if (sum <= 0) {
+        setError('Укажите часы для каждого сотрудника');
+      } else {
+        setError('');
+      }
+      return;
+    }
     if (sum > totalHours) {
-      setError(`Сумма часов (${sum}) превышает выделенное время (${totalHours})`);
+      setError(`Сумма часов (${sum.toFixed(1)}) превышает выделенное время (${totalHours})`);
     } else if (Math.abs(sum - totalHours) < 0.01) {
       setError('');
     } else {
@@ -2888,58 +3063,118 @@ export default function SplitTaskModal({ open, task, onClose, onSuccess }) {
     }
   };
 
-  const handleSubmit = async () => {
+  const addPart = () => {
+    const next = [...parts, { employeeName: employees[0], taskTypes: [taskTypes[0]], hours: 0 }];
+    setParts(next);
+    revalidateHours(next);
+  };
+
+  const removePart = (index) => {
+    const next = parts.filter((_, i) => i !== index);
+    setParts(next);
+    revalidateHours(next);
+  };
+
+  const updatePart = (index, field, value) => {
+    const next = [...parts];
+    next[index][field] = value;
+    setParts(next);
+    revalidateHours(next);
+  };
+
+  const validateParts = () => {
     const sum = parts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
-    if (Math.abs(sum - totalHours) > 0.01) {
-      setError(`Сумма часов должна равняться ${totalHours} ч`);
-      return;
-    }
-    
-    if (parts.some(p => !p.employeeName || p.taskTypes.length === 0 || p.hours <= 0)) {
+    if (parts.some(p => !p.employeeName || p.taskTypes.length === 0 || !(parseFloat(p.hours) > 0))) {
       setError('Заполните все поля для каждой части');
+      return false;
+    }
+    if (isDraft && parts.length < 2) {
+      setError('Добавьте минимум двух сотрудников для общей задачи');
+      return false;
+    }
+    if (!isEdit && !isDraft && parts.length < 2) {
+      setError('Добавьте минимум двух сотрудников для общей задачи');
+      return false;
+    }
+    if (!isEdit && !isDraft && Math.abs(sum - totalHours) > 0.01) {
+      setError(`Сумма часов должна равняться ${totalHours} ч`);
+      return false;
+    }
+    if (isDraft && sum <= 0) {
+      setError('Укажите часы для каждого сотрудника');
+      return false;
+    }
+    if (isEdit && sum <= 0) {
+      setError('Укажите часы для назначений');
+      return false;
+    }
+    return true;
+  };
+
+  const partsSum = parts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
+  const displayTotalHours = isEdit || isDraft ? partsSum : totalHours;
+
+  const handleSubmit = async () => {
+    if (!validateParts()) return;
+
+    if (isDraft) {
+      onDraftApply?.(partsToApi(parts), parts);
+      onClose();
       return;
     }
-    
+
     try {
-      const response = await fetch('/api/tasks/split', {
-        method: 'POST',
+      const body = { parentTaskId: task.id, parts: partsToApi(parts) };
+      const url = isEdit ? `/api/tasks/split/${task.id}` : '/api/tasks/split';
+      const response = await fetch(url, {
+        method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          parentTaskId: task.id,
-          parts: parts.map(p => ({
-            employeeName: p.employeeName,
-            taskType: p.taskTypes.join(', '),
-            allocatedHours: parseFloat(p.hours)
-          }))
-        })
+        body: JSON.stringify(body)
       });
-      
+
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
-      
-      onSuccess();
+      if (!response.ok) throw new Error(data.message || data.error);
+
+      onSuccess?.();
       onClose();
     } catch (err) {
       setError(err.message);
     }
   };
 
+  const taskLabel = task?.fileName || task?.folderPath || '';
+  const title = isDraft
+    ? 'Общая задача — назначения'
+    : isEdit
+      ? 'Редактирование назначений'
+      : 'Разделение задачи';
+  const submitLabel = isDraft ? 'Применить' : isEdit ? 'Сохранить' : 'Разделить';
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
-        Разделение задачи: {task?.title?.substring(0, 50)}...
+        {title}
+        {taskLabel && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {taskLabel}
+          </Typography>
+        )}
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Всего часов: {totalHours} ч
+          {isDraft
+            ? `Итого: ${displayTotalHours.toFixed(1)} ч — подставится в поле «Часы» задачи`
+            : isEdit
+              ? `Всего часов по назначениям: ${displayTotalHours.toFixed(1)} ч (обновится у задачи)`
+              : `Всего часов: ${displayTotalHours} ч`}
         </Typography>
       </DialogTitle>
-      
+
       <DialogContent>
         {error && (
           <Alert severity={error.includes('превышает') ? 'error' : 'info'} sx={{ mb: 2 }}>
             {error}
           </Alert>
         )}
-        
+
         <Stack spacing={2}>
           {parts.map((part, idx) => (
             <Paper key={idx} variant="outlined" sx={{ p: 2 }}>
@@ -2956,7 +3191,7 @@ export default function SplitTaskModal({ open, task, onClose, onSuccess }) {
                     ))}
                   </Select>
                 </FormControl>
-                
+
                 <FormControl size="small" sx={{ minWidth: 200, flex: 2 }}>
                   <InputLabel>Типы работ</InputLabel>
                   <Select
@@ -2975,7 +3210,7 @@ export default function SplitTaskModal({ open, task, onClose, onSuccess }) {
                     ))}
                   </Select>
                 </FormControl>
-                
+
                 <TextField
                   size="small"
                   type="number"
@@ -2985,7 +3220,7 @@ export default function SplitTaskModal({ open, task, onClose, onSuccess }) {
                   slotProps={{ htmlInput: { step: 0.5, min: 0 } }}
                   sx={{ width: 100 }}
                 />
-                
+
                 {parts.length > 1 && (
                   <IconButton color="error" onClick={() => removePart(idx)}>
                     <Delete />
@@ -2994,27 +3229,23 @@ export default function SplitTaskModal({ open, task, onClose, onSuccess }) {
               </Stack>
             </Paper>
           ))}
-          
-          <Button
-            startIcon={<Add />}
-            onClick={addPart}
-            variant="outlined"
-            size="small"
-          >
-            Добавить часть
+
+          <Button startIcon={<Add />} onClick={addPart} variant="outlined" size="small">
+            Добавить сотрудника
           </Button>
         </Stack>
       </DialogContent>
-      
+
       <DialogActions>
         <Button onClick={onClose}>Отмена</Button>
         <Button onClick={handleSubmit} variant="contained" color="primary">
-          Разделить
+          {submitLabel}
         </Button>
       </DialogActions>
     </Dialog>
   );
-}=== ./frontend/src/components/StatsCards.jsx ===
+}
+=== ./frontend/src/components/StatsCards.jsx ===
 // ./frontend/src/components/StatsCards.jsx
 import { Grid, Card, CardContent, Typography, Box } from '@mui/material';
 import { TaskAlt, AccessTime, HourglassEmpty, TrendingUp, TrendingDown } from '@mui/icons-material';
@@ -3097,8 +3328,10 @@ export default function StatsCards({ stats }) {
 import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../services/api';
 import { Warning, Error, FolderOpen, AccessTime, Event, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
 import { Tooltip, Chip, IconButton, Box, Typography } from '@mui/material';
+import { useUiFeedback } from '../context/UiFeedbackContext';
 
 export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
+  const { showError, showWarning } = useUiFeedback();
   const handleAction = async (id, action, progress = null) => {
     try {
       if (action === 'start') await startTask(id);
@@ -3110,13 +3343,13 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       setTimeout(() => onUpdate(), 100);
     } catch (err) {
       console.error('Ошибка действия:', err);
-      alert('Не удалось выполнить действие. Проверьте консоль.');
+      showError('Не удалось выполнить действие. Проверьте консоль.');
     }
   };
 
   const openFile = async (filePath) => {
     if (!filePath) {
-      alert('Путь к файлу не указан');
+      showWarning('Путь к файлу не указан');
       return;
     }
     try {
@@ -3130,7 +3363,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       });
       const data = await response.json();
       if (!response.ok) {
-        alert(data.message || 'Ошибка открытия файла');
+        showError(data.message || 'Ошибка открытия файла');
         return;
       }
       if (data.downloadUrl) {
@@ -3138,7 +3371,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       }
     } catch (err) {
       console.error('Ошибка открытия файла:', err);
-      alert('Не удалось открыть файл');
+      showError('Не удалось открыть файл');
     }
   };
 
@@ -3388,12 +3621,9 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     </Box>
   );
 }=== ./frontend/src/hooks/useTaskTableApi.jsx ===
-import { useState, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 export default function useTaskTableApi() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
   const handleResponse = useCallback(async (response) => {
     if (!response.ok) {
       const text = await response.text();
@@ -3403,25 +3633,16 @@ export default function useTaskTableApi() {
   }, []);
 
   const loadRows = useCallback(async (page = 1, pageSize = 50, selectedEmployee = '') => {
-    setLoading(true);
-    setError(null);
-    try {
-      let url = `/api/tasks/table?page=${page}&pageSize=${pageSize}`;
-      if (selectedEmployee) {
-        url += `&employee=${encodeURIComponent(selectedEmployee)}`;
-      }
-      const response = await fetch(url);
-      const data = await handleResponse(response);
-      if (data.items && data.totalCount !== undefined) {
-        return { items: data.items, totalCount: data.totalCount, page: data.page, pageSize: data.pageSize };
-      }
-      return { items: data, totalCount: data.length, page: 1, pageSize: data.length };
-    } catch (err) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
+    let url = `/api/tasks/table?page=${page}&pageSize=${pageSize}`;
+    if (selectedEmployee) {
+      url += `&employee=${encodeURIComponent(selectedEmployee)}`;
     }
+    const response = await fetch(url);
+    const data = await handleResponse(response);
+    if (data.items && data.totalCount !== undefined) {
+      return { items: data.items, totalCount: data.totalCount, page: data.page, pageSize: data.pageSize };
+    }
+    return { items: data, totalCount: data.length, page: 1, pageSize: data.length };
   }, [handleResponse]);
 
   const loadChildren = useCallback(async (parentId) => {
@@ -3431,100 +3652,69 @@ export default function useTaskTableApi() {
   }, [handleResponse]);
 
   const createRow = useCallback(async (rowData) => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/tasks/table/row', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          folderPath: rowData.folderPath,
-          fileName: rowData.fileName,
-          comment: rowData.comment,
-          deadline: rowData.deadline,
-          estimateHours: rowData.estimateHours,
-          type: rowData.type,
-          employeeName: rowData.employeeName,
-          parentRowNumber: rowData.parentRowNumber || null
-        })
-      });
-      return await handleResponse(response);
-    } finally {
-      setLoading(false);
+    const body = {
+      folderPath: rowData.folderPath,
+      fileName: rowData.fileName,
+      comment: rowData.comment,
+      deadline: rowData.deadline,
+      estimateHours: rowData.estimateHours,
+      type: rowData.type,
+      employeeName: rowData.employeeName,
+      parentRowNumber: rowData.parentRowNumber || null
+    };
+    if (rowData.parts?.length) {
+      body.parts = rowData.parts;
     }
+    const response = await fetch('/api/tasks/table/row', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return await handleResponse(response);
   }, [handleResponse]);
 
   const updateRow = useCallback(async (id, rowData) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/tasks/table/row/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          folderPath: rowData.folderPath,
-          fileName: rowData.fileName,
-          comment: rowData.comment,
-          deadline: rowData.deadline,
-          estimateHours: rowData.estimateHours,
-          type: rowData.type,
-          employeeName: rowData.employeeName,
-          parentRowNumber: rowData.parentRowNumber,
-          statusText: rowData.statusText
-        })
-      });
-      return await handleResponse(response);
-    } finally {
-      setLoading(false);
-    }
+    const response = await fetch(`/api/tasks/table/row/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        folderPath: rowData.folderPath,
+        fileName: rowData.fileName,
+        comment: rowData.comment,
+        deadline: rowData.deadline,
+        estimateHours: rowData.estimateHours,
+        type: rowData.type,
+        employeeName: rowData.employeeName,
+        parentRowNumber: rowData.parentRowNumber,
+        statusText: rowData.statusText
+      })
+    });
+    return await handleResponse(response);
   }, [handleResponse]);
 
   const deleteRow = useCallback(async (id) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/tasks/table/row/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Ошибка удаления');
-    } finally {
-      setLoading(false);
-    }
+    const response = await fetch(`/api/tasks/table/row/${id}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Ошибка удаления');
   }, []);
 
   const startTask = useCallback(async (rowId) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/tasks/${rowId}/start`, { method: 'POST' });
-      return await handleResponse(response);
-    } finally {
-      setLoading(false);
-    }
+    const response = await fetch(`/api/tasks/${rowId}/start`, { method: 'POST' });
+    return await handleResponse(response);
   }, [handleResponse]);
 
   const pauseTask = useCallback(async (rowId) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/tasks/${rowId}/pause`, { method: 'POST' });
-      return await handleResponse(response);
-    } finally {
-      setLoading(false);
-    }
+    const response = await fetch(`/api/tasks/${rowId}/pause`, { method: 'POST' });
+    return await handleResponse(response);
   }, [handleResponse]);
 
   const resumeTask = useCallback(async (rowId) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/tasks/${rowId}/resume`, { method: 'POST' });
-      return await handleResponse(response);
-    } finally {
-      setLoading(false);
-    }
+    const response = await fetch(`/api/tasks/${rowId}/resume`, { method: 'POST' });
+    return await handleResponse(response);
   }, [handleResponse]);
 
   const completeTask = useCallback(async (rowId) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/tasks/${rowId}/complete`, { method: 'POST' });
-      return await handleResponse(response);
-    } finally {
-      setLoading(false);
-    }
+    const response = await fetch(`/api/tasks/${rowId}/complete`, { method: 'POST' });
+    return await handleResponse(response);
   }, [handleResponse]);
 
   const openFile = useCallback(async (row) => {
@@ -3557,22 +3747,15 @@ export default function useTaskTableApi() {
   }, [handleResponse]);
 
   const splitTask = useCallback(async (parentTaskId, parts) => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/tasks/split', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parentTaskId, parts })
-      });
-      return await handleResponse(response);
-    } finally {
-      setLoading(false);
-    }
+    const response = await fetch('/api/tasks/split', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parentTaskId, parts })
+    });
+    return await handleResponse(response);
   }, [handleResponse]);
 
   const api = useMemo(() => ({
-    loading,
-    error,
     loadRows,
     loadChildren,
     createRow,
@@ -3585,7 +3768,7 @@ export default function useTaskTableApi() {
     openFile,
     getTaskForSplit,
     splitTask
-  }), [loading, error, loadRows, loadChildren, createRow, updateRow, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, getTaskForSplit, splitTask]);
+  }), [loadRows, loadChildren, createRow, updateRow, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, getTaskForSplit, splitTask]);
 
   return api;
 }=== ./frontend/src/hooks/useExpandedRows.jsx ===
@@ -3635,7 +3818,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>,
 )=== ./frontend/src/App.jsx ===
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Typography,
   Container,
@@ -3655,8 +3838,7 @@ import {
   Avatar,
   Menu,
   IconButton,
-  Divider,
-  Icon
+  Divider
 } from '@mui/material';
 import { 
   Today, 
@@ -3666,15 +3848,11 @@ import {
   CalendarMonth, 
   Logout, 
   Person,
+  AdminPanelSettings,
   CloudUpload,
   Delete,
-  Schedule,
-  Assignment,
-  AccessTime,
-  Close
 } from '@mui/icons-material';
-import * as signalR from '@microsoft/signalr';
-
+import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
@@ -3683,7 +3861,12 @@ import DebugPanel from './components/DebugPanel';
 import SplitTaskModal from './components/SplitTaskModal';
 import TaskTable from './components/TaskTable';
 import LoginForm from './components/LoginForm';
-import { getActiveTasks } from './services/api';
+import PushNotificationSnackbars from './components/PushNotificationSnackbars';
+import { LoadingState } from './components/LoadingState';
+import { UiFeedbackProvider, useUiFeedback } from './context/UiFeedbackContext';
+import useActiveTasksRefresh from './hooks/useActiveTasksRefresh';
+import useAuth from './hooks/useAuth';
+import useNotificationsHub from './hooks/useNotificationsHub';
 
 const theme = createTheme({
   palette: {
@@ -3702,135 +3885,19 @@ const theme = createTheme({
   shape: { borderRadius: 12 },
 });
 
-function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [employee, setEmployee] = useState('Дима');
-  const [activeTasks, setActiveTasks] = useState([]);
-  const [refresh, setRefresh] = useState(0);
+function AppContent() {
+  const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
+  const { showSuccess, showError, showWarning, showInfo, confirm } = useUiFeedback();
   const [splitModalOpen, setSplitModalOpen] = useState(false);
   const [selectedTaskForSplit, setSelectedTaskForSplit] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [avatarKey, setAvatarKey] = useState(Date.now()); // Добавляем ключ для принудительного обновления
-  
-  const [notifications, setNotifications] = useState([]);
-  const signalRRefreshTimeoutRef = useRef(null);
-  const refreshRetryTimeoutRef = useRef(null);
+  const [avatarKey, setAvatarKey] = useState(Date.now());
+  const { activeTasks, refresh, refreshAll } = useActiveTasksRefresh(user, employee);
+  const { notifications, closeNotification } = useNotificationsHub(user, refreshAll);
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
-  useEffect(() => { checkAuth(); }, []);
-
-  useEffect(() => {
-    return () => {
-      if (signalRRefreshTimeoutRef.current) clearTimeout(signalRRefreshTimeoutRef.current);
-      if (refreshRetryTimeoutRef.current) clearTimeout(refreshRetryTimeoutRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    let isMounted = true;
-
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl('/notificationHub')
-      .withAutomaticReconnect()
-      .build();
-
-    const refreshFromSignalR = () => {
-      if (signalRRefreshTimeoutRef.current) {
-        clearTimeout(signalRRefreshTimeoutRef.current);
-      }
-      signalRRefreshTimeoutRef.current = setTimeout(() => {
-        if (isMounted) refreshAll();
-      }, 300);
-    };
-
-    const handleNewTask = (taskId, taskTitle, deadline) => {
-      if (!isMounted) return;
-      const id = `${taskId}-${Date.now()}`;
-      setNotifications(prev => [
-        ...prev.slice(-19),
-        {
-          id,
-          title: taskTitle,
-          deadline: new Date(deadline).toLocaleString(),
-        }
-      ]);
-      refreshFromSignalR();
-    };
-
-    const handleRefreshEvent = () => {
-      refreshFromSignalR();
-    };
-
-    connection.start()
-      .then(() => {
-        if (isMounted) {
-          connection.invoke('JoinUserGroup', user.id).catch(err => console.error('JoinGroup error:', err));
-        }
-      })
-      .catch(err => console.error('SignalR start error:', err));
-
-    connection.on('NewTask', handleNewTask);
-    connection.on('TaskDeleted', handleRefreshEvent);
-    connection.on('TaskUpdated', handleRefreshEvent);
-    connection.on('TaskStatusChanged', handleRefreshEvent);
-    connection.on('TaskProgressChanged', handleRefreshEvent);
-
-    return () => {
-      isMounted = false;
-      if (signalRRefreshTimeoutRef.current) {
-        clearTimeout(signalRRefreshTimeoutRef.current);
-        signalRRefreshTimeoutRef.current = null;
-      }
-      connection.off('NewTask', handleNewTask);
-      connection.off('TaskDeleted', handleRefreshEvent);
-      connection.off('TaskUpdated', handleRefreshEvent);
-      connection.off('TaskStatusChanged', handleRefreshEvent);
-      connection.off('TaskProgressChanged', handleRefreshEvent);
-      connection.stop().catch(err => console.error('SignalR stop error:', err));
-    };
-  }, [user, employee]);
-
-  const closeNotification = (id) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
-  const checkAuth = async () => {
-    try {
-      const response = await fetch('/api/auth/me', { credentials: 'include' });
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data);
-        if (data.role !== 'Admin') setEmployee(data.fullName);
-      }
-    } catch (err) {
-      console.error('Ошибка проверки авторизации:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogin = (userData) => {
-    setUser(userData);
-    if (userData.role !== 'Admin') setEmployee(userData.fullName);
-  };
-
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-    setUser(null);
-    setEmployee('Дима');
-  };
 
   const handleOpenUserMenu = (event) => setAnchorElUser(event.currentTarget);
   const handleCloseUserMenu = () => setAnchorElUser(null);
@@ -3847,8 +3914,14 @@ function App() {
   const handleAvatarUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) return alert('Пожалуйста, выберите изображение');
-    if (file.size > 2 * 1024 * 1024) return alert('Размер файла не должен превышать 2MB');
+    if (!file.type.startsWith('image/')) {
+      showWarning('Пожалуйста, выберите изображение');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      showWarning('Размер файла не должен превышать 2MB');
+      return;
+    }
 
     setUploadingAvatar(true);
     const formData = new FormData();
@@ -3862,92 +3935,75 @@ function App() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
-      
-      // Обновляем пользователя с новым аватаром
-      setUser(prev => ({ 
-        ...prev, 
+
+      setUser(prev => ({
+        ...prev,
         avatarUrl: data.avatarUrl
       }));
-      
-      // Обновляем ключ для принудительной перезагрузки аватара
       setAvatarKey(Date.now());
-      
-      alert('Аватар успешно загружен!');
+      showSuccess('Аватар успешно загружен');
     } catch (err) {
-      alert(err.message || 'Ошибка загрузки');
+      showError(err.message || 'Ошибка загрузки');
     } finally {
       setUploadingAvatar(false);
     }
   };
 
   const handleAvatarError = (e) => {
-    console.log('Avatar failed to load, showing initials instead');
     e.target.style.display = 'none';
   };
 
   const handleDeleteAvatar = async () => {
-    if (!confirm('Вы уверены, что хотите удалить аватар?')) return;
+    const confirmed = await confirm({
+      title: 'Удалить аватар?',
+      message: 'Вы уверены, что хотите удалить фото профиля?',
+      confirmLabel: 'Удалить',
+      confirmColor: 'error',
+    });
+    if (!confirmed) return;
+
     setUploadingAvatar(true);
     try {
       const response = await fetch('/api/auth/avatar', { method: 'DELETE', credentials: 'include' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
       setUser(prev => ({ ...prev, avatarUrl: null }));
-      setAvatarKey(Date.now()); // Обновляем ключ
-      alert('Аватар удалён');
+      setAvatarKey(Date.now());
+      showSuccess('Аватар удалён');
     } catch (err) {
-      alert(err.message || 'Ошибка удаления');
+      showError(err.message || 'Ошибка удаления');
     } finally {
       setUploadingAvatar(false);
       handleCloseUserMenu();
     }
   };
 
-  useEffect(() => {
-    if (user) {
-      loadActiveTasks();
-      const interval = setInterval(() => setRefresh(r => r + 1), 60000);
-      return () => clearInterval(interval);
-    }
-  }, [employee, user]);
-
-  const loadActiveTasks = async () => {
-    try {
-      const tasks = await getActiveTasks(employee);
-      setActiveTasks(tasks);
-    } catch (err) {
-      console.error('Ошибка загрузки активных задач:', err);
-    }
-  };
-
-  const refreshAll = () => {
-    loadActiveTasks();
-    setRefresh(r => r + 1);
-    if (refreshRetryTimeoutRef.current) {
-      clearTimeout(refreshRetryTimeoutRef.current);
-    }
-    refreshRetryTimeoutRef.current = setTimeout(() => {
-      loadActiveTasks();
-      setRefresh(r => r + 1);
-      refreshRetryTimeoutRef.current = null;
-    }, 200);
-  };
-
   const handleReset = async () => {
-    if (window.confirm('Очистить всю базу данных?')) {
-      await fetch('/api/debug/reset-db', { method: 'POST' });
-      refreshAll();
-    }
+    const confirmed = await confirm({
+      title: 'Сброс базы данных',
+      message: 'Очистить всю базу данных? Это действие необратимо.',
+      confirmLabel: 'Очистить',
+      confirmColor: 'error',
+    });
+    if (!confirmed) return;
+    await fetch('/api/debug/reset-db', { method: 'POST' });
+    refreshAll();
+    showSuccess('База данных очищена');
   };
 
   const testNotification = () => {
-    if (!('Notification' in window)) return alert('Ваш браузер не поддерживает уведомления');
+    if (!('Notification' in window)) {
+      showWarning('Ваш браузер не поддерживает уведомления');
+      return;
+    }
     if (Notification.permission === 'granted') {
-      new Notification('✅ Уведомления работают!');
+      new Notification('Уведомления работают!');
+      showSuccess('Системное уведомление отправлено');
     } else if (Notification.permission === 'denied') {
-      alert('Уведомления заблокированы.');
+      showWarning('Уведомления заблокированы в настройках браузера');
     } else {
       Notification.requestPermission();
+      showInfo('Разрешите уведомления в запросе браузера');
     }
   };
 
@@ -3957,35 +4013,16 @@ function App() {
   };
 
   const handleSplitSuccess = () => refreshAll();
-  const handleTabChange = (event, newValue) => setActiveTab(newValue);
+  const handleTabChange = (_event, newValue) => setActiveTab(newValue);
   const isAdmin = user?.role === 'Admin';
 
-  const formatTime = (date) => {
-    return date.toLocaleTimeString('ru-RU', { 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit',
-      timeZone: 'Europe/Moscow'
-    });
-  };
-
-  const formatDate = (date) => {
-    return date.toLocaleDateString('ru-RU', { 
-      day: 'numeric', 
-      month: 'long',
-      timeZone: 'Europe/Moscow'
-    });
-  };
-
-  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Typography>Загрузка...</Typography></Box>;
+  if (loading) return <LoadingState fullScreen />;
   if (!user) return <LoginForm onLogin={handleLogin} />;
 
-  // Формируем URL аватара с ключом для сброса кэша
-  const avatarUrl = user?.id ? `/api/auth/avatar/${user.id}?t=${avatarKey}` : null;
+  const avatarUrl = user?.avatarUrl && user?.id ? `/api/auth/avatar/${user.id}?t=${avatarKey}` : null;
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <>
       <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: 3 }}>
         <Container maxWidth="xl">
           <Paper elevation={0} sx={{ p: 2, mb: 3, borderRadius: 3 }}>
@@ -3995,26 +4032,21 @@ function App() {
                 <Typography variant="h1" component="h1" sx={{ fontSize: '1.6rem', fontWeight: 600 }}>Mainstream Assistant</Typography>
               </Box>
               
-              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, bgcolor: '#f0f4f8', px: 2, py: 1, borderRadius: 3 }}>
-                <Schedule sx={{ color: '#7c9ebf' }} />
-                <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                    {formatDate(currentTime)}
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
-                    {formatTime(currentTime)}
-                  </Typography>
-                </Box>
-              </Box>
+              <CurrentDateTime />
 
               <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                 {isAdmin && (
                   <FormControl size="small" sx={{ minWidth: 130 }}>
-                    <InputLabel><Person sx={{ fontSize: 18 }} /> Сотрудник</InputLabel>
-                    <Select value={employee} label="Сотрудник" onChange={(e) => setEmployee(e.target.value)}>
-                      <MenuItem value="Дима">👤 Дима</MenuItem>
-                      <MenuItem value="Яромир">👤 Яромир</MenuItem>
-                      <MenuItem value="Павел">👤 Павел</MenuItem>
+                    <InputLabel id="admin-employee-label">Сотрудник</InputLabel>
+                    <Select
+                      labelId="admin-employee-label"
+                      value={employee}
+                      label="Сотрудник"
+                      onChange={(e) => setEmployee(e.target.value)}
+                    >
+                      <MenuItem value="Дима">Дима</MenuItem>
+                      <MenuItem value="Яромир">Яромир</MenuItem>
+                      <MenuItem value="Павел">Павел</MenuItem>
                     </Select>
                   </FormControl>
                 )}
@@ -4082,7 +4114,12 @@ function App() {
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{user?.fullName}</Typography>
             <Typography variant="caption" color="text.secondary">{user?.email}</Typography>
-            <Chip size="small" label={isAdmin ? '👑 Администратор' : '👤 Сотрудник'} sx={{ mt: 0.5, fontSize: '0.65rem', bgcolor: isAdmin ? '#fef3c7' : '#e0e7ff', color: isAdmin ? '#92400e' : '#3730a3', width: 'fit-content' }} />
+            <Chip
+              size="small"
+              icon={isAdmin ? <AdminPanelSettings sx={{ fontSize: '0.85rem !important' }} /> : <Person sx={{ fontSize: '0.85rem !important' }} />}
+              label={isAdmin ? 'Администратор' : 'Сотрудник'}
+              sx={{ mt: 0.5, fontSize: '0.65rem', bgcolor: isAdmin ? '#fef3c7' : '#e0e7ff', color: isAdmin ? '#92400e' : '#3730a3', width: 'fit-content' }}
+            />
           </Box>
         </MenuItem>
         <Divider />
@@ -4100,45 +4137,21 @@ function App() {
         </MenuItem>
       </Menu>
 
-      {/* Стек уведомлений в стиле тултипов календаря */}
-      <Box sx={{ position: 'fixed', bottom: 16, right: 16, zIndex: 2000, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {notifications.map(notification => (
-          <Paper
-            key={notification.id}
-            elevation={3}
-            sx={{
-              bgcolor: '#1e293b',
-              color: 'white',
-              borderRadius: 2,
-              p: 1.5,
-              minWidth: 280,
-              maxWidth: 350,
-              position: 'relative',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-            }}
-          >
-            <IconButton
-              size="small"
-              onClick={() => closeNotification(notification.id)}
-              sx={{ position: 'absolute', top: 4, right: 4, color: '#94a3b8' }}
-            >
-              <Close fontSize="small" />
-            </IconButton>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-              <Assignment sx={{ fontSize: 18, color: '#7c9ebf' }} />
-              <Typography variant="body2" sx={{ fontWeight: 500, pr: 3 }}>
-                {notification.title}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <AccessTime sx={{ fontSize: 14, color: '#7c9ebf' }} />
-              <Typography variant="caption" sx={{ color: '#cbd5e1' }}>
-                Дедлайн: {notification.deadline}
-              </Typography>
-            </Box>
-          </Paper>
-        ))}
-      </Box>
+      <PushNotificationSnackbars
+        notifications={notifications}
+        onClose={closeNotification}
+      />
+    </>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <UiFeedbackProvider>
+        <AppContent />
+      </UiFeedbackProvider>
     </ThemeProvider>
   );
 }

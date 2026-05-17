@@ -22,6 +22,7 @@ namespace ProductionPlanner.Data
         Task<List<ProductionTask>> GetRootTasksAsync();
         Task<List<ProductionTask>> GetChildTasksAsync(int parentId);
         Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize);
+        Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(IReadOnlyList<int> parentIds);
         Task ReorderTasksAsync(List<int> orderedIds);
         
         // Новые методы для оптимизации календаря
