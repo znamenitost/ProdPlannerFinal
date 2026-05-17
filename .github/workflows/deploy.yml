@@ -2,7 +2,7 @@ name: Build and Deploy to SmarterASP.NET
 
 on:
   push:
-    branches: [ "test/субботавечер" ]
+    branches: [ "codexOPT" ]
 
 jobs:
   build_and_deploy:
