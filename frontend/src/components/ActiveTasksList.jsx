@@ -4,6 +4,7 @@ import { Warning, Error, FolderOpen, AccessTime, Event, PlayArrow, Pause, CheckC
 import { Tooltip, Chip, IconButton, Box, Typography } from '@mui/material';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import { openFileOnClient } from '../utils/openFileOnClient';
+import { normalizePathForOpen } from '../utils/filePathForOpen';
 
 export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
   const { showError, showWarning } = useUiFeedback();
@@ -27,7 +28,10 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
       showWarning('Путь к файлу не указан');
       return;
     }
-    const result = openFileOnClient(filePath);
+    const parts = String(filePath).replace(/\\/g, '/').split('/');
+    const fileName = parts.pop() || '';
+    const folderPath = parts.join('/');
+    const result = openFileOnClient(normalizePathForOpen(folderPath, fileName));
     if (!result.ok) {
       showError('Не удалось открыть файл');
     }

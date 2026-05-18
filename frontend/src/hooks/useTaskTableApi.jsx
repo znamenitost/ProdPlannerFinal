@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { openFileOnClient } from '../utils/openFileOnClient';
+import { normalizePathForOpen } from '../utils/filePathForOpen';
 
 export default function useTaskTableApi() {
   const handleResponse = useCallback(async (response) => {
@@ -96,7 +97,7 @@ export default function useTaskTableApi() {
   }, [handleResponse]);
 
   const openFile = useCallback(async (row) => {
-    const relativePath = `${row.folderPath || ''}/${row.fileName || ''}`.replace(/\\/g, '/').replace(/\/\//g, '/');
+    const relativePath = normalizePathForOpen(row.folderPath, row.fileName);
     if (!relativePath || relativePath === '/') {
       throw new Error('Путь к файлу не указан');
     }

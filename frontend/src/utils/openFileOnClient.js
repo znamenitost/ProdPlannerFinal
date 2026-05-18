@@ -1,28 +1,29 @@
-/**
- * Открытие файла на компьютере пользователя: /api/files/launch → smb:// или netopen://
- */
+import { detectClientPlatform } from './filePathForOpen';
+
 function buildLaunchUrl(relativePath) {
-  const platform =
-    typeof navigator !== 'undefined' ? (navigator.userAgent || navigator.platform || '') : '';
   const params = new URLSearchParams({
     path: relativePath,
-    clientPlatform: platform
+    clientPlatform: detectClientPlatform()
   });
   return `/api/files/launch?${params.toString()}`;
 }
 
+/** Скрытый iframe — не перезагружает вкладку приложения. */
 function triggerLaunch(launchUrl) {
-  const link = document.createElement('a');
-  link.href = launchUrl;
-  link.style.display = 'none';
-  link.rel = 'noopener';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
+  iframe.src = launchUrl;
+  document.body.appendChild(iframe);
+  window.setTimeout(() => {
+    try {
+      document.body.removeChild(iframe);
+    } catch {
+      /* noop */
+    }
+  }, 20000);
   return true;
 }
 
-/** @param {string} relativePath например С/Спортмебель/15,05,26 спортт.cdr */
 export function openFileOnClient(relativePath) {
   if (!relativePath || relativePath === '/') {
     return { ok: false, reason: 'no-path' };

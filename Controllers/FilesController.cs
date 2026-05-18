@@ -1,3 +1,5 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using ProductionPlanner.Services;
@@ -24,6 +26,9 @@ namespace ProductionPlanner.Controllers
 
             if (!TryBuildOpenUrl(path, clientPlatform, out var openUrl, out var error))
                 return BadRequest(new { message = error });
+
+            if (IsCustomProtocolUrl(openUrl))
+                return Content(BuildProtocolLauncherHtml(openUrl), "text/html; charset=utf-8");
 
             return Redirect(openUrl);
         }
@@ -60,7 +65,7 @@ namespace ProductionPlanner.Controllers
             var netOpenScheme = _configuration["FileOpen:NetOpenScheme"] ?? "netopen";
             var netOpenShareName = _configuration["FileOpen:NetOpenShareName"] ?? shareName;
             var windowsShareName = _configuration["FileOpen:WindowsShareName"] ?? shareName;
-            var windowsOpenMode = _configuration["FileOpen:WindowsOpenMode"] ?? "file";
+            var windowsOpenMode = _configuration["FileOpen:WindowsOpenMode"] ?? "netopen";
 
             var correctedPath = FilePathNormalizer.NormalizeRelativePath(filePath, shareName);
             if (string.IsNullOrWhiteSpace(correctedPath))
@@ -86,6 +91,22 @@ namespace ProductionPlanner.Controllers
             }
 
             return true;
+        }
+
+        private static bool IsCustomProtocolUrl(string url) =>
+            !url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+        private static string BuildProtocolLauncherHtml(string openUrl)
+        {
+            var safeHref = HtmlEncoder.Default.Encode(openUrl);
+            var safeJs = JsonSerializer.Serialize(openUrl);
+            return "<!DOCTYPE html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>Открытие</title></head>" +
+                   "<body style=\"font-family:sans-serif;padding:1rem\">" +
+                   "<p>Открываем файл…</p>" +
+                   $"<p><a id=\"open-link\" href=\"{safeHref}\">Нажмите, если файл не открылся</a></p>" +
+                   $"<script>(function(){{var t={safeJs};try{{window.location.replace(t);}}catch(e){{}}" +
+                   "try{document.getElementById('open-link').click();}catch(e){}})();</script></body></html>";
         }
     }
 
