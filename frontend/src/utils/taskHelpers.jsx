@@ -37,6 +37,16 @@ export const getUniqueEmployeesFromChildren = (children) => {
   return Array.from(employees).join('/');
 };
 
+export const getParentEmployeeDisplay = (task, childrenTasks) => {
+  if (childrenTasks?.length > 0) {
+    return getUniqueEmployeesFromChildren(childrenTasks);
+  }
+  if (task.splitEmployeeNames) {
+    return task.splitEmployeeNames;
+  }
+  return task.employeeName || '';
+};
+
 export const isOverdue = (deadline, status) => {
   if (status === 'Готово') return false;
   return new Date(deadline) < new Date();

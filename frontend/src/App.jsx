@@ -23,7 +23,6 @@ import {
 import { 
   Today, 
   RestartAlt, 
-  Notifications, 
   TableChart, 
   CalendarMonth, 
   Logout, 
@@ -171,22 +170,6 @@ function AppContent() {
     showSuccess('База данных очищена');
   };
 
-  const testNotification = () => {
-    if (!('Notification' in window)) {
-      showWarning('Ваш браузер не поддерживает уведомления');
-      return;
-    }
-    if (Notification.permission === 'granted') {
-      new Notification('Уведомления работают!');
-      showSuccess('Системное уведомление отправлено');
-    } else if (Notification.permission === 'denied') {
-      showWarning('Уведомления заблокированы в настройках браузера');
-    } else {
-      Notification.requestPermission();
-      showInfo('Разрешите уведомления в запросе браузера');
-    }
-  };
-
   const handleSplit = (task) => {
     setSelectedTaskForSplit(task);
     setSplitModalOpen(true);
@@ -233,9 +216,6 @@ function AppContent() {
                 {isAdmin && <Divider orientation="vertical" flexItem sx={{ height: 30 }} />}
                 {isAdmin && (
                   <Button variant="outlined" startIcon={<RestartAlt />} onClick={handleReset} color="error" size="medium">Сброс БД</Button>
-                )}
-                {isAdmin && (
-                  <Button variant="outlined" startIcon={<Notifications />} onClick={testNotification} sx={{ color: '#7c9ebf', borderColor: '#7c9ebf' }} size="medium">Тест уведомлений</Button>
                 )}
                 <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
                   <Avatar 
@@ -329,9 +309,9 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <UiFeedbackProvider>
-        <AppContent />
-      </UiFeedbackProvider>
+        <UiFeedbackProvider>
+          <AppContent />
+        </UiFeedbackProvider>
     </ThemeProvider>
   );
 }

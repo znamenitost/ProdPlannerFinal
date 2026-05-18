@@ -10,15 +10,18 @@ public class TaskNotificationService : ITaskNotificationService
 {
     private readonly IHubContext<NotificationHub> _hubContext;
     private readonly UserManager<User> _userManager;
+    private readonly INotificationInboxService _inbox;
     private readonly ILogger<TaskNotificationService> _logger;
 
     public TaskNotificationService(
         IHubContext<NotificationHub> hubContext,
         UserManager<User> userManager,
+        INotificationInboxService inbox,
         ILogger<TaskNotificationService> logger)
     {
         _hubContext = hubContext;
         _userManager = userManager;
+        _inbox = inbox;
         _logger = logger;
     }
 
@@ -31,7 +34,18 @@ public class TaskNotificationService : ITaskNotificationService
             return;
         }
 
-        await _hubContext.Clients.Group(userId).SendAsync("NewTask", task.Id, task.TaskDisplayName, task.Deadline);
+        var notificationId = await _inbox.EnqueueNewTaskAsync(
+            userId,
+            task.Id,
+            task.TaskDisplayName,
+            task.Deadline);
+
+        await _hubContext.Clients.Group(userId).SendAsync(
+            "NewTask",
+            notificationId,
+            task.Id,
+            task.TaskDisplayName,
+            task.Deadline);
     }
 
     public async Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null)

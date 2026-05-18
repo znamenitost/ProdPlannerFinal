@@ -19,6 +19,7 @@ public static class WebApplicationExtensions
         services.AddScoped<IProductionTaskRepository, ProductionTaskRepository>();
         services.AddScoped<ITaskSplitService, TaskSplitService>();
         services.AddScoped<ITaskNotificationService, TaskNotificationService>();
+        services.AddScoped<INotificationInboxService, NotificationInboxService>();
         services.AddScoped<ITaskTableService, TaskTableService>();
         services.AddScoped<ITaskListQueryService, TaskListQueryService>();
         services.AddScoped<IWeekCalendarService, WeekCalendarService>();

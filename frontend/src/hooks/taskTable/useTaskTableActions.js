@@ -15,8 +15,11 @@ export default function useTaskTableActions({
   confirm
 }) {
   const handleSaveNewRow = useCallback(async () => {
-    if (!newRow.isSharedTask && !newRow.employeeName) {
-      showWarning('Выберите сотрудника или настройте общую задачу');
+    const isShared = newRow.isSharedTask && newRow.assigneeParts?.length >= 2;
+    const hasSingleAssignee = Boolean(newRow.employeeName);
+
+    if (!isShared && !hasSingleAssignee) {
+      showWarning('Назначьте сотрудника и часы через иконку участников');
       return;
     }
 
@@ -25,11 +28,10 @@ export default function useTaskTableActions({
       fileName: newRow.fileName,
       comment: newRow.comment,
       deadline: newRow.deadline,
-      estimateHours: newRow.estimateHours,
       parentRowNumber: null
     };
 
-    if (newRow.isSharedTask && newRow.assigneeParts?.length >= 2) {
+    if (isShared) {
       payload.parts = newRow.assigneeParts;
       payload.estimateHours = newRow.assigneeParts.reduce(
         (s, p) => s + (p.allocatedHours || 0),
@@ -37,8 +39,8 @@ export default function useTaskTableActions({
       );
     } else {
       const hours = parseFloat(newRow.estimateHours);
-      if (!hours || hours <= 0) {
-        showWarning('Укажите количество часов');
+      if (!hours || hours < 0.5 || hours > 24) {
+        showWarning('Укажите часы в назначениях (от 0.5 до 24)');
         return;
       }
       payload.estimateHours = hours;
@@ -49,10 +51,10 @@ export default function useTaskTableActions({
     try {
       const created = await api.createRow(payload);
       setNewRow(null);
-      refresh();
+      await refresh();
       if (newRow.isSharedTask && created?.id) {
-        expandParent(created.id);
         await loadChildrenForParent(created.id);
+        expandParent(created.id);
       }
     } catch (err) {
       console.error('Ошибка сохранения:', err);
@@ -83,7 +85,7 @@ export default function useTaskTableActions({
         statusText: row.statusText
       });
       setEditingId(null);
-      refresh();
+      await refresh();
     } catch (err) {
       console.error('Ошибка обновления:', err);
       showError('Ошибка обновления задачи');

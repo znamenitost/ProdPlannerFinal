@@ -23,10 +23,16 @@ export default function useTaskTableRows(api, { refreshTrigger, selectedEmployee
     loadRows();
   }, [refreshTrigger, page, rowsPerPage, selectedEmployeeForHighlight, loadRows]);
 
-  const refresh = useCallback(() => {
-    loadRows();
-    if (onTaskUpdate) onTaskUpdate();
+  const refresh = useCallback(async () => {
+    await loadRows();
+    onTaskUpdate?.();
   }, [loadRows, onTaskUpdate]);
+
+  const patchRow = useCallback((id, patch) => {
+    setRows((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, ...patch } : row))
+    );
+  }, []);
 
   const toggleHighlight = () => setHighlightMyTasks(prev => !prev);
   const handleChangePage = (_event, newPage) => setPage(newPage);
@@ -49,6 +55,7 @@ export default function useTaskTableRows(api, { refreshTrigger, selectedEmployee
     handleChangePage,
     handleChangeRowsPerPage,
     refresh,
-    loadRows
+    loadRows,
+    patchRow
   };
 }

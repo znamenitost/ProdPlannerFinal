@@ -51,6 +51,26 @@ public static class DatabaseInitializer
                 logger.LogInformation("Выполнен ALTER: {Command}", alterCmd);
             }
 
+            using (var createNotifications = connection.CreateCommand())
+            {
+                createNotifications.CommandText = """
+                    CREATE TABLE IF NOT EXISTS UserNotifications (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        UserId TEXT NOT NULL,
+                        Type TEXT NOT NULL,
+                        TaskId INTEGER,
+                        Title TEXT NOT NULL,
+                        Deadline TEXT,
+                        CreatedAt TEXT NOT NULL,
+                        AcknowledgedAt TEXT
+                    );
+                    CREATE INDEX IF NOT EXISTS IX_UserNotifications_UserId_Ack
+                        ON UserNotifications(UserId, AcknowledgedAt);
+                    """;
+                await createNotifications.ExecuteNonQueryAsync();
+                logger.LogInformation("Таблица UserNotifications проверена/создана.");
+            }
+
             await connection.CloseAsync();
         }
         catch (Exception ex)

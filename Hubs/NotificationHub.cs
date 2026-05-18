@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
-using System.Threading.Tasks;
 
 namespace ProductionPlanner.Hubs
 {
@@ -10,14 +9,11 @@ namespace ProductionPlanner.Hubs
     {
         public override async Task OnConnectedAsync()
         {
-            Console.WriteLine($"Client connected: {Context.ConnectionId}");
-            await base.OnConnectedAsync();
-        }
+            var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.IsNullOrEmpty(userId))
+                await Groups.AddToGroupAsync(Context.ConnectionId, userId);
 
-        public override async Task OnDisconnectedAsync(Exception? exception)
-        {
-            Console.WriteLine($"Client disconnected: {Context.ConnectionId}");
-            await base.OnDisconnectedAsync(exception);
+            await base.OnConnectedAsync();
         }
 
         public async Task JoinUserGroup(string userId)
@@ -27,7 +23,6 @@ namespace ProductionPlanner.Hubs
                 throw new HubException("Cannot join another user's notification group.");
 
             await Groups.AddToGroupAsync(Context.ConnectionId, userId);
-            Console.WriteLine($"Connection {Context.ConnectionId} joined group {userId}");
         }
 
         public async Task LeaveUserGroup(string userId)
@@ -37,7 +32,6 @@ namespace ProductionPlanner.Hubs
                 throw new HubException("Cannot leave another user's notification group.");
 
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, userId);
-            Console.WriteLine($"Connection {Context.ConnectionId} left group {userId}");
         }
     }
 }

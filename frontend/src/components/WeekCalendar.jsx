@@ -3,7 +3,7 @@ import { Box, Paper, IconButton, Typography, Button, alpha } from '@mui/material
 import { ChevronLeft, ChevronRight, CalendarMonth, Weekend } from '@mui/icons-material';
 import { getWeekCalendar } from '../services/api';
 import DayColumn from './DayColumn';
-import { CalendarLoadingSkeleton } from './LoadingState';
+import { CalendarLoadingState } from './LoadingState';
 
 export default function WeekCalendar({ employee, refresh }) {
   const [weekData, setWeekData] = useState(null);
@@ -47,7 +47,7 @@ export default function WeekCalendar({ employee, refresh }) {
     setCurrentMonday(newMonday);
   };
 
-  if (!weekData) return <CalendarLoadingSkeleton />;
+  if (!weekData) return <CalendarLoadingState />;
 
   const start = new Date(weekData.start);
   const end = new Date(start);

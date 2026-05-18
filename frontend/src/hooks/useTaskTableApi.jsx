@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react';
+import { openFileOnClient } from '../utils/openFileOnClient';
 
 export default function useTaskTableApi() {
   const handleResponse = useCallback(async (response) => {
@@ -99,21 +100,11 @@ export default function useTaskTableApi() {
     if (!relativePath || relativePath === '/') {
       throw new Error('Путь к файлу не указан');
     }
-    const response = await fetch('/api/files/open', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        filePath: relativePath,
-        clientPlatform: navigator.platform || navigator.userAgent
-      })
-    });
-    const data = await handleResponse(response);
-    if (data.downloadUrl) {
-      window.open(data.downloadUrl, '_blank');
-    } else {
-      throw new Error('Не удалось получить ссылку на файл');
+    const result = openFileOnClient(relativePath);
+    if (!result.ok) {
+      throw new Error('Не удалось открыть файл');
     }
-  }, [handleResponse]);
+  }, []);
 
   const getTaskForSplit = useCallback(async (employeeName, taskId) => {
     const response = await fetch(`/api/tasks/active?employee=${encodeURIComponent(employeeName)}`);

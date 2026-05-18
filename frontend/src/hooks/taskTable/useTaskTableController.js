@@ -11,8 +11,8 @@ export default function useTaskTableController({
   onTaskUpdate,
   selectedEmployeeForHighlight
 }) {
-  const api = useTaskTableApi();
   const { showError, showWarning, confirm } = useUiFeedback();
+  const api = useTaskTableApi();
 
   const rowsState = useTaskTableRows(api, {
     refreshTrigger,
@@ -47,6 +47,7 @@ export default function useTaskTableController({
     expandedRows: childrenState.expandedRows,
     editingId: rowsState.editingId,
     refresh: rowsState.refresh,
+    patchRow: rowsState.patchRow,
     newRow: rowsState.newRow,
     setNewRow: rowsState.setNewRow,
     showError

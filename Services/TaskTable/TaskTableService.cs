@@ -54,7 +54,7 @@ public class TaskTableService : ITaskTableService
                 parent,
                 children,
                 targetEmployeeName);
-            return TaskTableRowDto.FromParent(parent, statusText, hasSubtask);
+            return TaskTableRowDto.FromParent(parent, statusText, hasSubtask, children);
         }).ToList();
 
         return new PaginatedResult<TaskTableRowDto>

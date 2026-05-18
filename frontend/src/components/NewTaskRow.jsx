@@ -2,39 +2,41 @@ import {
   TableRow,
   TableCell,
   TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Box,
   Chip,
   IconButton,
-  Tooltip
+  Tooltip,
+  Typography
 } from '@mui/material';
 import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
-import { WORK_TIME_OPTIONS, combineDateTime } from '../utils/dateTimeHelpers';
-
-const DEFAULT_TIME = '15:00';
+import { combineDateTime, DEFAULT_TIME, parseDateTime } from '../utils/dateTimeHelpers';
+import DeadlineTimeClock from './DeadlineTimeClock';
 
 export default function NewTaskRow({
   newRow,
   setNewRow,
-  taskTypes,
-  employees,
   onSave,
   onCancel,
-  onOpenSharedModal
+  onOpenAssigneeModal
 }) {
-  const currentDate = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(0, 10) : '';
-  const currentTime = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(11, 16) : DEFAULT_TIME;
+  const { date: currentDate, time: currentTime } = newRow.deadline
+    ? parseDateTime(newRow.deadline)
+    : { date: '', time: DEFAULT_TIME };
   const isShared = newRow.isSharedTask && (newRow.assigneeParts?.length ?? 0) >= 2;
+  const hasAssignees = isShared || Boolean(newRow.employeeName);
+  const hoursDisplay =
+    newRow.estimateHours !== '' && newRow.estimateHours != null && !Number.isNaN(Number(newRow.estimateHours))
+      ? `${Number(newRow.estimateHours).toFixed(1)} ч`
+      : '—';
 
   const handleDateChange = (e) => {
     setNewRow({ ...newRow, deadline: combineDateTime(e.target.value, DEFAULT_TIME) });
   };
 
-  const handleTimeChange = (e) => {
-    setNewRow({ ...newRow, deadline: combineDateTime(currentDate, e.target.value) });
+  const assigneeLabel = () => {
+    if (isShared) return `Общая · ${newRow.assigneeParts.length}`;
+    if (newRow.employeeName) return newRow.employeeName;
+    return 'Участники';
   };
 
   return (
@@ -82,82 +84,46 @@ export default function NewTaskRow({
             onChange={handleDateChange}
             sx={{ width: 130 }}
           />
-          <Select
-            size="small"
+          <DeadlineTimeClock
             value={currentTime}
-            onChange={handleTimeChange}
-            sx={{ width: 85 }}
-          >
-            {WORK_TIME_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-          </Select>
+            onChange={(time) => setNewRow({ ...newRow, deadline: combineDateTime(currentDate, time) })}
+          />
         </Box>
       </TableCell>
 
-      <TableCell>
-        <TextField
-          type="number"
-          size="small"
-          value={newRow.estimateHours === '' || newRow.estimateHours == null ? '' : newRow.estimateHours}
-          onChange={(e) => {
-            const v = e.target.value;
-            setNewRow({
-              ...newRow,
-              estimateHours: v === '' ? '' : parseFloat(v) || 0
-            });
-          }}
-          disabled={isShared}
-          placeholder={isShared ? '' : 'ч'}
-          slotProps={{ htmlInput: { step: 0.5, min: 0 } }}
-          sx={{ width: 80 }}
-        />
+      <TableCell align="center">
+        <Typography variant="body2" sx={{ fontSize: '0.8rem', color: hasAssignees ? 'text.primary' : 'text.disabled' }}>
+          {hoursDisplay}
+        </Typography>
       </TableCell>
 
       <TableCell>
-        <FormControl size="small" fullWidth disabled={isShared}>
-          <InputLabel>Типы работ</InputLabel>
-          <Select
-            multiple
-            value={newRow.types || []}
-            label="Типы работ"
-            onChange={(e) => setNewRow({ ...newRow, types: e.target.value })}
-            renderValue={(selected) => selected.join(', ')}
+        <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+          {isShared ? '—' : (newRow.types?.length ? newRow.types.join(', ') : '—')}
+        </Typography>
+      </TableCell>
+
+      <TableCell>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+          <Tooltip
+            title={hasAssignees ? (isShared ? 'Изменить назначения' : 'Изменить сотрудника и часы') : 'Назначить сотрудников'}
+            arrow
           >
-            {taskTypes.map((type) => <MenuItem key={type} value={type}>{type}</MenuItem>)}
-          </Select>
-        </FormControl>
-      </TableCell>
-
-      <TableCell>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <FormControl size="small" sx={{ flex: 1 }} disabled={isShared}>
-            <InputLabel id="new-task-employee-label">Сотрудник</InputLabel>
-            <Select
-              labelId="new-task-employee-label"
-              value={newRow.employeeName ?? ''}
-              label="Сотрудник"
-              displayEmpty
-              onChange={(e) => setNewRow({ ...newRow, employeeName: e.target.value })}
-            >
-              {employees.map((e) => (
-                <MenuItem key={e} value={e}>
-                  {e}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Tooltip title={isShared ? 'Общая задача — изменить назначения' : 'Сделать общей задачей'} arrow>
-            <IconButton size="small" onClick={onOpenSharedModal} sx={{ flexShrink: 0 }}>
-              <PeopleAlt fontSize="small" sx={{ color: isShared ? '#8b5cf6' : '#94a3b8' }} />
+            <IconButton size="small" onClick={onOpenAssigneeModal}>
+              <PeopleAlt fontSize="small" sx={{ color: hasAssignees ? (isShared ? '#8b5cf6' : '#64748b') : '#94a3b8' }} />
             </IconButton>
           </Tooltip>
+          <Typography variant="caption" sx={{ color: hasAssignees ? 'text.primary' : 'text.disabled', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {assigneeLabel()}
+          </Typography>
         </Box>
       </TableCell>
 
       <TableCell>
         <Chip
-          label={isShared ? `Общая · ${newRow.assigneeParts.length}` : 'Новая'}
+          label={hasAssignees ? (isShared ? 'Общая' : 'Новая') : 'Черновик'}
           size="small"
-          color={isShared ? 'secondary' : 'warning'}
+          color={isShared ? 'secondary' : hasAssignees ? 'warning' : 'default'}
           variant={isShared ? 'outlined' : 'filled'}
         />
       </TableCell>

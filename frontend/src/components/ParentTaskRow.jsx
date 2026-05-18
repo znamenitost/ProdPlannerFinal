@@ -20,16 +20,15 @@ import {
   FolderOpen,
   ExpandMore,
   ChevronRight,
-  CallSplit,
   Person,
   Comment as CommentIcon,
-  PeopleAlt    // <-- добавлено для индикатора общей задачи
+  PeopleAlt
 } from '@mui/icons-material';
 import {
   truncate,
   getStatusColor,
   getStatusIcon,
-  getUniqueEmployeesFromChildren,
+  getParentEmployeeDisplay,
   isOverdue,
   getLastPathSegment
 } from '../utils/taskHelpers';
@@ -47,11 +46,10 @@ export default function ParentTaskRow({
   onComplete,
   onEdit,
   onDelete,
-  onSplit,
+  onOpenAssigneeModal,
   onOpenComment,
   canEdit,
   canDelete,
-  canSplit,
   canChangeStatus,
   currentUser,
   highlightMyTasks,
@@ -84,9 +82,7 @@ export default function ParentTaskRow({
     }
   }
 
-  const employeeDisplay = (hasChildren && childrenTasks && childrenTasks.length > 0)
-    ? getUniqueEmployeesFromChildren(childrenTasks)
-    : task.employeeName;
+  const employeeDisplay = getParentEmployeeDisplay(task, childrenTasks);
 
   const fullFilePath = `${task.folderPath || ''}/${task.fileName || ''}`.replace(/\/\//g, '/');
   const shortFolderPath = getLastPathSegment(task.folderPath);
@@ -131,14 +127,7 @@ export default function ParentTaskRow({
               </IconButton>
             )}
             {!hasChildren && <Box sx={{ width: 28 }} />}
-            
-            {/* Индикатор: общая задача (сплит) */}
-            {task.isSplitTask && (
-              <Tooltip title="Общая задача (разделена между сотрудниками)" arrow>
-                <PeopleAlt fontSize="small" sx={{ color: '#8b5cf6' }} />
-              </Tooltip>
-            )}
-            
+
             <Tooltip title={`Открыть файл: ${fullFilePath}`} arrow>
               <IconButton size="small" onClick={() => onOpenFile(task)} sx={{ color: '#7c9ebf' }}>
                 <FolderOpen fontSize="small" />
@@ -224,12 +213,12 @@ export default function ParentTaskRow({
           )}
         </TableCell>
 
-        <TableCell sx={{ width: (canEdit || canDelete || canSplit) ? '12%' : '10%' }}>
+        <TableCell sx={{ width: (canEdit || canDelete) ? '12%' : '10%' }}>
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
-            {canSplit && !hasChildren && task.statusText !== 'Готово' && (
-              <Tooltip title="Разделить задачу">
-                <IconButton size="small" onClick={() => onSplit(task)} sx={{ color: '#8b5cf6' }}>
-                  <CallSplit fontSize="small" />
+            {canEdit && task.statusText !== 'Готово' && (
+              <Tooltip title={task.isSplitTask ? 'Общая задача — изменить назначения' : 'Сделать общей задачей'} arrow>
+                <IconButton size="small" onClick={() => onOpenAssigneeModal(task)} sx={{ color: task.isSplitTask ? '#8b5cf6' : '#94a3b8' }}>
+                  <PeopleAlt fontSize="small" />
                 </IconButton>
               </Tooltip>
             )}

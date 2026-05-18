@@ -45,11 +45,9 @@ export default function TaskTable({
               <NewTaskRow
                 newRow={table.newRow}
                 setNewRow={table.setNewRow}
-                taskTypes={table.taskTypes}
-                employees={table.employees}
                 onSave={table.handleSaveNewRow}
                 onCancel={() => table.setNewRow(null)}
-                onOpenSharedModal={table.handleOpenNewSharedModal}
+                onOpenAssigneeModal={table.handleOpenNewSharedModal}
               />
             )}
             {table.rows.map(parent => {
@@ -61,9 +59,7 @@ export default function TaskTable({
                   task={parent}
                   onUpdate={table.handleUpdateRow}
                   onCancel={() => table.setEditingId(null)}
-                  taskTypes={table.taskTypes}
-                  employees={table.employees}
-                  onOpenSharedModal={table.handleOpenEditSharedModal}
+                  onOpenAssigneeModal={table.handleOpenAssigneeModal}
                 />
               ) : (
                 <ParentTaskRow
@@ -79,11 +75,10 @@ export default function TaskTable({
                   onComplete={table.handleCompleteTask}
                   onEdit={() => table.setEditingId(parent.id)}
                   onDelete={table.handleDeleteRow}
-                  onSplit={table.handleSplitTask}
+                  onOpenAssigneeModal={table.handleOpenAssigneeModal}
                   onOpenComment={table.handleOpenComment}
                   canEdit={isAdmin}
                   canDelete={isAdmin}
-                  canSplit={isAdmin}
                   canChangeStatus={!isAdmin}
                   currentUser={currentUser}
                   highlightMyTasks={table.highlightMyTasks}

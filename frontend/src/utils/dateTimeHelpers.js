@@ -1,29 +1,36 @@
-// ./frontend/src/utils/dateTimeHelpers.js
-export const WORK_TIME_OPTIONS = [];
-for (let h = 10; h <= 19; h++) {
-  for (let m of [0, 30]) {
-    if (h === 19 && m === 30) continue;
-    const hour = h.toString().padStart(2, '0');
-    const minute = m.toString().padStart(2, '0');
-    WORK_TIME_OPTIONS.push(`${hour}:${minute}`);
-  }
-}
+export const WORK_HOUR_MIN = 11;
+export const WORK_HOUR_MAX = 19;
 export const DEFAULT_TIME = '15:00';
+
+export function parseTimeToHour(timeStr) {
+  const hour = parseInt((timeStr || DEFAULT_TIME).split(':')[0], 10);
+  if (!Number.isFinite(hour)) return 15;
+  return Math.min(WORK_HOUR_MAX, Math.max(WORK_HOUR_MIN, hour));
+}
+
+export function formatHourAsTime(hour) {
+  const h = Math.min(WORK_HOUR_MAX, Math.max(WORK_HOUR_MIN, hour));
+  return `${h.toString().padStart(2, '0')}:00`;
+}
+
+export const WORK_TIME_OPTIONS = [];
+for (let h = WORK_HOUR_MIN; h <= WORK_HOUR_MAX; h++) {
+  WORK_TIME_OPTIONS.push(formatHourAsTime(h));
+}
 
 export const parseDateTime = (dateTimeStr) => {
   if (!dateTimeStr) return { date: '', time: DEFAULT_TIME };
-  const date = new Date(dateTimeStr);
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return { date: `${year}-${month}-${day}`, time: `${hours}:${minutes}` };
+  const [datePart, timePart] = dateTimeStr.split('T');
+  if (!datePart) return { date: '', time: DEFAULT_TIME };
+  const time = timePart ? formatHourAsTime(parseTimeToHour(timePart)) : DEFAULT_TIME;
+  return { date: datePart, time };
 };
 
 export const combineDateTime = (date, time) => {
   if (!date) return '';
-  return `${date}T${time}`;
+  const [h] = (time || DEFAULT_TIME).split(':');
+  const hour = Math.min(WORK_HOUR_MAX, Math.max(WORK_HOUR_MIN, parseInt(h, 10) || WORK_HOUR_MIN));
+  return `${date}T${hour.toString().padStart(2, '0')}:00`;
 };
 
 export const getMonday = (date) => {
@@ -35,16 +42,15 @@ export const getMonday = (date) => {
   return d;
 };
 
-// Функции для расчёта позиций в календаре (рабочий день 10-19 часов = 9 часов)
 export const getLeftPercent = (dateTime) => {
   const d = new Date(dateTime);
   const hours = d.getHours() + d.getMinutes() / 60;
-  return ((hours - 10) / 9) * 100;
+  return ((hours - WORK_HOUR_MIN) / (WORK_HOUR_MAX - WORK_HOUR_MIN)) * 100;
 };
 
 export const getWidthPercent = (start, end) => {
   const s = new Date(start);
   const e = new Date(end);
   const duration = (e - s) / (1000 * 60 * 60);
-  return (duration / 9) * 100;
+  return (duration / (WORK_HOUR_MAX - WORK_HOUR_MIN)) * 100;
 };

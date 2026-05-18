@@ -164,9 +164,17 @@ public async Task DeleteTaskAsync(int id)
 
         public async Task<List<ProductionTask>> GetChildTasksAsync(int parentId)
         {
+            var activeChildIds = await _context.TaskSplits
+                .Where(ts => ts.ParentRowNumber == parentId)
+                .Select(ts => ts.ChildTaskId)
+                .ToListAsync();
+
+            if (!activeChildIds.Any())
+                return new List<ProductionTask>();
+
             return await _context.ProductionTasks
                 .Include(t => t.WorkIntervals)
-                .Where(t => t.ParentRowNumber == parentId)
+                .Where(t => activeChildIds.Contains(t.Id))
                 .ToListAsync();
         }
 
@@ -196,14 +204,23 @@ public async Task DeleteTaskAsync(int id)
             if (parentIds.Count == 0)
                 return new Dictionary<int, List<ProductionTask>>();
 
-            var allChildren = await _context.ProductionTasks
-                .Where(c => c.ParentRowNumber.HasValue &&
-                            parentIds.Contains(c.ParentRowNumber.Value) &&
-                            c.IsSplitTask)
+            var splits = await _context.TaskSplits
+                .Where(ts => parentIds.Contains(ts.ParentRowNumber))
                 .ToListAsync();
 
-            return allChildren
-                .GroupBy(c => c.ParentRowNumber!.Value)
+            if (splits.Count == 0)
+                return new Dictionary<int, List<ProductionTask>>();
+
+            var childIds = splits.Select(s => s.ChildTaskId).ToList();
+            var children = await _context.ProductionTasks
+                .Where(c => childIds.Contains(c.Id) && c.IsSplitTask)
+                .ToListAsync();
+
+            var parentByChildId = splits.ToDictionary(s => s.ChildTaskId, s => s.ParentRowNumber);
+
+            return children
+                .Where(c => parentByChildId.ContainsKey(c.Id))
+                .GroupBy(c => parentByChildId[c.Id])
                 .ToDictionary(g => g.Key, g => g.ToList());
         }
 

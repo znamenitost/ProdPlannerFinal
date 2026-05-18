@@ -1,4 +1,5 @@
-import { Box, Checkbox, FormControlLabel, TextField, Typography, Button, Grid } from '@mui/material';
+import { Box, Checkbox, FormControlLabel, Typography, Button, Grid } from '@mui/material';
+import EstimateHoursInput from './EstimateHoursInput';
 import { CheckCircle } from '@mui/icons-material';
 import { useState, useEffect } from 'react';
 
@@ -74,13 +75,10 @@ export default function EmployeeHoursSelector({ employees, totalHours, onChange,
                   sx={{ width: 120 }}
                 />
                 {checked && (
-                  <TextField
-                    size="small"
-                    type="number"
-                    label="Часы"
+                  <EstimateHoursInput
                     value={assigned.hours}
-                    onChange={(e) => updateAssignment(emp, e.target.value)}
-                    inputProps={{ step: 0.5, min: 0, max: totalHours }}
+                    onChange={(hours) => updateAssignment(emp, hours)}
+                    max={totalHours}
                     sx={{ width: 100 }}
                   />
                 )}

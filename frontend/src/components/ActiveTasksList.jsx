@@ -3,6 +3,7 @@ import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../
 import { Warning, Error, FolderOpen, AccessTime, Event, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
 import { Tooltip, Chip, IconButton, Box, Typography } from '@mui/material';
 import { useUiFeedback } from '../context/UiFeedbackContext';
+import { openFileOnClient } from '../utils/openFileOnClient';
 
 export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
   const { showError, showWarning } = useUiFeedback();
@@ -21,30 +22,13 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     }
   };
 
-  const openFile = async (filePath) => {
+  const openFile = (filePath) => {
     if (!filePath) {
       showWarning('Путь к файлу не указан');
       return;
     }
-    try {
-      const response = await fetch('/api/files/open', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath,
-          clientPlatform: navigator.platform || navigator.userAgent
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        showError(data.message || 'Ошибка открытия файла');
-        return;
-      }
-      if (data.downloadUrl) {
-        window.open(data.downloadUrl, '_blank');
-      }
-    } catch (err) {
-      console.error('Ошибка открытия файла:', err);
+    const result = openFileOnClient(filePath);
+    if (!result.ok) {
       showError('Не удалось открыть файл');
     }
   };

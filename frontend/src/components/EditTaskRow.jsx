@@ -1,15 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
-import { TableRow, TableCell, TextField, Select, MenuItem, IconButton, Tooltip, Box } from '@mui/material';
+import { useState, useEffect } from 'react';
+import { TableRow, TableCell, TextField, IconButton, Tooltip, Box, Typography } from '@mui/material';
 import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
-import { WORK_TIME_OPTIONS, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
+import { parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
+import DeadlineTimeClock from './DeadlineTimeClock';
 
 export default function EditTaskRow({
   task,
   onUpdate,
   onCancel,
-  taskTypes,
-  employees,
-  onOpenSharedModal
+  onOpenAssigneeModal
 }) {
   const isShared = task.isSplitTask;
 
@@ -27,25 +26,21 @@ export default function EditTaskRow({
     isSplitTask: task.isSplitTask
   }));
 
-  const prevIdRef = useRef(task.id);
   useEffect(() => {
-    if (task.id !== prevIdRef.current) {
-      setLocalTask({
-        id: task.id,
-        folderPath: task.folderPath || '',
-        fileName: task.fileName || '',
-        comment: task.comment || '',
-        deadline: task.deadline,
-        estimateHours: task.estimateHours || 0,
-        type: task.type || '',
-        employeeName: task.employeeName || '',
-        parentRowNumber: task.parentRowNumber,
-        statusText: task.statusText || '',
-        isSplitTask: task.isSplitTask
-      });
-      prevIdRef.current = task.id;
-    }
-  }, [task.id, task]);
+    setLocalTask({
+      id: task.id,
+      folderPath: task.folderPath || '',
+      fileName: task.fileName || '',
+      comment: task.comment || '',
+      deadline: task.deadline,
+      estimateHours: task.estimateHours || 0,
+      type: task.type || '',
+      employeeName: task.employeeName || '',
+      parentRowNumber: task.parentRowNumber,
+      statusText: task.statusText || '',
+      isSplitTask: task.isSplitTask
+    });
+  }, [task.id, task.estimateHours, task.isSplitTask, task.type, task.employeeName, task.deadline, task.folderPath, task.fileName, task.comment, task.statusText]);
 
   const handleFieldChange = (field, value) => {
     setLocalTask(prev => ({ ...prev, [field]: value }));
@@ -65,16 +60,7 @@ export default function EditTaskRow({
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
       <TableCell sx={{ width: '3%' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Edit color="warning" fontSize="small" />
-          {isShared && (
-            <Tooltip title="Общая задача — редактировать назначения" arrow>
-              <IconButton size="small" onClick={() => onOpenSharedModal(localTask)}>
-                <PeopleAlt fontSize="small" sx={{ color: '#8b5cf6' }} />
-              </IconButton>
-            </Tooltip>
-          )}
-        </Box>
+        <Edit color="warning" fontSize="small" />
       </TableCell>
 
       <TableCell sx={{ width: '15%' }}>
@@ -115,52 +101,40 @@ export default function EditTaskRow({
             onChange={(e) => handleFieldChange('deadline', combineDateTime(e.target.value, time))}
             sx={{ width: 130 }}
           />
-          <Select
-            size="small"
+          <DeadlineTimeClock
             value={time}
-            onChange={(e) => handleFieldChange('deadline', combineDateTime(date, e.target.value))}
-            sx={{ width: 85 }}
-          >
-            {WORK_TIME_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-          </Select>
+            onChange={(t) => handleFieldChange('deadline', combineDateTime(date, t))}
+          />
         </Box>
       </TableCell>
 
       <TableCell align="center" sx={{ width: '6%' }}>
-        <TextField
-          size="small"
-          type="number"
-          value={localTask.estimateHours}
-          onChange={(e) => handleFieldChange('estimateHours', parseFloat(e.target.value) || 0)}
-          slotProps={{ htmlInput: { step: 0.5, min: 0 } }}
-          sx={{ width: 80 }}
-        />
+        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+          {localTask.estimateHours?.toFixed(1) || '0.0'} ч
+        </Typography>
       </TableCell>
 
       <TableCell sx={{ width: '8%' }}>
-        <Select
-          size="small"
-          multiple
-          disabled={isShared}
-          value={localTask.type ? localTask.type.split(', ') : []}
-          onChange={(e) => handleFieldChange('type', e.target.value.join(', '))}
-          renderValue={(selected) => selected.join(', ')}
-          fullWidth
-        >
-          {taskTypes.map((type) => <MenuItem key={type} value={type}>{type}</MenuItem>)}
-        </Select>
+        <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {isShared ? '—' : (localTask.type || '—')}
+        </Typography>
       </TableCell>
 
       <TableCell sx={{ width: '8%' }}>
-        <Select
-          size="small"
-          disabled={isShared}
-          value={localTask.employeeName}
-          onChange={(e) => handleFieldChange('employeeName', e.target.value)}
-          fullWidth
-        >
-          {employees.map(emp => <MenuItem key={emp} value={emp}>{emp}</MenuItem>)}
-        </Select>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+          <Tooltip title={isShared ? 'Изменить назначения' : 'Изменить сотрудника и часы'} arrow>
+            <IconButton
+              size="small"
+              onClick={() => onOpenAssigneeModal(localTask)}
+              sx={{ flexShrink: 0 }}
+            >
+              <PeopleAlt fontSize="small" sx={{ color: isShared ? '#8b5cf6' : '#64748b' }} />
+            </IconButton>
+          </Tooltip>
+          <Typography variant="caption" sx={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {isShared ? 'Общая' : (localTask.employeeName || '—')}
+          </Typography>
+        </Box>
       </TableCell>
 
       <TableCell sx={{ width: '8%' }}>

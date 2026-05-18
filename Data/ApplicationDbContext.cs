@@ -13,6 +13,7 @@ namespace ProductionPlanner.Data
         public DbSet<WorkInterval> WorkIntervals { get; set; }
         public DbSet<EmployeeStat> EmployeeStats { get; set; }
         public DbSet<TaskSplit> TaskSplits { get; set; }
+        public DbSet<UserNotification> UserNotifications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

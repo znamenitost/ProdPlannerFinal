@@ -1,0 +1,7 @@
+{
+  "name": "production-planner",
+  "private": true,
+  "scripts": {
+    "mac-opener": "node scripts/mac-local-opener.mjs"
+  }
+}

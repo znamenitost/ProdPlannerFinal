@@ -1,4 +1,4 @@
-import { Box, CircularProgress, Skeleton, Typography } from '@mui/material';
+import { Box, CircularProgress, Typography } from '@mui/material';
 
 export function LoadingState({ message = 'Загрузка...', fullScreen = false, size = 40 }) {
   return (
@@ -23,19 +23,18 @@ export function LoadingState({ message = 'Загрузка...', fullScreen = fal
   );
 }
 
-export function CalendarLoadingSkeleton() {
+export function CalendarLoadingState() {
   return (
-    <Box sx={{ py: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 3 }}>
-        <Skeleton variant="circular" width={40} height={40} />
-        <Skeleton variant="text" width={220} height={32} />
-        <Skeleton variant="circular" width={40} height={40} />
-      </Box>
-      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-        {[1, 2, 3, 4, 5].map((i) => (
-          <Skeleton key={i} variant="rounded" width={160} height={320} sx={{ borderRadius: 2 }} />
-        ))}
-      </Box>
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 400,
+        py: 6,
+      }}
+    >
+      <CircularProgress size={48} color="primary" />
     </Box>
   );
 }

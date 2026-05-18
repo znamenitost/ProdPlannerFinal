@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using ProductionPlanner.Services;
 
 namespace ProductionPlanner.Controllers
 {
@@ -15,70 +16,76 @@ namespace ProductionPlanner.Controllers
             _configuration = configuration;
         }
 
+        [HttpGet("launch")]
+        public IActionResult LaunchFile([FromQuery] string path, [FromQuery] string? clientPlatform)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return BadRequest(new { message = "Путь к файлу не указан" });
+
+            if (!TryBuildOpenUrl(path, clientPlatform, out var openUrl, out var error))
+                return BadRequest(new { message = error });
+
+            return Redirect(openUrl);
+        }
+
         [HttpPost("open")]
         public IActionResult OpenFile([FromBody] OpenFileRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.FilePath))
                 return BadRequest(new { message = "Путь к файлу не указан" });
 
+            if (!TryBuildOpenUrl(request.FilePath, request.ClientPlatform, out var openUrl, out var error))
+                return BadRequest(new { message = error });
+
             var shareName = _configuration["FileOpen:ShareName"] ?? "Клиенты";
-            var macSmbHost = _configuration["FileOpen:MacSmbHost"] ?? "MINIMARKER";
-            var windowsHost = _configuration["FileOpen:WindowsHost"] ?? "192.168.1.119";
-            var netOpenScheme = _configuration["FileOpen:NetOpenScheme"] ?? "netopen";
-            var netOpenShareName = _configuration["FileOpen:NetOpenShareName"] ?? shareName.ToLowerInvariant();
-
-            var correctedPath = NormalizeRelativePath(request.FilePath, shareName);
-            if (string.IsNullOrWhiteSpace(correctedPath))
-                return BadRequest(new { message = "Не удалось определить путь к файлу" });
-
-            var smbUrl = $"smb://{macSmbHost}/{shareName}/{correctedPath}";
-            var netOpenUrl = $"{netOpenScheme}://{windowsHost}/{netOpenShareName}/{correctedPath}";
-            var clientPlatform = request.ClientPlatform ?? string.Empty;
-            var downloadUrl = clientPlatform.Contains("Win", StringComparison.OrdinalIgnoreCase)
-                ? netOpenUrl
-                : smbUrl;
+            var correctedPath = FilePathNormalizer.NormalizeRelativePath(request.FilePath, shareName);
 
             return Ok(new
             {
                 message = "Ссылка на файл сформирована",
-                downloadUrl,
-                smbUrl,
-                netOpenUrl
+                openUrl,
+                relativePath = correctedPath,
+                launchUrl = $"/api/files/launch?path={Uri.EscapeDataString(request.FilePath)}&clientPlatform={Uri.EscapeDataString(request.ClientPlatform ?? "")}"
             });
         }
 
-        private static string NormalizeRelativePath(string filePath, string shareName)
+        private bool TryBuildOpenUrl(string filePath, string? clientPlatform, out string openUrl, out string error)
         {
-            var rawPath = filePath.Replace('\\', '/').Trim();
-            while (rawPath.Contains("//"))
-                rawPath = rawPath.Replace("//", "/");
+            openUrl = "";
+            error = "";
 
-            rawPath = rawPath.Trim('/');
-            var sharePrefix = shareName.Trim('/');
-            if (rawPath.StartsWith(sharePrefix + "/", StringComparison.OrdinalIgnoreCase))
-                rawPath = rawPath[(sharePrefix.Length + 1)..];
+            var shareName = _configuration["FileOpen:ShareName"] ?? "Клиенты";
+            var macSmbHost = _configuration["FileOpen:MacSmbHost"] ?? "minimarker";
+            var windowsHost = _configuration["FileOpen:WindowsHost"] ?? "192.168.1.119";
+            var netOpenScheme = _configuration["FileOpen:NetOpenScheme"] ?? "netopen";
+            var netOpenShareName = _configuration["FileOpen:NetOpenShareName"] ?? shareName;
+            var windowsShareName = _configuration["FileOpen:WindowsShareName"] ?? shareName;
+            var windowsOpenMode = _configuration["FileOpen:WindowsOpenMode"] ?? "file";
 
-            var parts = rawPath
-                .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .ToArray();
+            var correctedPath = FilePathNormalizer.NormalizeRelativePath(filePath, shareName);
+            if (string.IsNullOrWhiteSpace(correctedPath))
+            {
+                error = "Не удалось определить путь к файлу";
+                return false;
+            }
 
-            if (parts.Length == 0)
-                return string.Empty;
+            var platform = clientPlatform ?? "";
+            var isWindows = platform.Contains("Win", StringComparison.OrdinalIgnoreCase)
+                || platform.Contains("Windows", StringComparison.OrdinalIgnoreCase);
 
-            var cleanFileName = parts[^1].Split('[')[0].Trim();
-            if (!HasSupportedExtension(cleanFileName))
-                cleanFileName += ".cdr";
+            if (isWindows)
+            {
+                openUrl = windowsOpenMode.Equals("netopen", StringComparison.OrdinalIgnoreCase)
+                    ? FilePathNormalizer.BuildNetOpenUrl(netOpenScheme, windowsHost, netOpenShareName, correctedPath)
+                    : FilePathNormalizer.BuildWindowsFileUrl(windowsHost, windowsShareName, correctedPath);
+            }
+            else
+            {
+                // Кодирование каждого сегмента (запятые в имени файла — иначе открывается только папка).
+                openUrl = FilePathNormalizer.BuildSmbUrl(macSmbHost, shareName, correctedPath, encodePath: true);
+            }
 
-            parts[^1] = cleanFileName;
-            return string.Join("/", parts);
-        }
-
-        private static bool HasSupportedExtension(string fileName)
-        {
-            return fileName.EndsWith(".cdr", StringComparison.OrdinalIgnoreCase)
-                || fileName.EndsWith(".ai", StringComparison.OrdinalIgnoreCase)
-                || fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
-                || fileName.EndsWith(".eps", StringComparison.OrdinalIgnoreCase);
+            return true;
         }
     }
 

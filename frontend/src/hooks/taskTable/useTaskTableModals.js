@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { childrenToModalParts, apiPartsToModalParts } from '../../components/SplitTaskModal';
+import { childrenToModalParts, apiPartsToModalParts, taskToModalParts } from '../../components/SplitTaskModal';
 
 export default function useTaskTableModals({
   api,
@@ -12,6 +12,7 @@ export default function useTaskTableModals({
   expandedRows,
   editingId,
   refresh,
+  patchRow,
   newRow,
   setNewRow,
   showError
@@ -36,24 +37,47 @@ export default function useTaskTableModals({
       fileName: newRow.fileName,
       folderPath: newRow.folderPath
     });
-    setSplitModalInitialParts(
-      apiPartsToModalParts(newRow.assigneeParts, employees, taskTypes)
-    );
+    let initialParts = apiPartsToModalParts(newRow.assigneeParts, employees, taskTypes);
+    if (!initialParts?.length && newRow.employeeName) {
+      initialParts = [{
+        employeeName: newRow.employeeName,
+        taskTypes: newRow.types?.length ? newRow.types : [taskTypes[0]],
+        hours: Number(newRow.estimateHours) || 0
+      }];
+    }
+    setSplitModalInitialParts(initialParts);
     setSplitModalOpen(true);
   };
 
   const handleDraftApply = (apiParts) => {
     const isShared = apiParts.length >= 2;
     const totalFromParts = apiParts.reduce((s, p) => s + (p.allocatedHours || 0), 0);
-    setNewRow(prev => ({
-      ...prev,
-      assigneeParts: isShared ? apiParts : null,
-      isSharedTask: isShared,
-      estimateHours: isShared ? totalFromParts : (prev.estimateHours === '' ? '' : prev.estimateHours)
-    }));
+    if (isShared) {
+      setNewRow(prev => ({
+        ...prev,
+        assigneeParts: apiParts,
+        isSharedTask: true,
+        estimateHours: totalFromParts,
+        employeeName: '',
+        types: []
+      }));
+    } else {
+      const part = apiParts[0];
+      const types = part.taskType
+        ? part.taskType.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+      setNewRow(prev => ({
+        ...prev,
+        assigneeParts: null,
+        isSharedTask: false,
+        estimateHours: totalFromParts,
+        employeeName: part.employeeName,
+        types
+      }));
+    }
   };
 
-  const handleOpenEditSharedModal = async (task) => {
+  const openEditSharedModal = async (task) => {
     let children = childrenCache.get(task.id);
     if (!children?.length) {
       children = await api.loadChildren(task.id);
@@ -70,34 +94,47 @@ export default function useTaskTableModals({
     setSplitModalOpen(true);
   };
 
-  const handleSplitTask = async (row) => {
+  const handleOpenAssigneeModal = async (task) => {
     try {
-      const task = await api.getTaskForSplit(row.employeeName, row.id);
-      setSplitModalMode('split');
+      if (task.isSplitTask) {
+        await openEditSharedModal(task);
+        return;
+      }
+      setSplitModalMode('edit');
       setSplitModalTask({
         id: task.id,
         estimateHours: task.estimateHours,
-        fileName: row.fileName,
-        folderPath: row.folderPath
+        fileName: task.fileName,
+        folderPath: task.folderPath
       });
-      setSplitModalInitialParts(null);
+      setSplitModalInitialParts(taskToModalParts(task, employees, taskTypes));
       setSplitModalOpen(true);
     } catch (err) {
-      showError(err.message);
+      showError(err.message || 'Не удалось открыть назначения');
     }
   };
 
-  const handleSplitSuccess = async () => {
+  const handleSplitSuccess = async (result) => {
     const parentId = splitModalTask?.id;
-    if (splitModalMode === 'edit' && editingId === parentId) {
+    if (parentId && result) {
+      const rowPatch = {
+        estimateHours: result.estimateHours,
+        isSplitTask: result.isSplitTask,
+        employeeName: result.employeeName ?? '',
+        type: result.type ?? ''
+      };
+      if (!result.isSplitTask) {
+        rowPatch.splitEmployeeNames = '';
+      }
+      patchRow(parentId, rowPatch);
+    }
+    if (parentId) {
+      clearChildrenCache(parentId);
+    }
+    await refresh();
+    if (parentId) {
       const children = await api.loadChildren(parentId);
       setChildrenForParent(parentId, children);
-    }
-    refresh();
-    if (parentId) {
-      if (splitModalMode !== 'edit') {
-        clearChildrenCache(parentId);
-      }
       if (expandedRows.has(parentId)) {
         await loadChildrenForParent(parentId);
       }
@@ -133,8 +170,7 @@ export default function useTaskTableModals({
     closeSplitModal,
     handleOpenNewSharedModal,
     handleDraftApply,
-    handleOpenEditSharedModal,
-    handleSplitTask,
+    handleOpenAssigneeModal,
     handleSplitSuccess,
     handleOpenComment,
     handleSaveComment,

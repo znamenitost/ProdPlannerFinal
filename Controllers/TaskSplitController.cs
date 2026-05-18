@@ -29,8 +29,15 @@ namespace ProductionPlanner.Controllers
         {
             try
             {
-                await _splitService.SplitTaskAsync(request.ParentTaskId, request.Parts);
-                return Ok(new { message = "Задача успешно разделена" });
+                var parent = await _splitService.SplitTaskAsync(request.ParentTaskId, request.Parts);
+                return Ok(new
+                {
+                    message = "Задача успешно разделена",
+                    estimateHours = parent.EstimateHours,
+                    isSplitTask = parent.IsSplitTask,
+                    employeeName = parent.EmployeeName,
+                    type = parent.Type
+                });
             }
             catch (Exception ex)
             {
@@ -44,8 +51,15 @@ namespace ProductionPlanner.Controllers
         {
             try
             {
-                await _splitService.UpdateSplitAsync(parentTaskId, request.Parts);
-                return Ok(new { message = "Назначения обновлены" });
+                var parent = await _splitService.UpdateSplitAsync(parentTaskId, request.Parts);
+                return Ok(new
+                {
+                    message = "Назначения обновлены",
+                    estimateHours = parent.EstimateHours,
+                    isSplitTask = parent.IsSplitTask,
+                    employeeName = parent.EmployeeName,
+                    type = parent.Type
+                });
             }
             catch (Exception ex)
             {
@@ -69,8 +83,10 @@ namespace ProductionPlanner.Controllers
                 c.FileName,
                 c.Comment,
                 StatusText = MapStatusToText(c.Status),
+                Status = c.Status.ToString(),
                 c.Deadline,
                 c.EstimateHours,
+                c.ActualHours,
                 c.Type,
                 c.EmployeeName,
                 c.CreatedAt,

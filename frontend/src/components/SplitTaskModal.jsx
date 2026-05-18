@@ -20,6 +20,7 @@ import {
   OutlinedInput
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
+import EstimateHoursInput from './EstimateHoursInput';
 
 function partsToApi(parts) {
   return parts.map(p => ({
@@ -35,13 +36,21 @@ function parseTypeToArray(type) {
   return type.split(',').map(s => s.trim()).filter(Boolean);
 }
 
+function isChildStarted(child) {
+  const status = child.statusText || child.status || '';
+  return status === 'Начал' || status === 'Пауза' || status === 'InProgress' || status === 'Paused'
+    || (child.actualHours ?? 0) > 0.01 || (child.progress ?? 0) > 0.01;
+}
+
 export function childrenToModalParts(children, employees, taskTypes) {
   if (!children?.length) return null;
   return children.map(c => ({
     childTaskId: c.id,
     employeeName: c.employeeName || employees[0],
     taskTypes: parseTypeToArray(c.type).length ? parseTypeToArray(c.type) : [taskTypes[0]],
-    hours: c.estimateHours ?? 0
+    hours: c.estimateHours ?? 0,
+    statusText: c.statusText || '',
+    started: isChildStarted(c)
   }));
 }
 
@@ -52,6 +61,15 @@ export function apiPartsToModalParts(parts, employees, taskTypes) {
     taskTypes: parseTypeToArray(p.taskType).length ? parseTypeToArray(p.taskType) : [taskTypes[0]],
     hours: p.allocatedHours ?? 0
   }));
+}
+
+export function taskToModalParts(task, employees, taskTypes) {
+  const types = parseTypeToArray(task.type);
+  return [{
+    employeeName: task.employeeName || employees[0],
+    taskTypes: types.length ? types : [taskTypes[0]],
+    hours: task.estimateHours ?? 0
+  }];
 }
 
 export default function SplitTaskModal({
@@ -67,12 +85,11 @@ export default function SplitTaskModal({
 }) {
   const [parts, setParts] = useState([]);
   const [error, setError] = useState('');
-  const parentHours = task?.estimateHours;
-  const hasParentHours = parentHours !== '' && parentHours != null && !Number.isNaN(Number(parentHours)) && Number(parentHours) > 0;
-  const totalHours = hasParentHours ? Number(parentHours) : 0;
+  const [removeWarning, setRemoveWarning] = useState('');
 
   const isDraft = mode === 'draft';
   const isEdit = mode === 'edit';
+  const isFreeHoursMode = isDraft || isEdit || mode === 'split';
 
   useEffect(() => {
     if (!open) return;
@@ -84,29 +101,24 @@ export default function SplitTaskModal({
         childTaskId: p.childTaskId,
         employeeName: p.employeeName,
         taskTypes: p.taskTypes?.length ? p.taskTypes : [taskTypes[0]],
-        hours: p.hours ?? 0
+        hours: p.hours ?? 0,
+        statusText: p.statusText || '',
+        started: p.started ?? false
       })));
     } else if (isDraft) {
-      const secondEmployee = employees[1] ?? employees[0];
-      setParts([
-        { ...defaultPart, hours: 0 },
-        { employeeName: secondEmployee, taskTypes: [taskTypes[0]], hours: 0 }
-      ]);
+      setParts([{ ...defaultPart, hours: 0 }]);
     } else {
       setParts([defaultPart]);
     }
     setError('');
-  }, [open, task, initialParts, mode, employees, taskTypes, totalHours, isDraft]);
+    setRemoveWarning('');
+  }, [open, task, initialParts, mode, employees, taskTypes, isDraft]);
 
   const revalidateHours = (newParts) => {
     const sum = newParts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
-    if (isEdit) {
-      setError(sum > 0 ? '' : 'Укажите часы для назначений');
-      return;
-    }
-    if (isDraft) {
-      if (newParts.length < 2) {
-        setError('Добавьте минимум двух сотрудников');
+    if (isFreeHoursMode) {
+      if (newParts.length < 1) {
+        setError('Добавьте сотрудника');
       } else if (sum <= 0) {
         setError('Укажите часы для каждого сотрудника');
       } else {
@@ -114,13 +126,7 @@ export default function SplitTaskModal({
       }
       return;
     }
-    if (sum > totalHours) {
-      setError(`Сумма часов (${sum.toFixed(1)}) превышает выделенное время (${totalHours})`);
-    } else if (Math.abs(sum - totalHours) < 0.01) {
-      setError('');
-    } else {
-      setError(`Осталось распределить ${(totalHours - sum).toFixed(1)} ч`);
-    }
+    setError('');
   };
 
   const addPart = () => {
@@ -130,6 +136,16 @@ export default function SplitTaskModal({
   };
 
   const removePart = (index) => {
+    if (isEdit && parts.length <= 1) {
+      setError('Должен остаться хотя бы один сотрудник. Сохраните — задача станет обычной.');
+      return;
+    }
+    const removed = parts[index];
+    if (isEdit && removed?.started && removed?.childTaskId) {
+      setRemoveWarning(
+        `Сотрудник ${removed.employeeName} уже начал работу — при сохранении его подзадача будет завершена.`
+      );
+    }
     const next = parts.filter((_, i) => i !== index);
     setParts(next);
     revalidateHours(next);
@@ -148,31 +164,19 @@ export default function SplitTaskModal({
       setError('Заполните все поля для каждой части');
       return false;
     }
-    if (isDraft && parts.length < 2) {
-      setError('Добавьте минимум двух сотрудников для общей задачи');
+    if (isDraft && parts.length < 1) {
+      setError('Добавьте сотрудника');
       return false;
     }
-    if (!isEdit && !isDraft && parts.length < 2) {
-      setError('Добавьте минимум двух сотрудников для общей задачи');
-      return false;
-    }
-    if (!isEdit && !isDraft && Math.abs(sum - totalHours) > 0.01) {
-      setError(`Сумма часов должна равняться ${totalHours} ч`);
-      return false;
-    }
-    if (isDraft && sum <= 0) {
+    if (isFreeHoursMode && sum <= 0) {
       setError('Укажите часы для каждого сотрудника');
-      return false;
-    }
-    if (isEdit && sum <= 0) {
-      setError('Укажите часы для назначений');
       return false;
     }
     return true;
   };
 
   const partsSum = parts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
-  const displayTotalHours = isEdit || isDraft ? partsSum : totalHours;
+  const displayTotalHours = partsSum;
 
   const handleSubmit = async () => {
     if (!validateParts()) return;
@@ -195,7 +199,7 @@ export default function SplitTaskModal({
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || data.error);
 
-      onSuccess?.();
+      onSuccess?.(data);
       onClose();
     } catch (err) {
       setError(err.message);
@@ -204,7 +208,7 @@ export default function SplitTaskModal({
 
   const taskLabel = task?.fileName || task?.folderPath || '';
   const title = isDraft
-    ? 'Общая задача — назначения'
+    ? 'Назначения'
     : isEdit
       ? 'Редактирование назначений'
       : 'Разделение задачи';
@@ -221,16 +225,31 @@ export default function SplitTaskModal({
         )}
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
           {isDraft
-            ? `Итого: ${displayTotalHours.toFixed(1)} ч — подставится в поле «Часы» задачи`
-            : isEdit
-              ? `Всего часов по назначениям: ${displayTotalHours.toFixed(1)} ч (обновится у задачи)`
-              : `Всего часов: ${displayTotalHours} ч`}
+            ? parts.length >= 2
+              ? `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`
+              : `Обычная задача · ${displayTotalHours.toFixed(1)} ч`
+            : parts.length === 1
+              ? `Обычная задача · ${displayTotalHours.toFixed(1)} ч (попадёт в столбец «Часы»)`
+              : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`}
         </Typography>
       </DialogTitle>
 
       <DialogContent>
+        {(isEdit || mode === 'split') && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Укажите нужное время для каждого сотрудника — ограничений по столбцу «Часы» нет.
+            После сохранения в таблице отобразится сумма (или часы одного сотрудника).
+            Один сотрудник — обычная задача, несколько — общая.
+            Если убрать сотрудника, который уже начал подзадачу, она будет автоматически завершена.
+          </Alert>
+        )}
+        {removeWarning && (
+          <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setRemoveWarning('')}>
+            {removeWarning}
+          </Alert>
+        )}
         {error && (
-          <Alert severity={error.includes('превышает') ? 'error' : 'info'} sx={{ mb: 2 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
         )}
@@ -250,6 +269,11 @@ export default function SplitTaskModal({
                       <MenuItem key={emp} value={emp}>{emp}</MenuItem>
                     ))}
                   </Select>
+                  {isEdit && part.started && (
+                    <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>
+                      {part.statusText || 'В работе'}
+                    </Typography>
+                  )}
                 </FormControl>
 
                 <FormControl size="small" sx={{ minWidth: 200, flex: 2 }}>
@@ -271,13 +295,9 @@ export default function SplitTaskModal({
                   </Select>
                 </FormControl>
 
-                <TextField
-                  size="small"
-                  type="number"
-                  label="Часы"
+                <EstimateHoursInput
                   value={part.hours}
-                  onChange={(e) => updatePart(idx, 'hours', e.target.value)}
-                  slotProps={{ htmlInput: { step: 0.5, min: 0 } }}
+                  onChange={(hours) => updatePart(idx, 'hours', hours)}
                   sx={{ width: 100 }}
                 />
 
