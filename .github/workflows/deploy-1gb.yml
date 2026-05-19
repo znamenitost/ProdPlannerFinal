@@ -78,5 +78,7 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           server-dir: ${{ steps.ftp.outputs.server_dir }}
           local-dir: ./publish/
-          protocol: ftp
+          protocol: ftps
           port: 21
+          log-level: verbose
+          security: loose
