@@ -217,7 +217,7 @@ function AppContent() {
             </Box>
           </Paper>
 
-          <Paper sx={{ mb: 3, borderRadius: 1, overflow: 'hidden' }}>
+          <Paper sx={{ mb: 3, borderRadius: 3, overflow: 'hidden' }}>
             <Tabs value={activeTab} onChange={handleTabChange} centered variant="fullWidth">
               <Tab icon={<CalendarMonth />} iconPosition="start" label="Календарь" />
               <Tab icon={<TableChart />} iconPosition="start" label="Таблица задач" />
@@ -228,22 +228,22 @@ function AppContent() {
             <>
               <DeadlineWarnings employee={employee} refresh={refresh} />
               <WeekCalendar employee={employee} refresh={refresh} />
-              <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }}>
+              <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
                 <ActiveTasksList tasks={activeTasks} onUpdate={refreshAll} onSplit={handleSplit} embedded />
               </SectionCard>
               <CompletedTasksList employee={employee} refresh={refresh} />
             </>
           )}
 
-          {activeTab === 1 && (
-            <TaskTable 
-              refreshTrigger={refresh} 
-              onTaskUpdate={refreshAll} 
-              userRole={user?.role} 
+          <Box sx={{ display: activeTab === 1 ? 'block' : 'none' }}>
+            <TaskTable
+              refreshTrigger={refresh}
+              onTaskUpdate={refreshAll}
+              userRole={user?.role}
               currentUser={user}
               selectedEmployeeForHighlight={employee}
             />
-          )}
+          </Box>
 
           {isAdmin && <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />}
           <SplitTaskModal open={splitModalOpen} task={selectedTaskForSplit} onClose={() => setSplitModalOpen(false)} onSuccess={handleSplitSuccess} />

@@ -19,11 +19,20 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddLogging();
 
-var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "App_Data");
-Directory.CreateDirectory(dataDirectory);
-var dbPath = Path.Combine(dataDirectory, "ProductionPlanner.db");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite($"Data Source={dbPath}"));
+var postgresConnection = builder.Configuration.GetConnectionString("DefaultConnection");
+if (!string.IsNullOrWhiteSpace(postgresConnection))
+{
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseNpgsql(postgresConnection));
+}
+else
+{
+    var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "App_Data");
+    Directory.CreateDirectory(dataDirectory);
+    var dbPath = Path.Combine(dataDirectory, "ProductionPlanner.db");
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseSqlite($"Data Source={dbPath}"));
+}
 
 builder.Services.AddIdentity<User, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()

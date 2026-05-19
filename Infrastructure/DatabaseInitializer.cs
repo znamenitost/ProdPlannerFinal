@@ -14,11 +14,15 @@ public static class DatabaseInitializer
         var created = db.Database.EnsureCreated();
         logger.LogInformation(created ? "База данных создана." : "База данных уже существует.");
 
-        await ApplySchemaPatchesAsync(db, logger);
+        if (db.Database.IsSqlite())
+            await ApplySqliteSchemaPatchesAsync(db, logger);
+        else if (db.Database.IsNpgsql())
+            await ApplyPostgresSchemaPatchesAsync(db, logger);
+
         await IdentitySeedService.SeedAsync(scope.ServiceProvider);
     }
 
-    private static async Task ApplySchemaPatchesAsync(ApplicationDbContext db, ILogger logger)
+    private static async Task ApplySqliteSchemaPatchesAsync(ApplicationDbContext db, ILogger logger)
     {
         try
         {
@@ -51,31 +55,59 @@ public static class DatabaseInitializer
                 logger.LogInformation("Выполнен ALTER: {Command}", alterCmd);
             }
 
-            using (var createNotifications = connection.CreateCommand())
-            {
-                createNotifications.CommandText = """
-                    CREATE TABLE IF NOT EXISTS UserNotifications (
-                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        UserId TEXT NOT NULL,
-                        Type TEXT NOT NULL,
-                        TaskId INTEGER,
-                        Title TEXT NOT NULL,
-                        Deadline TEXT,
-                        CreatedAt TEXT NOT NULL,
-                        AcknowledgedAt TEXT
-                    );
-                    CREATE INDEX IF NOT EXISTS IX_UserNotifications_UserId_Ack
-                        ON UserNotifications(UserId, AcknowledgedAt);
-                    """;
-                await createNotifications.ExecuteNonQueryAsync();
-                logger.LogInformation("Таблица UserNotifications проверена/создана.");
-            }
-
+            await EnsureUserNotificationsTableSqliteAsync(connection, logger);
             await connection.CloseAsync();
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка при обновлении схемы БД");
+            logger.LogError(ex, "Ошибка при обновлении схемы SQLite");
         }
+    }
+
+    private static async Task ApplyPostgresSchemaPatchesAsync(ApplicationDbContext db, ILogger logger)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "UserNotifications" (
+                    "Id" SERIAL PRIMARY KEY,
+                    "UserId" TEXT NOT NULL,
+                    "Type" TEXT NOT NULL,
+                    "TaskId" INTEGER,
+                    "Title" TEXT NOT NULL,
+                    "Deadline" TIMESTAMPTZ,
+                    "CreatedAt" TIMESTAMPTZ NOT NULL,
+                    "AcknowledgedAt" TIMESTAMPTZ
+                );
+                CREATE INDEX IF NOT EXISTS "IX_UserNotifications_UserId_Ack"
+                    ON "UserNotifications" ("UserId", "AcknowledgedAt");
+                """);
+            logger.LogInformation("Таблица UserNotifications проверена/создана (PostgreSQL).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL");
+        }
+    }
+
+    private static async Task EnsureUserNotificationsTableSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)
+    {
+        using var createNotifications = connection.CreateCommand();
+        createNotifications.CommandText = """
+            CREATE TABLE IF NOT EXISTS UserNotifications (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId TEXT NOT NULL,
+                Type TEXT NOT NULL,
+                TaskId INTEGER,
+                Title TEXT NOT NULL,
+                Deadline TEXT,
+                CreatedAt TEXT NOT NULL,
+                AcknowledgedAt TEXT
+            );
+            CREATE INDEX IF NOT EXISTS IX_UserNotifications_UserId_Ack
+                ON UserNotifications(UserId, AcknowledgedAt);
+            """;
+        await createNotifications.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблица UserNotifications проверена/создана.");
     }
 }

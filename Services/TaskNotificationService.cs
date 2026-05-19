@@ -28,21 +28,30 @@ public class TaskNotificationService : ITaskNotificationService
     public async Task NotifyNewTaskAsync(ProductionTask task)
     {
         var userId = await GetUserIdByFullNameAsync(task.EmployeeName);
-        if (string.IsNullOrEmpty(userId))
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var notificationId = await _inbox.EnqueueNewTaskAsync(
+                userId,
+                task.Id,
+                task.TaskDisplayName,
+                task.Deadline);
+
+            await SendToGroupsAsync(
+                [userId],
+                "NewTask",
+                notificationId,
+                task.Id,
+                task.TaskDisplayName,
+                task.Deadline);
+        }
+        else
         {
             _logger.LogDebug("User not found for new task notification: {EmployeeName}", task.EmployeeName);
-            return;
         }
 
-        var notificationId = await _inbox.EnqueueNewTaskAsync(
-            userId,
-            task.Id,
-            task.TaskDisplayName,
-            task.Deadline);
-
-        await _hubContext.Clients.Group(userId).SendAsync(
-            "NewTask",
-            notificationId,
+        await SendToGroupsAsync(
+            [NotificationGroups.Admins],
+            "TaskUpdated",
             task.Id,
             task.TaskDisplayName,
             task.Deadline);
@@ -50,42 +59,54 @@ public class TaskNotificationService : ITaskNotificationService
 
     public async Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null)
     {
-        var usersToNotify = new HashSet<string>();
+        var employeeNames = new HashSet<string>(StringComparer.Ordinal);
         if (!string.IsNullOrEmpty(task.EmployeeName))
-            usersToNotify.Add(task.EmployeeName);
+            employeeNames.Add(task.EmployeeName);
         if (!string.IsNullOrEmpty(oldEmployeeName) && oldEmployeeName != task.EmployeeName)
-            usersToNotify.Add(oldEmployeeName);
+            employeeNames.Add(oldEmployeeName);
 
-        foreach (var employeeName in usersToNotify)
-        {
-            var userId = await GetUserIdByFullNameAsync(employeeName);
-            if (!string.IsNullOrEmpty(userId))
-                await _hubContext.Clients.Group(userId).SendAsync("TaskUpdated", task.Id, task.TaskDisplayName, task.Deadline);
-        }
+        var groups = await ResolveEmployeeGroupsAsync(employeeNames);
+        await SendToGroupsAsync(groups, "TaskUpdated", task.Id, task.TaskDisplayName, task.Deadline);
     }
 
     public async Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames)
     {
-        foreach (var employeeName in employeeNames.Where(name => !string.IsNullOrWhiteSpace(name)).Distinct())
-        {
-            var userId = await GetUserIdByFullNameAsync(employeeName);
-            if (!string.IsNullOrEmpty(userId))
-                await _hubContext.Clients.Group(userId).SendAsync("TaskDeleted", taskId);
-        }
+        var groups = await ResolveEmployeeGroupsAsync(
+            employeeNames.Where(name => !string.IsNullOrWhiteSpace(name)));
+        await SendToGroupsAsync(groups, "TaskDeleted", taskId);
     }
 
     public async Task NotifyStatusChangedAsync(ProductionTask task, string newStatus)
     {
-        var userId = await GetUserIdByFullNameAsync(task.EmployeeName);
-        if (!string.IsNullOrEmpty(userId))
-            await _hubContext.Clients.Group(userId).SendAsync("TaskStatusChanged", task.Id, newStatus);
+        var groups = await ResolveEmployeeGroupsAsync(
+            string.IsNullOrEmpty(task.EmployeeName) ? [] : [task.EmployeeName]);
+        await SendToGroupsAsync(groups, "TaskStatusChanged", task.Id, newStatus);
     }
 
     public async Task NotifyProgressChangedAsync(ProductionTask task, double progress)
     {
-        var userId = await GetUserIdByFullNameAsync(task.EmployeeName);
-        if (!string.IsNullOrEmpty(userId))
-            await _hubContext.Clients.Group(userId).SendAsync("TaskProgressChanged", task.Id, progress);
+        var groups = await ResolveEmployeeGroupsAsync(
+            string.IsNullOrEmpty(task.EmployeeName) ? [] : [task.EmployeeName]);
+        await SendToGroupsAsync(groups, "TaskProgressChanged", task.Id, progress);
+    }
+
+    private async Task<List<string>> ResolveEmployeeGroupsAsync(IEnumerable<string> employeeNames)
+    {
+        var groups = new HashSet<string>(StringComparer.Ordinal) { NotificationGroups.Admins };
+        foreach (var employeeName in employeeNames.Distinct(StringComparer.Ordinal))
+        {
+            var userId = await GetUserIdByFullNameAsync(employeeName);
+            if (!string.IsNullOrEmpty(userId))
+                groups.Add(userId);
+        }
+        return groups.ToList();
+    }
+
+    private Task SendToGroupsAsync(IReadOnlyList<string> groups, string method, params object?[] args)
+    {
+        if (groups.Count == 0)
+            return Task.CompletedTask;
+        return _hubContext.Clients.Groups(groups).SendAsync(method, args);
     }
 
     private async Task<string?> GetUserIdByFullNameAsync(string fullName)

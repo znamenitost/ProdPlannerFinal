@@ -175,6 +175,7 @@ public class TaskTableService : ITaskTableService
             }
         }
 
+        string? statusChangedTo = null;
         if (!string.IsNullOrEmpty(request.StatusText))
         {
             var newStatus = TaskStatusMapper.FromText(request.StatusText);
@@ -184,11 +185,15 @@ public class TaskTableService : ITaskTableService
                     await _lifecycle.CompleteTaskAsync(task.Id, _timeService.Now);
                 else
                     task.Status = newStatus;
+
+                statusChangedTo = newStatus.ToString();
             }
         }
 
         await _repo.UpdateTaskAsync(task);
         await _notificationService.NotifyTaskUpdatedAsync(task, oldEmployeeName);
+        if (statusChangedTo != null)
+            await _notificationService.NotifyStatusChangedAsync(task, statusChangedTo);
 
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }

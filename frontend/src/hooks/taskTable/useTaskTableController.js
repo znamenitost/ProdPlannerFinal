@@ -5,6 +5,7 @@ import useTaskTableRows from './useTaskTableRows';
 import useTaskTableChildren from './useTaskTableChildren';
 import useTaskTableActions from './useTaskTableActions';
 import useTaskTableModals from './useTaskTableModals';
+import { shouldShowHoursTypeColumns } from '../../utils/taskTableColumns';
 
 export default function useTaskTableController({
   refreshTrigger,
@@ -20,7 +21,7 @@ export default function useTaskTableController({
     onTaskUpdate
   });
 
-  const childrenState = useTaskTableChildren(api);
+  const childrenState = useTaskTableChildren(api, refreshTrigger);
 
   const actions = useTaskTableActions({
     api,
@@ -55,10 +56,13 @@ export default function useTaskTableController({
     showError
   });
 
+  const showHoursTypeColumns = shouldShowHoursTypeColumns(rowsState.newRow);
+
   return {
     api,
     employees: TASK_TABLE_EMPLOYEES,
     taskTypes: TASK_TABLE_TYPES,
+    showHoursTypeColumns,
     ...rowsState,
     ...childrenState,
     ...actions,
