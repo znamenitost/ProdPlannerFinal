@@ -32,7 +32,7 @@ jobs:
 
       - name: Publish application
         run: |
-          dotnet publish ProductionPlanner.csproj -c Release --self-contained true --runtime win-x86 -o ./publish
+          dotnet publish ProductionPlanner.csproj -c Release --self-contained true --runtime linux-x64 -o ./publish
 
       - name: Copy frontend to wwwroot
         run: |
@@ -61,12 +61,14 @@ jobs:
           dir="${{ secrets.FTP_SERVER_DIR }}"
           if [ -z "$dir" ]; then
             dir="/http/"
-            echo "FTP_SERVER_DIR не задан — используем /http/ (стандарт 1gb.ru)"
           fi
+          dir="${dir//\\//}"
           case "$dir" in
             /*) ;;
             *) dir="/$dir" ;;
           esac
+          [[ "$dir" == */ ]] || dir="${dir}/"
+          echo "FTP target: ${server}${dir}"
           echo "server=$server" >> "$GITHUB_OUTPUT"
           echo "server_dir=$dir" >> "$GITHUB_OUTPUT"
 
@@ -78,7 +80,6 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           server-dir: ${{ steps.ftp.outputs.server_dir }}
           local-dir: ./publish/
-          protocol: ftps
+          protocol: ftp
           port: 21
           log-level: verbose
-          security: loose
