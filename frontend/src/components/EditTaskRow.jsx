@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { TableRow, TableCell, TextField, IconButton, Tooltip, Box, Typography } from '@mui/material';
 import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
-import { parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
-import DeadlineTimeClock from './DeadlineTimeClock';
+import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 
 export default function EditTaskRow({
   task,
@@ -50,13 +49,6 @@ export default function EditTaskRow({
     onUpdate(localTask);
   };
 
-  let date = '', time = '10:00';
-  if (localTask.deadline) {
-    const parsed = parseDateTime(localTask.deadline);
-    date = parsed.date;
-    time = parsed.time;
-  }
-
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
       <TableCell sx={{ width: '3%' }}>
@@ -92,20 +84,12 @@ export default function EditTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={{ width: '10%' }}>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField
-            size="small"
-            type="date"
-            value={date}
-            onChange={(e) => handleFieldChange('deadline', combineDateTime(e.target.value, time))}
-            sx={{ width: 130 }}
-          />
-          <DeadlineTimeClock
-            value={time}
-            onChange={(t) => handleFieldChange('deadline', combineDateTime(date, t))}
-          />
-        </Box>
+      <TableCell sx={DEADLINE_COLUMN_SX}>
+        <DeadlineDateTimePicker
+          value={localTask.deadline}
+          onChange={(deadline) => handleFieldChange('deadline', deadline)}
+          hideLabel
+        />
       </TableCell>
 
       <TableCell align="center" sx={{ width: '6%' }}>

@@ -9,6 +9,8 @@ export default function useTaskTableModals({
   setChildrenForParent,
   loadChildrenForParent,
   clearChildrenCache,
+  refreshChildren,
+  patchChildInCache,
   expandedRows,
   editingId,
   refresh,
@@ -148,12 +150,20 @@ export default function useTaskTableModals({
 
   const handleSaveComment = async (newComment, updateRow) => {
     if (!selectedCommentTask) return;
-    const updatedTask = { ...selectedCommentTask, comment: newComment };
+    const task = selectedCommentTask;
+    const updatedTask = { ...task, comment: newComment };
     try {
       await updateRow(updatedTask.id, updatedTask);
+      const parentId = task.parentRowNumber;
+      if (parentId) {
+        patchChildInCache(task.id, { comment: newComment });
+        await refreshChildren(parentId);
+      } else {
+        patchRow(task.id, { comment: newComment });
+      }
       setCommentDialogOpen(false);
       setSelectedCommentTask(null);
-      refresh();
+      await refresh();
     } catch (err) {
       console.error(err);
       showError('Ошибка сохранения комментария');

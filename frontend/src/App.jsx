@@ -10,7 +10,6 @@ import {
   InputLabel,
   Button,
   ThemeProvider,
-  createTheme,
   CssBaseline,
   Chip,
   Tab,
@@ -18,7 +17,9 @@ import {
   Avatar,
   Menu,
   IconButton,
-  Divider
+  Divider,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import { 
   Today, 
@@ -46,23 +47,9 @@ import { UiFeedbackProvider, useUiFeedback } from './context/UiFeedbackContext';
 import useActiveTasksRefresh from './hooks/useActiveTasksRefresh';
 import useAuth from './hooks/useAuth';
 import useNotificationsHub from './hooks/useNotificationsHub';
-
-const theme = createTheme({
-  palette: {
-    primary: { main: '#7c9ebf', light: '#a8c4e0', dark: '#5d7f9e' },
-    secondary: { main: '#cbd5e1', light: '#e2e8f0', dark: '#94a3b8' },
-    success: { main: '#7c9e7c', light: '#a3b8a3', dark: '#5d7e5d' },
-    error: { main: '#d48c8c', light: '#e29b9b', dark: '#b06f6f' },
-    background: { default: '#f3f4f6', paper: '#ffffff' },
-    text: { primary: '#374151', secondary: '#6b7c93' },
-  },
-  typography: {
-    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-    h1: { fontSize: '1.6rem', fontWeight: 600 },
-    h2: { fontSize: '1.3rem', fontWeight: 500 },
-  },
-  shape: { borderRadius: 12 },
-});
+import appTheme from './theme/appTheme';
+import { glassPaperSx, pageShellSx } from './theme/surfaces';
+import SectionCard from './components/ui/SectionCard';
 
 function AppContent() {
   const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
@@ -186,13 +173,13 @@ function AppContent() {
 
   return (
     <>
-      <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: 3 }}>
+      <Box sx={pageShellSx}>
         <Container maxWidth="xl">
-          <Paper elevation={0} sx={{ p: 2, mb: 3, borderRadius: 3 }}>
+          <Paper sx={{ ...glassPaperSx, p: 2, mb: 3 }}>
             <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                <Today color="primary" sx={{ fontSize: 32 }} />
-                <Typography variant="h1" component="h1" sx={{ fontSize: '1.6rem', fontWeight: 600 }}>Mainstream Assistant</Typography>
+                <Today color="primary" sx={{ fontSize: 36 }} />
+                <Typography variant="h1" component="h1">Mainstream Assistant</Typography>
               </Box>
               
               <CurrentDateTime />
@@ -230,10 +217,10 @@ function AppContent() {
             </Box>
           </Paper>
 
-          <Paper elevation={0} sx={{ mb: 3, borderRadius: 3 }}>
-            <Tabs value={activeTab} onChange={handleTabChange} centered>
-              <Tab icon={<CalendarMonth />} label="Календарь" />
-              <Tab icon={<TableChart />} label="Таблица задач" />
+          <Paper sx={{ mb: 3, borderRadius: 1, overflow: 'hidden' }}>
+            <Tabs value={activeTab} onChange={handleTabChange} centered variant="fullWidth">
+              <Tab icon={<CalendarMonth />} iconPosition="start" label="Календарь" />
+              <Tab icon={<TableChart />} iconPosition="start" label="Таблица задач" />
             </Tabs>
           </Paper>
 
@@ -241,9 +228,9 @@ function AppContent() {
             <>
               <DeadlineWarnings employee={employee} refresh={refresh} />
               <WeekCalendar employee={employee} refresh={refresh} />
-              <Box sx={{ mb: 4 }}>
-                <ActiveTasksList tasks={activeTasks} onUpdate={refreshAll} onSplit={handleSplit} />
-              </Box>
+              <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }}>
+                <ActiveTasksList tasks={activeTasks} onUpdate={refreshAll} onSplit={handleSplit} embedded />
+              </SectionCard>
               <CompletedTasksList employee={employee} refresh={refresh} />
             </>
           )}
@@ -276,24 +263,29 @@ function AppContent() {
             <Typography variant="caption" color="text.secondary">{user?.email}</Typography>
             <Chip
               size="small"
+              color={isAdmin ? 'warning' : 'info'}
+              variant="outlined"
               icon={isAdmin ? <AdminPanelSettings sx={{ fontSize: '0.85rem !important' }} /> : <Person sx={{ fontSize: '0.85rem !important' }} />}
               label={isAdmin ? 'Администратор' : 'Сотрудник'}
-              sx={{ mt: 0.5, fontSize: '0.65rem', bgcolor: isAdmin ? '#fef3c7' : '#e0e7ff', color: isAdmin ? '#92400e' : '#3730a3', width: 'fit-content' }}
+              sx={{ mt: 0.5, fontSize: '0.65rem', width: 'fit-content' }}
             />
           </Box>
         </MenuItem>
         <Divider />
         <MenuItem onClick={handleFileSelect} disabled={uploadingAvatar}>
-          <CloudUpload sx={{ mr: 1, fontSize: 20 }} /> Загрузить фото
+          <ListItemIcon><CloudUpload fontSize="small" /></ListItemIcon>
+          <ListItemText>Загрузить фото</ListItemText>
         </MenuItem>
         {user?.avatarUrl && (
-          <MenuItem onClick={handleDeleteAvatar} disabled={uploadingAvatar} sx={{ color: '#dc2626' }}>
-            <Delete sx={{ mr: 1, fontSize: 20 }} /> Удалить фото
+          <MenuItem onClick={handleDeleteAvatar} disabled={uploadingAvatar} sx={{ color: 'error.main' }}>
+            <ListItemIcon><Delete fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText>Удалить фото</ListItemText>
           </MenuItem>
         )}
         <Divider />
-        <MenuItem onClick={handleLogout} sx={{ color: '#dc2626' }}>
-          <Logout sx={{ mr: 1, fontSize: 20 }} /> Выйти
+        <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
+          <ListItemIcon><Logout fontSize="small" color="error" /></ListItemIcon>
+          <ListItemText>Выйти</ListItemText>
         </MenuItem>
       </Menu>
 
@@ -307,7 +299,7 @@ function AppContent() {
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={appTheme}>
       <CssBaseline />
         <UiFeedbackProvider>
           <AppContent />

@@ -1,5 +1,5 @@
 import { TableRow, TableCell, Box, IconButton, Tooltip, Typography, Chip } from '@mui/material';
-import { PlayArrow, Pause, CheckCircle, Person, Comment as CommentIcon } from '@mui/icons-material';
+import { Person, Comment as CommentIcon } from '@mui/icons-material';
 import {
   truncate,
   getStatusColor,
@@ -7,6 +7,8 @@ import {
   isOverdue,
   isTaskBelongsToUser
 } from '../utils/taskHelpers';
+import EmployeeStatusButtons from './EmployeeStatusButtons';
+import { COL_ACTIONS } from '../utils/taskTableStyles';
 
 export default function ChildTaskRow({
   task,
@@ -135,48 +137,16 @@ export default function ChildTaskRow({
         <Chip icon={displayStatusIcon} label={task.statusText || "Назначена"} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
       </TableCell>
       
-      <TableCell sx={{ width: canChangeStatus ? '12%' : '10%' }}>
-        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
-          {showActionButtons && (
-            <>
-              {task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && (
-                <Tooltip title="Начать">
-                  <IconButton size="small" onClick={() => onStart(task)} sx={{ color: '#22c55e' }}>
-                    <PlayArrow fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              )}
-              {task.statusText === 'Начал' && (
-                <>
-                  <Tooltip title="Пауза">
-                    <IconButton size="small" onClick={() => onPause(task)} sx={{ color: '#f59e0b' }}>
-                      <Pause fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Завершить">
-                    <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
-                      <CheckCircle fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </>
-              )}
-              {task.statusText === 'Пауза' && (
-                <>
-                  <Tooltip title="Продолжить">
-                    <IconButton size="small" onClick={() => onResume(task)} sx={{ color: '#22c55e' }}>
-                      <PlayArrow fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Завершить">
-                    <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
-                      <CheckCircle fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </>
-              )}
-            </>
-          )}
-        </Box>
+      <TableCell sx={COL_ACTIONS}>
+        {showActionButtons ? (
+          <EmployeeStatusButtons
+            task={task}
+            onStart={onStart}
+            onPause={onPause}
+            onResume={onResume}
+            onComplete={onComplete}
+          />
+        ) : null}
       </TableCell>
     </TableRow>
   );

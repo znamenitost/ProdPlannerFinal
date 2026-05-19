@@ -28,6 +28,9 @@ import {
   EventNote  // добавлена для иконки периода выполнения (опционально)
 } from '@mui/icons-material';
 import { getCompletedTasks } from '../services/api';
+import { alpha } from '@mui/material/styles';
+import { glassPaperSx, sectionTitleRowSx } from '../theme/surfaces';
+import EmptyState from './ui/EmptyState';
 
 export default function CompletedTasksList({ employee, refresh }) {
   const [completed, setCompleted] = useState([]);
@@ -80,21 +83,19 @@ export default function CompletedTasksList({ employee, refresh }) {
   };
 
   return (
-    <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, mb: 3 }}>
+    <Paper sx={glassPaperSx}>
+      <Box sx={{ ...sectionTitleRowSx, mb: 3 }}>
         <Assessment color="primary" />
-        <Typography variant="h2" sx={{ fontWeight: 600 }}>
-          Выполненные задачи
-        </Typography>
+        <Typography variant="h2" component="h2">Выполненные задачи</Typography>
       </Box>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: '#f0fdf4', border: '1px solid #dcfce7' }}>
+          <Card sx={{ bgcolor: (t) => alpha(t.palette.success.main, 0.08), border: (t) => `1px solid ${alpha(t.palette.success.main, 0.2)}` }}>
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Всего задач</Typography>
-                <TaskAlt sx={{ color: '#22c55e' }} />
+                <TaskAlt color="success" />
               </Box>
               <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalTasks}
@@ -104,11 +105,11 @@ export default function CompletedTasksList({ employee, refresh }) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: '#eff6ff', border: '1px solid #dbeafe' }}>
+          <Card sx={{ bgcolor: (t) => alpha(t.palette.info.main, 0.08), border: (t) => `1px solid ${alpha(t.palette.info.main, 0.2)}` }}>
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Выделено часов</Typography>
-                <AccessTime sx={{ color: '#3b82f6' }} />
+                <AccessTime color="info" />
               </Box>
               <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalEstimate.toFixed(1)} ч
@@ -118,11 +119,11 @@ export default function CompletedTasksList({ employee, refresh }) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: '#fef3c7', border: '1px solid #fde68a' }}>
+          <Card sx={{ bgcolor: (t) => alpha(t.palette.warning.main, 0.1), border: (t) => `1px solid ${alpha(t.palette.warning.main, 0.25)}` }}>
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Реально часов</Typography>
-                <HourglassEmpty sx={{ color: '#f59e0b' }} />
+                <HourglassEmpty color="warning" />
               </Box>
               <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalActual.toFixed(1)} ч

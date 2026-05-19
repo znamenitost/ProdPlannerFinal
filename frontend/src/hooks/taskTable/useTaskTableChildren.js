@@ -79,6 +79,22 @@ export default function useTaskTableChildren(api) {
     setExpandedRows(prev => new Set(prev).add(parentId));
   }, []);
 
+  const patchChildInCache = useCallback((childId, patch) => {
+    setChildrenCache((prev) => {
+      const next = new Map(prev);
+      for (const [parentId, children] of next.entries()) {
+        const index = children.findIndex((c) => c.id === childId);
+        if (index >= 0) {
+          const updated = children.slice();
+          updated[index] = { ...updated[index], ...patch };
+          next.set(parentId, updated);
+          break;
+        }
+      }
+      return next;
+    });
+  }, []);
+
   return {
     expandedRows,
     childrenCache,
@@ -87,6 +103,7 @@ export default function useTaskTableChildren(api) {
     refreshChildren,
     setChildrenForParent,
     clearChildrenCache,
-    expandParent
+    expandParent,
+    patchChildInCache
   };
 }

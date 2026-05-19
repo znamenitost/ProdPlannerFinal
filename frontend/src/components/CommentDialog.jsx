@@ -1,6 +1,7 @@
 // ./frontend/src/components/CommentDialog.jsx
 import { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from '@mui/material';
+import { Comment, Save, Close } from '@mui/icons-material';
 
 export default function CommentDialog({ open, comment, onSave, onClose }) {
   const [value, setValue] = useState(comment || '');
@@ -17,7 +18,10 @@ export default function CommentDialog({ open, comment, onSave, onClose }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Редактирование комментария</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Comment color="primary" fontSize="small" />
+        Редактирование комментария
+      </DialogTitle>
       <DialogContent>
         <TextField
           autoFocus
@@ -31,8 +35,8 @@ export default function CommentDialog({ open, comment, onSave, onClose }) {
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Отмена</Button>
-        <Button onClick={handleSave} variant="contained">Сохранить</Button>
+        <Button onClick={onClose} startIcon={<Close />}>Отмена</Button>
+        <Button onClick={handleSave} variant="contained" startIcon={<Save />}>Сохранить</Button>
       </DialogActions>
     </Dialog>
   );

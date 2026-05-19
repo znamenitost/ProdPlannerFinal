@@ -1,13 +1,36 @@
-// ./frontend/src/components/ActiveTasksList.jsx
 import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../services/api';
-import { Warning, Error, FolderOpen, AccessTime, Event, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
-import { Tooltip, Chip, IconButton, Box, Typography } from '@mui/material';
+import {
+  Warning,
+  Error,
+  FolderOpen,
+  AccessTime,
+  Event,
+  PlayArrow,
+  Pause,
+  CheckCircle,
+  Assignment
+} from '@mui/icons-material';
+import {
+  Tooltip,
+  Chip,
+  IconButton,
+  Box,
+  Typography,
+  Button,
+  Card,
+  CardContent,
+  LinearProgress,
+  Stack
+} from '@mui/material';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import { openFileOnClient } from '../utils/openFileOnClient';
 import { normalizePathForOpen } from '../utils/filePathForOpen';
+import { glassCardSx, compactActionButtonSx } from '../theme/surfaces';
+import EmptyState from './ui/EmptyState';
 
-export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
+export default function ActiveTasksList({ tasks, onUpdate, onSplit, embedded = false }) {
   const { showError, showWarning } = useUiFeedback();
+
   const handleAction = async (id, action, progress = null) => {
     try {
       if (action === 'start') await startTask(id);
@@ -32,19 +55,17 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     const fileName = parts.pop() || '';
     const folderPath = parts.join('/');
     const result = openFileOnClient(normalizePathForOpen(folderPath, fileName));
-    if (!result.ok) {
-      showError('Не удалось открыть файл');
-    }
+    if (!result.ok) showError('Не удалось открыть файл');
   };
 
   const getRiskProps = (riskLevel) => {
     switch (riskLevel) {
       case 'overdue':
-        return { icon: <Error sx={{ fontSize: 16 }} />, color: '#dc2626', label: 'Дедлайн сорван' };
+        return { icon: <Error fontSize="small" />, color: 'error', label: 'Дедлайн сорван' };
       case 'critical':
-        return { icon: <Error sx={{ fontSize: 16 }} />, color: '#dc2626', label: 'Не хватает времени' };
+        return { icon: <Error fontSize="small" />, color: 'error', label: 'Не хватает времени' };
       case 'warning':
-        return { icon: <Warning sx={{ fontSize: 16 }} />, color: '#f59e0b', label: 'Дедлайн приближается' };
+        return { icon: <Warning fontSize="small" />, color: 'warning', label: 'Дедлайн приближается' };
       default:
         return null;
     }
@@ -55,231 +76,109 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     return title.split('\\').pop().split('/').pop();
   };
 
-  const getBorderColor = (status) => {
-    if (status === 1) return '#3b82f6';
-    if (status === 2) return '#f59e0b';
-    return '#cbd5e1';
+  const getBorderColor = (status, theme) => {
+    if (status === 1) return theme.palette.info.main;
+    if (status === 2) return theme.palette.warning.main;
+    return theme.palette.divider;
   };
 
-  return (
-    <Box sx={{ mt: 3 }}>
-      <Typography variant="h2" sx={{ mb: 2, fontSize: '1.3rem', fontWeight: 500 }}>
-        Активные задачи
-      </Typography>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {tasks.map(task => {
-          const risk = getRiskProps(task.riskLevel);
-          const borderColor = getBorderColor(task.status);
-          
-          return (
-            <Box 
-              key={task.id} 
-              sx={{ 
-                bgcolor: 'white',
-                borderRadius: 2,
-                p: 2,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                transition: 'all 0.2s ease',
-                borderLeft: `4px solid ${borderColor}`,
-                '&:hover': { 
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                  transform: 'translateY(-2px)'
-                }
-              }}
-            >
+  const list = (
+    <Stack spacing={2}>
+      {tasks.map((task) => {
+        const risk = getRiskProps(task.riskLevel);
+        const progressValue = Math.round((task.progress || 0) * 100);
+
+        return (
+          <Card
+            key={task.id}
+            sx={(theme) => ({
+              ...glassCardSx,
+              borderLeft: '4px solid',
+              borderLeftColor: getBorderColor(task.status, theme)
+            })}
+          >
+            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
               <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1 }}>
                 <Tooltip title="Открыть файл" arrow>
-                  <IconButton 
-                    size="small" 
-                    onClick={() => openFile(task.file)}
-                    sx={{ color: '#7c9ebf', p: 0.5 }}
-                  >
+                  <IconButton size="small" color="primary" onClick={() => openFile(task.file)}>
                     <FolderOpen fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {getShortTitle(task.title)}
-                </Typography>
-                <Typography variant="caption" sx={{ color: '#6b7c93' }}>
-                  ({task.type})
-                </Typography>
-                
+                <Typography variant="subtitle2">{getShortTitle(task.title)}</Typography>
+                <Chip label={task.type} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
                 {risk && (
-                  <Tooltip title={risk.label} arrow>
-                    <Chip
-                      icon={risk.icon}
-                      label={risk.label}
-                      size="small"
-                      sx={{
-                        height: 22,
-                        fontSize: '0.7rem',
-                        bgcolor: risk.color,
-                        color: 'white',
-                        '& .MuiChip-icon': { color: 'white', fontSize: 14, ml: 0.5 },
-                        '& .MuiChip-label': { px: 1 }
-                      }}
-                    />
-                  </Tooltip>
+                  <Chip icon={risk.icon} label={risk.label} size="small" color={risk.color} sx={{ height: 22, fontSize: '0.7rem' }} />
                 )}
               </Box>
-              
-              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, mb: 1, fontSize: '0.8rem', color: 'text.secondary' }}>
-                <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5 }}>
+
+              <Stack direction="row" spacing={2} sx={{ mb: 1, color: 'text.secondary' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <AccessTime sx={{ fontSize: 14 }} />
-                  <span>{task.estimateHours} ч</span>
+                  <Typography variant="caption">{task.estimateHours} ч</Typography>
                 </Box>
-                <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <Event sx={{ fontSize: 14 }} />
-                  <span>
-                    {task.deadline ? new Date(task.deadline).toLocaleDateString() + ' ' + new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Нет дедлайна'}
-                  </span>
+                  <Typography variant="caption">
+                    {task.deadline
+                      ? `${new Date(task.deadline).toLocaleDateString()} ${new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : 'Нет дедлайна'}
+                  </Typography>
                 </Box>
-              </Box>
-              
-              <Box sx={{ bgcolor: '#e2e8f0', borderRadius: 1, height: 8, overflow: 'hidden', mb: 1 }}>
-                <Box 
-                  sx={{ 
-                    width: `${(task.progress || 0) * 100}%`,
-                    height: '100%',
-                    bgcolor: task.status === 1 ? '#3b82f6' : (task.status === 2 ? '#f59e0b' : '#cbd5e1'),
-                    transition: 'width 0.3s ease',
-                    borderRadius: 1
-                  }} 
-                />
-              </Box>
-              
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+              </Stack>
+
+              <LinearProgress
+                variant="determinate"
+                value={progressValue}
+                color={task.status === 1 ? 'info' : task.status === 2 ? 'warning' : 'inherit'}
+                sx={{ mb: 1.5, borderRadius: 1 }}
+              />
+
+              <Stack direction="row" flexWrap="wrap" gap={0.75}>
                 {task.status === 0 && (
-                  <Box 
-                    component="button"
-                    onClick={() => handleAction(task.id, 'start')}
-                    sx={{ 
-                      px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                      border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                      display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                      '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                    }}
-                  >
-                    <PlayArrow sx={{ fontSize: 16, color: '#3b82f6' }} /> Начал
-                  </Box>
+                  <Button size="small" variant="outlined" color="success" startIcon={<PlayArrow />} onClick={() => handleAction(task.id, 'start')} sx={compactActionButtonSx}>
+                    Начал
+                  </Button>
                 )}
-                
                 {task.status === 1 && (
                   <>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'pause')}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <Pause sx={{ fontSize: 16, color: '#f59e0b' }} /> Пауза
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'complete')}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} /> Готово
-                    </Box>
+                    <Button size="small" variant="outlined" color="warning" startIcon={<Pause />} onClick={() => handleAction(task.id, 'pause')} sx={compactActionButtonSx}>
+                      Пауза
+                    </Button>
+                    <Button size="small" variant="outlined" color="primary" startIcon={<CheckCircle />} onClick={() => handleAction(task.id, 'complete')} sx={compactActionButtonSx}>
+                      Готово
+                    </Button>
                   </>
                 )}
-                
                 {task.status === 2 && (
                   <>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'resume')}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <PlayArrow sx={{ fontSize: 16 }} /> Продолжить
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'complete')}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} /> Готово
-                    </Box>
+                    <Button size="small" variant="contained" color="success" startIcon={<PlayArrow />} onClick={() => handleAction(task.id, 'resume')} sx={compactActionButtonSx}>
+                      Продолжить
+                    </Button>
+                    <Button size="small" variant="outlined" color="primary" startIcon={<CheckCircle />} onClick={() => handleAction(task.id, 'complete')} sx={compactActionButtonSx}>
+                      Готово
+                    </Button>
                   </>
                 )}
-                
-                {task.status !== 3 && (
-                  <>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'progress', 0.3)}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      30%
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'progress', 0.6)}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      60%
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'progress', 0.9)}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      90%
-                    </Box>
-                  </>
-                )}
-              </Box>
-            </Box>
-          );
-        })}
-      </Box>
+                {task.status !== 3 && [0.3, 0.6, 0.9].map((p) => (
+                  <Button key={p} size="small" variant="text" color="secondary" onClick={() => handleAction(task.id, 'progress', p)} sx={compactActionButtonSx}>
+                    {Math.round(p * 100)}%
+                  </Button>
+                ))}
+              </Stack>
+            </CardContent>
+          </Card>
+        );
+      })}
+      {tasks.length === 0 && <EmptyState message="Нет активных задач" icon={Assignment} />}
+    </Stack>
+  );
 
-      {tasks.length === 0 && (
-        <Box sx={{ textAlign: 'center', py: 4 }}>
-          <Typography variant="body1" color="text.secondary">
-            Нет активных задач
-          </Typography>
-        </Box>
-      )}
+  if (embedded) return list;
+
+  return (
+    <Box sx={{ mt: 3 }}>
+      <Typography variant="h2" sx={{ mb: 2 }}>Активные задачи</Typography>
+      {list}
     </Box>
   );
 }

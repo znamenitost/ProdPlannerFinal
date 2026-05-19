@@ -13,6 +13,8 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Login as LoginIcon, Person, AdminPanelSettings } from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
+import { glassPaperSx } from '../theme/surfaces';
 
 export default function LoginForm({ onLogin }) {
   const [loginType, setLoginType] = useState('employee'); // 'employee' or 'admin'
@@ -92,19 +94,14 @@ export default function LoginForm({ onLogin }) {
 
   return (
     <Container maxWidth="sm">
-      <Box sx={{ mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Avatar sx={{ m: 1, bgcolor: 'primary.main', width: 56, height: 56 }}>
+      <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 4 }}>
+        <Avatar sx={{ m: 1, bgcolor: 'primary.main', width: 64, height: 64 }}>
           <LoginIcon sx={{ fontSize: 32 }} />
         </Avatar>
         
-        <Typography variant="h4" gutterBottom>
-          Mainstream Assistant
-        </Typography>
-        
-        <Paper elevation={3} sx={{ p: 4, width: '100%', mt: 2 }}>
-          <Typography variant="h5" gutterBottom sx={{ textAlign: 'center' }}>
-            Вход в систему
-          </Typography>
+        <Typography variant="h1" gutterBottom sx={{ mt: 1 }}>Mainstream Assistant</Typography>
+        <Paper sx={{ ...glassPaperSx, p: 4, width: '100%', mt: 2 }}>
+          <Typography variant="h2" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>Вход в систему</Typography>
           
           <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1, mb: 3 }}>
             <Button
@@ -140,14 +137,15 @@ export default function LoginForm({ onLogin }) {
                       <Card 
                         key={emp}
                         onClick={() => setSelectedEmployee(emp)}
-                        sx={{ 
+                        sx={(theme) => ({ 
                           flex: 1,
                           cursor: 'pointer',
-                          border: selectedEmployee === emp ? '2px solid #7c9ebf' : '1px solid #e0e0e0',
-                          bgcolor: selectedEmployee === emp ? '#f0f4f8' : 'white',
+                          border: selectedEmployee === emp ? '2px solid' : '1px solid',
+                          borderColor: selectedEmployee === emp ? theme.palette.primary.main : theme.palette.divider,
+                          bgcolor: selectedEmployee === emp ? alpha(theme.palette.primary.main, 0.08) : alpha('#fff', 0.5),
                           transition: 'all 0.2s',
-                          '&:hover': { boxShadow: 2 }
-                        }}
+                          '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.light }
+                        })}
                       >
                         <CardContent sx={{ textAlign: 'center', py: 2 }}>
                           <Avatar sx={{ width: 40, height: 40, mx: 'auto', mb: 1, bgcolor: 'primary.light' }}>
@@ -190,7 +188,8 @@ export default function LoginForm({ onLogin }) {
                 variant="contained"
                 size="large"
                 disabled={loading}
-                startIcon={loading ? <CircularProgress size={18} color="inherit" /> : null}
+                fullWidth
+                startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <LoginIcon />}
                 sx={{ mt: 2 }}
               >
                 {loading ? 'Вход...' : 'Войти'}

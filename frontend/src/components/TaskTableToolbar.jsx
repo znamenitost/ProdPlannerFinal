@@ -1,31 +1,30 @@
 // ./frontend/src/components/TaskTableToolbar.jsx
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { Add, Lightbulb, TableChart } from '@mui/icons-material';
+import { sectionHeaderSx, sectionTitleRowSx, softIconButtonSx } from '../theme/surfaces';
 
 export default function TaskTableToolbar({ isAdmin, onAddNew, highlightMyTasks, onToggleHighlight }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    <Box sx={{ ...sectionHeaderSx, mb: 2 }}>
+      <Box sx={sectionTitleRowSx}>
         <TableChart color="primary" />
-        <Typography variant="h2" sx={{ fontWeight: 600 }}>Таблица задач</Typography>
+        <Typography variant="h2" component="h2">Таблица задач</Typography>
       </Box>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
         <Tooltip title={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}>
-          <IconButton 
-            onClick={onToggleHighlight} 
+          <IconButton
+            onClick={onToggleHighlight}
             color={highlightMyTasks ? 'warning' : 'default'}
-            sx={{ 
-              border: '1px solid', 
-              borderColor: highlightMyTasks ? 'warning.main' : 'divider',
-              transition: 'all 0.2s ease',
-              '&:hover': { transform: 'scale(1.05)' }
-            }}
+            sx={[
+              softIconButtonSx(highlightMyTasks ? 'warning' : 'primary'),
+              highlightMyTasks && { border: '1px solid', borderColor: 'warning.main' }
+            ]}
           >
             <Lightbulb />
           </IconButton>
         </Tooltip>
         {isAdmin && (
-          <Button variant="contained" startIcon={<Add />} onClick={onAddNew} sx={{ bgcolor: '#22c55e' }}>
+          <Button variant="contained" color="success" startIcon={<Add />} onClick={onAddNew}>
             Новая задача
           </Button>
         )}

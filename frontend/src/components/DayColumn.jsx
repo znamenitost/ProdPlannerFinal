@@ -122,7 +122,7 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
   const isHighlighted = (block) => highlightedTaskId === block.taskId;
 
   return (
-    <Paper elevation={0} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.95)', borderRadius: 3 }}>
+    <Paper elevation={0} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.95)', borderRadius: 1 }}>
       <Typography variant="subtitle1" fontWeight={600} sx={{ textAlign: 'center', mb: 2, color: '#1e293b' }}>
         {date.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric' })}
       </Typography>

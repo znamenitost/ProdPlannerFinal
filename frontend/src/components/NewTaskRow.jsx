@@ -9,8 +9,7 @@ import {
   Typography
 } from '@mui/material';
 import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
-import { combineDateTime, DEFAULT_TIME, parseDateTime } from '../utils/dateTimeHelpers';
-import DeadlineTimeClock from './DeadlineTimeClock';
+import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 
 export default function NewTaskRow({
   newRow,
@@ -19,19 +18,12 @@ export default function NewTaskRow({
   onCancel,
   onOpenAssigneeModal
 }) {
-  const { date: currentDate, time: currentTime } = newRow.deadline
-    ? parseDateTime(newRow.deadline)
-    : { date: '', time: DEFAULT_TIME };
   const isShared = newRow.isSharedTask && (newRow.assigneeParts?.length ?? 0) >= 2;
   const hasAssignees = isShared || Boolean(newRow.employeeName);
   const hoursDisplay =
     newRow.estimateHours !== '' && newRow.estimateHours != null && !Number.isNaN(Number(newRow.estimateHours))
       ? `${Number(newRow.estimateHours).toFixed(1)} ч`
       : '—';
-
-  const handleDateChange = (e) => {
-    setNewRow({ ...newRow, deadline: combineDateTime(e.target.value, DEFAULT_TIME) });
-  };
 
   const assigneeLabel = () => {
     if (isShared) return `Общая · ${newRow.assigneeParts.length}`;
@@ -75,20 +67,12 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField
-            size="small"
-            type="date"
-            value={currentDate}
-            onChange={handleDateChange}
-            sx={{ width: 130 }}
-          />
-          <DeadlineTimeClock
-            value={currentTime}
-            onChange={(time) => setNewRow({ ...newRow, deadline: combineDateTime(currentDate, time) })}
-          />
-        </Box>
+      <TableCell sx={DEADLINE_COLUMN_SX}>
+        <DeadlineDateTimePicker
+          value={newRow.deadline}
+          onChange={(deadline) => setNewRow({ ...newRow, deadline })}
+          hideLabel
+        />
       </TableCell>
 
       <TableCell align="center">

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Box, Paper, IconButton, Typography, Button, alpha } from '@mui/material';
+import { Box, Paper, IconButton, Typography, Button } from '@mui/material';
 import { ChevronLeft, ChevronRight, CalendarMonth, Weekend } from '@mui/icons-material';
 import { getWeekCalendar } from '../services/api';
 import DayColumn from './DayColumn';
+import { glassPaperSx, softIconButtonSx } from '../theme/surfaces';
 import { CalendarLoadingState } from './LoadingState';
 
 export default function WeekCalendar({ employee, refresh }) {
@@ -60,23 +61,17 @@ export default function WeekCalendar({ employee, refresh }) {
     : weekData.days.filter((_, index) => index < 5);
 
   return (
-    <Paper elevation={0} sx={{ p: 3, mb: 3, background: 'rgba(255,255,255,0.9)' }}>
+    <Paper sx={{ ...glassPaperSx, mb: 3 }}>
       <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', mb: 6 }}>
         <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-          <IconButton 
-            onClick={prevWeek} 
-            sx={{ bgcolor: alpha('#6366f1', 0.1), '&:hover': { bgcolor: alpha('#6366f1', 0.2) } }}
-          >
+          <IconButton onClick={prevWeek} sx={softIconButtonSx('primary')} aria-label="Предыдущая неделя">
             <ChevronLeft />
           </IconButton>
           <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-            <CalendarMonth sx={{ color: '#6366f1' }} />
-            <Typography variant="body1" sx={{ fontWeight: 600 }}>{weekRange}</Typography>
+            <CalendarMonth color="primary" />
+            <Typography variant="subtitle1">{weekRange}</Typography>
           </Box>
-          <IconButton 
-            onClick={nextWeek}
-            sx={{ bgcolor: alpha('#6366f1', 0.1), '&:hover': { bgcolor: alpha('#6366f1', 0.2) } }}
-          >
+          <IconButton onClick={nextWeek} sx={softIconButtonSx('primary')} aria-label="Следующая неделя">
             <ChevronRight />
           </IconButton>
         </Box>
@@ -84,20 +79,9 @@ export default function WeekCalendar({ employee, refresh }) {
         <Button
           size="small"
           variant={showWeekend ? 'contained' : 'outlined'}
+          color="primary"
           startIcon={<Weekend />}
           onClick={() => setShowWeekend(!showWeekend)}
-          sx={{ 
-            borderRadius: 2,
-            textTransform: 'none',
-            fontSize: '0.75rem',
-            ...(showWeekend ? {
-              bgcolor: '#6366f1',
-              '&:hover': { bgcolor: '#4f46e5' }
-            } : {
-              borderColor: '#cbd5e1',
-              color: '#64748b'
-            })
-          }}
         >
           {showWeekend ? 'Скрыть выходные' : 'Показать выходные'}
         </Button>

@@ -29,7 +29,7 @@ export default function TaskTable({
   });
 
   return (
-    <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
+    <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 1 }}>
       <TaskTableToolbar
         isAdmin={isAdmin}
         onAddNew={table.handleAddNewRow}

@@ -1,102 +1,6 @@
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-body {
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  background: #f3f4f6;
-  color: #1e293b;
-  padding: 20px;
-}
-.app {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-  margin-bottom: 30px;
-  background: white;
-  padding: 15px 25px;
-  border-radius: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-h1 {
-  font-size: 1.6rem;
-  font-weight: 600;
-}
-button {
-  background: #3b82f6;
-  border: none;
-  color: white;
-  padding: 8px 16px;
-  border-radius: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-button:hover {
-  background: #2563eb;
-}
-select {
-  padding: 8px 12px;
-  border-radius: 12px;
-  border: 1px solid #cbd5e1;
-  background: white;
-  font-size: 1rem;
-}
+/* Calendar timeline helpers — main UI via MUI theme */
+* { box-sizing: border-box; }
 
-/* Календарь */
-.week-container {
-  background: white;
-  border-radius: 24px;
-  padding: 20px;
-  margin-bottom: 30px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-.week-nav {
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-  margin-bottom: 20px;
-}
-.week-calendar {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
-}
-.day-column {
-  background: #f8fafc;
-  border-radius: 20px;
-  padding: 16px 12px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-}
-.day-header {
-  font-weight: 600;
-  text-align: center;
-  margin-bottom: 16px;
-  font-size: 1.1rem;
-}
-.progress-bar-container {
-  position: relative;
-  background: #e2e8f0;
-  height: 30px;
-  border-radius: 10px;
-  margin-bottom: 20px;
-  overflow: visible;
-}
-.progress-bar {
-  background: #3b82f6;
-  height: 100%;
-  border-radius: 10px;
-  transition: width 0.2s;
-}
-
-/* Перемычки задач */
 .task-separators {
   position: relative;
   top: -30px;
@@ -109,7 +13,7 @@ select {
   position: absolute;
   width: 2px;
   height: 30px;
-  background: rgba(0, 0, 0, 0.343);
+  background: rgba(100, 116, 139, 0.35);
   pointer-events: none;
 }
 
@@ -118,7 +22,7 @@ select {
   top: -25px;
   left: 50%;
   transform: translateX(-50%);
-  background: #1e293b;
+  background: #334155;
   color: white;
   font-size: 10px;
   padding: 2px 6px;
@@ -130,9 +34,7 @@ select {
   z-index: 10;
 }
 
-.task-hours-label:hover {
-  background: #3b82f6;
-}
+.task-hours-label:hover { background: #5b8db8; }
 
 .deadline-markers {
   position: relative;
@@ -140,6 +42,7 @@ select {
   height: 10px;
   pointer-events: none;
 }
+
 .deadline-marker {
   position: absolute;
   width: 3px;
@@ -148,156 +51,33 @@ select {
   pointer-events: auto;
   cursor: pointer;
 }
-.deadline-marker.pending {
-  background: #ef4444;
-}
-.deadline-marker.completed {
-  background: #94a3b8;
-  opacity: 0.6;
-}
+
+.deadline-marker.pending { background: #d48989; }
+.deadline-marker.completed { background: #94a3b8; opacity: 0.6; }
+
 .timeline-container {
   position: relative;
-  background: #e2e8f0;
+  background: rgba(148, 163, 184, 0.25);
   height: 40px;
   border-radius: 8px;
   margin: 15px 0;
   overflow: hidden;
 }
-.timeline-segment {
-  position: absolute;
-  height: 100%;
-  top: 0;
-}
-.timeline-segment.work {
-  background: #3b82f6;
-  opacity: 0.8;
-}
-.timeline-segment.work.completed {
-  background: #94a3b8;
-  opacity: 0.6;
-}
-.timeline-segment.idle {
-  background: #94a3b8;
-  opacity: 0.4;
-}
-.saved-hours {
-  text-align: center;
-  font-size: 0.9rem;
-  font-weight: 500;
-  padding-top: 8px;
-}
-.saved-hours.green {
-  color: #10b981;
-}
-.saved-hours.red {
-  color: #ef4444;
-}
 
-/* Активные задачи */
-.active-tasks {
-  background: white;
-  border-radius: 24px;
-  padding: 20px;
-  margin-bottom: 30px;
-}
-.tasks-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 16px;
-}
-.task-card {
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 16px;
-  background: #ffffff;
-}
-.task-title {
-  font-weight: 600;
-  font-size: 1.1rem;
-}
-.task-type {
-  font-size: 0.85rem;
-  color: #64748b;
-}
-.task-meta {
-  font-size: 0.85rem;
-  color: #475569;
-  margin: 8px 0;
-}
-.progress-bar-wrapper {
-  background: rgb(226, 232, 240);
-  height: 8px;
-  border-radius: 10px;
-  margin: 12px 0;
-}
-.progress-fill {
-  background: #3b82f6;
-  height: 100%;
-  border-radius: 10px;
-  transition: width 0.2s;
-}
-.task-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.task-buttons button {
-  background: #f1f5f9;
-  color: #1e293b;
-  font-size: 0.8rem;
-  padding: 4px 12px;
-}
-.task-buttons button:hover {
-  background: #e2e8f0;
-}
+.timeline-segment { position: absolute; height: 100%; top: 0; }
+.timeline-segment.work { background: #5b8db8; opacity: 0.75; }
+.timeline-segment.work.completed { background: #94a3b8; opacity: 0.5; }
+.timeline-segment.idle { background: #94a3b8; opacity: 0.35; }
 
-/* Выполненные задачи */
-.completed-tasks {
-  background: white;
-  border-radius: 24px;
-  padding: 20px;
-}
-.stats-summary {
-  display: flex;
-  gap: 24px;
-  background: #f1f5f9;
-  padding: 12px 20px;
-  border-radius: 20px;
-  margin: 16px 0;
-  flex-wrap: wrap;
-}
-.completed-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.completed-table th, .completed-table td {
-  text-align: left;
-  padding: 10px 8px;
-  border-bottom: 1px solid #e2e8f0;
-}
-.green {
-  color: #10b981;
-  font-weight: 500;
-}
-.red {
-  color: #ef4444;
-  font-weight: 500;
-}
-
-/* Всплывающая подсказка */
 .custom-tooltip {
-  background: #1e293b;
+  background: rgba(30, 41, 59, 0.92);
   color: white;
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 12px;
   max-width: 260px;
-  white-space: normal;
-  word-wrap: break-word;
   line-height: 1.4;
-  text-align: left;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(91, 141, 184, 0.15);
   font-weight: 500;
   pointer-events: none;
   z-index: 1000;

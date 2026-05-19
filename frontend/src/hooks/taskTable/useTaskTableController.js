@@ -44,6 +44,8 @@ export default function useTaskTableController({
     setChildrenForParent: childrenState.setChildrenForParent,
     loadChildrenForParent: childrenState.loadChildrenForParent,
     clearChildrenCache: childrenState.clearChildrenCache,
+    refreshChildren: childrenState.refreshChildren,
+    patchChildInCache: childrenState.patchChildInCache,
     expandedRows: childrenState.expandedRows,
     editingId: rowsState.editingId,
     refresh: rowsState.refresh,
