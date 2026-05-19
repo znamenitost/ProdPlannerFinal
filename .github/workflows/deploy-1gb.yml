@@ -39,11 +39,44 @@ jobs:
           mkdir -p publish/wwwroot
           cp -r frontend/dist/* publish/wwwroot/
 
+      - name: Validate FTP secrets
+        run: |
+          missing=0
+          for key in FTP_SERVER FTP_USERNAME FTP_PASSWORD; do
+            val="${{ secrets[key] }}"
+            if [ -z "$val" ]; then
+              echo "::error::Секрет $key не задан в Environment FTP_SERVER"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+
+      - name: Prepare FTP target
+        id: ftp
+        run: |
+          server="${{ secrets.FTP_SERVER }}"
+          server="${server#ftp://}"
+          server="${server#ftps://}"
+          server="${server%%/*}"
+          dir="${{ secrets.FTP_SERVER_DIR }}"
+          if [ -z "$dir" ]; then
+            dir="/http/"
+            echo "FTP_SERVER_DIR не задан — используем /http/ (стандарт 1gb.ru)"
+          fi
+          case "$dir" in
+            /*) ;;
+            *) dir="/$dir" ;;
+          esac
+          echo "server=$server" >> "$GITHUB_OUTPUT"
+          echo "server_dir=$dir" >> "$GITHUB_OUTPUT"
+
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
-          server: ${{ secrets.FTP_SERVER }}
+          server: ${{ steps.ftp.outputs.server }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
+          server-dir: ${{ steps.ftp.outputs.server_dir }}
           local-dir: ./publish/
+          protocol: ftp
+          port: 21
