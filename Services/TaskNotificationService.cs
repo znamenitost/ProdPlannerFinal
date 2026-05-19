@@ -27,13 +27,14 @@ public class TaskNotificationService : ITaskNotificationService
 
     public async Task NotifyNewTaskAsync(ProductionTask task)
     {
+        var title = GetNotificationTitle(task);
         var userId = await GetUserIdByFullNameAsync(task.EmployeeName);
         if (!string.IsNullOrEmpty(userId))
         {
             var notificationId = await _inbox.EnqueueNewTaskAsync(
                 userId,
                 task.Id,
-                task.TaskDisplayName,
+                title,
                 task.Deadline);
 
             await SendToGroupsAsync(
@@ -41,7 +42,7 @@ public class TaskNotificationService : ITaskNotificationService
                 "NewTask",
                 notificationId,
                 task.Id,
-                task.TaskDisplayName,
+                title,
                 task.Deadline);
         }
         else
@@ -53,7 +54,7 @@ public class TaskNotificationService : ITaskNotificationService
             [NotificationGroups.Admins],
             "TaskUpdated",
             task.Id,
-            task.TaskDisplayName,
+            title,
             task.Deadline);
     }
 
@@ -66,7 +67,7 @@ public class TaskNotificationService : ITaskNotificationService
             employeeNames.Add(oldEmployeeName);
 
         var groups = await ResolveEmployeeGroupsAsync(employeeNames);
-        await SendToGroupsAsync(groups, "TaskUpdated", task.Id, task.TaskDisplayName, task.Deadline);
+        await SendToGroupsAsync(groups, "TaskUpdated", task.Id, GetNotificationTitle(task), task.Deadline);
     }
 
     public async Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames)
@@ -106,7 +107,22 @@ public class TaskNotificationService : ITaskNotificationService
     {
         if (groups.Count == 0)
             return Task.CompletedTask;
-        return _hubContext.Clients.Groups(groups).SendAsync(method, args);
+        return _hubContext.Clients.Groups(groups).SendCoreAsync(method, args);
+    }
+
+    public static string GetNotificationTitle(ProductionTask task)
+    {
+        var name = task.TaskDisplayName;
+        if (!string.IsNullOrWhiteSpace(name))
+            return name.Trim();
+        if (!string.IsNullOrWhiteSpace(task.FileName))
+            return task.FileName.Trim();
+        if (!string.IsNullOrWhiteSpace(task.Comment))
+        {
+            var comment = task.Comment.Trim();
+            return comment.Length > 80 ? comment[..80] + "…" : comment;
+        }
+        return $"Задача #{task.Id}";
     }
 
     private async Task<string?> GetUserIdByFullNameAsync(string fullName)

@@ -5,11 +5,17 @@ export default function useTaskTableChildren(api, refreshTrigger) {
   const [childrenCache, setChildrenCache] = useState(new Map());
   const [loadingChildren, setLoadingChildren] = useState(new Set());
   const expandedRowsRef = useRef(expandedRows);
+  const childrenCacheRef = useRef(childrenCache);
+  const loadingChildrenRef = useRef(loadingChildren);
   expandedRowsRef.current = expandedRows;
+  childrenCacheRef.current = childrenCache;
+  loadingChildrenRef.current = loadingChildren;
 
   const loadChildrenForParent = useCallback(async (parentId, { force = false } = {}) => {
-    if (!force && childrenCache.has(parentId)) return childrenCache.get(parentId);
-    if (loadingChildren.has(parentId)) return;
+    if (!force && childrenCacheRef.current.has(parentId)) {
+      return childrenCacheRef.current.get(parentId);
+    }
+    if (loadingChildrenRef.current.has(parentId)) return;
 
     setLoadingChildren((prev) => new Set(prev).add(parentId));
     try {
@@ -26,10 +32,10 @@ export default function useTaskTableChildren(api, refreshTrigger) {
         return newSet;
       });
     }
-  }, [api, childrenCache, loadingChildren]);
+  }, [api]);
 
   const refreshChildren = useCallback(async (parentId) => {
-    if (expandedRows.has(parentId)) {
+    if (expandedRowsRef.current.has(parentId)) {
       setLoadingChildren((prev) => new Set(prev).add(parentId));
       try {
         const children = await api.loadChildren(parentId);
@@ -50,7 +56,7 @@ export default function useTaskTableChildren(api, refreshTrigger) {
         return newMap;
       });
     }
-  }, [expandedRows, api]);
+  }, [api]);
 
   useEffect(() => {
     const parents = [...expandedRowsRef.current];

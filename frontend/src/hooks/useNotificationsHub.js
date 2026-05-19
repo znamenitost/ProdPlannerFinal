@@ -1,12 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as signalR from '@microsoft/signalr';
 
+function formatNotificationDeadline(deadline) {
+  if (deadline == null || deadline === '') return 'не указан';
+  const d = new Date(deadline);
+  if (Number.isNaN(d.getTime())) return 'не указан';
+  return d.toLocaleString('ru-RU');
+}
+
+function parseNewTaskHubArgs(notificationId, taskId, taskTitle, deadline) {
+  if (Array.isArray(notificationId)) {
+    const [a, b, c, d] = notificationId;
+    return { notificationId: a, taskId: b, taskTitle: c, deadline: d };
+  }
+  return { notificationId, taskId, taskTitle, deadline };
+}
+
 function mapPendingDto(dto) {
   return {
     id: `n-${dto.id}`,
     serverId: dto.id,
-    title: dto.title,
-    deadline: dto.deadline ? new Date(dto.deadline).toLocaleString() : '',
+    title: dto.title?.trim() || 'Новая задача',
+    deadline: formatNotificationDeadline(dto.deadline),
   };
 }
 
@@ -94,13 +109,16 @@ export default function useNotificationsHub(user, onRefresh) {
       .withAutomaticReconnect()
       .build();
 
-    const handleNewTask = (notificationId, _taskId, taskTitle, deadline) => {
+    const handleNewTask = (notificationId, taskId, taskTitle, deadline) => {
       if (!isMounted) return;
+      const args = parseNewTaskHubArgs(notificationId, taskId, taskTitle, deadline);
+      const title =
+        typeof args.taskTitle === 'string' ? args.taskTitle.trim() : String(args.taskTitle ?? '').trim();
       offerNotification({
-        id: `n-${notificationId}`,
-        serverId: notificationId,
-        title: taskTitle,
-        deadline: new Date(deadline).toLocaleString(),
+        id: `n-${args.notificationId}`,
+        serverId: args.notificationId,
+        title: title || 'Новая задача',
+        deadline: formatNotificationDeadline(args.deadline),
       });
       scheduleRefresh();
     };

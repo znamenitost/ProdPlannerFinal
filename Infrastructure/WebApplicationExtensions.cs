@@ -49,10 +49,10 @@ public static class WebApplicationExtensions
         app.UseCors("AllowReact");
         app.UseAuthentication();
         app.UseAuthorization();
-        app.MapControllers();
-        app.MapFallbackToFile("index.html");
         app.UseWebSockets();
+        app.MapControllers();
         app.MapHub<NotificationHub>("/notificationHub");
+        app.MapFallbackToFile("index.html");
         return app;
     }
 }

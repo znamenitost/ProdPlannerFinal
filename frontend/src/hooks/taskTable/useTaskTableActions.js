@@ -95,14 +95,15 @@ export default function useTaskTableActions({
   const runLifecycleAction = useCallback(async (action, row) => {
     try {
       await action(row.id);
-      refresh();
+      await refresh();
       if (row.parentRowNumber) {
         await refreshChildren(row.parentRowNumber);
       }
     } catch (err) {
       console.error(err);
+      showError(err.message || 'Не удалось выполнить действие с задачей');
     }
-  }, [refresh, refreshChildren]);
+  }, [refresh, refreshChildren, showError]);
 
   const handleStartTask = useCallback(
     (row) => runLifecycleAction(api.startTask, row),
