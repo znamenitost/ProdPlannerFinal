@@ -6,6 +6,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Update="web.config">
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="ProductionPlanner.Tests/**" />
     <Content Remove="ProductionPlanner.Tests/**" />
     <None Remove="ProductionPlanner.Tests/**" />
