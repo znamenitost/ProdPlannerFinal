@@ -142,7 +142,38 @@ namespace ProductionPlanner.Models
         public bool IsActive { get; set; } = true;
         public string? AvatarUrl { get; set; } // Путь к аватару
     }
-}=== ./Models/AuthRequests.cs ===
+}=== ./Models/UserNotification.cs ===
+using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
+
+namespace ProductionPlanner.Models;
+
+[Index(nameof(UserId), nameof(AcknowledgedAt))]
+public class UserNotification
+{
+    [Key]
+    public long Id { get; set; }
+
+    [Required]
+    public string UserId { get; set; } = "";
+
+    [Required]
+    [MaxLength(50)]
+    public string Type { get; set; } = "";
+
+    public int? TaskId { get; set; }
+
+    [Required]
+    [MaxLength(500)]
+    public string Title { get; set; } = "";
+
+    public DateTime? Deadline { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime? AcknowledgedAt { get; set; }
+}
+=== ./Models/AuthRequests.cs ===
 namespace ProductionPlanner.Models;
 
 public class EmployeeLoginRequest
@@ -215,6 +246,18 @@ public class CalendarDeadlineDto
     public int TaskId { get; set; }
     public string TaskTitle { get; set; } = "";
 }
+=== ./Models/Dtos/NotificationDto.cs ===
+namespace ProductionPlanner.Models.Dtos;
+
+public class NotificationDto
+{
+    public long Id { get; set; }
+    public string Type { get; set; } = "";
+    public int? TaskId { get; set; }
+    public string Title { get; set; } = "";
+    public DateTime? Deadline { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
 === ./Models/Dtos/TaskTableRowDto.cs ===
 using ProductionPlanner.Models;
 
@@ -238,29 +281,46 @@ public class TaskTableRowDto
     public bool IsSplitTask { get; set; }
     public double Progress { get; set; }
     public bool HasCurrentUserSubtask { get; set; }
+    /// <summary>Имена сотрудников дочерних подзадач (через «/») для общих задач.</summary>
+    public string SplitEmployeeNames { get; set; } = "";
 
     public static TaskTableRowDto FromParent(
         ProductionTask parent,
         string statusText,
-        bool hasCurrentUserSubtask) => new()
+        bool hasCurrentUserSubtask,
+        IReadOnlyList<ProductionTask>? children = null)
     {
-        Id = parent.Id,
-        DisplayOrder = parent.DisplayOrder,
-        FolderPath = parent.FolderPath,
-        FileName = parent.FileName,
-        Comment = parent.Comment,
-        StatusText = statusText,
-        Deadline = parent.Deadline,
-        EstimateHours = parent.EstimateHours,
-        Type = parent.Type,
-        EmployeeName = parent.EmployeeName,
-        CreatedAt = parent.CreatedAt,
-        UpdatedAt = parent.UpdatedAt,
-        ParentRowNumber = parent.ParentRowNumber,
-        IsSplitTask = parent.IsSplitTask,
-        Progress = parent.Progress,
-        HasCurrentUserSubtask = hasCurrentUserSubtask
-    };
+        var splitEmployeeNames = "";
+        if (parent.IsSplitTask && children is { Count: > 0 })
+        {
+            splitEmployeeNames = string.Join("/",
+                children
+                    .Select(c => c.EmployeeName)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Distinct());
+        }
+
+        return new TaskTableRowDto
+        {
+            Id = parent.Id,
+            DisplayOrder = parent.DisplayOrder,
+            FolderPath = parent.FolderPath,
+            FileName = parent.FileName,
+            Comment = parent.Comment,
+            StatusText = statusText,
+            Deadline = parent.Deadline,
+            EstimateHours = parent.EstimateHours,
+            Type = parent.Type,
+            EmployeeName = parent.EmployeeName,
+            CreatedAt = parent.CreatedAt,
+            UpdatedAt = parent.UpdatedAt,
+            ParentRowNumber = parent.ParentRowNumber,
+            IsSplitTask = parent.IsSplitTask,
+            Progress = parent.Progress,
+            HasCurrentUserSubtask = hasCurrentUserSubtask,
+            SplitEmployeeNames = splitEmployeeNames
+        };
+    }
 }
 === ./Models/EmployeeStat.cs ===
 namespace ProductionPlanner.Models
@@ -350,7 +410,6 @@ public class UpdateTaskRequest
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
-using System.Threading.Tasks;
 
 namespace ProductionPlanner.Hubs
 {
@@ -359,14 +418,11 @@ namespace ProductionPlanner.Hubs
     {
         public override async Task OnConnectedAsync()
         {
-            Console.WriteLine($"Client connected: {Context.ConnectionId}");
-            await base.OnConnectedAsync();
-        }
+            var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.IsNullOrEmpty(userId))
+                await Groups.AddToGroupAsync(Context.ConnectionId, userId);
 
-        public override async Task OnDisconnectedAsync(Exception? exception)
-        {
-            Console.WriteLine($"Client disconnected: {Context.ConnectionId}");
-            await base.OnDisconnectedAsync(exception);
+            await base.OnConnectedAsync();
         }
 
         public async Task JoinUserGroup(string userId)
@@ -376,7 +432,6 @@ namespace ProductionPlanner.Hubs
                 throw new HubException("Cannot join another user's notification group.");
 
             await Groups.AddToGroupAsync(Context.ConnectionId, userId);
-            Console.WriteLine($"Connection {Context.ConnectionId} joined group {userId}");
         }
 
         public async Task LeaveUserGroup(string userId)
@@ -386,10 +441,10 @@ namespace ProductionPlanner.Hubs
                 throw new HubException("Cannot leave another user's notification group.");
 
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, userId);
-            Console.WriteLine($"Connection {Context.ConnectionId} left group {userId}");
         }
     }
-}=== ./Infrastructure/IdentitySeedService.cs ===
+}
+=== ./Infrastructure/IdentitySeedService.cs ===
 using Microsoft.AspNetCore.Identity;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services.Auth;
@@ -439,6 +494,7 @@ public static class WebApplicationExtensions
         services.AddScoped<IProductionTaskRepository, ProductionTaskRepository>();
         services.AddScoped<ITaskSplitService, TaskSplitService>();
         services.AddScoped<ITaskNotificationService, TaskNotificationService>();
+        services.AddScoped<INotificationInboxService, NotificationInboxService>();
         services.AddScoped<ITaskTableService, TaskTableService>();
         services.AddScoped<ITaskListQueryService, TaskListQueryService>();
         services.AddScoped<IWeekCalendarService, WeekCalendarService>();
@@ -529,6 +585,26 @@ public static class DatabaseInitializer
                 logger.LogInformation("Выполнен ALTER: {Command}", alterCmd);
             }
 
+            using (var createNotifications = connection.CreateCommand())
+            {
+                createNotifications.CommandText = """
+                    CREATE TABLE IF NOT EXISTS UserNotifications (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        UserId TEXT NOT NULL,
+                        Type TEXT NOT NULL,
+                        TaskId INTEGER,
+                        Title TEXT NOT NULL,
+                        Deadline TEXT,
+                        CreatedAt TEXT NOT NULL,
+                        AcknowledgedAt TEXT
+                    );
+                    CREATE INDEX IF NOT EXISTS IX_UserNotifications_UserId_Ack
+                        ON UserNotifications(UserId, AcknowledgedAt);
+                    """;
+                await createNotifications.ExecuteNonQueryAsync();
+                logger.LogInformation("Таблица UserNotifications проверена/создана.");
+            }
+
             await connection.CloseAsync();
         }
         catch (Exception ex)
@@ -569,8 +645,15 @@ namespace ProductionPlanner.Controllers
         {
             try
             {
-                await _splitService.SplitTaskAsync(request.ParentTaskId, request.Parts);
-                return Ok(new { message = "Задача успешно разделена" });
+                var parent = await _splitService.SplitTaskAsync(request.ParentTaskId, request.Parts);
+                return Ok(new
+                {
+                    message = "Задача успешно разделена",
+                    estimateHours = parent.EstimateHours,
+                    isSplitTask = parent.IsSplitTask,
+                    employeeName = parent.EmployeeName,
+                    type = parent.Type
+                });
             }
             catch (Exception ex)
             {
@@ -584,8 +667,15 @@ namespace ProductionPlanner.Controllers
         {
             try
             {
-                await _splitService.UpdateSplitAsync(parentTaskId, request.Parts);
-                return Ok(new { message = "Назначения обновлены" });
+                var parent = await _splitService.UpdateSplitAsync(parentTaskId, request.Parts);
+                return Ok(new
+                {
+                    message = "Назначения обновлены",
+                    estimateHours = parent.EstimateHours,
+                    isSplitTask = parent.IsSplitTask,
+                    employeeName = parent.EmployeeName,
+                    type = parent.Type
+                });
             }
             catch (Exception ex)
             {
@@ -609,8 +699,10 @@ namespace ProductionPlanner.Controllers
                 c.FileName,
                 c.Comment,
                 StatusText = MapStatusToText(c.Status),
+                Status = c.Status.ToString(),
                 c.Deadline,
                 c.EstimateHours,
+                c.ActualHours,
                 c.Type,
                 c.EmployeeName,
                 c.CreatedAt,
@@ -1199,9 +1291,57 @@ public class TaskListsController : ControllerBase
         }
     }
 }
+=== ./Controllers/NotificationsController.cs ===
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using ProductionPlanner.Services;
+
+namespace ProductionPlanner.Controllers;
+
+[Authorize]
+[ApiController]
+[Route("api/notifications")]
+public class NotificationsController : ControllerBase
+{
+    private readonly INotificationInboxService _inbox;
+
+    public NotificationsController(INotificationInboxService inbox)
+    {
+        _inbox = inbox;
+    }
+
+    [HttpGet("pending")]
+    public async Task<IActionResult> GetPending()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var pending = await _inbox.GetPendingAsync(userId);
+        return Ok(pending);
+    }
+
+    [HttpPost("{id:long}/ack")]
+    public async Task<IActionResult> Acknowledge(long id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var ok = await _inbox.AcknowledgeAsync(userId, id);
+        if (!ok)
+            return NotFound();
+
+        return NoContent();
+    }
+}
 === ./Controllers/FilesController.cs ===
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using ProductionPlanner.Services;
 
 namespace ProductionPlanner.Controllers
 {
@@ -1217,70 +1357,95 @@ namespace ProductionPlanner.Controllers
             _configuration = configuration;
         }
 
+        [HttpGet("launch")]
+        public IActionResult LaunchFile([FromQuery] string path, [FromQuery] string? clientPlatform)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return BadRequest(new { message = "Путь к файлу не указан" });
+
+            if (!TryBuildOpenUrl(path, clientPlatform, out var openUrl, out var error))
+                return BadRequest(new { message = error });
+
+            if (IsCustomProtocolUrl(openUrl))
+                return Content(BuildProtocolLauncherHtml(openUrl), "text/html; charset=utf-8");
+
+            return Redirect(openUrl);
+        }
+
         [HttpPost("open")]
         public IActionResult OpenFile([FromBody] OpenFileRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.FilePath))
                 return BadRequest(new { message = "Путь к файлу не указан" });
 
+            if (!TryBuildOpenUrl(request.FilePath, request.ClientPlatform, out var openUrl, out var error))
+                return BadRequest(new { message = error });
+
             var shareName = _configuration["FileOpen:ShareName"] ?? "Клиенты";
-            var macSmbHost = _configuration["FileOpen:MacSmbHost"] ?? "MINIMARKER";
-            var windowsHost = _configuration["FileOpen:WindowsHost"] ?? "192.168.1.119";
-            var netOpenScheme = _configuration["FileOpen:NetOpenScheme"] ?? "netopen";
-            var netOpenShareName = _configuration["FileOpen:NetOpenShareName"] ?? shareName.ToLowerInvariant();
-
-            var correctedPath = NormalizeRelativePath(request.FilePath, shareName);
-            if (string.IsNullOrWhiteSpace(correctedPath))
-                return BadRequest(new { message = "Не удалось определить путь к файлу" });
-
-            var smbUrl = $"smb://{macSmbHost}/{shareName}/{correctedPath}";
-            var netOpenUrl = $"{netOpenScheme}://{windowsHost}/{netOpenShareName}/{correctedPath}";
-            var clientPlatform = request.ClientPlatform ?? string.Empty;
-            var downloadUrl = clientPlatform.Contains("Win", StringComparison.OrdinalIgnoreCase)
-                ? netOpenUrl
-                : smbUrl;
+            var correctedPath = FilePathNormalizer.NormalizeRelativePath(request.FilePath, shareName);
 
             return Ok(new
             {
                 message = "Ссылка на файл сформирована",
-                downloadUrl,
-                smbUrl,
-                netOpenUrl
+                openUrl,
+                relativePath = correctedPath,
+                launchUrl = $"/api/files/launch?path={Uri.EscapeDataString(request.FilePath)}&clientPlatform={Uri.EscapeDataString(request.ClientPlatform ?? "")}"
             });
         }
 
-        private static string NormalizeRelativePath(string filePath, string shareName)
+        private bool TryBuildOpenUrl(string filePath, string? clientPlatform, out string openUrl, out string error)
         {
-            var rawPath = filePath.Replace('\\', '/').Trim();
-            while (rawPath.Contains("//"))
-                rawPath = rawPath.Replace("//", "/");
+            openUrl = "";
+            error = "";
 
-            rawPath = rawPath.Trim('/');
-            var sharePrefix = shareName.Trim('/');
-            if (rawPath.StartsWith(sharePrefix + "/", StringComparison.OrdinalIgnoreCase))
-                rawPath = rawPath[(sharePrefix.Length + 1)..];
+            var shareName = _configuration["FileOpen:ShareName"] ?? "Клиенты";
+            var macSmbHost = _configuration["FileOpen:MacSmbHost"] ?? "minimarker";
+            var windowsHost = _configuration["FileOpen:WindowsHost"] ?? "192.168.1.119";
+            var netOpenScheme = _configuration["FileOpen:NetOpenScheme"] ?? "netopen";
+            var netOpenShareName = _configuration["FileOpen:NetOpenShareName"] ?? shareName;
+            var windowsShareName = _configuration["FileOpen:WindowsShareName"] ?? shareName;
+            var windowsOpenMode = _configuration["FileOpen:WindowsOpenMode"] ?? "netopen";
 
-            var parts = rawPath
-                .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .ToArray();
+            var correctedPath = FilePathNormalizer.NormalizeRelativePath(filePath, shareName);
+            if (string.IsNullOrWhiteSpace(correctedPath))
+            {
+                error = "Не удалось определить путь к файлу";
+                return false;
+            }
 
-            if (parts.Length == 0)
-                return string.Empty;
+            var platform = clientPlatform ?? "";
+            var isWindows = platform.Contains("Win", StringComparison.OrdinalIgnoreCase)
+                || platform.Contains("Windows", StringComparison.OrdinalIgnoreCase);
 
-            var cleanFileName = parts[^1].Split('[')[0].Trim();
-            if (!HasSupportedExtension(cleanFileName))
-                cleanFileName += ".cdr";
+            if (isWindows)
+            {
+                openUrl = windowsOpenMode.Equals("netopen", StringComparison.OrdinalIgnoreCase)
+                    ? FilePathNormalizer.BuildNetOpenUrl(netOpenScheme, windowsHost, netOpenShareName, correctedPath)
+                    : FilePathNormalizer.BuildWindowsFileUrl(windowsHost, windowsShareName, correctedPath);
+            }
+            else
+            {
+                // Кодирование каждого сегмента (запятые в имени файла — иначе открывается только папка).
+                openUrl = FilePathNormalizer.BuildSmbUrl(macSmbHost, shareName, correctedPath, encodePath: true);
+            }
 
-            parts[^1] = cleanFileName;
-            return string.Join("/", parts);
+            return true;
         }
 
-        private static bool HasSupportedExtension(string fileName)
+        private static bool IsCustomProtocolUrl(string url) =>
+            !url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+        private static string BuildProtocolLauncherHtml(string openUrl)
         {
-            return fileName.EndsWith(".cdr", StringComparison.OrdinalIgnoreCase)
-                || fileName.EndsWith(".ai", StringComparison.OrdinalIgnoreCase)
-                || fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
-                || fileName.EndsWith(".eps", StringComparison.OrdinalIgnoreCase);
+            var safeHref = HtmlEncoder.Default.Encode(openUrl);
+            var safeJs = JsonSerializer.Serialize(openUrl);
+            return "<!DOCTYPE html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>Открытие</title></head>" +
+                   "<body style=\"font-family:sans-serif;padding:1rem\">" +
+                   "<p>Открываем файл…</p>" +
+                   $"<p><a id=\"open-link\" href=\"{safeHref}\">Нажмите, если файл не открылся</a></p>" +
+                   $"<script>(function(){{var t={safeJs};try{{window.location.replace(t);}}catch(e){{}}" +
+                   "try{document.getElementById('open-link').click();}catch(e){}})();</script></body></html>";
         }
     }
 
@@ -1289,7 +1454,8 @@ namespace ProductionPlanner.Controllers
         public string FilePath { get; set; } = "";
         public string? ClientPlatform { get; set; }
     }
-}=== ./Controllers/TaskLifecycleController.cs ===
+}
+=== ./Controllers/TaskLifecycleController.cs ===
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductionPlanner.Data;
@@ -1637,9 +1803,17 @@ public async Task DeleteTaskAsync(int id)
 
         public async Task<List<ProductionTask>> GetChildTasksAsync(int parentId)
         {
+            var activeChildIds = await _context.TaskSplits
+                .Where(ts => ts.ParentRowNumber == parentId)
+                .Select(ts => ts.ChildTaskId)
+                .ToListAsync();
+
+            if (!activeChildIds.Any())
+                return new List<ProductionTask>();
+
             return await _context.ProductionTasks
                 .Include(t => t.WorkIntervals)
-                .Where(t => t.ParentRowNumber == parentId)
+                .Where(t => activeChildIds.Contains(t.Id))
                 .ToListAsync();
         }
 
@@ -1669,14 +1843,23 @@ public async Task DeleteTaskAsync(int id)
             if (parentIds.Count == 0)
                 return new Dictionary<int, List<ProductionTask>>();
 
-            var allChildren = await _context.ProductionTasks
-                .Where(c => c.ParentRowNumber.HasValue &&
-                            parentIds.Contains(c.ParentRowNumber.Value) &&
-                            c.IsSplitTask)
+            var splits = await _context.TaskSplits
+                .Where(ts => parentIds.Contains(ts.ParentRowNumber))
                 .ToListAsync();
 
-            return allChildren
-                .GroupBy(c => c.ParentRowNumber!.Value)
+            if (splits.Count == 0)
+                return new Dictionary<int, List<ProductionTask>>();
+
+            var childIds = splits.Select(s => s.ChildTaskId).ToList();
+            var children = await _context.ProductionTasks
+                .Where(c => childIds.Contains(c.Id) && c.IsSplitTask)
+                .ToListAsync();
+
+            var parentByChildId = splits.ToDictionary(s => s.ChildTaskId, s => s.ParentRowNumber);
+
+            return children
+                .Where(c => parentByChildId.ContainsKey(c.Id))
+                .GroupBy(c => parentByChildId[c.Id])
                 .ToDictionary(g => g.Key, g => g.ToList());
         }
 
@@ -1756,6 +1939,7 @@ namespace ProductionPlanner.Data
         public DbSet<WorkInterval> WorkIntervals { get; set; }
         public DbSet<EmployeeStat> EmployeeStats { get; set; }
         public DbSet<TaskSplit> TaskSplits { get; set; }
+        public DbSet<UserNotification> UserNotifications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -1922,6 +2106,70 @@ public class SplitTaskStatusAggregatorTests
         Assert.False(hasSubtask);
     }
 }
+=== ./ProductionPlanner.Tests/FilePathNormalizerTests.cs ===
+using ProductionPlanner.Services;
+using Xunit;
+
+namespace ProductionPlanner.Tests;
+
+public class FilePathNormalizerTests
+{
+    private const string Share = "Клиенты";
+
+    [Fact]
+    public void Strips_windows_path_before_share()
+    {
+        var input = "C:/Users/пк/Yandex.Disk/Клиенты/Ф/Фрэшмемори/18,05,26 конфеты.cdr";
+        var result = FilePathNormalizer.NormalizeRelativePath(input, Share);
+        Assert.Equal("Ф/Фрэшмемори/18,05,26 конфеты.cdr", result);
+    }
+
+    [Fact]
+    public void Strips_e_drive_yandex_path()
+    {
+        var input = @"E:\Users\User\YandexDisk\YandexDisk\Клиенты\Ф\Фрешмемори\18,05,26 конфеты.cdr";
+        var result = FilePathNormalizer.NormalizeRelativePath(input, Share);
+        Assert.Equal("Ф/Фрешмемори/18,05,26 конфеты.cdr", result);
+    }
+
+    [Fact]
+    public void Keeps_relative_path_under_share()
+    {
+        var input = "Клиенты/Ф/Фрэшмемори/18,05,26 конфеты";
+        var result = FilePathNormalizer.NormalizeRelativePath(input, Share);
+        Assert.Equal("Ф/Фрэшмемори/18,05,26 конфеты.cdr", result);
+    }
+
+    [Fact]
+    public void BuildSmbUrl_uses_lowercase_host()
+    {
+        var url = FilePathNormalizer.BuildSmbUrl("MINIMARKER", Share, "Ф/Фрэшмемори/file.cdr", encodePath: false);
+        Assert.Equal("smb://minimarker/Клиенты/Ф/Фрэшмемори/file.cdr", url);
+    }
+
+    [Fact]
+    public void BuildSmbUrl_encodes_commas_in_filename()
+    {
+        var url = FilePathNormalizer.BuildSmbUrl("minimarker", Share, "С/Спортмебель/15,05,26 спортт.cdr", encodePath: true);
+        Assert.Contains("15%2C05%2C26", url);
+        Assert.EndsWith("%D1%81%D0%BF%D0%BE%D1%80%D1%82%D1%82.cdr", url);
+    }
+
+    [Fact]
+    public void BuildWindowsFileUrl_encodes_path_for_file_protocol()
+    {
+        var url = FilePathNormalizer.BuildWindowsFileUrl("192.168.1.119", Share, "С/Спортмебель/15,05,26 спортт.cdr");
+        Assert.StartsWith("file://192.168.1.119/", url);
+        Assert.Contains("15%2C05%2C26", url);
+    }
+
+    [Fact]
+    public void BuildWindowsUncPath_matches_server_layout()
+    {
+        var unc = FilePathNormalizer.BuildWindowsUncPath("192.168.1.119", Share, "С/Спортмебель/15,05,26 спортт.cdr");
+        Assert.Equal(@"\\192.168.1.119\Клиенты\С\Спортмебель\15,05,26 спортт.cdr", unc);
+    }
+}
 === ./ProductionPlanner.Tests/TaskStatusMapperTests.cs ===
 using ProductionPlanner.Models;
 using ProductionPlanner.Services.TaskTable;
@@ -1952,6 +2200,143 @@ public class TaskStatusMapperTests
 }
 === ./ProductionPlanner.Tests/GlobalUsings.cs ===
 global using Xunit;
+=== ./Services/FilePathNormalizer.cs ===
+using System.Text.RegularExpressions;
+
+namespace ProductionPlanner.Services;
+
+public static class FilePathNormalizer
+{
+    private static readonly Regex DrivePrefixRegex = new(@"^[A-Za-z]:[/\\]?", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Возвращает путь относительно SMB-шары «Клиенты»: Ф/Фрэшмемори/файл.cdr
+    /// </summary>
+    public static string NormalizeRelativePath(string filePath, string shareName)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return string.Empty;
+
+        var rawPath = filePath.Replace('\\', '/').Trim();
+        while (rawPath.Contains("//", StringComparison.Ordinal))
+            rawPath = rawPath.Replace("//", "/", StringComparison.Ordinal);
+
+        rawPath = rawPath.Trim('/');
+        rawPath = DrivePrefixRegex.Replace(rawPath, "");
+
+        var sharePrefix = shareName.Trim('/');
+        var shareMarker = sharePrefix + "/";
+        var shareIndex = rawPath.IndexOf(shareMarker, StringComparison.OrdinalIgnoreCase);
+        if (shareIndex >= 0)
+            rawPath = rawPath[(shareIndex + shareMarker.Length)..];
+        else if (rawPath.Equals(sharePrefix, StringComparison.OrdinalIgnoreCase))
+            rawPath = string.Empty;
+
+        rawPath = rawPath.Trim('/');
+        if (string.IsNullOrEmpty(rawPath))
+            return string.Empty;
+
+        var parts = rawPath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToArray();
+
+        if (parts.Length == 0)
+            return string.Empty;
+
+        var cleanFileName = parts[^1].Split('[')[0].Trim();
+        if (!HasSupportedExtension(cleanFileName))
+            cleanFileName += ".cdr";
+
+        parts[^1] = cleanFileName;
+        return string.Join("/", parts);
+    }
+
+    /// <summary>
+    /// Абсолютный путь на Mac: /Volumes/Клиенты/Ф/.../file.cdr (для команды open).
+    /// </summary>
+    public static string? BuildMacLocalPath(string? volumeMountPath, string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(volumeMountPath))
+            return null;
+
+        var basePath = volumeMountPath.Trim().TrimEnd('/');
+        var path = relativePath.Replace('\\', '/').Trim('/');
+        if (string.IsNullOrEmpty(path))
+            return null;
+
+        return $"{basePath}/{path}";
+    }
+
+    /// <summary>
+    /// file:///Volumes/Клиенты/... — запасной вариант (браузер часто открывает только папку).
+    /// </summary>
+    public static string? BuildMacFileUrl(string? volumeMountPath, string relativePath)
+    {
+        var localPath = BuildMacLocalPath(volumeMountPath, relativePath);
+        if (localPath == null)
+            return null;
+
+        if (!Uri.TryCreate(localPath, UriKind.Absolute, out var uri))
+            return null;
+
+        return uri.AbsoluteUri;
+    }
+
+    public static string BuildSmbUrl(string host, string shareName, string relativePath, bool encodePath = true)
+    {
+        var normalizedHost = (host ?? "minimarker").Trim().ToLowerInvariant();
+        var share = shareName.Trim('/');
+        var path = relativePath.Replace('\\', '/').Trim('/');
+
+        if (!encodePath)
+            return $"smb://{normalizedHost}/{share}/{path}";
+
+        var encodedShare = Uri.EscapeDataString(share);
+        var encodedPath = string.Join("/",
+            path.Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => Uri.EscapeDataString(s)));
+
+        return $"smb://{normalizedHost}/{encodedShare}/{encodedPath}";
+    }
+
+    public static string BuildNetOpenUrl(string scheme, string host, string shareName, string relativePath)
+    {
+        var path = relativePath.Replace('\\', '/').Trim('/');
+        var encodedPath = EncodePathSegments(path);
+        return $"{scheme.TrimEnd(':')}://{host.Trim()}/{shareName.Trim('/')}/{encodedPath}";
+    }
+
+    /// <summary>
+    /// file://server/Share/path — открытие с Windows через сетевую шару (без netopen).
+    /// </summary>
+    public static string BuildWindowsFileUrl(string host, string shareName, string relativePath)
+    {
+        var path = relativePath.Replace('\\', '/').Trim('/');
+        var encodedPath = EncodePathSegments(path);
+        var share = Uri.EscapeDataString(shareName.Trim('/'));
+        return $"file://{host.Trim()}/{share}/{encodedPath}";
+    }
+
+    /// <summary>
+    /// \\server\Share\path — для справки и тестов в проводнике.
+    /// </summary>
+    public static string BuildWindowsUncPath(string host, string shareName, string relativePath)
+    {
+        var path = relativePath.Replace('/', '\\').Trim('\\');
+        return $@"\\{host.Trim()}\{shareName.Trim('\\')}\{path}";
+    }
+
+    private static string EncodePathSegments(string path) =>
+        string.Join("/",
+            path.Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .Select(Uri.EscapeDataString));
+
+    private static bool HasSupportedExtension(string fileName) =>
+        fileName.EndsWith(".cdr", StringComparison.OrdinalIgnoreCase)
+        || fileName.EndsWith(".ai", StringComparison.OrdinalIgnoreCase)
+        || fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
+        || fileName.EndsWith(".eps", StringComparison.OrdinalIgnoreCase);
+}
 === ./Services/TaskTable/TaskTableService.cs ===
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
@@ -2009,7 +2394,7 @@ public class TaskTableService : ITaskTableService
                 parent,
                 children,
                 targetEmployeeName);
-            return TaskTableRowDto.FromParent(parent, statusText, hasSubtask);
+            return TaskTableRowDto.FromParent(parent, statusText, hasSubtask, children);
         }).ToList();
 
         return new PaginatedResult<TaskTableRowDto>
@@ -3024,6 +3409,88 @@ public class AvatarService : IAvatarService
         _ => "application/octet-stream"
     };
 }
+=== ./Services/NotificationInboxService.cs ===
+using Microsoft.EntityFrameworkCore;
+using ProductionPlanner.Data;
+using ProductionPlanner.Models;
+using ProductionPlanner.Models.Dtos;
+
+namespace ProductionPlanner.Services;
+
+public class NotificationInboxService : INotificationInboxService
+{
+    private readonly ApplicationDbContext _context;
+    private readonly IAppTimeService _timeService;
+
+    public NotificationInboxService(ApplicationDbContext context, IAppTimeService timeService)
+    {
+        _context = context;
+        _timeService = timeService;
+    }
+
+    public async Task<long> EnqueueNewTaskAsync(string userId, int taskId, string title, DateTime deadline)
+    {
+        var notification = new UserNotification
+        {
+            UserId = userId,
+            Type = "NewTask",
+            TaskId = taskId,
+            Title = title,
+            Deadline = deadline,
+            CreatedAt = _timeService.Now
+        };
+
+        _context.UserNotifications.Add(notification);
+        await _context.SaveChangesAsync();
+        return notification.Id;
+    }
+
+    public async Task<IReadOnlyList<NotificationDto>> GetPendingAsync(string userId)
+    {
+        return await _context.UserNotifications
+            .AsNoTracking()
+            .Where(n => n.UserId == userId && n.AcknowledgedAt == null)
+            .OrderBy(n => n.CreatedAt)
+            .Select(n => new NotificationDto
+            {
+                Id = n.Id,
+                Type = n.Type,
+                TaskId = n.TaskId,
+                Title = n.Title,
+                Deadline = n.Deadline,
+                CreatedAt = n.CreatedAt
+            })
+            .ToListAsync();
+    }
+
+    public async Task<bool> AcknowledgeAsync(string userId, long notificationId)
+    {
+        var notification = await _context.UserNotifications
+            .FirstOrDefaultAsync(n => n.Id == notificationId && n.UserId == userId);
+
+        if (notification == null)
+            return false;
+
+        if (notification.AcknowledgedAt == null)
+        {
+            notification.AcknowledgedAt = _timeService.Now;
+            await _context.SaveChangesAsync();
+        }
+
+        return true;
+    }
+}
+=== ./Services/INotificationInboxService.cs ===
+using ProductionPlanner.Models.Dtos;
+
+namespace ProductionPlanner.Services;
+
+public interface INotificationInboxService
+{
+    Task<long> EnqueueNewTaskAsync(string userId, int taskId, string title, DateTime deadline);
+    Task<IReadOnlyList<NotificationDto>> GetPendingAsync(string userId);
+    Task<bool> AcknowledgeAsync(string userId, long notificationId);
+}
 === ./Services/IWorkHoursCalculator.cs ===
 using System;
 using System.Collections.Generic;
@@ -3353,15 +3820,18 @@ public class TaskNotificationService : ITaskNotificationService
 {
     private readonly IHubContext<NotificationHub> _hubContext;
     private readonly UserManager<User> _userManager;
+    private readonly INotificationInboxService _inbox;
     private readonly ILogger<TaskNotificationService> _logger;
 
     public TaskNotificationService(
         IHubContext<NotificationHub> hubContext,
         UserManager<User> userManager,
+        INotificationInboxService inbox,
         ILogger<TaskNotificationService> logger)
     {
         _hubContext = hubContext;
         _userManager = userManager;
+        _inbox = inbox;
         _logger = logger;
     }
 
@@ -3374,7 +3844,18 @@ public class TaskNotificationService : ITaskNotificationService
             return;
         }
 
-        await _hubContext.Clients.Group(userId).SendAsync("NewTask", task.Id, task.TaskDisplayName, task.Deadline);
+        var notificationId = await _inbox.EnqueueNewTaskAsync(
+            userId,
+            task.Id,
+            task.TaskDisplayName,
+            task.Deadline);
+
+        await _hubContext.Clients.Group(userId).SendAsync(
+            "NewTask",
+            notificationId,
+            task.Id,
+            task.TaskDisplayName,
+            task.Deadline);
     }
 
     public async Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null)
@@ -3887,6 +4368,7 @@ namespace ProductionPlanner.Services
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ProductionPlanner.Services
 {
@@ -3896,17 +4378,20 @@ namespace ProductionPlanner.Services
         private readonly ApplicationDbContext _context;
         private readonly IAppTimeService _timeService;
         private readonly ITaskNotificationService _notificationService;
+        private readonly IServiceProvider _serviceProvider;
 
         public TaskSplitService(
             IProductionTaskRepository repo,
             ApplicationDbContext context,
             IAppTimeService timeService,
-            ITaskNotificationService notificationService)
+            ITaskNotificationService notificationService,
+            IServiceProvider serviceProvider)
         {
             _repo = repo;
             _context = context;
             _timeService = timeService;
             _notificationService = notificationService;
+            _serviceProvider = serviceProvider;
         }
 
         public async Task<ProductionTask> SplitTaskAsync(int parentTaskId, List<SplitPart> parts)
@@ -3916,8 +4401,9 @@ namespace ProductionPlanner.Services
                 throw new Exception($"Задача {parentTaskId} не найдена");
 
             var totalAllocated = parts.Sum(p => p.AllocatedHours);
-            if (Math.Abs(totalAllocated - parentTask.EstimateHours) > 0.01)
-                throw new Exception($"Сумма выделенных часов ({totalAllocated}) не равна оценке задачи ({parentTask.EstimateHours})");
+            parentTask.EstimateHours = totalAllocated;
+            parentTask.Type = string.Join(", ",
+                parts.Select(p => p.TaskType).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct());
 
             foreach (var part in parts)
             {
@@ -3955,11 +4441,17 @@ namespace ProductionPlanner.Services
             var parentTask = await _repo.GetTaskByIdAsync(parentTaskId);
             if (parentTask == null)
                 throw new Exception($"Задача {parentTaskId} не найдена");
-            if (!parentTask.IsSplitTask || parentTask.ParentRowNumber != null)
-                throw new Exception("Задача не является общей");
+            if (parentTask.ParentRowNumber != null)
+                throw new Exception("Нельзя редактировать назначения у подзадачи");
 
-            if (parts.Count < 2)
-                throw new Exception("Общая задача должна содержать минимум двух сотрудников");
+            if (parts.Count == 0)
+                throw new Exception("Укажите сотрудника");
+
+            if (parts.Count == 1)
+                return await ConvertToRegularTaskAsync(parentTask, parts[0]);
+
+            if (!parentTask.IsSplitTask)
+                return await SplitTaskAsync(parentTaskId, parts);
 
             var existingChildren = await GetChildTasksAsync(parentTaskId);
             var splits = await _context.TaskSplits.Where(ts => ts.ParentRowNumber == parentTaskId).ToListAsync();
@@ -4010,6 +4502,8 @@ namespace ProductionPlanner.Services
                 }
             }
 
+            var lifecycle = _serviceProvider.GetRequiredService<ITaskLifecycleService>();
+
             foreach (var orphan in existingChildren.Where(c => !usedChildIds.Contains(c.Id)))
             {
                 if (CanRemoveChild(orphan))
@@ -4019,10 +4513,19 @@ namespace ProductionPlanner.Services
                     if (orphanSplits.Any())
                         _context.TaskSplits.RemoveRange(orphanSplits);
                 }
+                else if (orphan.Status != JobStatus.Completed)
+                {
+                    await lifecycle.CompleteTaskAsync(orphan.Id, now);
+                    var orphanSplits = splits.Where(s => s.ChildTaskId == orphan.Id).ToList();
+                    if (orphanSplits.Any())
+                        _context.TaskSplits.RemoveRange(orphanSplits);
+                }
             }
 
             await _repo.UpdateTaskAsync(parentTask);
             await _context.SaveChangesAsync();
+
+            await RecalculateParentStatusAsync(parentTask.Id);
 
             return parentTask;
         }
@@ -4076,10 +4579,112 @@ namespace ProductionPlanner.Services
         private static bool CanRemoveChild(ProductionTask child) =>
             child.Status == JobStatus.Assigned && child.ActualHours < 0.01 && child.Progress < 0.01;
 
+        private async Task<ProductionTask> ConvertToRegularTaskAsync(ProductionTask parent, SplitPart part)
+        {
+            var now = _timeService.Now;
+            var activeChildren = await GetChildTasksAsync(parent.Id);
+            var allChildren = await _context.ProductionTasks
+                .Include(t => t.WorkIntervals)
+                .Where(t => t.ParentRowNumber == parent.Id)
+                .ToListAsync();
+            var splits = await _context.TaskSplits.Where(ts => ts.ParentRowNumber == parent.Id).ToListAsync();
+            var lifecycle = _serviceProvider.GetRequiredService<ITaskLifecycleService>();
+
+            var keptChild = ResolveChildForPart(part, activeChildren, new HashSet<int>());
+
+            foreach (var child in allChildren.Where(c => keptChild == null || c.Id != keptChild.Id))
+            {
+                if (CanRemoveChild(child))
+                {
+                    _context.ProductionTasks.Remove(child);
+                }
+                else if (child.Status != JobStatus.Completed)
+                {
+                    await lifecycle.CompleteTaskAsync(child.Id, now);
+                }
+            }
+
+            parent.EmployeeName = part.EmployeeName;
+            parent.EstimateHours = part.AllocatedHours;
+            parent.Type = part.TaskType ?? string.Empty;
+            parent.IsSplitTask = false;
+            parent.FileName = ResolveBaseFileName(parent.FileName, keptChild);
+            parent.UpdatedAt = now;
+
+            if (keptChild != null)
+            {
+                parent.Status = keptChild.Status;
+                parent.Progress = keptChild.Progress;
+                parent.ActualHours = keptChild.ActualHours;
+                parent.CompletedAt = keptChild.CompletedAt;
+
+                foreach (var interval in keptChild.WorkIntervals.ToList())
+                {
+                    interval.ProductionTaskId = parent.Id;
+                    await _repo.UpdateWorkIntervalAsync(interval);
+                }
+
+                _context.ProductionTasks.Remove(keptChild);
+            }
+            else
+            {
+                parent.Status = JobStatus.Assigned;
+                parent.Progress = 0;
+                parent.ActualHours = 0;
+                parent.CompletedAt = null;
+            }
+
+            if (splits.Any())
+                _context.TaskSplits.RemoveRange(splits);
+
+            await _repo.UpdateTaskAsync(parent);
+            await _context.SaveChangesAsync();
+
+            return parent;
+        }
+
+        private static string ResolveBaseFileName(string parentFileName, ProductionTask? child)
+        {
+            if (child != null && !string.IsNullOrEmpty(child.FileName))
+            {
+                var idx = child.FileName.LastIndexOf(" [", StringComparison.Ordinal);
+                if (idx > 0)
+                    return child.FileName[..idx];
+            }
+
+            return parentFileName;
+        }
+
+        private async Task RecalculateParentStatusAsync(int parentId)
+        {
+            var parent = await _repo.GetTaskByIdAsync(parentId);
+            if (parent == null || !parent.IsSplitTask) return;
+
+            var children = await GetChildTasksAsync(parentId);
+            if (!children.Any()) return;
+
+            JobStatus newStatus;
+            if (children.All(c => c.Status == JobStatus.Completed))
+                newStatus = JobStatus.Completed;
+            else if (children.Any(c =>
+                c.Status is JobStatus.Completed or JobStatus.InProgress or JobStatus.Paused))
+                newStatus = JobStatus.InProgress;
+            else
+                newStatus = JobStatus.Assigned;
+
+            if (parent.Status == newStatus) return;
+
+            parent.Status = newStatus;
+            parent.Progress = newStatus == JobStatus.Completed ? 1 : 0;
+            parent.CompletedAt = newStatus == JobStatus.Completed ? _timeService.Now : null;
+            parent.UpdatedAt = _timeService.Now;
+            await _repo.UpdateTaskAsync(parent);
+            await _context.SaveChangesAsync();
+        }
+
         public async Task<bool> AreAllSubtasksCompletedAsync(int parentRowNumber)
         {
-            var allTasks = await _repo.GetAllTasksAsync();
-            var children = allTasks.Where(t => t.ParentRowNumber == parentRowNumber && t.IsSplitTask).ToList();
+            var children = await GetChildTasksAsync(parentRowNumber);
             if (!children.Any()) return true;
             return children.All(t => t.Status == JobStatus.Completed);
         }
@@ -4091,9 +4696,14 @@ namespace ProductionPlanner.Services
 
         public async Task<List<ProductionTask>> GetChildTasksAsync(int parentRowNumber)
         {
+            var activeChildIds = await _context.TaskSplits
+                .Where(ts => ts.ParentRowNumber == parentRowNumber)
+                .Select(ts => ts.ChildTaskId)
+                .ToListAsync();
+
             return await _context.ProductionTasks
                 .Include(t => t.WorkIntervals)
-                .Where(t => t.ParentRowNumber == parentRowNumber && t.IsSplitTask)
+                .Where(t => activeChildIds.Contains(t.Id))
                 .ToListAsync();
         }
     }

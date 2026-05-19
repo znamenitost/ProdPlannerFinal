@@ -168,6 +168,16 @@ export const getUniqueEmployeesFromChildren = (children) => {
   return Array.from(employees).join('/');
 };
 
+export const getParentEmployeeDisplay = (task, childrenTasks) => {
+  if (childrenTasks?.length > 0) {
+    return getUniqueEmployeesFromChildren(childrenTasks);
+  }
+  if (task.splitEmployeeNames) {
+    return task.splitEmployeeNames;
+  }
+  return task.employeeName || '';
+};
+
 export const isOverdue = (deadline, status) => {
   if (status === 'Готово') return false;
   return new Date(deadline) < new Date();
@@ -201,7 +211,97 @@ export const isTaskBelongsToUser = (task, currentUser, hasChildren) => {
     );
   }
   return false;
-};=== ./frontend/src/components/TaskTableHead.jsx ===
+};=== ./frontend/src/components/ui/EmptyState.jsx ===
+import { Box, Typography } from '@mui/material';
+import { InboxOutlined } from '@mui/icons-material';
+
+export default function EmptyState({ message = 'Нет данных', icon: Icon = InboxOutlined }) {
+  return (
+    <Box sx={{ textAlign: 'center', py: 5, px: 2 }}>
+      <Icon sx={{ fontSize: 48, opacity: 0.35, mb: 1, color: 'text.secondary' }} />
+      <Typography variant="body1" color="text.secondary">{message}</Typography>
+    </Box>
+  );
+}
+=== ./frontend/src/components/ui/SectionCard.jsx ===
+import { Paper, Box, Typography } from '@mui/material';
+import { glassPaperSx, sectionHeaderSx, sectionTitleRowSx } from '../../theme/surfaces';
+
+export default function SectionCard({ title, icon, action, children, sx, contentSx, ...paperProps }) {
+  return (
+    <Paper sx={[glassPaperSx, sx]} {...paperProps}>
+      {(title || action) && (
+        <Box sx={sectionHeaderSx}>
+          <Box sx={sectionTitleRowSx}>
+            {icon}
+            {title && <Typography variant="h2" component="h2">{title}</Typography>}
+          </Box>
+          {action}
+        </Box>
+      )}
+      <Box sx={contentSx}>{children}</Box>
+    </Paper>
+  );
+}
+=== ./frontend/src/components/TaskAdminActionsMenu.jsx ===
+import { useState } from 'react';
+import { IconButton, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
+import { MoreVert, Edit, Delete } from '@mui/icons-material';
+import { softIconButtonSx } from '../theme/surfaces';
+
+export default function TaskAdminActionsMenu({ onEdit, onDelete, disabled = false }) {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+
+  const handleOpen = (event) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => setAnchorEl(null);
+
+  const run = (fn) => (event) => {
+    event.stopPropagation();
+    fn();
+    handleClose();
+  };
+
+  return (
+    <>
+      <IconButton
+        size="small"
+        onClick={handleOpen}
+        disabled={disabled}
+        aria-label="Действия с задачей"
+        sx={softIconButtonSx('primary')}
+      >
+        <MoreVert fontSize="small" />
+      </IconButton>
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        onClick={(e) => e.stopPropagation()}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem onClick={run(onEdit)}>
+          <ListItemIcon>
+            <Edit fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Редактировать</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={run(onDelete)} sx={{ color: 'error.main' }}>
+          <ListItemIcon>
+            <Delete fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText>Удалить</ListItemText>
+        </MenuItem>
+      </Menu>
+    </>
+  );
+}
+=== ./frontend/src/components/TaskTableHead.jsx ===
 import { TableHead, TableRow, TableCell } from '@mui/material';
 
 export default function TaskTableHead({ isAdmin }) {
@@ -462,7 +562,128 @@ export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
       </Collapse>
     </>
   );
-}=== ./frontend/src/components/TaskTable.jsx ===
+}=== ./frontend/src/components/EstimateHoursInput.jsx ===
+import { Box } from '@mui/material';
+import { Remove, Add } from '@mui/icons-material';
+import { NumberField } from '@base-ui/react/number-field';
+
+export const ESTIMATE_HOURS_MIN = 0.5;
+export const ESTIMATE_HOURS_MAX = 24;
+export const ESTIMATE_HOURS_STEP = 0.5;
+
+export function clampEstimateHours(value) {
+  return clampEstimateHoursToRange(value);
+}
+
+export function clampEstimateHoursToRange(
+  value,
+  min = ESTIMATE_HOURS_MIN,
+  max = ESTIMATE_HOURS_MAX
+) {
+  if (value === '' || value == null) return '';
+  const num = typeof value === 'number' ? value : parseFloat(value);
+  if (!Number.isFinite(num)) return '';
+  const stepped = Math.round(num / ESTIMATE_HOURS_STEP) * ESTIMATE_HOURS_STEP;
+  return Math.min(max, Math.max(min, stepped));
+}
+
+const fieldSx = {
+  display: 'inline-flex',
+  alignItems: 'stretch',
+  border: 1,
+  borderColor: 'divider',
+  borderRadius: 1,
+  bgcolor: 'transparent',
+  overflow: 'hidden',
+  '& [data-disabled]': {
+    opacity: 0.45,
+    cursor: 'not-allowed',
+  },
+  '& button': {
+    border: 'none',
+    background: 'transparent',
+    color: 'text.secondary',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 30,
+    px: 0.5,
+    flexShrink: 0,
+    '&:hover:not([data-disabled])': {
+      bgcolor: 'action.hover',
+      color: 'text.primary',
+    },
+  },
+  '& input': {
+    width: 48,
+    border: 'none',
+    borderLeft: 1,
+    borderRight: 1,
+    borderColor: 'divider',
+    textAlign: 'center',
+    fontSize: '0.875rem',
+    fontFamily: 'inherit',
+    outline: 'none',
+    py: 0.75,
+    px: 0.5,
+    bgcolor: 'transparent',
+    color: 'text.primary',
+    MozAppearance: 'textfield',
+    '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
+      WebkitAppearance: 'none',
+      margin: 0,
+    },
+  },
+};
+
+export default function EstimateHoursInput({
+  value,
+  onChange,
+  disabled = false,
+  allowEmpty = false,
+  placeholder,
+  min = ESTIMATE_HOURS_MIN,
+  max = ESTIMATE_HOURS_MAX,
+  sx,
+}) {
+  const numericValue =
+    value === '' || value == null ? null : Number(value);
+
+  const handleValueChange = (nextValue) => {
+    if (nextValue == null) {
+      onChange(allowEmpty ? '' : min);
+      return;
+    }
+    onChange(clampEstimateHoursToRange(nextValue, min, max));
+  };
+
+  return (
+    <Box sx={{ ...fieldSx, ...sx }}>
+      <NumberField.Root
+        value={numericValue}
+        onValueChange={handleValueChange}
+        min={min}
+        max={max}
+        step={ESTIMATE_HOURS_STEP}
+        snapOnStep
+        disabled={disabled}
+        format={{ minimumFractionDigits: 0, maximumFractionDigits: 1 }}
+      >
+        <NumberField.Group style={{ display: 'flex', alignItems: 'stretch' }}>
+          <NumberField.Decrement aria-label="Уменьшить">
+            <Remove sx={{ fontSize: 18 }} />
+          </NumberField.Decrement>
+          <NumberField.Input placeholder={placeholder} />
+          <NumberField.Increment aria-label="Увеличить">
+            <Add sx={{ fontSize: 18 }} />
+          </NumberField.Increment>
+        </NumberField.Group>
+      </NumberField.Root>
+    </Box>
+  );
+}
+=== ./frontend/src/components/TaskTable.jsx ===
 import {
   Paper,
   Table,
@@ -494,7 +715,7 @@ export default function TaskTable({
   });
 
   return (
-    <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
+    <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 1 }}>
       <TaskTableToolbar
         isAdmin={isAdmin}
         onAddNew={table.handleAddNewRow}
@@ -510,11 +731,9 @@ export default function TaskTable({
               <NewTaskRow
                 newRow={table.newRow}
                 setNewRow={table.setNewRow}
-                taskTypes={table.taskTypes}
-                employees={table.employees}
                 onSave={table.handleSaveNewRow}
                 onCancel={() => table.setNewRow(null)}
-                onOpenSharedModal={table.handleOpenNewSharedModal}
+                onOpenAssigneeModal={table.handleOpenNewSharedModal}
               />
             )}
             {table.rows.map(parent => {
@@ -526,9 +745,7 @@ export default function TaskTable({
                   task={parent}
                   onUpdate={table.handleUpdateRow}
                   onCancel={() => table.setEditingId(null)}
-                  taskTypes={table.taskTypes}
-                  employees={table.employees}
-                  onOpenSharedModal={table.handleOpenEditSharedModal}
+                  onOpenAssigneeModal={table.handleOpenAssigneeModal}
                 />
               ) : (
                 <ParentTaskRow
@@ -544,11 +761,10 @@ export default function TaskTable({
                   onComplete={table.handleCompleteTask}
                   onEdit={() => table.setEditingId(parent.id)}
                   onDelete={table.handleDeleteRow}
-                  onSplit={table.handleSplitTask}
+                  onOpenAssigneeModal={table.handleOpenAssigneeModal}
                   onOpenComment={table.handleOpenComment}
                   canEdit={isAdmin}
                   canDelete={isAdmin}
-                  canSplit={isAdmin}
                   canChangeStatus={!isAdmin}
                   currentUser={currentUser}
                   highlightMyTasks={table.highlightMyTasks}
@@ -594,7 +810,7 @@ export default function TaskTable({
   );
 }
 === ./frontend/src/components/LoadingState.jsx ===
-import { Box, CircularProgress, Skeleton, Typography } from '@mui/material';
+import { Box, CircularProgress, Typography } from '@mui/material';
 
 export function LoadingState({ message = 'Загрузка...', fullScreen = false, size = 40 }) {
   return (
@@ -619,19 +835,179 @@ export function LoadingState({ message = 'Загрузка...', fullScreen = fal
   );
 }
 
-export function CalendarLoadingSkeleton() {
+export function CalendarLoadingState() {
   return (
-    <Box sx={{ py: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 3 }}>
-        <Skeleton variant="circular" width={40} height={40} />
-        <Skeleton variant="text" width={220} height={32} />
-        <Skeleton variant="circular" width={40} height={40} />
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 400,
+        py: 6,
+      }}
+    >
+      <CircularProgress size={48} color="primary" />
+    </Box>
+  );
+}
+=== ./frontend/src/components/WorkHourDial.jsx ===
+import { Box, Typography } from '@mui/material';
+import {
+  WORK_HOUR_MIN,
+  WORK_HOUR_MAX,
+  formatHourAsTime,
+  parseTimeToHour
+} from '../utils/dateTimeHelpers';
+
+const HOURS = Array.from(
+  { length: WORK_HOUR_MAX - WORK_HOUR_MIN + 1 },
+  (_, i) => WORK_HOUR_MIN + i
+);
+
+const SIZE = 280;
+const CENTER = SIZE / 2;
+const RADIUS = 102;
+const BUTTON_SIZE = 40;
+const POINTER_LENGTH = RADIUS - 28;
+
+function getHourPosition(index, total) {
+  const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
+  return {
+    angle,
+    x: CENTER + RADIUS * Math.cos(angle),
+    y: CENTER + RADIUS * Math.sin(angle),
+  };
+}
+
+export default function WorkHourDial({ value, onChange }) {
+  const selectedHour = parseTimeToHour(value);
+  const selectedIndex = HOURS.indexOf(selectedHour);
+  const pointerAngle = (selectedIndex / HOURS.length) * 2 * Math.PI - Math.PI / 2;
+
+  return (
+    <Box
+      sx={{
+        position: 'relative',
+        width: SIZE,
+        height: SIZE,
+        mx: 'auto',
+        userSelect: 'none',
+      }}
+    >
+      <Box
+        sx={{
+          position: 'absolute',
+          inset: 12,
+          borderRadius: '50%',
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'grey.50',
+        }}
+      />
+
+      <Box
+        sx={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          width: 2,
+          height: POINTER_LENGTH,
+          ml: '-1px',
+          bgcolor: 'primary.main',
+          transformOrigin: 'center bottom',
+          transform: `translateY(-100%) rotate(${pointerAngle}rad)`,
+          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), height 0.2s',
+          borderRadius: 1,
+          zIndex: 0,
+          pointerEvents: 'none',
+        }}
+      />
+
+      <Box
+        sx={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          width: 8,
+          height: 8,
+          ml: -0.5,
+          mt: -0.5,
+          borderRadius: '50%',
+          bgcolor: 'primary.main',
+          zIndex: 2,
+          pointerEvents: 'none',
+        }}
+      />
+
+      <Box
+        sx={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+          zIndex: 1,
+        }}
+      >
+        <Typography variant="h5" fontWeight={700} color="primary.main">
+          {formatHourAsTime(selectedHour)}
+        </Typography>
       </Box>
-      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-        {[1, 2, 3, 4, 5].map((i) => (
-          <Skeleton key={i} variant="rounded" width={160} height={320} sx={{ borderRadius: 2 }} />
-        ))}
-      </Box>
+
+      {HOURS.map((hour, index) => {
+        const { x, y } = getHourPosition(index, HOURS.length);
+        const selected = hour === selectedHour;
+        const half = BUTTON_SIZE / 2;
+
+        return (
+          <Box
+            key={hour}
+            role="button"
+            tabIndex={0}
+            aria-label={`${hour}:00`}
+            aria-pressed={selected}
+            onClick={() => onChange(formatHourAsTime(hour))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onChange(formatHourAsTime(hour));
+              }
+            }}
+            sx={{
+              position: 'absolute',
+              left: x - half,
+              top: y - half,
+              width: BUTTON_SIZE,
+              height: BUTTON_SIZE,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: '0.9rem',
+              fontWeight: selected ? 700 : 500,
+              bgcolor: selected ? 'primary.main' : 'background.paper',
+              color: selected ? 'primary.contrastText' : 'text.primary',
+              border: '1px solid',
+              borderColor: selected ? 'primary.main' : 'divider',
+              boxShadow: selected ? 2 : 0,
+              transition: 'background-color 0.15s, color 0.15s, box-shadow 0.15s',
+              zIndex: 3,
+              '&:hover': {
+                bgcolor: selected ? 'primary.dark' : 'action.hover',
+              },
+              '&:focus-visible': {
+                outline: '2px solid',
+                outlineColor: 'primary.main',
+                outlineOffset: 2,
+              },
+            }}
+          >
+            {hour}
+          </Box>
+        );
+      })}
     </Box>
   );
 }
@@ -650,28 +1026,24 @@ import {
   Collapse
 } from '@mui/material';
 import {
-  PlayArrow,
-  Pause,
-  CheckCircle,
-  Edit,
-  Delete,
   FolderOpen,
   ExpandMore,
   ChevronRight,
-  CallSplit,
   Person,
   Comment as CommentIcon,
-  PeopleAlt    // <-- добавлено для индикатора общей задачи
-} from '@mui/icons-material';
+  } from '@mui/icons-material';
 import {
   truncate,
   getStatusColor,
   getStatusIcon,
-  getUniqueEmployeesFromChildren,
+  getParentEmployeeDisplay,
   isOverdue,
   getLastPathSegment
 } from '../utils/taskHelpers';
 import ChildTaskRow from './ChildTaskRow';
+import TaskAdminActionsMenu from './TaskAdminActionsMenu';
+import EmployeeStatusButtons from './EmployeeStatusButtons';
+import { COL_ACTIONS } from '../utils/taskTableStyles';
 
 export default function ParentTaskRow({
   task,
@@ -685,11 +1057,10 @@ export default function ParentTaskRow({
   onComplete,
   onEdit,
   onDelete,
-  onSplit,
+  onOpenAssigneeModal,
   onOpenComment,
   canEdit,
   canDelete,
-  canSplit,
   canChangeStatus,
   currentUser,
   highlightMyTasks,
@@ -722,9 +1093,7 @@ export default function ParentTaskRow({
     }
   }
 
-  const employeeDisplay = (hasChildren && childrenTasks && childrenTasks.length > 0)
-    ? getUniqueEmployeesFromChildren(childrenTasks)
-    : task.employeeName;
+  const employeeDisplay = getParentEmployeeDisplay(task, childrenTasks);
 
   const fullFilePath = `${task.folderPath || ''}/${task.fileName || ''}`.replace(/\/\//g, '/');
   const shortFolderPath = getLastPathSegment(task.folderPath);
@@ -769,14 +1138,7 @@ export default function ParentTaskRow({
               </IconButton>
             )}
             {!hasChildren && <Box sx={{ width: 28 }} />}
-            
-            {/* Индикатор: общая задача (сплит) */}
-            {task.isSplitTask && (
-              <Tooltip title="Общая задача (разделена между сотрудниками)" arrow>
-                <PeopleAlt fontSize="small" sx={{ color: '#8b5cf6' }} />
-              </Tooltip>
-            )}
-            
+
             <Tooltip title={`Открыть файл: ${fullFilePath}`} arrow>
               <IconButton size="small" onClick={() => onOpenFile(task)} sx={{ color: '#7c9ebf' }}>
                 <FolderOpen fontSize="small" />
@@ -862,67 +1224,22 @@ export default function ParentTaskRow({
           )}
         </TableCell>
 
-        <TableCell sx={{ width: (canEdit || canDelete || canSplit) ? '12%' : '10%' }}>
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
-            {canSplit && !hasChildren && task.statusText !== 'Готово' && (
-              <Tooltip title="Разделить задачу">
-                <IconButton size="small" onClick={() => onSplit(task)} sx={{ color: '#8b5cf6' }}>
-                  <CallSplit fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
+        <TableCell sx={COL_ACTIONS}>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center', justifyContent: 'flex-start' }}>
             {canEdit && (
-              <Tooltip title="Редактировать">
-                <IconButton size="small" onClick={() => onEdit(task)}>
-                  <Edit fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            {canDelete && (
-              <Tooltip title="Удалить">
-                <IconButton size="small" color="error" onClick={() => onDelete(task.id)}>
-                  <Delete fontSize="small" />
-                </IconButton>
-              </Tooltip>
+              <TaskAdminActionsMenu
+                onEdit={() => onEdit(task)}
+                onDelete={() => onDelete(task.id)}
+              />
             )}
             {showActionButtons && (
-              <>
-                {task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && (
-                  <Tooltip title="Начать">
-                    <IconButton size="small" onClick={() => onStart(task)} sx={{ color: '#22c55e' }}>
-                      <PlayArrow fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-                {task.statusText === 'Начал' && (
-                  <>
-                    <Tooltip title="Пауза">
-                      <IconButton size="small" onClick={() => onPause(task)} sx={{ color: '#f59e0b' }}>
-                        <Pause fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Завершить">
-                      <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
-                        <CheckCircle fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </>
-                )}
-                {task.statusText === 'Пауза' && (
-                  <>
-                    <Tooltip title="Продолжить">
-                      <IconButton size="small" onClick={() => onResume(task)} sx={{ color: '#22c55e' }}>
-                        <PlayArrow fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Завершить">
-                      <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
-                        <CheckCircle fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </>
-                )}
-              </>
+              <EmployeeStatusButtons
+                task={task}
+                onStart={onStart}
+                onPause={onPause}
+                onResume={onResume}
+                onComplete={onComplete}
+              />
             )}
           </Box>
         </TableCell>
@@ -960,7 +1277,7 @@ export default function ParentTaskRow({
   );
 }=== ./frontend/src/components/ChildTaskRow.jsx ===
 import { TableRow, TableCell, Box, IconButton, Tooltip, Typography, Chip } from '@mui/material';
-import { PlayArrow, Pause, CheckCircle, Person, Comment as CommentIcon } from '@mui/icons-material';
+import { Person, Comment as CommentIcon } from '@mui/icons-material';
 import {
   truncate,
   getStatusColor,
@@ -968,6 +1285,8 @@ import {
   isOverdue,
   isTaskBelongsToUser
 } from '../utils/taskHelpers';
+import EmployeeStatusButtons from './EmployeeStatusButtons';
+import { COL_ACTIONS } from '../utils/taskTableStyles';
 
 export default function ChildTaskRow({
   task,
@@ -1096,48 +1415,16 @@ export default function ChildTaskRow({
         <Chip icon={displayStatusIcon} label={task.statusText || "Назначена"} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
       </TableCell>
       
-      <TableCell sx={{ width: canChangeStatus ? '12%' : '10%' }}>
-        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
-          {showActionButtons && (
-            <>
-              {task.statusText !== 'Готово' && task.statusText !== 'Начал' && task.statusText !== 'Пауза' && (
-                <Tooltip title="Начать">
-                  <IconButton size="small" onClick={() => onStart(task)} sx={{ color: '#22c55e' }}>
-                    <PlayArrow fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              )}
-              {task.statusText === 'Начал' && (
-                <>
-                  <Tooltip title="Пауза">
-                    <IconButton size="small" onClick={() => onPause(task)} sx={{ color: '#f59e0b' }}>
-                      <Pause fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Завершить">
-                    <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
-                      <CheckCircle fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </>
-              )}
-              {task.statusText === 'Пауза' && (
-                <>
-                  <Tooltip title="Продолжить">
-                    <IconButton size="small" onClick={() => onResume(task)} sx={{ color: '#22c55e' }}>
-                      <PlayArrow fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Завершить">
-                    <IconButton size="small" onClick={() => onComplete(task)} sx={{ color: '#22c55e' }}>
-                      <CheckCircle fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </>
-              )}
-            </>
-          )}
-        </Box>
+      <TableCell sx={COL_ACTIONS}>
+        {showActionButtons ? (
+          <EmployeeStatusButtons
+            task={task}
+            onStart={onStart}
+            onPause={onPause}
+            onResume={onResume}
+            onComplete={onComplete}
+          />
+        ) : null}
       </TableCell>
     </TableRow>
   );
@@ -1172,6 +1459,9 @@ import {
   EventNote  // добавлена для иконки периода выполнения (опционально)
 } from '@mui/icons-material';
 import { getCompletedTasks } from '../services/api';
+import { alpha } from '@mui/material/styles';
+import { glassPaperSx, sectionTitleRowSx } from '../theme/surfaces';
+import EmptyState from './ui/EmptyState';
 
 export default function CompletedTasksList({ employee, refresh }) {
   const [completed, setCompleted] = useState([]);
@@ -1224,21 +1514,19 @@ export default function CompletedTasksList({ employee, refresh }) {
   };
 
   return (
-    <Paper elevation={0} sx={{ p: 3, borderRadius: 3 }}>
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, mb: 3 }}>
+    <Paper sx={glassPaperSx}>
+      <Box sx={{ ...sectionTitleRowSx, mb: 3 }}>
         <Assessment color="primary" />
-        <Typography variant="h2" sx={{ fontWeight: 600 }}>
-          Выполненные задачи
-        </Typography>
+        <Typography variant="h2" component="h2">Выполненные задачи</Typography>
       </Box>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: '#f0fdf4', border: '1px solid #dcfce7' }}>
+          <Card sx={{ bgcolor: (t) => alpha(t.palette.success.main, 0.08), border: (t) => `1px solid ${alpha(t.palette.success.main, 0.2)}` }}>
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Всего задач</Typography>
-                <TaskAlt sx={{ color: '#22c55e' }} />
+                <TaskAlt color="success" />
               </Box>
               <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalTasks}
@@ -1248,11 +1536,11 @@ export default function CompletedTasksList({ employee, refresh }) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: '#eff6ff', border: '1px solid #dbeafe' }}>
+          <Card sx={{ bgcolor: (t) => alpha(t.palette.info.main, 0.08), border: (t) => `1px solid ${alpha(t.palette.info.main, 0.2)}` }}>
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Выделено часов</Typography>
-                <AccessTime sx={{ color: '#3b82f6' }} />
+                <AccessTime color="info" />
               </Box>
               <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalEstimate.toFixed(1)} ч
@@ -1262,11 +1550,11 @@ export default function CompletedTasksList({ employee, refresh }) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: '#fef3c7', border: '1px solid #fde68a' }}>
+          <Card sx={{ bgcolor: (t) => alpha(t.palette.warning.main, 0.1), border: (t) => `1px solid ${alpha(t.palette.warning.main, 0.25)}` }}>
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Реально часов</Typography>
-                <HourglassEmpty sx={{ color: '#f59e0b' }} />
+                <HourglassEmpty color="warning" />
               </Box>
               <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalActual.toFixed(1)} ч
@@ -1438,39 +1726,33 @@ import {
   TableRow,
   TableCell,
   TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Box,
   Chip,
   IconButton,
-  Tooltip
+  Tooltip,
+  Typography
 } from '@mui/material';
 import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
-import { WORK_TIME_OPTIONS, combineDateTime } from '../utils/dateTimeHelpers';
-
-const DEFAULT_TIME = '15:00';
+import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 
 export default function NewTaskRow({
   newRow,
   setNewRow,
-  taskTypes,
-  employees,
   onSave,
   onCancel,
-  onOpenSharedModal
+  onOpenAssigneeModal
 }) {
-  const currentDate = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(0, 10) : '';
-  const currentTime = newRow.deadline ? new Date(newRow.deadline).toISOString().slice(11, 16) : DEFAULT_TIME;
   const isShared = newRow.isSharedTask && (newRow.assigneeParts?.length ?? 0) >= 2;
+  const hasAssignees = isShared || Boolean(newRow.employeeName);
+  const hoursDisplay =
+    newRow.estimateHours !== '' && newRow.estimateHours != null && !Number.isNaN(Number(newRow.estimateHours))
+      ? `${Number(newRow.estimateHours).toFixed(1)} ч`
+      : '—';
 
-  const handleDateChange = (e) => {
-    setNewRow({ ...newRow, deadline: combineDateTime(e.target.value, DEFAULT_TIME) });
-  };
-
-  const handleTimeChange = (e) => {
-    setNewRow({ ...newRow, deadline: combineDateTime(currentDate, e.target.value) });
+  const assigneeLabel = () => {
+    if (isShared) return `Общая · ${newRow.assigneeParts.length}`;
+    if (newRow.employeeName) return newRow.employeeName;
+    return 'Участники';
   };
 
   return (
@@ -1509,91 +1791,47 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField
-            size="small"
-            type="date"
-            value={currentDate}
-            onChange={handleDateChange}
-            sx={{ width: 130 }}
-          />
-          <Select
-            size="small"
-            value={currentTime}
-            onChange={handleTimeChange}
-            sx={{ width: 85 }}
-          >
-            {WORK_TIME_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-          </Select>
-        </Box>
-      </TableCell>
-
-      <TableCell>
-        <TextField
-          type="number"
-          size="small"
-          value={newRow.estimateHours === '' || newRow.estimateHours == null ? '' : newRow.estimateHours}
-          onChange={(e) => {
-            const v = e.target.value;
-            setNewRow({
-              ...newRow,
-              estimateHours: v === '' ? '' : parseFloat(v) || 0
-            });
-          }}
-          disabled={isShared}
-          placeholder={isShared ? '' : 'ч'}
-          slotProps={{ htmlInput: { step: 0.5, min: 0 } }}
-          sx={{ width: 80 }}
+      <TableCell sx={DEADLINE_COLUMN_SX}>
+        <DeadlineDateTimePicker
+          value={newRow.deadline}
+          onChange={(deadline) => setNewRow({ ...newRow, deadline })}
+          hideLabel
         />
       </TableCell>
 
-      <TableCell>
-        <FormControl size="small" fullWidth disabled={isShared}>
-          <InputLabel>Типы работ</InputLabel>
-          <Select
-            multiple
-            value={newRow.types || []}
-            label="Типы работ"
-            onChange={(e) => setNewRow({ ...newRow, types: e.target.value })}
-            renderValue={(selected) => selected.join(', ')}
-          >
-            {taskTypes.map((type) => <MenuItem key={type} value={type}>{type}</MenuItem>)}
-          </Select>
-        </FormControl>
+      <TableCell align="center">
+        <Typography variant="body2" sx={{ fontSize: '0.8rem', color: hasAssignees ? 'text.primary' : 'text.disabled' }}>
+          {hoursDisplay}
+        </Typography>
       </TableCell>
 
       <TableCell>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <FormControl size="small" sx={{ flex: 1 }} disabled={isShared}>
-            <InputLabel id="new-task-employee-label">Сотрудник</InputLabel>
-            <Select
-              labelId="new-task-employee-label"
-              value={newRow.employeeName ?? ''}
-              label="Сотрудник"
-              displayEmpty
-              onChange={(e) => setNewRow({ ...newRow, employeeName: e.target.value })}
-            >
-              {employees.map((e) => (
-                <MenuItem key={e} value={e}>
-                  {e}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Tooltip title={isShared ? 'Общая задача — изменить назначения' : 'Сделать общей задачей'} arrow>
-            <IconButton size="small" onClick={onOpenSharedModal} sx={{ flexShrink: 0 }}>
-              <PeopleAlt fontSize="small" sx={{ color: isShared ? '#8b5cf6' : '#94a3b8' }} />
+        <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+          {isShared ? '—' : (newRow.types?.length ? newRow.types.join(', ') : '—')}
+        </Typography>
+      </TableCell>
+
+      <TableCell>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+          <Tooltip
+            title={hasAssignees ? (isShared ? 'Изменить назначения' : 'Изменить сотрудника и часы') : 'Назначить сотрудников'}
+            arrow
+          >
+            <IconButton size="small" onClick={onOpenAssigneeModal}>
+              <PeopleAlt fontSize="small" sx={{ color: hasAssignees ? (isShared ? '#8b5cf6' : '#64748b') : '#94a3b8' }} />
             </IconButton>
           </Tooltip>
+          <Typography variant="caption" sx={{ color: hasAssignees ? 'text.primary' : 'text.disabled', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {assigneeLabel()}
+          </Typography>
         </Box>
       </TableCell>
 
       <TableCell>
         <Chip
-          label={isShared ? `Общая · ${newRow.assigneeParts.length}` : 'Новая'}
+          label={hasAssignees ? (isShared ? 'Общая' : 'Новая') : 'Черновик'}
           size="small"
-          color={isShared ? 'secondary' : 'warning'}
+          color={isShared ? 'secondary' : hasAssignees ? 'warning' : 'default'}
           variant={isShared ? 'outlined' : 'filled'}
         />
       </TableCell>
@@ -1615,31 +1853,30 @@ export default function NewTaskRow({
 // ./frontend/src/components/TaskTableToolbar.jsx
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { Add, Lightbulb, TableChart } from '@mui/icons-material';
+import { sectionHeaderSx, sectionTitleRowSx, softIconButtonSx } from '../theme/surfaces';
 
 export default function TaskTableToolbar({ isAdmin, onAddNew, highlightMyTasks, onToggleHighlight }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    <Box sx={{ ...sectionHeaderSx, mb: 2 }}>
+      <Box sx={sectionTitleRowSx}>
         <TableChart color="primary" />
-        <Typography variant="h2" sx={{ fontWeight: 600 }}>Таблица задач</Typography>
+        <Typography variant="h2" component="h2">Таблица задач</Typography>
       </Box>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
         <Tooltip title={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}>
-          <IconButton 
-            onClick={onToggleHighlight} 
+          <IconButton
+            onClick={onToggleHighlight}
             color={highlightMyTasks ? 'warning' : 'default'}
-            sx={{ 
-              border: '1px solid', 
-              borderColor: highlightMyTasks ? 'warning.main' : 'divider',
-              transition: 'all 0.2s ease',
-              '&:hover': { transform: 'scale(1.05)' }
-            }}
+            sx={[
+              softIconButtonSx(highlightMyTasks ? 'warning' : 'primary'),
+              highlightMyTasks && { border: '1px solid', borderColor: 'warning.main' }
+            ]}
           >
             <Lightbulb />
           </IconButton>
         </Tooltip>
         {isAdmin && (
-          <Button variant="contained" startIcon={<Add />} onClick={onAddNew} sx={{ bgcolor: '#22c55e' }}>
+          <Button variant="contained" color="success" startIcon={<Add />} onClick={onAddNew}>
             Новая задача
           </Button>
         )}
@@ -1777,6 +2014,8 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Login as LoginIcon, Person, AdminPanelSettings } from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
+import { glassPaperSx } from '../theme/surfaces';
 
 export default function LoginForm({ onLogin }) {
   const [loginType, setLoginType] = useState('employee'); // 'employee' or 'admin'
@@ -1856,19 +2095,14 @@ export default function LoginForm({ onLogin }) {
 
   return (
     <Container maxWidth="sm">
-      <Box sx={{ mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Avatar sx={{ m: 1, bgcolor: 'primary.main', width: 56, height: 56 }}>
+      <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 4 }}>
+        <Avatar sx={{ m: 1, bgcolor: 'primary.main', width: 64, height: 64 }}>
           <LoginIcon sx={{ fontSize: 32 }} />
         </Avatar>
         
-        <Typography variant="h4" gutterBottom>
-          Mainstream Assistant
-        </Typography>
-        
-        <Paper elevation={3} sx={{ p: 4, width: '100%', mt: 2 }}>
-          <Typography variant="h5" gutterBottom sx={{ textAlign: 'center' }}>
-            Вход в систему
-          </Typography>
+        <Typography variant="h1" gutterBottom sx={{ mt: 1 }}>Mainstream Assistant</Typography>
+        <Paper sx={{ ...glassPaperSx, p: 4, width: '100%', mt: 2 }}>
+          <Typography variant="h2" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>Вход в систему</Typography>
           
           <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1, mb: 3 }}>
             <Button
@@ -1904,14 +2138,15 @@ export default function LoginForm({ onLogin }) {
                       <Card 
                         key={emp}
                         onClick={() => setSelectedEmployee(emp)}
-                        sx={{ 
+                        sx={(theme) => ({ 
                           flex: 1,
                           cursor: 'pointer',
-                          border: selectedEmployee === emp ? '2px solid #7c9ebf' : '1px solid #e0e0e0',
-                          bgcolor: selectedEmployee === emp ? '#f0f4f8' : 'white',
+                          border: selectedEmployee === emp ? '2px solid' : '1px solid',
+                          borderColor: selectedEmployee === emp ? theme.palette.primary.main : theme.palette.divider,
+                          bgcolor: selectedEmployee === emp ? alpha(theme.palette.primary.main, 0.08) : alpha('#fff', 0.5),
                           transition: 'all 0.2s',
-                          '&:hover': { boxShadow: 2 }
-                        }}
+                          '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.light }
+                        })}
                       >
                         <CardContent sx={{ textAlign: 'center', py: 2 }}>
                           <Avatar sx={{ width: 40, height: 40, mx: 'auto', mb: 1, bgcolor: 'primary.light' }}>
@@ -1954,7 +2189,8 @@ export default function LoginForm({ onLogin }) {
                 variant="contained"
                 size="large"
                 disabled={loading}
-                startIcon={loading ? <CircularProgress size={18} color="inherit" /> : null}
+                fullWidth
+                startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <LoginIcon />}
                 sx={{ mt: 2 }}
               >
                 {loading ? 'Вход...' : 'Войти'}
@@ -1973,11 +2209,12 @@ export default function LoginForm({ onLogin }) {
   );
 }=== ./frontend/src/components/WeekCalendar.jsx ===
 import { useState, useEffect } from 'react';
-import { Box, Paper, IconButton, Typography, Button, alpha } from '@mui/material';
+import { Box, Paper, IconButton, Typography, Button } from '@mui/material';
 import { ChevronLeft, ChevronRight, CalendarMonth, Weekend } from '@mui/icons-material';
 import { getWeekCalendar } from '../services/api';
 import DayColumn from './DayColumn';
-import { CalendarLoadingSkeleton } from './LoadingState';
+import { glassPaperSx, softIconButtonSx } from '../theme/surfaces';
+import { CalendarLoadingState } from './LoadingState';
 
 export default function WeekCalendar({ employee, refresh }) {
   const [weekData, setWeekData] = useState(null);
@@ -2021,7 +2258,7 @@ export default function WeekCalendar({ employee, refresh }) {
     setCurrentMonday(newMonday);
   };
 
-  if (!weekData) return <CalendarLoadingSkeleton />;
+  if (!weekData) return <CalendarLoadingState />;
 
   const start = new Date(weekData.start);
   const end = new Date(start);
@@ -2034,23 +2271,17 @@ export default function WeekCalendar({ employee, refresh }) {
     : weekData.days.filter((_, index) => index < 5);
 
   return (
-    <Paper elevation={0} sx={{ p: 3, mb: 3, background: 'rgba(255,255,255,0.9)' }}>
+    <Paper sx={{ ...glassPaperSx, mb: 3 }}>
       <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', mb: 6 }}>
         <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-          <IconButton 
-            onClick={prevWeek} 
-            sx={{ bgcolor: alpha('#6366f1', 0.1), '&:hover': { bgcolor: alpha('#6366f1', 0.2) } }}
-          >
+          <IconButton onClick={prevWeek} sx={softIconButtonSx('primary')} aria-label="Предыдущая неделя">
             <ChevronLeft />
           </IconButton>
           <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-            <CalendarMonth sx={{ color: '#6366f1' }} />
-            <Typography variant="body1" sx={{ fontWeight: 600 }}>{weekRange}</Typography>
+            <CalendarMonth color="primary" />
+            <Typography variant="subtitle1">{weekRange}</Typography>
           </Box>
-          <IconButton 
-            onClick={nextWeek}
-            sx={{ bgcolor: alpha('#6366f1', 0.1), '&:hover': { bgcolor: alpha('#6366f1', 0.2) } }}
-          >
+          <IconButton onClick={nextWeek} sx={softIconButtonSx('primary')} aria-label="Следующая неделя">
             <ChevronRight />
           </IconButton>
         </Box>
@@ -2058,20 +2289,9 @@ export default function WeekCalendar({ employee, refresh }) {
         <Button
           size="small"
           variant={showWeekend ? 'contained' : 'outlined'}
+          color="primary"
           startIcon={<Weekend />}
           onClick={() => setShowWeekend(!showWeekend)}
-          sx={{ 
-            borderRadius: 2,
-            textTransform: 'none',
-            fontSize: '0.75rem',
-            ...(showWeekend ? {
-              bgcolor: '#6366f1',
-              '&:hover': { bgcolor: '#4f46e5' }
-            } : {
-              borderColor: '#cbd5e1',
-              color: '#64748b'
-            })
-          }}
         >
           {showWeekend ? 'Скрыть выходные' : 'Показать выходные'}
         </Button>
@@ -2104,18 +2324,16 @@ function getMonday(date) {
   d.setHours(0, 0, 0, 0);
   return d;
 }=== ./frontend/src/components/EditTaskRow.jsx ===
-import { useState, useEffect, useRef } from 'react';
-import { TableRow, TableCell, TextField, Select, MenuItem, IconButton, Tooltip, Box } from '@mui/material';
+import { useState, useEffect } from 'react';
+import { TableRow, TableCell, TextField, IconButton, Tooltip, Box, Typography } from '@mui/material';
 import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
-import { WORK_TIME_OPTIONS, parseDateTime, combineDateTime } from '../utils/dateTimeHelpers';
+import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 
 export default function EditTaskRow({
   task,
   onUpdate,
   onCancel,
-  taskTypes,
-  employees,
-  onOpenSharedModal
+  onOpenAssigneeModal
 }) {
   const isShared = task.isSplitTask;
 
@@ -2133,25 +2351,21 @@ export default function EditTaskRow({
     isSplitTask: task.isSplitTask
   }));
 
-  const prevIdRef = useRef(task.id);
   useEffect(() => {
-    if (task.id !== prevIdRef.current) {
-      setLocalTask({
-        id: task.id,
-        folderPath: task.folderPath || '',
-        fileName: task.fileName || '',
-        comment: task.comment || '',
-        deadline: task.deadline,
-        estimateHours: task.estimateHours || 0,
-        type: task.type || '',
-        employeeName: task.employeeName || '',
-        parentRowNumber: task.parentRowNumber,
-        statusText: task.statusText || '',
-        isSplitTask: task.isSplitTask
-      });
-      prevIdRef.current = task.id;
-    }
-  }, [task.id, task]);
+    setLocalTask({
+      id: task.id,
+      folderPath: task.folderPath || '',
+      fileName: task.fileName || '',
+      comment: task.comment || '',
+      deadline: task.deadline,
+      estimateHours: task.estimateHours || 0,
+      type: task.type || '',
+      employeeName: task.employeeName || '',
+      parentRowNumber: task.parentRowNumber,
+      statusText: task.statusText || '',
+      isSplitTask: task.isSplitTask
+    });
+  }, [task.id, task.estimateHours, task.isSplitTask, task.type, task.employeeName, task.deadline, task.folderPath, task.fileName, task.comment, task.statusText]);
 
   const handleFieldChange = (field, value) => {
     setLocalTask(prev => ({ ...prev, [field]: value }));
@@ -2161,26 +2375,10 @@ export default function EditTaskRow({
     onUpdate(localTask);
   };
 
-  let date = '', time = '10:00';
-  if (localTask.deadline) {
-    const parsed = parseDateTime(localTask.deadline);
-    date = parsed.date;
-    time = parsed.time;
-  }
-
   return (
     <TableRow sx={{ bgcolor: '#fef3c7' }}>
       <TableCell sx={{ width: '3%' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Edit color="warning" fontSize="small" />
-          {isShared && (
-            <Tooltip title="Общая задача — редактировать назначения" arrow>
-              <IconButton size="small" onClick={() => onOpenSharedModal(localTask)}>
-                <PeopleAlt fontSize="small" sx={{ color: '#8b5cf6' }} />
-              </IconButton>
-            </Tooltip>
-          )}
-        </Box>
+        <Edit color="warning" fontSize="small" />
       </TableCell>
 
       <TableCell sx={{ width: '15%' }}>
@@ -2212,61 +2410,41 @@ export default function EditTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={{ width: '10%' }}>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField
-            size="small"
-            type="date"
-            value={date}
-            onChange={(e) => handleFieldChange('deadline', combineDateTime(e.target.value, time))}
-            sx={{ width: 130 }}
-          />
-          <Select
-            size="small"
-            value={time}
-            onChange={(e) => handleFieldChange('deadline', combineDateTime(date, e.target.value))}
-            sx={{ width: 85 }}
-          >
-            {WORK_TIME_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-          </Select>
-        </Box>
-      </TableCell>
-
-      <TableCell align="center" sx={{ width: '6%' }}>
-        <TextField
-          size="small"
-          type="number"
-          value={localTask.estimateHours}
-          onChange={(e) => handleFieldChange('estimateHours', parseFloat(e.target.value) || 0)}
-          slotProps={{ htmlInput: { step: 0.5, min: 0 } }}
-          sx={{ width: 80 }}
+      <TableCell sx={DEADLINE_COLUMN_SX}>
+        <DeadlineDateTimePicker
+          value={localTask.deadline}
+          onChange={(deadline) => handleFieldChange('deadline', deadline)}
+          hideLabel
         />
       </TableCell>
 
-      <TableCell sx={{ width: '8%' }}>
-        <Select
-          size="small"
-          multiple
-          disabled={isShared}
-          value={localTask.type ? localTask.type.split(', ') : []}
-          onChange={(e) => handleFieldChange('type', e.target.value.join(', '))}
-          renderValue={(selected) => selected.join(', ')}
-          fullWidth
-        >
-          {taskTypes.map((type) => <MenuItem key={type} value={type}>{type}</MenuItem>)}
-        </Select>
+      <TableCell align="center" sx={{ width: '6%' }}>
+        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+          {localTask.estimateHours?.toFixed(1) || '0.0'} ч
+        </Typography>
       </TableCell>
 
       <TableCell sx={{ width: '8%' }}>
-        <Select
-          size="small"
-          disabled={isShared}
-          value={localTask.employeeName}
-          onChange={(e) => handleFieldChange('employeeName', e.target.value)}
-          fullWidth
-        >
-          {employees.map(emp => <MenuItem key={emp} value={emp}>{emp}</MenuItem>)}
-        </Select>
+        <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {isShared ? '—' : (localTask.type || '—')}
+        </Typography>
+      </TableCell>
+
+      <TableCell sx={{ width: '8%' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+          <Tooltip title={isShared ? 'Изменить назначения' : 'Изменить сотрудника и часы'} arrow>
+            <IconButton
+              size="small"
+              onClick={() => onOpenAssigneeModal(localTask)}
+              sx={{ flexShrink: 0 }}
+            >
+              <PeopleAlt fontSize="small" sx={{ color: isShared ? '#8b5cf6' : '#64748b' }} />
+            </IconButton>
+          </Tooltip>
+          <Typography variant="caption" sx={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {isShared ? 'Общая' : (localTask.employeeName || '—')}
+          </Typography>
+        </Box>
       </TableCell>
 
       <TableCell sx={{ width: '8%' }}>
@@ -2415,7 +2593,7 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
   const isHighlighted = (block) => highlightedTaskId === block.taskId;
 
   return (
-    <Paper elevation={0} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.95)', borderRadius: 3 }}>
+    <Paper elevation={0} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.95)', borderRadius: 1 }}>
       <Typography variant="subtitle1" fontWeight={600} sx={{ textAlign: 'center', mb: 2, color: '#1e293b' }}>
         {date.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric' })}
       </Typography>
@@ -2654,7 +2832,8 @@ function getDuration(start, end) {
   const e = new Date(end);
   return ((e - s) / (1000 * 60 * 60)).toFixed(1);
 }=== ./frontend/src/components/EmployeeHoursSelector.jsx ===
-import { Box, Checkbox, FormControlLabel, TextField, Typography, Button, Grid } from '@mui/material';
+import { Box, Checkbox, FormControlLabel, Typography, Button, Grid } from '@mui/material';
+import EstimateHoursInput from './EstimateHoursInput';
 import { CheckCircle } from '@mui/icons-material';
 import { useState, useEffect } from 'react';
 
@@ -2730,13 +2909,10 @@ export default function EmployeeHoursSelector({ employees, totalHours, onChange,
                   sx={{ width: 120 }}
                 />
                 {checked && (
-                  <TextField
-                    size="small"
-                    type="number"
-                    label="Часы"
+                  <EstimateHoursInput
                     value={assigned.hours}
-                    onChange={(e) => updateAssignment(emp, e.target.value)}
-                    inputProps={{ step: 0.5, min: 0, max: totalHours }}
+                    onChange={(hours) => updateAssignment(emp, hours)}
+                    max={totalHours}
                     sx={{ width: 100 }}
                   />
                 )}
@@ -2762,11 +2938,272 @@ export default function EmployeeHoursSelector({ employees, totalHours, onChange,
       )}
     </Box>
   );
-}=== ./frontend/src/components/PushNotificationSnackbars.jsx ===
+}=== ./frontend/src/components/DeadlineDateTimePicker.jsx ===
+import { useMemo, useCallback } from 'react';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ru';
+import {
+  Box,
+  Button,
+  List,
+  ListItemButton,
+  ListItemText,
+  Typography
+} from '@mui/material';
+import { CalendarMonth } from '@mui/icons-material';
+import { DesktopDatePicker } from '@mui/x-date-pickers/DesktopDatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { usePickerContext } from '@mui/x-date-pickers/hooks';
+import {
+  usePickerLayout,
+  PickersLayoutRoot,
+  pickersLayoutClasses
+} from '@mui/x-date-pickers/PickersLayout';
+import {
+  combineDateTime,
+  DEFAULT_TIME,
+  parseDateTime,
+  WORK_TIME_OPTIONS
+} from '../utils/dateTimeHelpers';
+import { taskTableDatePickerSx } from '../utils/taskTableStyles';
+
+export { COL_DEADLINE_INPUT as DEADLINE_COLUMN_SX } from '../utils/taskTableStyles';
+
+function toPickerValue(deadlineIso) {
+  const { date, time } = parseDateTime(deadlineIso);
+  if (!date) return null;
+  const d = dayjs(date);
+  if (!d.isValid()) return null;
+  const [hours, minutes] = (time || DEFAULT_TIME).split(':').map(Number);
+  return d.hour(hours).minute(minutes);
+}
+
+function DeadlineTimeActionList({ selectedTime, onSelectTime }) {
+  const selected = selectedTime || DEFAULT_TIME;
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 88 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ px: 1, py: 0.75, fontWeight: 600 }}>
+        Время
+      </Typography>
+      <List dense disablePadding sx={{ flex: 1, overflowY: 'auto', py: 0 }}>
+        {WORK_TIME_OPTIONS.map((time) => (
+          <ListItemButton
+            key={time}
+            selected={time === selected}
+            onClick={() => onSelectTime(time)}
+            sx={{ py: 0.6, borderRadius: 0.5, mx: 0.5 }}
+          >
+            <ListItemText
+              primary={time}
+              primaryTypographyProps={{
+                variant: 'body2',
+                fontWeight: time === selected ? 600 : 400
+              }}
+            />
+          </ListItemButton>
+        ))}
+      </List>
+    </Box>
+  );
+}
+
+/** 2 колонки: календарь | время; 2-я строка: кнопка «Выбрать» на всю ширину */
+function DeadlinePickerLayout(props) {
+  const { toolbar, tabs, content, actionBar, ownerState } = usePickerLayout(props);
+  const { acceptValueChanges } = usePickerContext();
+
+  return (
+    <PickersLayoutRoot
+      className={pickersLayoutClasses.root}
+      ownerState={ownerState}
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        minWidth: 0,
+        [`& .${pickersLayoutClasses.contentWrapper}`]: {
+          display: 'contents'
+        },
+        [`& .${pickersLayoutClasses.actionBar}`]: {
+          display: 'contents'
+        }
+      }}
+    >
+      {toolbar}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) auto',
+          gridTemplateRows: 'auto auto',
+          columnGap: 0,
+          rowGap: 0
+        }}
+      >
+        <Box
+          sx={{
+            gridColumn: 1,
+            gridRow: 1,
+            minWidth: 0,
+            '& .MuiDateCalendar-root': { width: '100%', maxWidth: 320 }
+          }}
+        >
+          {tabs}
+          {content}
+        </Box>
+
+        <Box
+          className={pickersLayoutClasses.actionBar}
+          sx={{
+            gridColumn: 2,
+            gridRow: 1,
+            borderLeft: 1,
+            borderColor: 'divider',
+            alignSelf: 'stretch',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          {actionBar}
+        </Box>
+
+        <Box
+          sx={{
+            gridColumn: '1 / -1',
+            gridRow: 2,
+            borderTop: 1,
+            borderColor: 'divider',
+            display: 'flex',
+            justifyContent: 'center',
+            px: 2,
+            py: 1.25,
+            bgcolor: 'background.paper'
+          }}
+        >
+          <Button variant="contained" size="small" onClick={() => acceptValueChanges()}>
+            Выбрать
+          </Button>
+        </Box>
+      </Box>
+    </PickersLayoutRoot>
+  );
+}
+
+export default function DeadlineDateTimePicker({
+  value,
+  onChange,
+  disabled = false,
+  size = 'small',
+  label = 'Дедлайн',
+  hideLabel = false,
+  fullWidth = true
+}) {
+  const { date: dateStr, time: timeStr } = parseDateTime(value);
+  const pickerValue = useMemo(() => toPickerValue(value), [value]);
+
+  const emitChange = useCallback(
+    (nextDate, nextTime) => {
+      const d = nextDate?.isValid?.() ? nextDate.format('YYYY-MM-DD') : dateStr;
+      const t = nextTime || timeStr || DEFAULT_TIME;
+      if (d) onChange(combineDateTime(d, t));
+    },
+    [dateStr, timeStr, onChange]
+  );
+
+  const handlePickerChange = useCallback(
+    (newDate) => {
+      if (!newDate || !newDate.isValid()) return;
+      emitChange(newDate, timeStr || DEFAULT_TIME);
+    },
+    [emitChange, timeStr]
+  );
+
+  const handleTimeSelect = useCallback(
+    (time) => {
+      emitChange(pickerValue || dayjs(), time);
+    },
+    [emitChange, pickerValue]
+  );
+
+  const TimeActionBar = useCallback(
+    () => (
+      <DeadlineTimeActionList
+        selectedTime={timeStr}
+        onSelectTime={handleTimeSelect}
+      />
+    ),
+    [timeStr, handleTimeSelect]
+  );
+
+  return (
+    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="ru">
+      <DesktopDatePicker
+        value={pickerValue}
+        onChange={handlePickerChange}
+        disabled={disabled}
+        format="DD.MM.YYYY"
+        closeOnSelect={false}
+        slots={{
+          openPickerIcon: CalendarMonth,
+          layout: DeadlinePickerLayout,
+          actionBar: TimeActionBar
+        }}
+        slotProps={{
+          field: {
+            openPickerButtonPosition: 'end'
+          },
+          textField: {
+            size,
+            variant: 'outlined',
+            label: hideLabel ? undefined : label,
+            fullWidth,
+            sx: taskTableDatePickerSx
+          },
+          openPickerButton: {
+            size: 'small'
+          },
+          openPickerIcon: {
+            sx: { fontSize: 20, color: 'action.active' }
+          },
+          popper: {
+            sx: {
+              '& .MuiPaper-root': {
+                borderRadius: 1,
+                overflow: 'hidden'
+              }
+            }
+          },
+          desktopPaper: {
+            sx: {
+              borderRadius: 1,
+              overflow: 'hidden'
+            }
+          }
+        }}
+      />
+    </LocalizationProvider>
+  );
+}
+=== ./frontend/src/components/PushNotificationSnackbars.jsx ===
 import { Snackbar, Alert, Box, Typography } from '@mui/material';
 import { Assignment, AccessTime } from '@mui/icons-material';
 
 const SNACKBAR_HEIGHT = 88;
+
+const alertDarkSx = {
+  width: '100%',
+  minWidth: 280,
+  maxWidth: 360,
+  alignItems: 'flex-start',
+  bgcolor: '#1e293b',
+  color: '#f8fafc',
+  '& .MuiAlert-icon': { color: '#9bb9d9', mt: 0.25 },
+  '& .MuiAlert-message': { color: '#f8fafc', padding: 0 },
+  '& .MuiAlert-action .MuiIconButton-root': {
+    color: '#cbd5e1',
+    '&:hover': { color: '#f8fafc', bgcolor: 'rgba(255,255,255,0.08)' }
+  },
+  '& .MuiTypography-root': { color: '#f8fafc' }
+};
 
 export default function PushNotificationSnackbars({ notifications, onClose }) {
   return (
@@ -2780,7 +3217,7 @@ export default function PushNotificationSnackbars({ notifications, onClose }) {
             bottom: { xs: 16 + index * SNACKBAR_HEIGHT, sm: 24 + index * SNACKBAR_HEIGHT },
             right: { xs: 16, sm: 24 },
             left: 'auto',
-            zIndex: (theme) => theme.zIndex.snackbar + index,
+            zIndex: (theme) => theme.zIndex.snackbar + index
           }}
         >
           <Alert
@@ -2788,21 +3225,14 @@ export default function PushNotificationSnackbars({ notifications, onClose }) {
             variant="filled"
             onClose={() => onClose(notification.id)}
             icon={<Assignment fontSize="small" />}
-            sx={{
-              width: '100%',
-              minWidth: 280,
-              maxWidth: 360,
-              alignItems: 'flex-start',
-              bgcolor: '#1e293b',
-              '& .MuiAlert-icon': { color: '#7c9ebf', mt: 0.25 },
-            }}
+            sx={alertDarkSx}
           >
-            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: '#f8fafc' }}>
               {notification.title}
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <AccessTime sx={{ fontSize: 14, opacity: 0.85 }} />
-              <Typography variant="caption" sx={{ opacity: 0.9 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#e2e8f0' }}>
+              <AccessTime sx={{ fontSize: 14, color: '#94a3b8' }} />
+              <Typography variant="caption" sx={{ color: '#e2e8f0' }}>
                 Дедлайн: {notification.deadline}
               </Typography>
             </Box>
@@ -2898,10 +3328,102 @@ export default function CompletedTaskRow({ task }) {
       </TableCell>
     </TableRow>
   );
-}=== ./frontend/src/components/CommentDialog.jsx ===
+}=== ./frontend/src/components/EmployeeStatusButtons.jsx ===
+import { Box, Button } from '@mui/material';
+import { PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
+import { compactActionButtonSx } from '../theme/surfaces';
+
+export default function EmployeeStatusButtons({
+  task,
+  onStart,
+  onPause,
+  onResume,
+  onComplete
+}) {
+  const status = task.statusText || 'Назначена';
+  const isDone = status === 'Готово';
+  const isStarted = status === 'Начал';
+  const isPaused = status === 'Пауза';
+  const canStart = !isDone && !isStarted && !isPaused;
+
+  const handlePauseClick = () => {
+    if (isPaused) onResume(task);
+    else onPause(task);
+  };
+
+  return (
+    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
+      <Button
+        size="small"
+        variant={isStarted ? 'contained' : 'outlined'}
+        color="success"
+        disabled={!canStart}
+        startIcon={<PlayArrow sx={{ fontSize: '14px !important' }} />}
+        onClick={() => onStart(task)}
+        sx={compactActionButtonSx}
+      >
+        Начал
+      </Button>
+      <Button
+        size="small"
+        variant={isPaused ? 'contained' : 'outlined'}
+        color="warning"
+        disabled={isDone || (!isStarted && !isPaused)}
+        startIcon={<Pause sx={{ fontSize: '14px !important' }} />}
+        onClick={handlePauseClick}
+        sx={compactActionButtonSx}
+      >
+        Пауза
+      </Button>
+      <Button
+        size="small"
+        variant={isDone ? 'contained' : 'outlined'}
+        color="primary"
+        disabled={isDone}
+        startIcon={<CheckCircle sx={{ fontSize: '14px !important' }} />}
+        onClick={() => onComplete(task)}
+        sx={compactActionButtonSx}
+      >
+        Готово
+      </Button>
+    </Box>
+  );
+}
+=== ./frontend/src/components/DeadlineTimeClock.jsx ===
+import { FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import {
+  WORK_TIME_OPTIONS,
+  formatHourAsTime,
+  parseTimeToHour,
+  DEFAULT_TIME
+} from '../utils/dateTimeHelpers';
+
+export default function DeadlineTimeClock({ value, onChange, disabled = false, size = 'small' }) {
+  const selected = formatHourAsTime(parseTimeToHour(value || DEFAULT_TIME));
+
+  return (
+    <FormControl size={size} disabled={disabled} sx={{ minWidth: 108 }}>
+      <InputLabel id="deadline-time-label">Время</InputLabel>
+      <Select
+        labelId="deadline-time-label"
+        label="Время"
+        value={selected}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {WORK_TIME_OPTIONS.map((time) => (
+          <MenuItem key={time} value={time}>
+            {time}
+          </MenuItem>
+        ))}
+      </Select>
+    </FormControl>
+  );
+}
+=== ./frontend/src/components/CommentDialog.jsx ===
 // ./frontend/src/components/CommentDialog.jsx
 import { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from '@mui/material';
+import { Comment, Save, Close } from '@mui/icons-material';
 
 export default function CommentDialog({ open, comment, onSave, onClose }) {
   const [value, setValue] = useState(comment || '');
@@ -2918,7 +3440,10 @@ export default function CommentDialog({ open, comment, onSave, onClose }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Редактирование комментария</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Comment color="primary" fontSize="small" />
+        Редактирование комментария
+      </DialogTitle>
       <DialogContent>
         <TextField
           autoFocus
@@ -2932,8 +3457,8 @@ export default function CommentDialog({ open, comment, onSave, onClose }) {
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Отмена</Button>
-        <Button onClick={handleSave} variant="contained">Сохранить</Button>
+        <Button onClick={onClose} startIcon={<Close />}>Отмена</Button>
+        <Button onClick={handleSave} variant="contained" startIcon={<Save />}>Сохранить</Button>
       </DialogActions>
     </Dialog>
   );
@@ -2960,6 +3485,7 @@ import {
   OutlinedInput
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
+import EstimateHoursInput from './EstimateHoursInput';
 
 function partsToApi(parts) {
   return parts.map(p => ({
@@ -2975,13 +3501,21 @@ function parseTypeToArray(type) {
   return type.split(',').map(s => s.trim()).filter(Boolean);
 }
 
+function isChildStarted(child) {
+  const status = child.statusText || child.status || '';
+  return status === 'Начал' || status === 'Пауза' || status === 'InProgress' || status === 'Paused'
+    || (child.actualHours ?? 0) > 0.01 || (child.progress ?? 0) > 0.01;
+}
+
 export function childrenToModalParts(children, employees, taskTypes) {
   if (!children?.length) return null;
   return children.map(c => ({
     childTaskId: c.id,
     employeeName: c.employeeName || employees[0],
     taskTypes: parseTypeToArray(c.type).length ? parseTypeToArray(c.type) : [taskTypes[0]],
-    hours: c.estimateHours ?? 0
+    hours: c.estimateHours ?? 0,
+    statusText: c.statusText || '',
+    started: isChildStarted(c)
   }));
 }
 
@@ -2992,6 +3526,15 @@ export function apiPartsToModalParts(parts, employees, taskTypes) {
     taskTypes: parseTypeToArray(p.taskType).length ? parseTypeToArray(p.taskType) : [taskTypes[0]],
     hours: p.allocatedHours ?? 0
   }));
+}
+
+export function taskToModalParts(task, employees, taskTypes) {
+  const types = parseTypeToArray(task.type);
+  return [{
+    employeeName: task.employeeName || employees[0],
+    taskTypes: types.length ? types : [taskTypes[0]],
+    hours: task.estimateHours ?? 0
+  }];
 }
 
 export default function SplitTaskModal({
@@ -3007,12 +3550,11 @@ export default function SplitTaskModal({
 }) {
   const [parts, setParts] = useState([]);
   const [error, setError] = useState('');
-  const parentHours = task?.estimateHours;
-  const hasParentHours = parentHours !== '' && parentHours != null && !Number.isNaN(Number(parentHours)) && Number(parentHours) > 0;
-  const totalHours = hasParentHours ? Number(parentHours) : 0;
+  const [removeWarning, setRemoveWarning] = useState('');
 
   const isDraft = mode === 'draft';
   const isEdit = mode === 'edit';
+  const isFreeHoursMode = isDraft || isEdit || mode === 'split';
 
   useEffect(() => {
     if (!open) return;
@@ -3024,29 +3566,24 @@ export default function SplitTaskModal({
         childTaskId: p.childTaskId,
         employeeName: p.employeeName,
         taskTypes: p.taskTypes?.length ? p.taskTypes : [taskTypes[0]],
-        hours: p.hours ?? 0
+        hours: p.hours ?? 0,
+        statusText: p.statusText || '',
+        started: p.started ?? false
       })));
     } else if (isDraft) {
-      const secondEmployee = employees[1] ?? employees[0];
-      setParts([
-        { ...defaultPart, hours: 0 },
-        { employeeName: secondEmployee, taskTypes: [taskTypes[0]], hours: 0 }
-      ]);
+      setParts([{ ...defaultPart, hours: 0 }]);
     } else {
       setParts([defaultPart]);
     }
     setError('');
-  }, [open, task, initialParts, mode, employees, taskTypes, totalHours, isDraft]);
+    setRemoveWarning('');
+  }, [open, task, initialParts, mode, employees, taskTypes, isDraft]);
 
   const revalidateHours = (newParts) => {
     const sum = newParts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
-    if (isEdit) {
-      setError(sum > 0 ? '' : 'Укажите часы для назначений');
-      return;
-    }
-    if (isDraft) {
-      if (newParts.length < 2) {
-        setError('Добавьте минимум двух сотрудников');
+    if (isFreeHoursMode) {
+      if (newParts.length < 1) {
+        setError('Добавьте сотрудника');
       } else if (sum <= 0) {
         setError('Укажите часы для каждого сотрудника');
       } else {
@@ -3054,13 +3591,7 @@ export default function SplitTaskModal({
       }
       return;
     }
-    if (sum > totalHours) {
-      setError(`Сумма часов (${sum.toFixed(1)}) превышает выделенное время (${totalHours})`);
-    } else if (Math.abs(sum - totalHours) < 0.01) {
-      setError('');
-    } else {
-      setError(`Осталось распределить ${(totalHours - sum).toFixed(1)} ч`);
-    }
+    setError('');
   };
 
   const addPart = () => {
@@ -3070,6 +3601,16 @@ export default function SplitTaskModal({
   };
 
   const removePart = (index) => {
+    if (isEdit && parts.length <= 1) {
+      setError('Должен остаться хотя бы один сотрудник. Сохраните — задача станет обычной.');
+      return;
+    }
+    const removed = parts[index];
+    if (isEdit && removed?.started && removed?.childTaskId) {
+      setRemoveWarning(
+        `Сотрудник ${removed.employeeName} уже начал работу — при сохранении его подзадача будет завершена.`
+      );
+    }
     const next = parts.filter((_, i) => i !== index);
     setParts(next);
     revalidateHours(next);
@@ -3088,31 +3629,19 @@ export default function SplitTaskModal({
       setError('Заполните все поля для каждой части');
       return false;
     }
-    if (isDraft && parts.length < 2) {
-      setError('Добавьте минимум двух сотрудников для общей задачи');
+    if (isDraft && parts.length < 1) {
+      setError('Добавьте сотрудника');
       return false;
     }
-    if (!isEdit && !isDraft && parts.length < 2) {
-      setError('Добавьте минимум двух сотрудников для общей задачи');
-      return false;
-    }
-    if (!isEdit && !isDraft && Math.abs(sum - totalHours) > 0.01) {
-      setError(`Сумма часов должна равняться ${totalHours} ч`);
-      return false;
-    }
-    if (isDraft && sum <= 0) {
+    if (isFreeHoursMode && sum <= 0) {
       setError('Укажите часы для каждого сотрудника');
-      return false;
-    }
-    if (isEdit && sum <= 0) {
-      setError('Укажите часы для назначений');
       return false;
     }
     return true;
   };
 
   const partsSum = parts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
-  const displayTotalHours = isEdit || isDraft ? partsSum : totalHours;
+  const displayTotalHours = partsSum;
 
   const handleSubmit = async () => {
     if (!validateParts()) return;
@@ -3135,7 +3664,7 @@ export default function SplitTaskModal({
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || data.error);
 
-      onSuccess?.();
+      onSuccess?.(data);
       onClose();
     } catch (err) {
       setError(err.message);
@@ -3144,7 +3673,7 @@ export default function SplitTaskModal({
 
   const taskLabel = task?.fileName || task?.folderPath || '';
   const title = isDraft
-    ? 'Общая задача — назначения'
+    ? 'Назначения'
     : isEdit
       ? 'Редактирование назначений'
       : 'Разделение задачи';
@@ -3161,16 +3690,31 @@ export default function SplitTaskModal({
         )}
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
           {isDraft
-            ? `Итого: ${displayTotalHours.toFixed(1)} ч — подставится в поле «Часы» задачи`
-            : isEdit
-              ? `Всего часов по назначениям: ${displayTotalHours.toFixed(1)} ч (обновится у задачи)`
-              : `Всего часов: ${displayTotalHours} ч`}
+            ? parts.length >= 2
+              ? `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`
+              : `Обычная задача · ${displayTotalHours.toFixed(1)} ч`
+            : parts.length === 1
+              ? `Обычная задача · ${displayTotalHours.toFixed(1)} ч (попадёт в столбец «Часы»)`
+              : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`}
         </Typography>
       </DialogTitle>
 
       <DialogContent>
+        {(isEdit || mode === 'split') && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Укажите нужное время для каждого сотрудника — ограничений по столбцу «Часы» нет.
+            После сохранения в таблице отобразится сумма (или часы одного сотрудника).
+            Один сотрудник — обычная задача, несколько — общая.
+            Если убрать сотрудника, который уже начал подзадачу, она будет автоматически завершена.
+          </Alert>
+        )}
+        {removeWarning && (
+          <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setRemoveWarning('')}>
+            {removeWarning}
+          </Alert>
+        )}
         {error && (
-          <Alert severity={error.includes('превышает') ? 'error' : 'info'} sx={{ mb: 2 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
         )}
@@ -3190,6 +3734,11 @@ export default function SplitTaskModal({
                       <MenuItem key={emp} value={emp}>{emp}</MenuItem>
                     ))}
                   </Select>
+                  {isEdit && part.started && (
+                    <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>
+                      {part.statusText || 'В работе'}
+                    </Typography>
+                  )}
                 </FormControl>
 
                 <FormControl size="small" sx={{ minWidth: 200, flex: 2 }}>
@@ -3211,13 +3760,9 @@ export default function SplitTaskModal({
                   </Select>
                 </FormControl>
 
-                <TextField
-                  size="small"
-                  type="number"
-                  label="Часы"
+                <EstimateHoursInput
                   value={part.hours}
-                  onChange={(e) => updatePart(idx, 'hours', e.target.value)}
-                  slotProps={{ htmlInput: { step: 0.5, min: 0 } }}
+                  onChange={(hours) => updatePart(idx, 'hours', hours)}
                   sx={{ width: 100 }}
                 />
 
@@ -3324,14 +3869,39 @@ export default function StatsCards({ stats }) {
     </Grid>
   );
 }=== ./frontend/src/components/ActiveTasksList.jsx ===
-// ./frontend/src/components/ActiveTasksList.jsx
 import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../services/api';
-import { Warning, Error, FolderOpen, AccessTime, Event, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
-import { Tooltip, Chip, IconButton, Box, Typography } from '@mui/material';
+import {
+  Warning,
+  Error,
+  FolderOpen,
+  AccessTime,
+  Event,
+  PlayArrow,
+  Pause,
+  CheckCircle,
+  Assignment
+} from '@mui/icons-material';
+import {
+  Tooltip,
+  Chip,
+  IconButton,
+  Box,
+  Typography,
+  Button,
+  Card,
+  CardContent,
+  LinearProgress,
+  Stack
+} from '@mui/material';
 import { useUiFeedback } from '../context/UiFeedbackContext';
+import { openFileOnClient } from '../utils/openFileOnClient';
+import { normalizePathForOpen } from '../utils/filePathForOpen';
+import { glassCardSx, compactActionButtonSx } from '../theme/surfaces';
+import EmptyState from './ui/EmptyState';
 
-export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
+export default function ActiveTasksList({ tasks, onUpdate, onSplit, embedded = false }) {
   const { showError, showWarning } = useUiFeedback();
+
   const handleAction = async (id, action, progress = null) => {
     try {
       if (action === 'start') await startTask(id);
@@ -3347,42 +3917,26 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     }
   };
 
-  const openFile = async (filePath) => {
+  const openFile = (filePath) => {
     if (!filePath) {
       showWarning('Путь к файлу не указан');
       return;
     }
-    try {
-      const response = await fetch('/api/files/open', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath,
-          clientPlatform: navigator.platform || navigator.userAgent
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        showError(data.message || 'Ошибка открытия файла');
-        return;
-      }
-      if (data.downloadUrl) {
-        window.open(data.downloadUrl, '_blank');
-      }
-    } catch (err) {
-      console.error('Ошибка открытия файла:', err);
-      showError('Не удалось открыть файл');
-    }
+    const parts = String(filePath).replace(/\\/g, '/').split('/');
+    const fileName = parts.pop() || '';
+    const folderPath = parts.join('/');
+    const result = openFileOnClient(normalizePathForOpen(folderPath, fileName));
+    if (!result.ok) showError('Не удалось открыть файл');
   };
 
   const getRiskProps = (riskLevel) => {
     switch (riskLevel) {
       case 'overdue':
-        return { icon: <Error sx={{ fontSize: 16 }} />, color: '#dc2626', label: 'Дедлайн сорван' };
+        return { icon: <Error fontSize="small" />, color: 'error', label: 'Дедлайн сорван' };
       case 'critical':
-        return { icon: <Error sx={{ fontSize: 16 }} />, color: '#dc2626', label: 'Не хватает времени' };
+        return { icon: <Error fontSize="small" />, color: 'error', label: 'Не хватает времени' };
       case 'warning':
-        return { icon: <Warning sx={{ fontSize: 16 }} />, color: '#f59e0b', label: 'Дедлайн приближается' };
+        return { icon: <Warning fontSize="small" />, color: 'warning', label: 'Дедлайн приближается' };
       default:
         return null;
     }
@@ -3393,235 +3947,116 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit }) {
     return title.split('\\').pop().split('/').pop();
   };
 
-  const getBorderColor = (status) => {
-    if (status === 1) return '#3b82f6';
-    if (status === 2) return '#f59e0b';
-    return '#cbd5e1';
+  const getBorderColor = (status, theme) => {
+    if (status === 1) return theme.palette.info.main;
+    if (status === 2) return theme.palette.warning.main;
+    return theme.palette.divider;
   };
 
-  return (
-    <Box sx={{ mt: 3 }}>
-      <Typography variant="h2" sx={{ mb: 2, fontSize: '1.3rem', fontWeight: 500 }}>
-        Активные задачи
-      </Typography>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {tasks.map(task => {
-          const risk = getRiskProps(task.riskLevel);
-          const borderColor = getBorderColor(task.status);
-          
-          return (
-            <Box 
-              key={task.id} 
-              sx={{ 
-                bgcolor: 'white',
-                borderRadius: 2,
-                p: 2,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                transition: 'all 0.2s ease',
-                borderLeft: `4px solid ${borderColor}`,
-                '&:hover': { 
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                  transform: 'translateY(-2px)'
-                }
-              }}
-            >
+  const list = (
+    <Stack spacing={2}>
+      {tasks.map((task) => {
+        const risk = getRiskProps(task.riskLevel);
+        const progressValue = Math.round((task.progress || 0) * 100);
+
+        return (
+          <Card
+            key={task.id}
+            sx={(theme) => ({
+              ...glassCardSx,
+              borderLeft: '4px solid',
+              borderLeftColor: getBorderColor(task.status, theme)
+            })}
+          >
+            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
               <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1 }}>
                 <Tooltip title="Открыть файл" arrow>
-                  <IconButton 
-                    size="small" 
-                    onClick={() => openFile(task.file)}
-                    sx={{ color: '#7c9ebf', p: 0.5 }}
-                  >
+                  <IconButton size="small" color="primary" onClick={() => openFile(task.file)}>
                     <FolderOpen fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {getShortTitle(task.title)}
-                </Typography>
-                <Typography variant="caption" sx={{ color: '#6b7c93' }}>
-                  ({task.type})
-                </Typography>
-                
+                <Typography variant="subtitle2">{getShortTitle(task.title)}</Typography>
+                <Chip label={task.type} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
                 {risk && (
-                  <Tooltip title={risk.label} arrow>
-                    <Chip
-                      icon={risk.icon}
-                      label={risk.label}
-                      size="small"
-                      sx={{
-                        height: 22,
-                        fontSize: '0.7rem',
-                        bgcolor: risk.color,
-                        color: 'white',
-                        '& .MuiChip-icon': { color: 'white', fontSize: 14, ml: 0.5 },
-                        '& .MuiChip-label': { px: 1 }
-                      }}
-                    />
-                  </Tooltip>
+                  <Chip icon={risk.icon} label={risk.label} size="small" color={risk.color} sx={{ height: 22, fontSize: '0.7rem' }} />
                 )}
               </Box>
-              
-              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, mb: 1, fontSize: '0.8rem', color: 'text.secondary' }}>
-                <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5 }}>
+
+              <Stack direction="row" spacing={2} sx={{ mb: 1, color: 'text.secondary' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <AccessTime sx={{ fontSize: 14 }} />
-                  <span>{task.estimateHours} ч</span>
+                  <Typography variant="caption">{task.estimateHours} ч</Typography>
                 </Box>
-                <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <Event sx={{ fontSize: 14 }} />
-                  <span>
-                    {task.deadline ? new Date(task.deadline).toLocaleDateString() + ' ' + new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Нет дедлайна'}
-                  </span>
+                  <Typography variant="caption">
+                    {task.deadline
+                      ? `${new Date(task.deadline).toLocaleDateString()} ${new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : 'Нет дедлайна'}
+                  </Typography>
                 </Box>
-              </Box>
-              
-              <Box sx={{ bgcolor: '#e2e8f0', borderRadius: 1, height: 8, overflow: 'hidden', mb: 1 }}>
-                <Box 
-                  sx={{ 
-                    width: `${(task.progress || 0) * 100}%`,
-                    height: '100%',
-                    bgcolor: task.status === 1 ? '#3b82f6' : (task.status === 2 ? '#f59e0b' : '#cbd5e1'),
-                    transition: 'width 0.3s ease',
-                    borderRadius: 1
-                  }} 
-                />
-              </Box>
-              
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+              </Stack>
+
+              <LinearProgress
+                variant="determinate"
+                value={progressValue}
+                color={task.status === 1 ? 'info' : task.status === 2 ? 'warning' : 'inherit'}
+                sx={{ mb: 1.5, borderRadius: 1 }}
+              />
+
+              <Stack direction="row" flexWrap="wrap" gap={0.75}>
                 {task.status === 0 && (
-                  <Box 
-                    component="button"
-                    onClick={() => handleAction(task.id, 'start')}
-                    sx={{ 
-                      px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                      cursor: 'pointer', transition: 'all 0.2s ease',
-                      border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                      display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                      '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                    }}
-                  >
-                    <PlayArrow sx={{ fontSize: 16, color: '#3b82f6' }} /> Начал
-                  </Box>
+                  <Button size="small" variant="outlined" color="success" startIcon={<PlayArrow />} onClick={() => handleAction(task.id, 'start')} sx={compactActionButtonSx}>
+                    Начал
+                  </Button>
                 )}
-                
                 {task.status === 1 && (
                   <>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'pause')}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <Pause sx={{ fontSize: 16, color: '#f59e0b' }} /> Пауза
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'complete')}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} /> Готово
-                    </Box>
+                    <Button size="small" variant="outlined" color="warning" startIcon={<Pause />} onClick={() => handleAction(task.id, 'pause')} sx={compactActionButtonSx}>
+                      Пауза
+                    </Button>
+                    <Button size="small" variant="outlined" color="primary" startIcon={<CheckCircle />} onClick={() => handleAction(task.id, 'complete')} sx={compactActionButtonSx}>
+                      Готово
+                    </Button>
                   </>
                 )}
-                
                 {task.status === 2 && (
                   <>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'resume')}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#22c55e', color: 'white',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#16a34a', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <PlayArrow sx={{ fontSize: 16 }} /> Продолжить
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'complete')}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} /> Готово
-                    </Box>
+                    <Button size="small" variant="contained" color="success" startIcon={<PlayArrow />} onClick={() => handleAction(task.id, 'resume')} sx={compactActionButtonSx}>
+                      Продолжить
+                    </Button>
+                    <Button size="small" variant="outlined" color="primary" startIcon={<CheckCircle />} onClick={() => handleAction(task.id, 'complete')} sx={compactActionButtonSx}>
+                      Готово
+                    </Button>
                   </>
                 )}
-                
-                {task.status !== 3 && (
-                  <>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'progress', 0.3)}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      30%
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'progress', 0.6)}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      60%
-                    </Box>
-                    <Box 
-                      component="button"
-                      onClick={() => handleAction(task.id, 'progress', 0.9)}
-                      sx={{ 
-                        px: 2, py: 0.5, borderRadius: 1, fontSize: '0.75rem', fontWeight: 500,
-                        cursor: 'pointer', transition: 'all 0.2s ease',
-                        border: '1px solid #e2e8f0', bgcolor: '#f8fafc', color: '#334155',
-                        '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }
-                      }}
-                    >
-                      90%
-                    </Box>
-                  </>
-                )}
-              </Box>
-            </Box>
-          );
-        })}
-      </Box>
+                {task.status !== 3 && [0.3, 0.6, 0.9].map((p) => (
+                  <Button key={p} size="small" variant="text" color="secondary" onClick={() => handleAction(task.id, 'progress', p)} sx={compactActionButtonSx}>
+                    {Math.round(p * 100)}%
+                  </Button>
+                ))}
+              </Stack>
+            </CardContent>
+          </Card>
+        );
+      })}
+      {tasks.length === 0 && <EmptyState message="Нет активных задач" icon={Assignment} />}
+    </Stack>
+  );
 
-      {tasks.length === 0 && (
-        <Box sx={{ textAlign: 'center', py: 4 }}>
-          <Typography variant="body1" color="text.secondary">
-            Нет активных задач
-          </Typography>
-        </Box>
-      )}
+  if (embedded) return list;
+
+  return (
+    <Box sx={{ mt: 3 }}>
+      <Typography variant="h2" sx={{ mb: 2 }}>Активные задачи</Typography>
+      {list}
     </Box>
   );
-}=== ./frontend/src/hooks/useTaskTableApi.jsx ===
+}
+=== ./frontend/src/hooks/useTaskTableApi.jsx ===
 import { useCallback, useMemo } from 'react';
+import { openFileOnClient } from '../utils/openFileOnClient';
+import { normalizePathForOpen } from '../utils/filePathForOpen';
 
 export default function useTaskTableApi() {
   const handleResponse = useCallback(async (response) => {
@@ -3718,25 +4153,15 @@ export default function useTaskTableApi() {
   }, [handleResponse]);
 
   const openFile = useCallback(async (row) => {
-    const relativePath = `${row.folderPath || ''}/${row.fileName || ''}`.replace(/\\/g, '/').replace(/\/\//g, '/');
+    const relativePath = normalizePathForOpen(row.folderPath, row.fileName);
     if (!relativePath || relativePath === '/') {
       throw new Error('Путь к файлу не указан');
     }
-    const response = await fetch('/api/files/open', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        filePath: relativePath,
-        clientPlatform: navigator.platform || navigator.userAgent
-      })
-    });
-    const data = await handleResponse(response);
-    if (data.downloadUrl) {
-      window.open(data.downloadUrl, '_blank');
-    } else {
-      throw new Error('Не удалось получить ссылку на файл');
+    const result = openFileOnClient(relativePath);
+    if (!result.ok) {
+      throw new Error('Не удалось открыть файл');
     }
-  }, [handleResponse]);
+  }, []);
 
   const getTaskForSplit = useCallback(async (employeeName, taskId) => {
     const response = await fetch(`/api/tasks/active?employee=${encodeURIComponent(employeeName)}`);
@@ -3830,7 +4255,6 @@ import {
   InputLabel,
   Button,
   ThemeProvider,
-  createTheme,
   CssBaseline,
   Chip,
   Tab,
@@ -3838,12 +4262,13 @@ import {
   Avatar,
   Menu,
   IconButton,
-  Divider
+  Divider,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import { 
   Today, 
   RestartAlt, 
-  Notifications, 
   TableChart, 
   CalendarMonth, 
   Logout, 
@@ -3867,23 +4292,9 @@ import { UiFeedbackProvider, useUiFeedback } from './context/UiFeedbackContext';
 import useActiveTasksRefresh from './hooks/useActiveTasksRefresh';
 import useAuth from './hooks/useAuth';
 import useNotificationsHub from './hooks/useNotificationsHub';
-
-const theme = createTheme({
-  palette: {
-    primary: { main: '#7c9ebf', light: '#a8c4e0', dark: '#5d7f9e' },
-    secondary: { main: '#cbd5e1', light: '#e2e8f0', dark: '#94a3b8' },
-    success: { main: '#7c9e7c', light: '#a3b8a3', dark: '#5d7e5d' },
-    error: { main: '#d48c8c', light: '#e29b9b', dark: '#b06f6f' },
-    background: { default: '#f3f4f6', paper: '#ffffff' },
-    text: { primary: '#374151', secondary: '#6b7c93' },
-  },
-  typography: {
-    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-    h1: { fontSize: '1.6rem', fontWeight: 600 },
-    h2: { fontSize: '1.3rem', fontWeight: 500 },
-  },
-  shape: { borderRadius: 12 },
-});
+import appTheme from './theme/appTheme';
+import { glassPaperSx, pageShellSx } from './theme/surfaces';
+import SectionCard from './components/ui/SectionCard';
 
 function AppContent() {
   const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
@@ -3991,22 +4402,6 @@ function AppContent() {
     showSuccess('База данных очищена');
   };
 
-  const testNotification = () => {
-    if (!('Notification' in window)) {
-      showWarning('Ваш браузер не поддерживает уведомления');
-      return;
-    }
-    if (Notification.permission === 'granted') {
-      new Notification('Уведомления работают!');
-      showSuccess('Системное уведомление отправлено');
-    } else if (Notification.permission === 'denied') {
-      showWarning('Уведомления заблокированы в настройках браузера');
-    } else {
-      Notification.requestPermission();
-      showInfo('Разрешите уведомления в запросе браузера');
-    }
-  };
-
   const handleSplit = (task) => {
     setSelectedTaskForSplit(task);
     setSplitModalOpen(true);
@@ -4023,13 +4418,13 @@ function AppContent() {
 
   return (
     <>
-      <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', py: 3 }}>
+      <Box sx={pageShellSx}>
         <Container maxWidth="xl">
-          <Paper elevation={0} sx={{ p: 2, mb: 3, borderRadius: 3 }}>
+          <Paper sx={{ ...glassPaperSx, p: 2, mb: 3 }}>
             <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                <Today color="primary" sx={{ fontSize: 32 }} />
-                <Typography variant="h1" component="h1" sx={{ fontSize: '1.6rem', fontWeight: 600 }}>Mainstream Assistant</Typography>
+                <Today color="primary" sx={{ fontSize: 36 }} />
+                <Typography variant="h1" component="h1">Mainstream Assistant</Typography>
               </Box>
               
               <CurrentDateTime />
@@ -4054,9 +4449,6 @@ function AppContent() {
                 {isAdmin && (
                   <Button variant="outlined" startIcon={<RestartAlt />} onClick={handleReset} color="error" size="medium">Сброс БД</Button>
                 )}
-                {isAdmin && (
-                  <Button variant="outlined" startIcon={<Notifications />} onClick={testNotification} sx={{ color: '#7c9ebf', borderColor: '#7c9ebf' }} size="medium">Тест уведомлений</Button>
-                )}
                 <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
                   <Avatar 
                     src={avatarUrl} 
@@ -4070,10 +4462,10 @@ function AppContent() {
             </Box>
           </Paper>
 
-          <Paper elevation={0} sx={{ mb: 3, borderRadius: 3 }}>
-            <Tabs value={activeTab} onChange={handleTabChange} centered>
-              <Tab icon={<CalendarMonth />} label="Календарь" />
-              <Tab icon={<TableChart />} label="Таблица задач" />
+          <Paper sx={{ mb: 3, borderRadius: 1, overflow: 'hidden' }}>
+            <Tabs value={activeTab} onChange={handleTabChange} centered variant="fullWidth">
+              <Tab icon={<CalendarMonth />} iconPosition="start" label="Календарь" />
+              <Tab icon={<TableChart />} iconPosition="start" label="Таблица задач" />
             </Tabs>
           </Paper>
 
@@ -4081,9 +4473,9 @@ function AppContent() {
             <>
               <DeadlineWarnings employee={employee} refresh={refresh} />
               <WeekCalendar employee={employee} refresh={refresh} />
-              <Box sx={{ mb: 4 }}>
-                <ActiveTasksList tasks={activeTasks} onUpdate={refreshAll} onSplit={handleSplit} />
-              </Box>
+              <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }}>
+                <ActiveTasksList tasks={activeTasks} onUpdate={refreshAll} onSplit={handleSplit} embedded />
+              </SectionCard>
               <CompletedTasksList employee={employee} refresh={refresh} />
             </>
           )}
@@ -4116,24 +4508,29 @@ function AppContent() {
             <Typography variant="caption" color="text.secondary">{user?.email}</Typography>
             <Chip
               size="small"
+              color={isAdmin ? 'warning' : 'info'}
+              variant="outlined"
               icon={isAdmin ? <AdminPanelSettings sx={{ fontSize: '0.85rem !important' }} /> : <Person sx={{ fontSize: '0.85rem !important' }} />}
               label={isAdmin ? 'Администратор' : 'Сотрудник'}
-              sx={{ mt: 0.5, fontSize: '0.65rem', bgcolor: isAdmin ? '#fef3c7' : '#e0e7ff', color: isAdmin ? '#92400e' : '#3730a3', width: 'fit-content' }}
+              sx={{ mt: 0.5, fontSize: '0.65rem', width: 'fit-content' }}
             />
           </Box>
         </MenuItem>
         <Divider />
         <MenuItem onClick={handleFileSelect} disabled={uploadingAvatar}>
-          <CloudUpload sx={{ mr: 1, fontSize: 20 }} /> Загрузить фото
+          <ListItemIcon><CloudUpload fontSize="small" /></ListItemIcon>
+          <ListItemText>Загрузить фото</ListItemText>
         </MenuItem>
         {user?.avatarUrl && (
-          <MenuItem onClick={handleDeleteAvatar} disabled={uploadingAvatar} sx={{ color: '#dc2626' }}>
-            <Delete sx={{ mr: 1, fontSize: 20 }} /> Удалить фото
+          <MenuItem onClick={handleDeleteAvatar} disabled={uploadingAvatar} sx={{ color: 'error.main' }}>
+            <ListItemIcon><Delete fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText>Удалить фото</ListItemText>
           </MenuItem>
         )}
         <Divider />
-        <MenuItem onClick={handleLogout} sx={{ color: '#dc2626' }}>
-          <Logout sx={{ mr: 1, fontSize: 20 }} /> Выйти
+        <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
+          <ListItemIcon><Logout fontSize="small" color="error" /></ListItemIcon>
+          <ListItemText>Выйти</ListItemText>
         </MenuItem>
       </Menu>
 
@@ -4147,11 +4544,11 @@ function AppContent() {
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={appTheme}>
       <CssBaseline />
-      <UiFeedbackProvider>
-        <AppContent />
-      </UiFeedbackProvider>
+        <UiFeedbackProvider>
+          <AppContent />
+        </UiFeedbackProvider>
     </ThemeProvider>
   );
 }
