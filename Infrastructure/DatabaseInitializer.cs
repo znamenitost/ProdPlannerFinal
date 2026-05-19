@@ -11,7 +11,15 @@ public static class DatabaseInitializer
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-        var created = db.Database.EnsureCreated();
+        if (db.Database.IsNpgsql())
+        {
+            if (!await db.Database.CanConnectAsync())
+                throw new InvalidOperationException(
+                    "Не удалось подключиться к PostgreSQL. Проверьте ConnectionStrings:DefaultConnection и что сервер запущен (docker compose -f docker-compose.postgres.yml up -d).");
+            logger.LogInformation("Подключение к PostgreSQL установлено.");
+        }
+
+        var created = await db.Database.EnsureCreatedAsync();
         logger.LogInformation(created ? "База данных создана." : "База данных уже существует.");
 
         if (db.Database.IsSqlite())

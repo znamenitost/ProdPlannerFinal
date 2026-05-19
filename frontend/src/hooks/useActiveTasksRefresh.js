@@ -14,6 +14,10 @@ export default function useActiveTasksRefresh(user, employee) {
     return () => {
       mountedRef.current = false;
       activeAbortRef.current?.abort();
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
     };
   }, []);
 
@@ -40,37 +44,19 @@ export default function useActiveTasksRefresh(user, employee) {
       setActiveTasks([]);
       return undefined;
     }
-
     loadActiveTasks();
-    const interval = setInterval(() => {
-      setRefresh((r) => r + 1);
-      loadActiveTasks();
-    }, 60000);
-
-    return () => {
-      clearInterval(interval);
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-        retryTimeoutRef.current = null;
-      }
-    };
   }, [loadActiveTasks, user]);
 
-  useEffect(() => {
-    if (!user || refresh === 0) return;
-    loadActiveTasks();
-  }, [refresh, loadActiveTasks, user]);
-
   const refreshAll = useCallback(() => {
-    loadActiveTasks();
     setRefresh((r) => r + 1);
+    loadActiveTasks();
 
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current);
     }
     retryTimeoutRef.current = setTimeout(() => {
-      loadActiveTasks();
       setRefresh((r) => r + 1);
+      loadActiveTasks();
       retryTimeoutRef.current = null;
     }, 200);
   }, [loadActiveTasks]);

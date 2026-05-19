@@ -20,10 +20,12 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddLogging();
 
 var postgresConnection = builder.Configuration.GetConnectionString("DefaultConnection");
-if (!string.IsNullOrWhiteSpace(postgresConnection))
+var usePostgres = !string.IsNullOrWhiteSpace(postgresConnection);
+if (usePostgres)
 {
     builder.Services.AddDbContext<ApplicationDbContext>(options =>
-        options.UseNpgsql(postgresConnection));
+        options.UseNpgsql(postgresConnection, npgsql =>
+            npgsql.EnableRetryOnFailure(maxRetryCount: 3)));
 }
 else
 {
@@ -81,6 +83,10 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+startupLogger.LogInformation(
+    usePostgres ? "База данных: PostgreSQL" : "База данных: SQLite (App_Data/ProductionPlanner.db)");
 
 await DatabaseInitializer.InitializeAsync(app.Services);
 app.ConfigureProductionPlannerPipeline();

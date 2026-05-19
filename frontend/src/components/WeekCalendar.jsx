@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Box, Paper, IconButton, Typography, Button } from '@mui/material';
 import { ChevronLeft, ChevronRight, CalendarMonth, Weekend } from '@mui/icons-material';
-import { getWeekCalendar } from '../services/api';
-import DayColumn from './DayColumn';
 import { glassPaperSx, softIconButtonSx } from '../theme/surfaces';
+import { getWeekCalendar } from '../services/api';
+import useClockMinute from '../hooks/useClockMinute';
+import DayColumn from './DayColumn';
 import { CalendarLoadingState } from './LoadingState';
 
 export default function WeekCalendar({ employee, refresh }) {
+  const clockMinute = useClockMinute(true);
   const [weekData, setWeekData] = useState(null);
   const [currentMonday, setCurrentMonday] = useState(() => getMonday(new Date()));
   const [highlightedTaskId, setHighlightedTaskId] = useState(null);
@@ -34,7 +36,7 @@ export default function WeekCalendar({ employee, refresh }) {
     };
     fetchData();
     return () => controller.abort();
-  }, [employee, refresh, currentMonday]);
+  }, [employee, refresh, currentMonday, clockMinute]);
 
   const prevWeek = () => {
     const newMonday = new Date(currentMonday);
@@ -62,7 +64,7 @@ export default function WeekCalendar({ employee, refresh }) {
 
   return (
     <Paper sx={{ ...glassPaperSx, mb: 3 }}>
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', mb: 6 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', mb: 4, flexWrap: 'wrap', gap: 2 }}>
         <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
           <IconButton onClick={prevWeek} sx={softIconButtonSx('primary')} aria-label="Предыдущая неделя">
             <ChevronLeft />
@@ -75,7 +77,7 @@ export default function WeekCalendar({ employee, refresh }) {
             <ChevronRight />
           </IconButton>
         </Box>
-        
+
         <Button
           size="small"
           variant={showWeekend ? 'contained' : 'outlined'}
