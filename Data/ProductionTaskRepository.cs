@@ -228,10 +228,8 @@ public async Task DeleteTaskAsync(int id)
         // Оптимизированный метод ReorderTasksAsync без загрузки всех задач в память
         public async Task ReorderTasksAsync(List<int> orderedIds)
         {
-            await using var transaction = await _context.Database.BeginTransactionAsync();
-            try
+            await ExecuteInTransactionAsync(async () =>
             {
-                // 1. Сбросить DisplayOrder для всех задач, которых нет в списке (ставить большой номер)
                 var notListedIds = await _context.ProductionTasks
                     .Where(t => !orderedIds.Contains(t.Id))
                     .Select(t => t.Id)
@@ -244,21 +242,13 @@ public async Task DeleteTaskAsync(int id)
                         .ExecuteUpdateAsync(setter => setter.SetProperty(t => t.DisplayOrder, int.MaxValue));
                 }
 
-                // 2. Обновить DisplayOrder для переданных Id по порядку
-                for (int i = 0; i < orderedIds.Count; i++)
+                for (var i = 0; i < orderedIds.Count; i++)
                 {
                     await _context.ProductionTasks
                         .Where(t => t.Id == orderedIds[i])
                         .ExecuteUpdateAsync(setter => setter.SetProperty(t => t.DisplayOrder, i));
                 }
-
-                await transaction.CommitAsync();
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
-            }
+            });
         }
 
         // Новые методы для оптимизации календаря
