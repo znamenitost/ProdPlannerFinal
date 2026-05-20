@@ -10,43 +10,36 @@ namespace ProductionPlanner.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            ConvertToBoolean(migrationBuilder, "Users", "IsActive");
-            ConvertToBoolean(migrationBuilder, "Users", "EmailConfirmed");
-            ConvertToBoolean(migrationBuilder, "Users", "PhoneNumberConfirmed");
-            ConvertToBoolean(migrationBuilder, "Users", "TwoFactorEnabled");
-            ConvertToBoolean(migrationBuilder, "Users", "LockoutEnabled");
-
-            ConvertToBoolean(migrationBuilder, "ProductionTasks", "Notified");
-            ConvertToBoolean(migrationBuilder, "ProductionTasks", "OverdueNotified");
-            ConvertToBoolean(migrationBuilder, "ProductionTasks", "IsSplitTask");
+            migrationBuilder.Sql("""
+                DO $$
+                DECLARE r RECORD;
+                BEGIN
+                  FOR r IN
+                    SELECT n.nspname AS schema_name, c.relname AS table_name, a.attname AS column_name
+                    FROM pg_attribute a
+                    JOIN pg_class c ON c.oid = a.attrelid
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    JOIN pg_type t ON t.oid = a.atttypid
+                    WHERE n.nspname = 'public'
+                      AND c.relkind = 'r'
+                      AND NOT a.attisdropped
+                      AND a.attnum > 0
+                      AND a.attname IN (
+                        'IsActive', 'EmailConfirmed', 'PhoneNumberConfirmed', 'TwoFactorEnabled', 'LockoutEnabled',
+                        'Notified', 'OverdueNotified', 'IsSplitTask')
+                      AND t.typname IN ('int2', 'int4', 'int8')
+                  LOOP
+                    EXECUTE format(
+                      'ALTER TABLE %I.%I ALTER COLUMN %I TYPE boolean USING (CASE WHEN %I IS NULL THEN NULL ELSE (%I::integer <> 0) END)',
+                      r.schema_name, r.table_name, r.column_name, r.column_name, r.column_name);
+                  END LOOP;
+                END $$;
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-        }
-
-        private static void ConvertToBoolean(MigrationBuilder migrationBuilder, string table, string column)
-        {
-            migrationBuilder.Sql($"""
-                DO $EF$
-                BEGIN
-                  IF EXISTS (
-                    SELECT 1 FROM information_schema.columns c
-                    WHERE c.table_schema = 'public' AND c.table_name = '{table}' AND c.column_name = '{column}'
-                      AND c.udt_name <> 'bool'
-                  ) THEN
-                    ALTER TABLE "{table}"
-                      ALTER COLUMN "{column}" TYPE boolean
-                      USING (
-                        CASE
-                          WHEN "{column}" IS NULL THEN NULL
-                          ELSE ("{column}"::integer <> 0)
-                        END
-                      );
-                  END IF;
-                END $EF$;
-                """);
         }
     }
 }
