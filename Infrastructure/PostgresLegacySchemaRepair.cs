@@ -11,7 +11,7 @@ namespace ProductionPlanner.Infrastructure;
 /// </summary>
 public static class PostgresLegacySchemaRepair
 {
-    public const string RepairVersion = "2026-05-21-v3-all-schemas";
+    public const string RepairVersion = "2026-05-21-v4-comprehensive";
 
     private static readonly string[] BooleanColumns =
     [
@@ -23,6 +23,11 @@ public static class PostgresLegacySchemaRepair
     [
         "starttime", "endtime", "lockoutend", "createdat", "updatedat", "deadline", "completedat",
         "acknowledgedat", "lastresetdate"
+    ];
+
+    private static readonly string[] DoubleColumns =
+    [
+        "estimatehours", "progress", "actualhours", "totalsavedhours", "todaysavedhours", "allocatedhours"
     ];
 
     public static async Task RepairAsync(ApplicationDbContext db, ILogger logger)
@@ -70,6 +75,19 @@ public static class PostgresLegacySchemaRepair
                 """;
             await ExecuteAsync(connection, alter);
             logger.LogInformation("Converted to timestamptz: {Schema}.{Table}.{Column}", col.Schema, col.Table, col.Column);
+        }
+
+        var realTargets = await LoadColumnsAsync(connection, DoubleColumns, ["float4"]);
+        foreach (var col in realTargets)
+        {
+            var alter = $"""
+                ALTER TABLE {Qualify(col)}
+                ALTER COLUMN {QuoteIdent(col.Column)}
+                TYPE double precision
+                USING ({QuoteIdent(col.Column)}::double precision)
+                """;
+            await ExecuteAsync(connection, alter);
+            logger.LogInformation("Converted to double precision: {Schema}.{Table}.{Column}", col.Schema, col.Table, col.Column);
         }
 
         var remaining = await LoadColumnsAsync(connection, BooleanColumns, ["int2", "int4", "int8"]);

@@ -280,6 +280,12 @@ public async Task DeleteTaskAsync(int id)
 
         public async Task ExecuteInTransactionAsync(Func<Task> action)
         {
+            if (_context.Database.CurrentTransaction != null)
+            {
+                await action();
+                return;
+            }
+
             var strategy = _context.Database.CreateExecutionStrategy();
             await strategy.ExecuteAsync(async () =>
             {
@@ -299,9 +305,10 @@ public async Task DeleteTaskAsync(int id)
 
         public async Task<int> CloseOpenIntervalsAsync(int taskId, DateTime closedAt)
         {
+            var end = ToDbDateTime(closedAt);
             return await _context.WorkIntervals
                 .Where(i => i.ProductionTaskId == taskId && i.EndTime == null)
-                .ExecuteUpdateAsync(s => s.SetProperty(i => i.EndTime, closedAt));
+                .ExecuteUpdateAsync(s => s.SetProperty(i => i.EndTime, end));
         }
 
         public async Task<int> TryTransitionStatusAsync(
@@ -311,6 +318,7 @@ public async Task DeleteTaskAsync(int id)
             IReadOnlyList<JobStatus>? expectedStatuses = null,
             TaskStatusPatch? patch = null)
         {
+            var updated = ToDbDateTime(updatedAt);
             var query = _context.ProductionTasks.Where(t => t.Id == taskId);
 
             if (expectedStatuses is { Count: > 0 })
@@ -320,7 +328,7 @@ public async Task DeleteTaskAsync(int id)
 
             var rows = await query.ExecuteUpdateAsync(s =>
                 s.SetProperty(t => t.Status, newStatus)
-                    .SetProperty(t => t.UpdatedAt, updatedAt));
+                    .SetProperty(t => t.UpdatedAt, updated));
 
             if (rows == 0 || patch == null)
                 return rows;
@@ -331,7 +339,10 @@ public async Task DeleteTaskAsync(int id)
                 await patchQuery.ExecuteUpdateAsync(s => s.SetProperty(t => t.Progress, progress));
 
             if (patch.CompletedAt is DateTime completedAt)
-                await patchQuery.ExecuteUpdateAsync(s => s.SetProperty(t => t.CompletedAt, completedAt));
+            {
+                var completed = ToDbDateTime(completedAt);
+                await patchQuery.ExecuteUpdateAsync(s => s.SetProperty(t => t.CompletedAt, completed));
+            }
 
             if (patch.ClearCompletedAt)
                 await patchQuery.ExecuteUpdateAsync(s => s.SetProperty(t => t.CompletedAt, (DateTime?)null));
@@ -341,6 +352,9 @@ public async Task DeleteTaskAsync(int id)
 
             return rows;
         }
+
+        private DateTime ToDbDateTime(DateTime value) =>
+            _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(value) : value;
 
         public void StageWorkInterval(WorkInterval interval)
         {

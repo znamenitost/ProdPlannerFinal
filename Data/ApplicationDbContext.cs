@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 
 namespace ProductionPlanner.Data
@@ -8,7 +9,49 @@ namespace ProductionPlanner.Data
     public class ApplicationDbContext : IdentityDbContext<User>
     {
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
-        
+
+        public override int SaveChanges()
+        {
+            NormalizeDateTimesForPostgres();
+            return base.SaveChanges();
+        }
+
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        {
+            NormalizeDateTimesForPostgres();
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            NormalizeDateTimesForPostgres();
+            return base.SaveChangesAsync(cancellationToken);
+        }
+
+        public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+        {
+            NormalizeDateTimesForPostgres();
+            return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        private void NormalizeDateTimesForPostgres()
+        {
+            if (!Database.IsNpgsql())
+                return;
+
+            foreach (var entry in ChangeTracker.Entries())
+            {
+                if (entry.State is EntityState.Detached or EntityState.Unchanged)
+                    continue;
+
+                foreach (var property in entry.Properties)
+                {
+                    if (property.CurrentValue is DateTime dt)
+                        property.CurrentValue = PostgresDateTime.ToUtc(dt);
+                }
+            }
+        }
+
         public DbSet<ProductionTask> ProductionTasks { get; set; }
         public DbSet<WorkInterval> WorkIntervals { get; set; }
         public DbSet<EmployeeStat> EmployeeStats { get; set; }
