@@ -13,9 +13,23 @@ public static class DatabaseInitializer
 
         if (db.Database.IsNpgsql())
         {
-            if (!await db.Database.CanConnectAsync())
+            var rawConn = db.Database.GetConnectionString() ?? "";
+            logger.LogInformation("PostgreSQL: {Connection}", PostgresConnectionHelper.Mask(rawConn));
+
+            try
+            {
+                await db.Database.OpenConnectionAsync();
+                await db.Database.CloseConnectionAsync();
+            }
+            catch (Exception ex)
+            {
                 throw new InvalidOperationException(
-                    "Не удалось подключиться к PostgreSQL. Проверьте ConnectionStrings:DefaultConnection и что сервер запущен (docker compose -f docker-compose.postgres.yml up -d).");
+                    $"Не удалось подключиться к PostgreSQL ({PostgresConnectionHelper.Mask(rawConn)}). " +
+                    "Для 1gb.ru в секрете GitHub укажите SSL Mode=Disable. " +
+                    $"Детали: {ex.Message}",
+                    ex);
+            }
+
             logger.LogInformation("Подключение к PostgreSQL установлено.");
         }
 

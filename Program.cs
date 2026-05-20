@@ -51,6 +51,7 @@ try
     var usePostgres = !string.IsNullOrWhiteSpace(postgresConnection);
     if (usePostgres)
     {
+        postgresConnection = PostgresConnectionHelper.Normalize(postgresConnection);
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(postgresConnection, npgsql =>
                 npgsql.EnableRetryOnFailure(maxRetryCount: 3)));

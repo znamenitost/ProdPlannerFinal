@@ -50,15 +50,68 @@ jobs:
             exit 0
           fi
           python3 << 'PY'
-          import json, os
+          import json, os, re
+
+          def normalize_1gb(conn: str) -> str:
+              conn = conn.strip()
+              if "SSL Mode" not in conn and "Ssl Mode" not in conn:
+                  conn += ";SSL Mode=Disable"
+              if "Timeout" not in conn:
+                  conn += ";Timeout=30"
+              if "Command Timeout" not in conn:
+                  conn += ";Command Timeout=60"
+              return conn
+
+          def escape_xml_attr(value: str) -> str:
+              return (
+                  value.replace("&", "&amp;")
+                  .replace('"', "&quot;")
+                  .replace("<", "&lt;")
+              )
+
+          conn = normalize_1gb(os.environ["POSTGRES_CONNECTION_STRING"])
+
           path = "publish/appsettings.Production.json"
           with open(path, encoding="utf-8") as f:
               cfg = json.load(f)
-          cfg.setdefault("ConnectionStrings", {})["DefaultConnection"] = os.environ["POSTGRES_CONNECTION_STRING"]
+          cfg.setdefault("ConnectionStrings", {})["DefaultConnection"] = conn
           with open(path, "w", encoding="utf-8") as f:
               json.dump(cfg, f, indent=2, ensure_ascii=False)
               f.write("\n")
-          print("ConnectionStrings:DefaultConnection записан в appsettings.Production.json")
+          print("appsettings.Production.json: connection string записан (SSL Mode=Disable для 1gb)")
+
+          web_config = "publish/web.config"
+          with open(web_config, encoding="utf-8") as f:
+              xml = f.read()
+
+          env_line = (
+              '          <environmentVariable name="ConnectionStrings__DefaultConnection" '
+              f'value="{escape_xml_attr(conn)}" />'
+          )
+
+          if "ConnectionStrings__DefaultConnection" in xml:
+              xml = re.sub(
+                  r'<environmentVariable name="ConnectionStrings__DefaultConnection" value="[^"]*"\s*/>',
+                  env_line.strip(),
+                  xml,
+                  count=1,
+              )
+          else:
+              xml = xml.replace(
+                  '<environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />',
+                  '<environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />\n' + env_line,
+              )
+
+          with open(web_config, "w", encoding="utf-8") as f:
+              f.write(xml)
+          print("web.config: ConnectionStrings__DefaultConnection добавлен")
+
+          host = ""
+          for part in conn.split(";"):
+              if part.strip().lower().startswith("host="):
+                  host = part.split("=", 1)[1].strip()
+                  break
+          print(f"Проверка: Host={host or '?'}")
           PY
 
       - name: Validate FTP secrets
