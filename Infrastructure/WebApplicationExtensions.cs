@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using ProductionPlanner.Data;
 using ProductionPlanner.Hubs;
 using ProductionPlanner.Services;
@@ -38,6 +39,11 @@ public static class WebApplicationExtensions
         var avatarsDir = Path.Combine(app.Environment.WebRootPath, "avatars");
         if (!Directory.Exists(avatarsDir))
             Directory.CreateDirectory(avatarsDir);
+
+        app.UseForwardedHeaders(new ForwardedHeadersOptions
+        {
+            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+        });
 
         if (app.Environment.IsDevelopment())
         {

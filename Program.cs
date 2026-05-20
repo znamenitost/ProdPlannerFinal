@@ -7,7 +7,9 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.WebHost.UseUrls("http://0.0.0.0:5234", "http://localhost:5234");
+// Локально — порт 5234. На IIS (1gb) порт задаёт ANCM через ASPNETCORE_PORT — UseUrls не переопределяем.
+if (builder.Environment.IsDevelopment())
+    builder.WebHost.UseUrls("http://0.0.0.0:5234", "http://localhost:5234");
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -71,11 +73,13 @@ builder.Services.AddAuthorization();
 builder.Services.AddProductionPlannerServices();
 builder.Services.AddSignalR();
 
+var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
+    ?? ["http://localhost:5173"];
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReact", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins(corsOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
