@@ -1,14 +1,32 @@
 import { TableRow, TableCell, Box, IconButton, Tooltip, Typography, Chip } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { Person, Comment as CommentIcon } from '@mui/icons-material';
 import {
-  truncate,
   getStatusColor,
   getStatusIcon,
-  isOverdue,
-  isTaskBelongsToUser
+  isOverdue
 } from '../utils/taskHelpers';
+import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
+import {
+  COL_ICON,
+  COL_TASK,
+  COL_FILE,
+  COL_COMMENT,
+  COL_DEADLINE,
+  COL_EMPLOYEE,
+  COL_STATUS,
+  COL_ACTIONS,
+  cellDisplayTextSx
+} from '../utils/taskTableStyles';
+import { formatCommentForDisplay, commentDisplaySx } from '../utils/commentLimits';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
-import { COL_ACTIONS } from '../utils/taskTableStyles';
+import { childRowSx } from '../theme/surfaces';
+
+function formatDeadline(deadline) {
+  if (!deadline) return '—';
+  const d = new Date(deadline);
+  return `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+}
 
 export default function ChildTaskRow({
   task,
@@ -17,11 +35,13 @@ export default function ChildTaskRow({
   onPause,
   onResume,
   onComplete,
+  pendingLifecycleTaskId = null,
   onOpenComment,
   canChangeStatus,
   currentUser,
   highlightMyTasks,
-  selectedEmployeeForHighlight
+  selectedEmployeeForHighlight,
+  showHoursTypeColumns = true
 }) {
   const overdue = isOverdue(task.deadline, task.statusText);
   const displayStatusIcon = getStatusIcon(task.statusText);
@@ -42,111 +62,162 @@ export default function ChildTaskRow({
 
   const getRowStyle = () => {
     let style = {
-      '&:hover': { bgcolor: '#f8fafc' },
-      position: 'relative'
+      ...childRowSx,
+      '&:hover': { bgcolor: 'action.hover' }
     };
-    let bgColor = overdue && task.statusText !== 'Готово' ? '#fef2f2' : 'inherit';
+    let bgColor;
+    if (overdue && task.statusText !== 'Готово') {
+      bgColor = (t) => alpha(t.palette.error.main, 0.06);
+    }
     if (highlightMyTasks) {
       if (isMine) {
-        bgColor = '#e6f7ff';
-        style.boxShadow = 'inset 0 0 0 2px #1890ff';
-        style.borderRadius = '4px';
+        bgColor = 'info.light';
+        style.boxShadow = (t) => `inset 0 0 0 2px ${t.palette.info.main}`;
+        style.borderRadius = 1;
       } else {
-        style.opacity = '0.65';
-        style['&:hover'] = { bgcolor: '#f8fafc', opacity: '0.85' };
+        style.opacity = 0.65;
+        style['&:hover'] = { opacity: 0.85 };
       }
     }
-    return { ...style, bgcolor: bgColor };
+    return bgColor ? { ...style, bgcolor: bgColor } : style;
   };
 
   const showActionButtons = canUserManage() && canChangeStatus;
 
   return (
     <TableRow sx={getRowStyle()}>
-      <TableCell sx={{ width: '3%', p: 0, position: 'relative' }}>
-        <Box
-          sx={{
-            position: 'absolute',
-            left: '16px',
-            top: '-8px',
-            width: '24px',
-            height: 'calc(100% + 8px)',
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              width: '16px',
-              height: '50%',
-              borderLeft: '2px solid #cbd5e1',
-              borderBottom: '2px solid #cbd5e1',
-              borderBottomLeftRadius: '8px',
-            }
-          }}
-        />
-      </TableCell>
-      
-      <TableCell sx={{ width: '15%' }} />
-      <TableCell sx={{ width: '10%' }} />
-      
-      <TableCell sx={{ width: '20%' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Tooltip title={task.comment || 'Нет комментария'} arrow placement="top"
-            slotProps={{ tooltip: { sx: { bgcolor: '#1e293b', fontSize: '12px', padding: '8px 15px', maxWidth: '400px', borderRadius: 2 } } }}
+      <TableCell sx={COL_ICON}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
+          <Box
+            sx={{
+              width: 28,
+              height: 34,
+              flexShrink: 0,
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
           >
-            <Typography variant="body2" sx={{
-              color: 'text.secondary',
-              fontSize: '0.8rem',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              wordBreak: 'break-word',
-              maxWidth: '100%',
-              cursor: 'default'
-            }}>
-              {truncate(task.comment || '—', 25)}
+            <Box
+              sx={{
+                position: 'absolute',
+                left: 12,
+                top: 0,
+                width: 14,
+                height: '50%',
+                borderLeft: '2px solid #cbd5e1',
+                borderBottom: '2px solid #cbd5e1',
+                borderBottomLeftRadius: '6px'
+              }}
+            />
+          </Box>
+          <Box sx={{ width: 34, height: 34, flexShrink: 0 }} />
+        </Box>
+      </TableCell>
+
+      <TableCell sx={COL_TASK} />
+      <TableCell sx={COL_FILE} />
+
+      <TableCell sx={COL_COMMENT}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
+          <Tooltip
+            title={task.comment || 'Нет комментария'}
+            arrow
+            placement="top"
+            slotProps={{
+              tooltip: {
+                sx: {
+                  bgcolor: '#1e293b',
+                  fontSize: '12px',
+                  padding: '8px 15px',
+                  maxWidth: '400px',
+                  borderRadius: 2
+                }
+              }
+            }}
+          >
+            <Typography variant="body2" sx={{ color: 'text.secondary', ...commentDisplaySx, cursor: 'default' }}>
+              {formatCommentForDisplay(task.comment)}
             </Typography>
           </Tooltip>
-          <IconButton size="small" onClick={() => onOpenComment(task)} sx={{ p: 0.5, flexShrink: 0 }}>
-            <CommentIcon fontSize="small" sx={{ fontSize: 14, color: '#7c9ebf' }} />
+          <IconButton size="small" color="primary" onClick={() => onOpenComment(task)} sx={{ p: 0.5, flexShrink: 0 }}>
+            <CommentIcon fontSize="small" sx={{ fontSize: 14 }} />
           </IconButton>
         </Box>
       </TableCell>
-      
-      <TableCell sx={{ width: '10%', display: 'none' }} />
-      
-      <TableCell align="center" sx={{ width: '6%' }}>
-        <Typography variant="body2" sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+
+      <TableCell sx={COL_DEADLINE}>
+        <Typography
+          variant="body2"
+          sx={{ color: overdue ? '#dc2626' : 'inherit', ...cellDisplayTextSx }}
+        >
+          {formatDeadline(task.deadline)}
+        </Typography>
+      </TableCell>
+
+      <TableCell align="center" sx={hoursColumnSx(showHoursTypeColumns)}>
+        <Typography variant="body2" sx={cellDisplayTextSx}>
           {task.estimateHours.toFixed(1)} ч
         </Typography>
       </TableCell>
-      
-      <TableCell sx={{ width: '8%' }}>
+
+      <TableCell sx={typeColumnSx(showHoursTypeColumns)}>
         <Tooltip title={task.type} arrow>
-          <Chip label={truncate(task.type, 20)} size="small" variant="outlined" sx={{ fontSize: '0.7rem', maxWidth: '100%' }} />
+          <Chip
+            label={task.type || '—'}
+            size="small"
+            variant="outlined"
+            sx={{
+              fontSize: '0.75rem',
+              whiteSpace: 'nowrap',
+              height: 'auto',
+              '& .MuiChip-label': { whiteSpace: 'nowrap' }
+            }}
+          />
         </Tooltip>
       </TableCell>
-      
-      <TableCell sx={{ width: '8%' }}>
-        <Chip icon={<Person sx={{ fontSize: 14 }} />} label={task.employeeName} size="small" variant="outlined" sx={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
+
+      <TableCell sx={COL_EMPLOYEE}>
+        <Chip
+          icon={<Person sx={{ fontSize: 14 }} />}
+          label={task.employeeName}
+          size="small"
+          variant="outlined"
+          sx={{
+            fontSize: '0.75rem',
+            whiteSpace: 'nowrap',
+            height: 'auto',
+            '& .MuiChip-label': { whiteSpace: 'nowrap' }
+          }}
+        />
       </TableCell>
-      
-      <TableCell sx={{ width: '8%' }}>
-        <Chip icon={displayStatusIcon} label={task.statusText || "Назначена"} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
+
+      <TableCell sx={COL_STATUS}>
+        <Chip
+          icon={displayStatusIcon}
+          label={task.statusText || 'Назначена'}
+          size="small"
+          sx={{
+            bgcolor: displayStatusColor,
+            color: 'white',
+            fontSize: '0.7rem',
+            whiteSpace: 'nowrap'
+          }}
+        />
       </TableCell>
-      
+
       <TableCell sx={COL_ACTIONS}>
-        {showActionButtons ? (
+        {showActionButtons && (
           <EmployeeStatusButtons
             task={task}
+            pending={pendingLifecycleTaskId === task.id}
             onStart={onStart}
             onPause={onPause}
             onResume={onResume}
             onComplete={onComplete}
           />
-        ) : null}
+        )}
       </TableCell>
     </TableRow>
   );

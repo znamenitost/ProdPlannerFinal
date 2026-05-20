@@ -283,5 +283,76 @@ public async Task DeleteTaskAsync(int id)
                 .Where(t => t.EmployeeName == employeeName)
                 .ToListAsync();
         }
+
+        public async Task ExecuteInTransactionAsync(Func<Task> action)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    await action();
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+        public async Task<int> CloseOpenIntervalsAsync(int taskId, DateTime closedAt)
+        {
+            return await _context.WorkIntervals
+                .Where(i => i.ProductionTaskId == taskId && i.EndTime == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(i => i.EndTime, closedAt));
+        }
+
+        public async Task<int> TryTransitionStatusAsync(
+            int taskId,
+            JobStatus newStatus,
+            DateTime updatedAt,
+            IReadOnlyList<JobStatus>? expectedStatuses = null,
+            TaskStatusPatch? patch = null)
+        {
+            var query = _context.ProductionTasks.Where(t => t.Id == taskId);
+
+            if (expectedStatuses is { Count: > 0 })
+                query = query.Where(t => expectedStatuses.Contains(t.Status));
+            else if (newStatus == JobStatus.Completed)
+                query = query.Where(t => t.Status != JobStatus.Completed);
+
+            var rows = await query.ExecuteUpdateAsync(s =>
+                s.SetProperty(t => t.Status, newStatus)
+                    .SetProperty(t => t.UpdatedAt, updatedAt));
+
+            if (rows == 0 || patch == null)
+                return rows;
+
+            var patchQuery = _context.ProductionTasks.Where(t => t.Id == taskId);
+
+            if (patch.Progress is double progress)
+                await patchQuery.ExecuteUpdateAsync(s => s.SetProperty(t => t.Progress, progress));
+
+            if (patch.CompletedAt is DateTime completedAt)
+                await patchQuery.ExecuteUpdateAsync(s => s.SetProperty(t => t.CompletedAt, completedAt));
+
+            if (patch.ClearCompletedAt)
+                await patchQuery.ExecuteUpdateAsync(s => s.SetProperty(t => t.CompletedAt, (DateTime?)null));
+
+            if (patch.ActualHours is double actualHours)
+                await patchQuery.ExecuteUpdateAsync(s => s.SetProperty(t => t.ActualHours, actualHours));
+
+            return rows;
+        }
+
+        public void StageWorkInterval(WorkInterval interval)
+        {
+            _context.WorkIntervals.Add(interval);
+        }
+
+        public Task SaveChangesAsync() => _context.SaveChangesAsync();
     }
 }

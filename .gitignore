@@ -5,6 +5,10 @@ wwwroot/
 *.db
 *.db-shm
 *.db-wal
+appsettings.Production.local.json
+appsettings.*.local.json
+.env
+.env.*
 node_modules/
 frontend/dist/
 .DS_Store

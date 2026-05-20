@@ -6,9 +6,26 @@ export default function useTaskTableApi() {
   const handleResponse = useCallback(async (response) => {
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(text || `Ошибка ${response.status}`);
+      let message = text || `Ошибка ${response.status}`;
+      try {
+        const body = JSON.parse(text);
+        if (body?.error) message = body.error;
+        if (response.status === 409) {
+          const err = new Error(message);
+          err.code = body?.code || 'concurrency_conflict';
+          err.status = 409;
+          throw err;
+        }
+      } catch (parseErr) {
+        if (parseErr?.status === 409) throw parseErr;
+      }
+      throw new Error(message);
     }
-    return response.json();
+    const contentType = response.headers.get('content-type');
+    if (contentType?.includes('application/json')) {
+      return response.json();
+    }
+    return null;
   }, []);
 
   const loadRows = useCallback(async (page = 1, pageSize = 50, selectedEmployee = '') => {

@@ -2,24 +2,20 @@ import { Fragment } from 'react';
 import {
   TableRow,
   TableCell,
-  Table,
-  TableBody,
   Box,
   IconButton,
   Tooltip,
   Typography,
-  Chip,
-  Collapse
+  Chip
 } from '@mui/material';
 import {
   FolderOpen,
   ExpandMore,
   ChevronRight,
   Person,
-  Comment as CommentIcon,
-  } from '@mui/icons-material';
+  Comment as CommentIcon
+} from '@mui/icons-material';
 import {
-  truncate,
   getStatusColor,
   getStatusIcon,
   getParentEmployeeDisplay,
@@ -29,7 +25,19 @@ import {
 import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionsMenu from './TaskAdminActionsMenu';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
-import { COL_ACTIONS } from '../utils/taskTableStyles';
+import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
+import {
+  COL_ICON,
+  COL_TASK,
+  COL_FILE,
+  COL_COMMENT,
+  COL_DEADLINE,
+  COL_EMPLOYEE,
+  COL_STATUS,
+  COL_ACTIONS,
+  cellDisplayTextSx
+} from '../utils/taskTableStyles';
+import { formatCommentForDisplay, commentDisplaySx } from '../utils/commentLimits';
 
 export default function ParentTaskRow({
   task,
@@ -41,16 +49,17 @@ export default function ParentTaskRow({
   onPause,
   onResume,
   onComplete,
+  pendingLifecycleTaskId = null,
   onEdit,
   onDelete,
-  onOpenAssigneeModal,
   onOpenComment,
   canEdit,
   canDelete,
   canChangeStatus,
   currentUser,
   highlightMyTasks,
-  selectedEmployeeForHighlight
+  selectedEmployeeForHighlight,
+  showHoursTypeColumns = true
 }) {
   const overdue = isOverdue(task.deadline, task.statusText);
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
@@ -116,7 +125,7 @@ export default function ParentTaskRow({
     <Fragment>
       <TableRow sx={getRowStyle()}>
         {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}
-        <TableCell sx={{ width: '3%' }}>
+        <TableCell sx={COL_ICON}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
             {hasChildren && (
               <IconButton size="small" onClick={() => onToggleExpand(task.id)}>
@@ -133,40 +142,29 @@ export default function ParentTaskRow({
           </Box>
         </TableCell>
 
-        <TableCell sx={{ width: '15%' }}>
+        <TableCell sx={COL_TASK}>
           <Tooltip title={task.folderPath || ''} arrow>
-            <Typography variant="body2" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {truncate(shortFolderPath, 50)}
+            <Typography variant="body2" sx={{ fontWeight: 600, ...cellDisplayTextSx }}>
+              {shortFolderPath || task.folderPath || '—'}
             </Typography>
           </Tooltip>
         </TableCell>
 
-        <TableCell sx={{ width: '10%' }}>
+        <TableCell sx={COL_FILE}>
           <Tooltip title={task.fileName || ''} arrow>
-            <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {truncate(task.fileName || '', 50)}
+            <Typography variant="body2" sx={cellDisplayTextSx}>
+              {task.fileName || '—'}
             </Typography>
           </Tooltip>
         </TableCell>
 
-        <TableCell sx={{ width: '20%' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <TableCell sx={COL_COMMENT}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
             <Tooltip title={task.comment || 'Нет комментария'} arrow placement="top"
               slotProps={{ tooltip: { sx: { bgcolor: '#1e293b', fontSize: '12px', padding: '8px 15px', maxWidth: '400px', borderRadius: 2 } } }}
             >
-              <Typography variant="body2" sx={{
-                color: 'text.secondary',
-                fontSize: '0.8rem',
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                wordBreak: 'break-word',
-                maxWidth: '100%',
-                cursor: 'default'
-              }}>
-                {truncate(task.comment || '—', 25)}
+              <Typography variant="body2" sx={{ color: 'text.secondary', ...commentDisplaySx, cursor: 'default' }}>
+                {formatCommentForDisplay(task.comment)}
               </Typography>
             </Tooltip>
             <IconButton size="small" onClick={() => onOpenComment(task)} sx={{ p: 0.5, flexShrink: 0 }}>
@@ -175,34 +173,31 @@ export default function ParentTaskRow({
           </Box>
         </TableCell>
 
-        <TableCell sx={{ width: '10%' }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <Typography variant="body2" sx={{ color: overdue ? '#dc2626' : 'inherit', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-              {new Date(task.deadline).toLocaleDateString()}
-            </Typography>
-            <Typography variant="caption" sx={{ color: overdue ? '#dc2626' : 'text.secondary', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
-              {new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </Typography>
-          </Box>
+        <TableCell sx={COL_DEADLINE}>
+          <Typography variant="body2" sx={{ color: overdue ? '#dc2626' : 'inherit', ...cellDisplayTextSx }}>
+            {new Date(task.deadline).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+            {' '}
+            {new Date(task.deadline).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+          </Typography>
         </TableCell>
 
-        <TableCell align="center" sx={{ width: '6%' }}>
-          <Typography variant="body2" sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+        <TableCell align="center" sx={hoursColumnSx(showHoursTypeColumns)}>
+          <Typography variant="body2" sx={cellDisplayTextSx}>
             {task.estimateHours?.toFixed(1) || '0.0'} ч
           </Typography>
         </TableCell>
 
-        <TableCell sx={{ width: '8%' }}>
+        <TableCell sx={typeColumnSx(showHoursTypeColumns)}>
           <Tooltip title={task.type} arrow>
-            <Chip label={truncate(task.type, 20)} size="small" variant="outlined" sx={{ fontSize: '0.7rem', maxWidth: '100%' }} />
+            <Chip label={task.type || '—'} size="small" variant="outlined" sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap', height: 'auto', '& .MuiChip-label': { whiteSpace: 'nowrap' } }} />
           </Tooltip>
         </TableCell>
 
-        <TableCell sx={{ width: '8%' }}>
-          <Chip icon={<Person sx={{ fontSize: 14 }} />} label={employeeDisplay} size="small" variant="outlined" sx={{ fontSize: '0.7rem', whiteSpace: 'nowrap', maxWidth: '100%' }} />
+        <TableCell sx={COL_EMPLOYEE}>
+          <Chip icon={<Person sx={{ fontSize: 14 }} />} label={employeeDisplay} size="small" variant="outlined" sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap', height: 'auto', '& .MuiChip-label': { whiteSpace: 'nowrap' } }} />
         </TableCell>
 
-        <TableCell sx={{ width: '8%' }}>
+        <TableCell sx={COL_STATUS}>
           {hasChildren ? (
             <Chip icon={displayStatusIcon} label={displayStatus} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
           ) : (
@@ -212,7 +207,7 @@ export default function ParentTaskRow({
 
         <TableCell sx={COL_ACTIONS}>
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center', justifyContent: 'flex-start' }}>
-            {canEdit && (
+            {canEdit && canDelete && (
               <TaskAdminActionsMenu
                 onEdit={() => onEdit(task)}
                 onDelete={() => onDelete(task.id)}
@@ -221,6 +216,7 @@ export default function ParentTaskRow({
             {showActionButtons && (
               <EmployeeStatusButtons
                 task={task}
+                pending={pendingLifecycleTaskId === task.id}
                 onStart={onStart}
                 onPause={onPause}
                 onResume={onResume}
@@ -231,34 +227,24 @@ export default function ParentTaskRow({
         </TableCell>
       </TableRow>
 
-      {hasChildren && isExpanded && (
-        <TableRow>
-          <TableCell colSpan={10} sx={{ p: 0 }}>
-            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-              <Table size="small" sx={{ width: '100%', pl: 6 }}>
-                <TableBody>
-                  {(childrenTasks || []).map(child => (
-                    <ChildTaskRow
-                      key={child.id}
-                      task={child}
-                      onOpenFile={onOpenFile}
-                      onStart={onStart}
-                      onPause={onPause}
-                      onResume={onResume}
-                      onComplete={onComplete}
-                      onOpenComment={onOpenComment}
-                      canChangeStatus={canChangeStatus}
-                      currentUser={currentUser}
-                      highlightMyTasks={highlightMyTasks}
-                      selectedEmployeeForHighlight={selectedEmployeeForHighlight}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </Collapse>
-          </TableCell>
-        </TableRow>
-      )}
+      {hasChildren && isExpanded && (childrenTasks || []).map((child) => (
+        <ChildTaskRow
+          key={child.id}
+          task={child}
+          onOpenFile={onOpenFile}
+          onStart={onStart}
+          onPause={onPause}
+          onResume={onResume}
+          onComplete={onComplete}
+          pendingLifecycleTaskId={pendingLifecycleTaskId}
+          onOpenComment={onOpenComment}
+          canChangeStatus={canChangeStatus}
+          currentUser={currentUser}
+          highlightMyTasks={highlightMyTasks}
+          selectedEmployeeForHighlight={selectedEmployeeForHighlight}
+          showHoursTypeColumns={showHoursTypeColumns}
+        />
+      ))}
     </Fragment>
   );
 }

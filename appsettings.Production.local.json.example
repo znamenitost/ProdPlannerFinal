@@ -1,0 +1,5 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=postgres82.1gb.ru;Port=5432;Database=xgb_bdmain;Username=xgb_bdmain;Password=ВАШ_ПАРОЛЬ;SSL Mode=Prefer;Trust Server Certificate=true"
+  }
+}

@@ -43,15 +43,10 @@ export default function LoginForm({ onLogin }) {
         credentials: 'include'
       });
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Ошибка входа');
-      }
-
+      const data = await parseAuthResponse(response);
       onLogin(data);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Ошибка входа');
     } finally {
       setLoading(false);
     }
@@ -69,19 +64,33 @@ export default function LoginForm({ onLogin }) {
         credentials: 'include'
       });
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Ошибка входа');
-      }
-
+      const data = await parseAuthResponse(response);
       onLogin(data);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Ошибка входа');
     } finally {
       setLoading(false);
     }
   };
+
+  async function parseAuthResponse(response) {
+    const text = await response.text();
+    if (!text) {
+      throw new Error(
+        'API недоступен. Запустите бэкенд в отдельном терминале: dotnet run (порт 5234)'
+      );
+    }
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error('Некорректный ответ сервера');
+    }
+    if (!response.ok) {
+      throw new Error(data.message || data.error || 'Ошибка входа');
+    }
+    return data;
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -95,13 +104,18 @@ export default function LoginForm({ onLogin }) {
   return (
     <Container maxWidth="sm">
       <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 4 }}>
-        <Avatar sx={{ m: 1, bgcolor: 'primary.main', width: 64, height: 64 }}>
-          <LoginIcon sx={{ fontSize: 32 }} />
+        <Avatar sx={{ m: 1, bgcolor: 'primary.main', width: 64, height: 64, boxShadow: (t) => `0 8px 24px ${alpha(t.palette.primary.main, 0.25)}` }}>
+          <LoginIcon sx={{ fontSize: 36 }} />
         </Avatar>
-        
-        <Typography variant="h1" gutterBottom sx={{ mt: 1 }}>Mainstream Assistant</Typography>
+
+        <Typography variant="h1" gutterBottom sx={{ mt: 1 }}>
+          Mainstream Assistant
+        </Typography>
+
         <Paper sx={{ ...glassPaperSx, p: 4, width: '100%', mt: 2 }}>
-          <Typography variant="h2" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>Вход в систему</Typography>
+          <Typography variant="h2" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>
+            Вход в систему
+          </Typography>
           
           <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1, mb: 3 }}>
             <Button
@@ -137,12 +151,15 @@ export default function LoginForm({ onLogin }) {
                       <Card 
                         key={emp}
                         onClick={() => setSelectedEmployee(emp)}
-                        sx={(theme) => ({ 
+                        sx={(theme) => ({
                           flex: 1,
                           cursor: 'pointer',
-                          border: selectedEmployee === emp ? '2px solid' : '1px solid',
-                          borderColor: selectedEmployee === emp ? theme.palette.primary.main : theme.palette.divider,
-                          bgcolor: selectedEmployee === emp ? alpha(theme.palette.primary.main, 0.08) : alpha('#fff', 0.5),
+                          border: selectedEmployee === emp
+                            ? `2px solid ${theme.palette.primary.main}`
+                            : `1px solid ${alpha(theme.palette.divider, 1)}`,
+                          bgcolor: selectedEmployee === emp
+                            ? alpha(theme.palette.primary.main, 0.08)
+                            : alpha('#ffffff', 0.5),
                           transition: 'all 0.2s',
                           '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.light }
                         })}
@@ -187,8 +204,8 @@ export default function LoginForm({ onLogin }) {
                 type="submit"
                 variant="contained"
                 size="large"
-                disabled={loading}
                 fullWidth
+                disabled={loading}
                 startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <LoginIcon />}
                 sx={{ mt: 2 }}
               >

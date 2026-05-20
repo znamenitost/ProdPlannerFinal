@@ -19,13 +19,18 @@ public static class DatabaseInitializer
             logger.LogInformation("Подключение к PostgreSQL установлено.");
         }
 
-        var created = await db.Database.EnsureCreatedAsync();
-        logger.LogInformation(created ? "База данных создана." : "База данных уже существует.");
-
-        if (db.Database.IsSqlite())
-            await ApplySqliteSchemaPatchesAsync(db, logger);
-        else if (db.Database.IsNpgsql())
+        if (db.Database.IsNpgsql())
+        {
+            await db.Database.MigrateAsync();
+            logger.LogInformation("Схема PostgreSQL применена (EF migrations).");
             await ApplyPostgresSchemaPatchesAsync(db, logger);
+        }
+        else
+        {
+            var created = await db.Database.EnsureCreatedAsync();
+            logger.LogInformation(created ? "База SQLite создана." : "База SQLite уже существует.");
+            await ApplySqliteSchemaPatchesAsync(db, logger);
+        }
 
         await IdentitySeedService.SeedAsync(scope.ServiceProvider);
     }

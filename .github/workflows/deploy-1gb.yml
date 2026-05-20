@@ -41,6 +41,26 @@ jobs:
           cp -r frontend/dist/* publish/wwwroot/
           test -f publish/wwwroot/index.html
 
+      - name: Configure PostgreSQL connection for production
+        env:
+          POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
+        run: |
+          if [ -z "$POSTGRES_CONNECTION_STRING" ]; then
+            echo "::warning::Секрет POSTGRES_CONNECTION_STRING не задан — на сервере останется SQLite (App_Data) или пустая строка в appsettings"
+            exit 0
+          fi
+          python3 << 'PY'
+          import json, os
+          path = "publish/appsettings.Production.json"
+          with open(path, encoding="utf-8") as f:
+              cfg = json.load(f)
+          cfg.setdefault("ConnectionStrings", {})["DefaultConnection"] = os.environ["POSTGRES_CONNECTION_STRING"]
+          with open(path, "w", encoding="utf-8") as f:
+              json.dump(cfg, f, indent=2, ensure_ascii=False)
+              f.write("\n")
+          print("ConnectionStrings:DefaultConnection записан в appsettings.Production.json")
+          PY
+
       - name: Validate FTP secrets
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}

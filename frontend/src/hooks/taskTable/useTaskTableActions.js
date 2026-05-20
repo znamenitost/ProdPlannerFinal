@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { combineDateTime, DEFAULT_TIME } from '../../utils/dateTimeHelpers';
 
 export default function useTaskTableActions({
@@ -14,6 +14,8 @@ export default function useTaskTableActions({
   showWarning,
   confirm
 }) {
+  const [pendingLifecycleTaskId, setPendingLifecycleTaskId] = useState(null);
+
   const handleSaveNewRow = useCallback(async () => {
     const isShared = newRow.isSharedTask && newRow.assigneeParts?.length >= 2;
     const hasSingleAssignee = Boolean(newRow.employeeName);
@@ -93,6 +95,9 @@ export default function useTaskTableActions({
   }, [api, refresh, setEditingId, showError]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
+    if (pendingLifecycleTaskId === row.id) return;
+
+    setPendingLifecycleTaskId(row.id);
     try {
       await action(row.id);
       await refresh();
@@ -101,9 +106,17 @@ export default function useTaskTableActions({
       }
     } catch (err) {
       console.error(err);
+      if (err?.code === 'concurrency_conflict') {
+        await refresh();
+        if (row.parentRowNumber) {
+          await refreshChildren(row.parentRowNumber);
+        }
+      }
       showError(err.message || 'Не удалось выполнить действие с задачей');
+    } finally {
+      setPendingLifecycleTaskId(null);
     }
-  }, [refresh, refreshChildren, showError]);
+  }, [pendingLifecycleTaskId, refresh, refreshChildren, showError]);
 
   const handleStartTask = useCallback(
     (row) => runLifecycleAction(api.startTask, row),
@@ -155,6 +168,7 @@ export default function useTaskTableActions({
   }, [setNewRow]);
 
   return {
+    pendingLifecycleTaskId,
     handleSaveNewRow,
     handleUpdateRow,
     handleStartTask,

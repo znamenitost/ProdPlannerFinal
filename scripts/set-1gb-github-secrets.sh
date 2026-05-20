@@ -23,4 +23,11 @@ gh secret set FTP_USERNAME --env "$ENV_NAME" --repo "$REPO" --body "$FTP_USERNAM
 gh secret set FTP_PASSWORD --env "$ENV_NAME" --repo "$REPO" --body "$FTP_PASSWORD"
 gh secret set FTP_SERVER_DIR --env "$ENV_NAME" --repo "$REPO" --body "$FTP_SERVER_DIR"
 
+if [ -n "${POSTGRES_CONNECTION_STRING:-}" ]; then
+  gh secret set POSTGRES_CONNECTION_STRING --env "$ENV_NAME" --repo "$REPO" --body "$POSTGRES_CONNECTION_STRING"
+  echo "POSTGRES_CONNECTION_STRING записан."
+else
+  echo "Подсказка: POSTGRES_CONNECTION_STRING='Host=postgres82.1gb.ru;...' $0 — для PostgreSQL на 1gb"
+fi
+
 echo "Секреты записаны в Environment $ENV_NAME. Запустите Deploy to 1gb.ru в Actions."

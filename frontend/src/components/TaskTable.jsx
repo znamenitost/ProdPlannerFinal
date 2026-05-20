@@ -29,7 +29,7 @@ export default function TaskTable({
   });
 
   return (
-    <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 1 }}>
+    <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
       <TaskTableToolbar
         isAdmin={isAdmin}
         onAddNew={table.handleAddNewRow}
@@ -38,8 +38,8 @@ export default function TaskTable({
       />
 
       <TableContainer sx={{ maxHeight: '70vh', overflow: 'auto' }}>
-        <Table stickyHeader size="small">
-          <TaskTableHead isAdmin={isAdmin} />
+        <Table stickyHeader size="small" sx={{ tableLayout: 'auto', width: 'max-content', minWidth: '100%' }}>
+          <TaskTableHead isAdmin={isAdmin} showHoursTypeColumns={table.showHoursTypeColumns} />
           <TableBody>
             {table.newRow && isAdmin && (
               <NewTaskRow
@@ -48,6 +48,7 @@ export default function TaskTable({
                 onSave={table.handleSaveNewRow}
                 onCancel={() => table.setNewRow(null)}
                 onOpenAssigneeModal={table.handleOpenNewSharedModal}
+                showHoursTypeColumns={table.showHoursTypeColumns}
               />
             )}
             {table.rows.map(parent => {
@@ -60,6 +61,7 @@ export default function TaskTable({
                   onUpdate={table.handleUpdateRow}
                   onCancel={() => table.setEditingId(null)}
                   onOpenAssigneeModal={table.handleOpenAssigneeModal}
+                  showHoursTypeColumns={table.showHoursTypeColumns}
                 />
               ) : (
                 <ParentTaskRow
@@ -73,9 +75,9 @@ export default function TaskTable({
                   onPause={table.handlePauseTask}
                   onResume={table.handleResumeTask}
                   onComplete={table.handleCompleteTask}
+                  pendingLifecycleTaskId={table.pendingLifecycleTaskId}
                   onEdit={() => table.setEditingId(parent.id)}
                   onDelete={table.handleDeleteRow}
-                  onOpenAssigneeModal={table.handleOpenAssigneeModal}
                   onOpenComment={table.handleOpenComment}
                   canEdit={isAdmin}
                   canDelete={isAdmin}
@@ -83,6 +85,7 @@ export default function TaskTable({
                   currentUser={currentUser}
                   highlightMyTasks={table.highlightMyTasks}
                   selectedEmployeeForHighlight={selectedEmployeeForHighlight}
+                  showHoursTypeColumns={table.showHoursTypeColumns}
                 />
               );
             })}

@@ -4,6 +4,7 @@ import { compactActionButtonSx } from '../theme/surfaces';
 
 export default function EmployeeStatusButtons({
   task,
+  pending = false,
   onStart,
   onPause,
   onResume,
@@ -14,6 +15,7 @@ export default function EmployeeStatusButtons({
   const isStarted = status === 'Начал';
   const isPaused = status === 'Пауза';
   const canStart = !isDone && !isStarted && !isPaused;
+  const isDisabled = pending;
 
   const handlePauseClick = () => {
     if (isPaused) onResume(task);
@@ -26,7 +28,7 @@ export default function EmployeeStatusButtons({
         size="small"
         variant={isStarted ? 'contained' : 'outlined'}
         color="success"
-        disabled={!canStart}
+        disabled={!canStart || isDisabled}
         startIcon={<PlayArrow sx={{ fontSize: '14px !important' }} />}
         onClick={() => onStart(task)}
         sx={compactActionButtonSx}
@@ -37,7 +39,7 @@ export default function EmployeeStatusButtons({
         size="small"
         variant={isPaused ? 'contained' : 'outlined'}
         color="warning"
-        disabled={isDone || (!isStarted && !isPaused)}
+        disabled={isDone || (!isStarted && !isPaused) || isDisabled}
         startIcon={<Pause sx={{ fontSize: '14px !important' }} />}
         onClick={handlePauseClick}
         sx={compactActionButtonSx}
@@ -48,7 +50,7 @@ export default function EmployeeStatusButtons({
         size="small"
         variant={isDone ? 'contained' : 'outlined'}
         color="primary"
-        disabled={isDone}
+        disabled={isDone || isDisabled}
         startIcon={<CheckCircle sx={{ fontSize: '14px !important' }} />}
         onClick={() => onComplete(task)}
         sx={compactActionButtonSx}

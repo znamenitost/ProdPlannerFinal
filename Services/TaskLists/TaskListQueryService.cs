@@ -22,25 +22,15 @@ public class TaskListQueryService : ITaskListQueryService
 
     public async Task<List<object>> GetActiveTasksAsync(string employee, DateTime now)
     {
-        var allTasks = await _repo.GetAllTasksAsync();
-        var result = new List<object>();
-
-        foreach (var task in allTasks.Where(t => t.EmployeeName == employee && t.Status != JobStatus.Completed))
-        {
-            if (task.IsSplitTask && task.ParentRowNumber == null)
-                continue;
-            result.Add(MapTaskToResult(task, now));
-        }
-
-        return result;
+        var tasks = await _repo.GetActiveTasksAsync(employee);
+        return tasks.Select(task => MapTaskToResult(task, now)).Cast<object>().ToList();
     }
 
     public async Task<object> GetCompletedTasksAsync(string employee)
     {
-        var allTasks = await _repo.GetAllTasksAsync();
-        var completedTasks = allTasks
-            .Where(t => t.EmployeeName == employee && t.Status == JobStatus.Completed
-                        && !(t.IsSplitTask && t.ParentRowNumber == null))
+        var completedTasks = await _repo.GetCompletedTasksAsync(employee);
+        completedTasks = completedTasks
+            .Where(t => !(t.IsSplitTask && t.ParentRowNumber == null))
             .ToList();
 
         var stats = new

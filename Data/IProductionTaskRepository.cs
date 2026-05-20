@@ -31,5 +31,16 @@ namespace ProductionPlanner.Data
         
         // Новый метод – все задачи сотрудника (без фильтра по статусу)
         Task<List<ProductionTask>> GetEmployeeTasksAsync(string employeeName);
+
+        Task ExecuteInTransactionAsync(Func<Task> action);
+        Task<int> CloseOpenIntervalsAsync(int taskId, DateTime closedAt);
+        Task<int> TryTransitionStatusAsync(
+            int taskId,
+            JobStatus newStatus,
+            DateTime updatedAt,
+            IReadOnlyList<JobStatus>? expectedStatuses = null,
+            TaskStatusPatch? patch = null);
+        void StageWorkInterval(WorkInterval interval);
+        Task SaveChangesAsync();
     }
 }

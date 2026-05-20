@@ -8,9 +8,17 @@ using System.Text.Json.Serialization;
 
 StartupDiagnostics.LogEnvironment();
 
+if (args.Length > 0 && args[0].Equals("migrate-sqlite-to-postgres", StringComparison.OrdinalIgnoreCase))
+{
+    Environment.Exit(await MigrationCli.RunAsync(args));
+}
+
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+    // Локальные секреты 1gb — только в Production, чтобы Development оставался на SQLite
+    if (builder.Environment.IsProduction())
+        builder.Configuration.AddJsonFile("appsettings.Production.local.json", optional: true);
 
     Directory.CreateDirectory(StartupDiagnostics.LogsDirectory);
     builder.Logging.ClearProviders();
