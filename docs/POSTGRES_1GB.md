@@ -7,8 +7,10 @@
 Строка подключения для 1gb (часто без SSL внутри дата-центра):
 
 ```
-Host=postgres82.1gb.ru;Port=5432;Database=xgb_bdmain;Username=xgb_bdmain;Password=***;SSL Mode=Disable;Timeout=30
+Host=postgres82.1gb.ru;Port=5432;Database=xgb_xgb_bdmain;Username=xgb_xgb_bdmain;Password=***;SSL Mode=Disable;Timeout=30;Command Timeout=60
 ```
+
+Имя БД и логин смотрите в панели 1gb / phpPgAdmin (часто `Database` = `xgb_xgb_bdmain` или `xgb_bdmain`, логин — `xgb_xgb_bdmain`).
 
 Для GitHub Actions задайте секрет `POSTGRES_CONNECTION_STRING` в environment `FTP_SERVER`:
 

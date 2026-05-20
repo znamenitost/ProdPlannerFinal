@@ -49,8 +49,8 @@ jobs:
           POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
         run: |
           if [ -z "$POSTGRES_CONNECTION_STRING" ]; then
-            echo "::warning::Секрет POSTGRES_CONNECTION_STRING не задан — на сервере останется SQLite (App_Data) или пустая строка в appsettings"
-            exit 0
+            echo "::error::Секрет POSTGRES_CONNECTION_STRING не задан в environment FTP_SERVER"
+            exit 1
           fi
           python3 << 'PY'
           import json, os

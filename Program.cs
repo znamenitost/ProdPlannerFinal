@@ -125,9 +125,18 @@ try
 
     var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
     startupLogger.LogInformation(
-        "Старт приложения. База: {Db}. Arch: {Arch}",
+        "Старт приложения. База: {Db}. Arch: {Arch}{PgConn}",
         usePostgres ? "PostgreSQL" : "SQLite",
-        System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture);
+        System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture,
+        usePostgres ? $" Conn={PostgresConnectionHelper.Mask(postgresConnection!)}" : "");
+
+    if (usePostgres && builder.Environment.IsProduction())
+    {
+        var localOverridePath = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.Production.local.json");
+        if (File.Exists(localOverridePath))
+            startupLogger.LogWarning(
+                "На сервере найден appsettings.Production.local.json — он перекрывает строку из деплоя. Удалите файл с FTP, если не нужен.");
+    }
 
     await DatabaseInitializer.InitializeAsync(app.Services);
     app.ConfigureProductionPlannerPipeline();
