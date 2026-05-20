@@ -12,13 +12,6 @@ namespace ProductionPlanner.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "StartTime",
-                table: "WorkIntervals",
-                type: "timestamp with time zone",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
 
             migrationBuilder.AlterColumn<int>(
                 name: "ProductionTaskId",
@@ -27,15 +20,6 @@ namespace ProductionPlanner.Migrations
                 nullable: false,
                 oldClrType: typeof(int),
                 oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "EndTime",
-                table: "WorkIntervals",
-                type: "timestamp with time zone",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "TEXT",
-                oldNullable: true);
 
             migrationBuilder.AlterColumn<int>(
                 name: "Id",
@@ -165,15 +149,6 @@ namespace ProductionPlanner.Migrations
                 oldMaxLength: 256,
                 oldNullable: true);
 
-            migrationBuilder.AlterColumn<DateTimeOffset>(
-                name: "LockoutEnd",
-                table: "Users",
-                type: "timestamp with time zone",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "TEXT",
-                oldNullable: true);
-
             migrationBuilder.AlterColumn<bool>(
                 name: "LockoutEnabled",
                 table: "Users",
@@ -218,14 +193,6 @@ namespace ProductionPlanner.Migrations
                 oldType: "TEXT",
                 oldMaxLength: 256,
                 oldNullable: true);
-
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "CreatedAt",
-                table: "Users",
-                type: "timestamp with time zone",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
 
             migrationBuilder.AlterColumn<string>(
                 name: "ConcurrencyStamp",
@@ -314,31 +281,7 @@ namespace ProductionPlanner.Migrations
                 oldType: "INTEGER",
                 oldNullable: true);
 
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "Deadline",
-                table: "UserNotifications",
-                type: "timestamp with time zone",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "TEXT",
-                oldNullable: true);
 
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "CreatedAt",
-                table: "UserNotifications",
-                type: "timestamp with time zone",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
-
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "AcknowledgedAt",
-                table: "UserNotifications",
-                type: "timestamp with time zone",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "TEXT",
-                oldNullable: true);
 
             migrationBuilder.AlterColumn<long>(
                 name: "Id",
@@ -540,14 +483,6 @@ namespace ProductionPlanner.Migrations
                 oldType: "INTEGER")
                 .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn);
 
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "UpdatedAt",
-                table: "ProductionTasks",
-                type: "timestamp with time zone",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
-
             migrationBuilder.AlterColumn<string>(
                 name: "Type",
                 table: "ProductionTasks",
@@ -653,30 +588,7 @@ namespace ProductionPlanner.Migrations
                 oldClrType: typeof(int),
                 oldType: "INTEGER");
 
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "Deadline",
-                table: "ProductionTasks",
-                type: "timestamp with time zone",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
 
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "CreatedAt",
-                table: "ProductionTasks",
-                type: "timestamp with time zone",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
-
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "CompletedAt",
-                table: "ProductionTasks",
-                type: "timestamp with time zone",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "TEXT",
-                oldNullable: true);
 
             migrationBuilder.AlterColumn<string>(
                 name: "Comment",
@@ -718,14 +630,6 @@ namespace ProductionPlanner.Migrations
                 nullable: false,
                 oldClrType: typeof(float),
                 oldType: "REAL");
-
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "LastResetDate",
-                table: "EmployeeStats",
-                type: "timestamp with time zone",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
 
             migrationBuilder.AlterColumn<string>(
                 name: "EmployeeName",
