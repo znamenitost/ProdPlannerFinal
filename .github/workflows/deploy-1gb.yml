@@ -37,9 +37,10 @@ jobs:
 
       - name: Copy frontend to wwwroot
         run: |
-          mkdir -p publish/wwwroot publish/logs publish/App_Data
+          mkdir -p publish/wwwroot
           cp -r frontend/dist/* publish/wwwroot/
           test -f publish/wwwroot/index.html
+          # logs/ и App_Data/ не включаем в FTP — на сервере 550 при перезаписи занятых папок
 
       - name: Configure PostgreSQL connection for production
         env:
@@ -133,11 +134,26 @@ jobs:
           server="${server#ftp://}"
           server="${server#ftps://}"
           server="${server%%/*}"
-          # На 1gb.ru корень сайта всегда /http/ (не /site/ как на SmarterASP)
-          dir="/http/"
+          # На 1gb.ru корень сайта обычно /http/ (можно переопределить секретом FTP_SERVER_DIR)
+          dir="${{ secrets.FTP_SERVER_DIR }}"
+          if [ -z "$dir" ]; then
+            dir="/http/"
+          fi
+          case "$dir" in
+            */) ;;
+            *) dir="${dir}/" ;;
+          esac
           echo "FTP target: ${server}${dir}"
           echo "server=$server" >> "$GITHUB_OUTPUT"
           echo "server_dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - name: Test FTP login
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+          lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }}; ls '${{ steps.ftp.outputs.server_dir }}'; bye" || {
+            echo "::warning::FTP ls не удался — проверьте FTP_SERVER, FTP_USERNAME, FTP_PASSWORD и FTP_SERVER_DIR"
+          }
 
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
@@ -149,9 +165,14 @@ jobs:
           local-dir: ./publish/
           protocol: ftp
           port: 21
+          security: loose
           log-level: verbose
           exclude: |
             **/.git*
             **/.github/**
-            App_Data/*.db-shm
-            App_Data/*.db-wal
+            **/logs/**
+            **/App_Data/**
+            **/*.db
+            **/*.db-shm
+            **/*.db-wal
+            **/*.pdb
