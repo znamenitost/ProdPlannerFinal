@@ -56,14 +56,56 @@ jobs:
           import json, os
 
           def normalize_1gb(conn: str) -> str:
-              conn = conn.strip()
-              if "SSL Mode" not in conn and "Ssl Mode" not in conn:
-                  conn += ";SSL Mode=Disable"
-              if "Timeout" not in conn:
-                  conn += ";Timeout=30"
-              if "Command Timeout" not in conn:
-                  conn += ";Command Timeout=60"
-              return conn
+              conn = conn.strip().strip('"').strip("'")
+              parts = {}
+
+              if ";" in conn:
+                  for item in conn.split(";"):
+                      item = item.strip()
+                      if "=" not in item:
+                          continue
+                      k, v = item.split("=", 1)
+                      parts[k.strip().lower()] = v.strip().strip('"').strip("'")
+              elif " " in conn and "=" in conn:
+                  for token in conn.split():
+                      if "=" not in token:
+                          continue
+                      k, v = token.split("=", 1)
+                      parts[k.strip().lower()] = v.strip().strip('"').strip("'")
+              else:
+                  raise SystemExit("Строка подключения должна быть вида Host=...;Port=5432;Database=...;Username=...;Password=...")
+
+              keymap = {
+                  "host": "host",
+                  "port": "port",
+                  "database": "database",
+                  "dbname": "database",
+                  "username": "username",
+                  "user": "username",
+                  "user id": "username",
+                  "password": "password",
+              }
+              mapped = {}
+              for k, v in parts.items():
+                  mk = keymap.get(k)
+                  if mk:
+                      mapped[mk] = v
+
+              host = mapped.get("host", "")
+              if not host or " " in host or "=" in host:
+                  raise SystemExit(f"Некорректный Host в секрете: {host!r}. Только имя сервера, без пробелов.")
+
+              out = [
+                  f"Host={host}",
+                  f"Port={mapped.get('port', '5432')}",
+                  f"Database={mapped['database']}",
+                  f"Username={mapped['username']}",
+                  f"Password={mapped['password']}",
+                  "SSL Mode=Disable",
+                  "Timeout=30",
+                  "Command Timeout=60",
+              ]
+              return ";".join(out)
 
           conn = normalize_1gb(os.environ["POSTGRES_CONNECTION_STRING"])
 

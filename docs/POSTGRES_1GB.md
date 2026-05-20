@@ -4,11 +4,16 @@
 
 Скопируйте `appsettings.Production.local.json.example` в `appsettings.Production.local.json` (файл в `.gitignore`).
 
-Строка подключения для 1gb (часто без SSL внутри дата-центра):
+Строка подключения для 1gb (часто без SSL внутри дата-центра).
+
+**Только через точку с запятой `;`, без кавычек и без пробелов вместо `;`:**
 
 ```
 Host=postgres82.1gb.ru;Port=5432;Database=xgb_xgb_bdmain;Username=xgb_xgb_bdmain;Password=***;SSL Mode=Disable;Timeout=30;Command Timeout=60
 ```
+
+Неверно (даёт `No such host is known`):  
+`Host=postgres82.1gb.ru port=5432 dbname=... user=... password=...`
 
 Имя БД и логин смотрите в панели 1gb / phpPgAdmin (часто `Database` = `xgb_xgb_bdmain` или `xgb_bdmain`, логин — `xgb_xgb_bdmain`).
 
