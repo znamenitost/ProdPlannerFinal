@@ -41,7 +41,7 @@ jobs:
           cp -r frontend/dist/* publish/wwwroot/
           test -f publish/wwwroot/index.html
           echo "${{ github.sha }}" > publish/deploy-version.txt
-          echo "schema-repair-v3-all-schemas" >> publish/deploy-version.txt
+          echo "calendar-timestamptz-fix" >> publish/deploy-version.txt
           # logs/ и App_Data/ не включаем в FTP — на сервере 550 при перезаписи занятых папок
 
       - name: Configure PostgreSQL connection for production

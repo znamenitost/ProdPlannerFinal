@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services; 
 
@@ -270,10 +271,13 @@ public async Task DeleteTaskAsync(int id)
 
         public async Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end)
         {
+            var rangeStart = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(start) : start;
+            var rangeEnd = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(end) : end;
+
             return await _context.WorkIntervals
                 .Include(i => i.Task)
                 .Where(i => i.Task.EmployeeName == employeeName &&
-                            i.StartTime >= start && i.StartTime <= end)
+                            i.StartTime >= rangeStart && i.StartTime < rangeEnd)
                 .ToListAsync();
         }
 

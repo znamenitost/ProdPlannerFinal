@@ -6,6 +6,9 @@ using ProductionPlanner.Infrastructure.Logging;
 using ProductionPlanner.Models;
 using System.Text.Json.Serialization;
 
+// Moscow wall-clock DateTime values (Unspecified) in queries against timestamptz
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 StartupDiagnostics.LogEnvironment();
 
 if (args.Length > 0 && args[0].Equals("migrate-sqlite-to-postgres", StringComparison.OrdinalIgnoreCase))
