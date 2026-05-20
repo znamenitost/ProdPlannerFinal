@@ -36,8 +36,9 @@ jobs:
 
       - name: Copy frontend to wwwroot
         run: |
-          mkdir -p publish/wwwroot publish/logs
+          mkdir -p publish/wwwroot publish/logs publish/App_Data
           cp -r frontend/dist/* publish/wwwroot/
+          test -f publish/wwwroot/index.html
 
       - name: Validate FTP secrets
         env:
@@ -46,9 +47,9 @@ jobs:
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: |
           missing=0
-          [ -n "$FTP_SERVER" ] || { echo "::error::Секрет FTP_SERVER не задан в Environment FTP_SERVER"; missing=1; }
-          [ -n "$FTP_USERNAME" ] || { echo "::error::Секрет FTP_USERNAME не задан в Environment FTP_SERVER"; missing=1; }
-          [ -n "$FTP_PASSWORD" ] || { echo "::error::Секрет FTP_PASSWORD не задан в Environment FTP_SERVER"; missing=1; }
+          [ -n "$FTP_SERVER" ] || { echo "::error::Секрет FTP_SERVER не задан"; missing=1; }
+          [ -n "$FTP_USERNAME" ] || { echo "::error::Секрет FTP_USERNAME не задан"; missing=1; }
+          [ -n "$FTP_PASSWORD" ] || { echo "::error::Секрет FTP_PASSWORD не задан"; missing=1; }
           [ "$missing" -eq 0 ] || exit 1
 
       - name: Prepare FTP target
@@ -58,16 +59,8 @@ jobs:
           server="${server#ftp://}"
           server="${server#ftps://}"
           server="${server%%/*}"
-          dir="${{ secrets.FTP_SERVER_DIR }}"
-          if [ -z "$dir" ]; then
-            dir="/http/"
-          fi
-          dir="${dir//\\//}"
-          case "$dir" in
-            /*) ;;
-            *) dir="/$dir" ;;
-          esac
-          [[ "$dir" == */ ]] || dir="${dir}/"
+          # На 1gb.ru корень сайта всегда /http/ (не /site/ как на SmarterASP)
+          dir="/http/"
           echo "FTP target: ${server}${dir}"
           echo "server=$server" >> "$GITHUB_OUTPUT"
           echo "server_dir=$dir" >> "$GITHUB_OUTPUT"
@@ -83,3 +76,8 @@ jobs:
           protocol: ftp
           port: 21
           log-level: verbose
+          exclude: |
+            **/.git*
+            **/.github/**
+            App_Data/*.db-shm
+            App_Data/*.db-wal

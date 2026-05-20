@@ -406,9 +406,18 @@ public class UpdateTaskRequest
     public int? ParentRowNumber { get; set; }
     public string? StatusText { get; set; }
 }
+=== ./Hubs/NotificationGroups.cs ===
+namespace ProductionPlanner.Hubs;
+
+public static class NotificationGroups
+{
+    public const string Admins = "Admins";
+}
 === ./Hubs/NotificationHub.cs ===
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
+using ProductionPlanner.Models;
 using System.Security.Claims;
 
 namespace ProductionPlanner.Hubs
@@ -416,11 +425,22 @@ namespace ProductionPlanner.Hubs
     [Authorize]
     public class NotificationHub : Hub
     {
+        private readonly UserManager<User> _userManager;
+
+        public NotificationHub(UserManager<User> userManager)
+        {
+            _userManager = userManager;
+        }
+
         public override async Task OnConnectedAsync()
         {
             var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!string.IsNullOrEmpty(userId))
                 await Groups.AddToGroupAsync(Context.ConnectionId, userId);
+
+            var user = await _userManager.GetUserAsync(Context.User!);
+            if (user?.Role == "Admin")
+                await Groups.AddToGroupAsync(Context.ConnectionId, NotificationGroups.Admins);
 
             await base.OnConnectedAsync();
         }
@@ -524,10 +544,10 @@ public static class WebApplicationExtensions
         app.UseCors("AllowReact");
         app.UseAuthentication();
         app.UseAuthorization();
-        app.MapControllers();
-        app.MapFallbackToFile("index.html");
         app.UseWebSockets();
+        app.MapControllers();
         app.MapHub<NotificationHub>("/notificationHub");
+        app.MapFallbackToFile("index.html");
         return app;
     }
 }
@@ -545,14 +565,26 @@ public static class DatabaseInitializer
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-        var created = db.Database.EnsureCreated();
+        if (db.Database.IsNpgsql())
+        {
+            if (!await db.Database.CanConnectAsync())
+                throw new InvalidOperationException(
+                    "Не удалось подключиться к PostgreSQL. Проверьте ConnectionStrings:DefaultConnection и что сервер запущен (docker compose -f docker-compose.postgres.yml up -d).");
+            logger.LogInformation("Подключение к PostgreSQL установлено.");
+        }
+
+        var created = await db.Database.EnsureCreatedAsync();
         logger.LogInformation(created ? "База данных создана." : "База данных уже существует.");
 
-        await ApplySchemaPatchesAsync(db, logger);
+        if (db.Database.IsSqlite())
+            await ApplySqliteSchemaPatchesAsync(db, logger);
+        else if (db.Database.IsNpgsql())
+            await ApplyPostgresSchemaPatchesAsync(db, logger);
+
         await IdentitySeedService.SeedAsync(scope.ServiceProvider);
     }
 
-    private static async Task ApplySchemaPatchesAsync(ApplicationDbContext db, ILogger logger)
+    private static async Task ApplySqliteSchemaPatchesAsync(ApplicationDbContext db, ILogger logger)
     {
         try
         {
@@ -585,32 +617,60 @@ public static class DatabaseInitializer
                 logger.LogInformation("Выполнен ALTER: {Command}", alterCmd);
             }
 
-            using (var createNotifications = connection.CreateCommand())
-            {
-                createNotifications.CommandText = """
-                    CREATE TABLE IF NOT EXISTS UserNotifications (
-                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        UserId TEXT NOT NULL,
-                        Type TEXT NOT NULL,
-                        TaskId INTEGER,
-                        Title TEXT NOT NULL,
-                        Deadline TEXT,
-                        CreatedAt TEXT NOT NULL,
-                        AcknowledgedAt TEXT
-                    );
-                    CREATE INDEX IF NOT EXISTS IX_UserNotifications_UserId_Ack
-                        ON UserNotifications(UserId, AcknowledgedAt);
-                    """;
-                await createNotifications.ExecuteNonQueryAsync();
-                logger.LogInformation("Таблица UserNotifications проверена/создана.");
-            }
-
+            await EnsureUserNotificationsTableSqliteAsync(connection, logger);
             await connection.CloseAsync();
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка при обновлении схемы БД");
+            logger.LogError(ex, "Ошибка при обновлении схемы SQLite");
         }
+    }
+
+    private static async Task ApplyPostgresSchemaPatchesAsync(ApplicationDbContext db, ILogger logger)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "UserNotifications" (
+                    "Id" SERIAL PRIMARY KEY,
+                    "UserId" TEXT NOT NULL,
+                    "Type" TEXT NOT NULL,
+                    "TaskId" INTEGER,
+                    "Title" TEXT NOT NULL,
+                    "Deadline" TIMESTAMPTZ,
+                    "CreatedAt" TIMESTAMPTZ NOT NULL,
+                    "AcknowledgedAt" TIMESTAMPTZ
+                );
+                CREATE INDEX IF NOT EXISTS "IX_UserNotifications_UserId_Ack"
+                    ON "UserNotifications" ("UserId", "AcknowledgedAt");
+                """);
+            logger.LogInformation("Таблица UserNotifications проверена/создана (PostgreSQL).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL");
+        }
+    }
+
+    private static async Task EnsureUserNotificationsTableSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)
+    {
+        using var createNotifications = connection.CreateCommand();
+        createNotifications.CommandText = """
+            CREATE TABLE IF NOT EXISTS UserNotifications (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId TEXT NOT NULL,
+                Type TEXT NOT NULL,
+                TaskId INTEGER,
+                Title TEXT NOT NULL,
+                Deadline TEXT,
+                CreatedAt TEXT NOT NULL,
+                AcknowledgedAt TEXT
+            );
+            CREATE INDEX IF NOT EXISTS IX_UserNotifications_UserId_Ack
+                ON UserNotifications(UserId, AcknowledgedAt);
+            """;
+        await createNotifications.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблица UserNotifications проверена/создана.");
     }
 }
 === ./Controllers/TaskSplitController.cs ===
@@ -2170,6 +2230,28 @@ public class FilePathNormalizerTests
         Assert.Equal(@"\\192.168.1.119\Клиенты\С\Спортмебель\15,05,26 спортт.cdr", unc);
     }
 }
+=== ./ProductionPlanner.Tests/TaskNotificationServiceTests.cs ===
+using ProductionPlanner.Models;
+using ProductionPlanner.Services;
+
+namespace ProductionPlanner.Tests;
+
+public class TaskNotificationServiceTests
+{
+    [Fact]
+    public void GetNotificationTitle_uses_file_when_display_name_empty()
+    {
+        var task = new ProductionTask { Id = 5, FileName = "report.pdf", FolderPath = "" };
+        Assert.Equal("report.pdf", TaskNotificationService.GetNotificationTitle(task));
+    }
+
+    [Fact]
+    public void GetNotificationTitle_falls_back_to_task_id()
+    {
+        var task = new ProductionTask { Id = 12 };
+        Assert.Equal("Задача #12", TaskNotificationService.GetNotificationTitle(task));
+    }
+}
 === ./ProductionPlanner.Tests/TaskStatusMapperTests.cs ===
 using ProductionPlanner.Models;
 using ProductionPlanner.Services.TaskTable;
@@ -2515,6 +2597,7 @@ public class TaskTableService : ITaskTableService
             }
         }
 
+        string? statusChangedTo = null;
         if (!string.IsNullOrEmpty(request.StatusText))
         {
             var newStatus = TaskStatusMapper.FromText(request.StatusText);
@@ -2524,11 +2607,15 @@ public class TaskTableService : ITaskTableService
                     await _lifecycle.CompleteTaskAsync(task.Id, _timeService.Now);
                 else
                     task.Status = newStatus;
+
+                statusChangedTo = newStatus.ToString();
             }
         }
 
         await _repo.UpdateTaskAsync(task);
         await _notificationService.NotifyTaskUpdatedAsync(task, oldEmployeeName);
+        if (statusChangedTo != null)
+            await _notificationService.NotifyStatusChangedAsync(task, statusChangedTo);
 
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }
@@ -3837,65 +3924,102 @@ public class TaskNotificationService : ITaskNotificationService
 
     public async Task NotifyNewTaskAsync(ProductionTask task)
     {
+        var title = GetNotificationTitle(task);
         var userId = await GetUserIdByFullNameAsync(task.EmployeeName);
-        if (string.IsNullOrEmpty(userId))
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var notificationId = await _inbox.EnqueueNewTaskAsync(
+                userId,
+                task.Id,
+                title,
+                task.Deadline);
+
+            await SendToGroupsAsync(
+                [userId],
+                "NewTask",
+                notificationId,
+                task.Id,
+                title,
+                task.Deadline);
+        }
+        else
         {
             _logger.LogDebug("User not found for new task notification: {EmployeeName}", task.EmployeeName);
-            return;
         }
 
-        var notificationId = await _inbox.EnqueueNewTaskAsync(
-            userId,
+        await SendToGroupsAsync(
+            [NotificationGroups.Admins],
+            "TaskUpdated",
             task.Id,
-            task.TaskDisplayName,
-            task.Deadline);
-
-        await _hubContext.Clients.Group(userId).SendAsync(
-            "NewTask",
-            notificationId,
-            task.Id,
-            task.TaskDisplayName,
+            title,
             task.Deadline);
     }
 
     public async Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null)
     {
-        var usersToNotify = new HashSet<string>();
+        var employeeNames = new HashSet<string>(StringComparer.Ordinal);
         if (!string.IsNullOrEmpty(task.EmployeeName))
-            usersToNotify.Add(task.EmployeeName);
+            employeeNames.Add(task.EmployeeName);
         if (!string.IsNullOrEmpty(oldEmployeeName) && oldEmployeeName != task.EmployeeName)
-            usersToNotify.Add(oldEmployeeName);
+            employeeNames.Add(oldEmployeeName);
 
-        foreach (var employeeName in usersToNotify)
-        {
-            var userId = await GetUserIdByFullNameAsync(employeeName);
-            if (!string.IsNullOrEmpty(userId))
-                await _hubContext.Clients.Group(userId).SendAsync("TaskUpdated", task.Id, task.TaskDisplayName, task.Deadline);
-        }
+        var groups = await ResolveEmployeeGroupsAsync(employeeNames);
+        await SendToGroupsAsync(groups, "TaskUpdated", task.Id, GetNotificationTitle(task), task.Deadline);
     }
 
     public async Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames)
     {
-        foreach (var employeeName in employeeNames.Where(name => !string.IsNullOrWhiteSpace(name)).Distinct())
-        {
-            var userId = await GetUserIdByFullNameAsync(employeeName);
-            if (!string.IsNullOrEmpty(userId))
-                await _hubContext.Clients.Group(userId).SendAsync("TaskDeleted", taskId);
-        }
+        var groups = await ResolveEmployeeGroupsAsync(
+            employeeNames.Where(name => !string.IsNullOrWhiteSpace(name)));
+        await SendToGroupsAsync(groups, "TaskDeleted", taskId);
     }
 
     public async Task NotifyStatusChangedAsync(ProductionTask task, string newStatus)
     {
-        var userId = await GetUserIdByFullNameAsync(task.EmployeeName);
-        if (!string.IsNullOrEmpty(userId))
-            await _hubContext.Clients.Group(userId).SendAsync("TaskStatusChanged", task.Id, newStatus);
+        var groups = await ResolveEmployeeGroupsAsync(
+            string.IsNullOrEmpty(task.EmployeeName) ? [] : [task.EmployeeName]);
+        await SendToGroupsAsync(groups, "TaskStatusChanged", task.Id, newStatus);
     }
 
     public async Task NotifyProgressChangedAsync(ProductionTask task, double progress)
     {
-        var userId = await GetUserIdByFullNameAsync(task.EmployeeName);
-        if (!string.IsNullOrEmpty(userId))
-            await _hubContext.Clients.Group(userId).SendAsync("TaskProgressChanged", task.Id, progress);
+        var groups = await ResolveEmployeeGroupsAsync(
+            string.IsNullOrEmpty(task.EmployeeName) ? [] : [task.EmployeeName]);
+        await SendToGroupsAsync(groups, "TaskProgressChanged", task.Id, progress);
+    }
+
+    private async Task<List<string>> ResolveEmployeeGroupsAsync(IEnumerable<string> employeeNames)
+    {
+        var groups = new HashSet<string>(StringComparer.Ordinal) { NotificationGroups.Admins };
+        foreach (var employeeName in employeeNames.Distinct(StringComparer.Ordinal))
+        {
+            var userId = await GetUserIdByFullNameAsync(employeeName);
+            if (!string.IsNullOrEmpty(userId))
+                groups.Add(userId);
+        }
+        return groups.ToList();
+    }
+
+    private Task SendToGroupsAsync(IReadOnlyList<string> groups, string method, params object?[] args)
+    {
+        if (groups.Count == 0)
+            return Task.CompletedTask;
+        return _hubContext.Clients.Groups(groups).SendCoreAsync(method, args);
+    }
+
+    public static string GetNotificationTitle(ProductionTask task)
+    {
+        var name = task.TaskDisplayName;
+        if (!string.IsNullOrWhiteSpace(name))
+            return name.Trim();
+        if (!string.IsNullOrWhiteSpace(task.FileName))
+            return task.FileName.Trim();
+        if (!string.IsNullOrWhiteSpace(task.Comment))
+        {
+            var comment = task.Comment.Trim();
+            return comment.Length > 80 ? comment[..80] + "…" : comment;
+        }
+        return $"Задача #{task.Id}";
     }
 
     private async Task<string?> GetUserIdByFullNameAsync(string fullName)
@@ -4744,11 +4868,22 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddLogging();
 
-var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "App_Data");
-Directory.CreateDirectory(dataDirectory);
-var dbPath = Path.Combine(dataDirectory, "ProductionPlanner.db");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite($"Data Source={dbPath}"));
+var postgresConnection = builder.Configuration.GetConnectionString("DefaultConnection");
+var usePostgres = !string.IsNullOrWhiteSpace(postgresConnection);
+if (usePostgres)
+{
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseNpgsql(postgresConnection, npgsql =>
+            npgsql.EnableRetryOnFailure(maxRetryCount: 3)));
+}
+else
+{
+    var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "App_Data");
+    Directory.CreateDirectory(dataDirectory);
+    var dbPath = Path.Combine(dataDirectory, "ProductionPlanner.db");
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseSqlite($"Data Source={dbPath}"));
+}
 
 builder.Services.AddIdentity<User, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
@@ -4797,6 +4932,10 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+startupLogger.LogInformation(
+    usePostgres ? "База данных: PostgreSQL" : "База данных: SQLite (App_Data/ProductionPlanner.db)");
 
 await DatabaseInitializer.InitializeAsync(app.Services);
 app.ConfigureProductionPlannerPipeline();
