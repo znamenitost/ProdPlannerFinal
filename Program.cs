@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using ProductionPlanner.Data;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Infrastructure.Logging;
@@ -56,8 +57,10 @@ try
     {
         postgresConnection = PostgresConnectionHelper.Normalize(postgresConnection);
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseNpgsql(postgresConnection, npgsql =>
-                npgsql.EnableRetryOnFailure(maxRetryCount: 3)));
+            options
+                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+                .UseNpgsql(postgresConnection, npgsql =>
+                    npgsql.EnableRetryOnFailure(maxRetryCount: 3)));
     }
     else
     {
@@ -65,7 +68,9 @@ try
         Directory.CreateDirectory(dataDirectory);
         var dbPath = Path.Combine(dataDirectory, "ProductionPlanner.db");
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseSqlite($"Data Source={dbPath}"));
+            options
+                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+                .UseSqlite($"Data Source={dbPath}"));
     }
 
     builder.Services.AddIdentity<User, IdentityRole>()
