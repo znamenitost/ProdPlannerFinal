@@ -10,6 +10,7 @@ namespace ProductionPlanner.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Same logic as PostgresLegacySchemaRepair (all schemas, case-insensitive columns).
             migrationBuilder.Sql("""
                 DO $$
                 DECLARE r RECORD;
@@ -20,13 +21,14 @@ namespace ProductionPlanner.Migrations
                     JOIN pg_class c ON c.oid = a.attrelid
                     JOIN pg_namespace n ON n.oid = c.relnamespace
                     JOIN pg_type t ON t.oid = a.atttypid
-                    WHERE n.nspname = 'public'
-                      AND c.relkind = 'r'
+                    WHERE c.relkind = 'r'
                       AND NOT a.attisdropped
                       AND a.attnum > 0
-                      AND a.attname IN (
-                        'IsActive', 'EmailConfirmed', 'PhoneNumberConfirmed', 'TwoFactorEnabled', 'LockoutEnabled',
-                        'Notified', 'OverdueNotified', 'IsSplitTask')
+                      AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                      AND n.nspname NOT LIKE 'pg_toast%'
+                      AND lower(a.attname) IN (
+                        'isactive', 'emailconfirmed', 'phonenumberconfirmed', 'twofactorenabled', 'lockoutenabled',
+                        'notified', 'overduenotified', 'issplittask')
                       AND t.typname IN ('int2', 'int4', 'int8')
                   LOOP
                     EXECUTE format(

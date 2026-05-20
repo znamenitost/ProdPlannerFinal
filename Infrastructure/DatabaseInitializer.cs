@@ -16,7 +16,9 @@ public static class DatabaseInitializer
             if (!await db.Database.CanConnectAsync())
                 throw new InvalidOperationException(
                     "Не удалось подключиться к PostgreSQL. Проверьте ConnectionStrings:DefaultConnection и что сервер запущен (docker compose -f docker-compose.postgres.yml up -d).");
-            logger.LogInformation("Подключение к PostgreSQL установлено.");
+            logger.LogInformation(
+                "Подключение к PostgreSQL установлено. SchemaRepair={Version}",
+                PostgresLegacySchemaRepair.RepairVersion);
         }
 
         if (db.Database.IsNpgsql())
