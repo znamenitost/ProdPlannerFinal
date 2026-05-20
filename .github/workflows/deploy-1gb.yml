@@ -51,7 +51,7 @@ jobs:
             exit 0
           fi
           python3 << 'PY'
-          import json, os, re
+          import json, os
 
           def normalize_1gb(conn: str) -> str:
               conn = conn.strip()
@@ -63,13 +63,6 @@ jobs:
                   conn += ";Command Timeout=60"
               return conn
 
-          def escape_xml_attr(value: str) -> str:
-              return (
-                  value.replace("&", "&amp;")
-                  .replace('"', "&quot;")
-                  .replace("<", "&lt;")
-              )
-
           conn = normalize_1gb(os.environ["POSTGRES_CONNECTION_STRING"])
 
           path = "publish/appsettings.Production.json"
@@ -80,32 +73,7 @@ jobs:
               json.dump(cfg, f, indent=2, ensure_ascii=False)
               f.write("\n")
           print("appsettings.Production.json: connection string записан (SSL Mode=Disable для 1gb)")
-
-          web_config = "publish/web.config"
-          with open(web_config, encoding="utf-8") as f:
-              xml = f.read()
-
-          env_line = (
-              '          <environmentVariable name="ConnectionStrings__DefaultConnection" '
-              f'value="{escape_xml_attr(conn)}" />'
-          )
-
-          if "ConnectionStrings__DefaultConnection" in xml:
-              xml = re.sub(
-                  r'<environmentVariable name="ConnectionStrings__DefaultConnection" value="[^"]*"\s*/>',
-                  env_line.strip(),
-                  xml,
-                  count=1,
-              )
-          else:
-              xml = xml.replace(
-                  '<environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />',
-                  '<environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />\n' + env_line,
-              )
-
-          with open(web_config, "w", encoding="utf-8") as f:
-              f.write(xml)
-          print("web.config: ConnectionStrings__DefaultConnection добавлен")
+          # web.config не трогаем — IIS часто держит файл открытым (FTP 550)
 
           host = ""
           for part in conn.split(";"):
@@ -147,13 +115,27 @@ jobs:
           echo "server=$server" >> "$GITHUB_OUTPUT"
           echo "server_dir=$dir" >> "$GITHUB_OUTPUT"
 
+      - name: Install lftp
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
       - name: Test FTP login
-        continue-on-error: true
+        env:
+          FTP_SERVER: ${{ steps.ftp.outputs.server }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_DIR: ${{ steps.ftp.outputs.server_dir }}
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq lftp
-          lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }}; ls '${{ steps.ftp.outputs.server_dir }}'; bye" || {
-            echo "::warning::FTP ls не удался — проверьте FTP_SERVER, FTP_USERNAME, FTP_PASSWORD и FTP_SERVER_DIR"
-          }
+          lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }}; ls '${{ steps.ftp.outputs.server_dir }}'; bye"
+
+      - name: Stop IIS (app_offline.htm)
+        env:
+          FTP_SERVER: ${{ steps.ftp.outputs.server }}
+          FTP_DIR: ${{ steps.ftp.outputs.server_dir }}
+        run: |
+          echo '<!DOCTYPE html><html><body><p>Обновление приложения…</p></body></html>' > app_offline.htm
+          lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }}; cd '${{ steps.ftp.outputs.server_dir }}'; put app_offline.htm; bye"
+          echo "Ждём остановку пула IIS (15 с)…"
+          sleep 15
 
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
@@ -167,6 +149,7 @@ jobs:
           port: 21
           security: loose
           log-level: verbose
+          timeout: 120000
           exclude: |
             **/.git*
             **/.github/**
@@ -176,3 +159,11 @@ jobs:
             **/*.db-shm
             **/*.db-wal
             **/*.pdb
+            app_offline.htm
+
+      - name: Start IIS (remove app_offline.htm)
+        if: always()
+        run: |
+          lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }}; cd '${{ steps.ftp.outputs.server_dir }}'; rm -f app_offline.htm; bye" || {
+            echo "::warning::Не удалось удалить app_offline.htm — удалите вручную в /http/ через FileZilla"
+          }
