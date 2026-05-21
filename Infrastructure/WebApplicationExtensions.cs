@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Net.Http.Headers;
 using ProductionPlanner.Data;
 using ProductionPlanner.Hubs;
 using ProductionPlanner.Services;
@@ -51,7 +52,21 @@ public static class WebApplicationExtensions
             app.UseSwaggerUI();
         }
 
-        app.UseStaticFiles();
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            OnPrepareResponse = ctx =>
+            {
+                var name = Path.GetFileName(ctx.File.Name);
+                if (name.Equals("index.html", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("deploy-version.txt", StringComparison.OrdinalIgnoreCase))
+                {
+                    var headers = ctx.Context.Response.Headers;
+                    headers[HeaderNames.CacheControl] = "no-cache, no-store, must-revalidate";
+                    headers[HeaderNames.Pragma] = "no-cache";
+                    headers[HeaderNames.Expires] = "0";
+                }
+            }
+        });
         app.UseCors("AllowReact");
         app.UseAuthentication();
         app.UseAuthorization();

@@ -65,8 +65,10 @@ jobs:
           {
             echo "branch=codexOpt4"
             echo "sha=${{ github.sha }}"
+            echo "bundle=$JS"
             echo "features=ux-menu,two-line-titles,shared-task-icon,migrations-ci"
-          } > publish/deploy-version.txt
+          } | tee publish/deploy-version.txt > publish/wwwroot/deploy-version.txt
+          sed -i "s|</head>|  <!-- deploy-sha:${{ github.sha }} bundle:$JS --></head>|" publish/wwwroot/index.html
           # logs/ и App_Data/ не включаем в FTP — на сервере 550 при перезаписи занятых папок
 
       - name: Configure PostgreSQL connection for production
@@ -206,6 +208,19 @@ jobs:
           echo "Ждём остановку пула IIS (30 с)…"
           sleep 30
 
+      - name: Reset FTP sync and stale frontend entrypoints
+        run: |
+          lftp -e "
+            set ftp:passive-mode on;
+            set ssl:force off;
+            open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }};
+            cd '${{ steps.ftp.outputs.server_dir }}';
+            rm -f .ftp-deploy-sync-state.json;
+            rm -f wwwroot/index.html;
+            glob -a rm -f wwwroot/assets/*;
+            bye
+          " || echo "::warning::Не удалось очистить wwwroot на FTP — продолжаем деплой"
+
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
@@ -236,3 +251,16 @@ jobs:
           lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }}; cd '${{ steps.ftp.outputs.server_dir }}'; rm -f app_offline.htm; bye" || {
             echo "::warning::Не удалось удалить app_offline.htm — удалите вручную в /http/ через FileZilla"
           }
+
+      - name: Deploy summary
+        run: |
+          JS=$(basename "$(ls publish/wwwroot/assets/index-*.js)")
+          echo "## Deployed bundle" >> "$GITHUB_STEP_SUMMARY"
+          echo "- sha: \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- js: \`$JS\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Проверка на проде (после зелёного job):" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. http://team-mainb6d.1gb.ru/wwwroot/deploy-version.txt" >> "$GITHUB_STEP_SUMMARY"
+          echo "2. http://team-mainb6d.1gb.ru/api/deploy-info" >> "$GITHUB_STEP_SUMMARY"
+          echo "3. View Source главной — комментарий \`deploy-sha:${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "4. Ctrl+Shift+R; меню ⋮ — вкладка **Таблица задач** (роль Admin или своя задача)" >> "$GITHUB_STEP_SUMMARY"

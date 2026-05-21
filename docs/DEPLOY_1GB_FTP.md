@@ -18,6 +18,17 @@
 | FTP_SERVER_DIR | /http/ (опционально) |
 | POSTGRES_CONNECTION_STRING | Host=postgres82.1gb.ru;...;SSL Mode=Disable;Timeout=30 |
 
+## Проверка, что на сайте новая сборка
+
+После зелёного **Deploy to 1gb.ru**:
+
+1. Откройте http://team-mainb6d.1gb.ru/wwwroot/deploy-version.txt — в `sha` должен быть коммит из Actions.
+2. Откройте http://team-mainb6d.1gb.ru/api/deploy-info — тот же `sha` и `bundle` (имя `index-*.js`).
+3. На главной: **Просмотр кода страницы** → в `<head>` комментарий `deploy-sha:...`.
+4. **Ctrl+Shift+R** (жёсткое обновление). Без этого браузер может держать старый `index.html` и грузить старый `index-*.js`.
+
+Коммит `f77c748` менял только CI/backend-предупреждения — **UI не меняется**, если на FTP уже лежит тот же `index-*.js`. Если UX нет, смотрите: job был зелёный до шага FTP; в `deploy-version.txt` на FTP актуальный `sha`; вы на **Таблица задач** (меню ⋮) и под нужной ролью (Admin или своя задача без дочерних).
+
 ## PostgreSQL на сервере
 
 После успешного FTP в логе приложения (`logs/app.log` или stdout) должно быть:
