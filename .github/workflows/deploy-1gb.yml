@@ -22,8 +22,12 @@ jobs:
       - name: Build frontend
         run: |
           cd frontend
+          rm -rf dist
           npm ci
           npm run build
+          grep -q "Действия с задачей" dist/assets/*.js
+          grep -q "Общая задача" dist/assets/*.js
+          echo "UX bundle verified in $(ls dist/assets/index-*.js)"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -49,8 +53,12 @@ jobs:
       - name: Copy frontend to wwwroot
         run: |
           mkdir -p publish/wwwroot
+          rm -rf publish/wwwroot/assets publish/wwwroot/index.html
           cp -r frontend/dist/* publish/wwwroot/
           test -f publish/wwwroot/index.html
+          grep -q "Действия с задачей" publish/wwwroot/assets/*.js
+          JS=$(basename "$(ls publish/wwwroot/assets/index-*.js)")
+          echo "wwwroot bundle: $JS"
           {
             echo "branch=codexOpt4"
             echo "sha=${{ github.sha }}"
