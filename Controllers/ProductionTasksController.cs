@@ -28,23 +28,35 @@ public class ProductionTasksController : ControllerBase
         _tableService = tableService;
     }
 
+    private async Task<(User? User, string? TargetEmployee)> ResolveViewerAsync(
+        string? employee,
+        CancellationToken cancellationToken)
+    {
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser == null)
+            return (null, null);
+
+        var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+        var targetEmployeeName = (isAdmin && !string.IsNullOrEmpty(employee))
+            ? employee
+            : currentUser.FullName;
+
+        return (currentUser, targetEmployeeName);
+    }
+
     [HttpGet("table")]
     public async Task<IActionResult> GetTableRows(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
-        [FromQuery] string? employee = null)
+        [FromQuery] string? employee = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            var currentUser = await _userManager.GetUserAsync(User);
+            var (currentUser, targetEmployeeName) = await ResolveViewerAsync(employee, cancellationToken);
             if (currentUser == null) return Unauthorized();
 
-            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
-            var targetEmployeeName = (isAdmin && !string.IsNullOrEmpty(employee))
-                ? employee
-                : currentUser.FullName;
-
-            var result = await _tableService.GetRowsAsync(page, pageSize, targetEmployeeName);
+            var result = await _tableService.GetRowsAsync(page, pageSize, targetEmployeeName!, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -54,12 +66,38 @@ public class ProductionTasksController : ControllerBase
         }
     }
 
-    [HttpPost("table/row")]
-    public async Task<IActionResult> CreateTableRow([FromBody] CreateTaskRequest request)
+    [HttpGet("table/row/{id}")]
+    public async Task<IActionResult> GetTableRow(
+        int id,
+        [FromQuery] string? employee = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            var result = await _tableService.CreateRowAsync(request);
+            var (currentUser, targetEmployeeName) = await ResolveViewerAsync(employee, cancellationToken);
+            if (currentUser == null) return Unauthorized();
+
+            var row = await _tableService.GetRowDtoAsync(id, targetEmployeeName!, cancellationToken);
+            if (row == null)
+                return NotFound();
+
+            return Ok(row);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в GetTableRow для id {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("table/row")]
+    public async Task<IActionResult> CreateTableRow(
+        [FromBody] CreateTaskRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await _tableService.CreateRowAsync(request, cancellationToken);
             if (result.Error != null)
                 return BadRequest(new { error = result.Error });
             return Ok(result.Data);
@@ -72,11 +110,14 @@ public class ProductionTasksController : ControllerBase
     }
 
     [HttpPut("table/row/{id}")]
-    public async Task<IActionResult> UpdateTableRow(int id, [FromBody] UpdateTaskRequest request)
+    public async Task<IActionResult> UpdateTableRow(
+        int id,
+        [FromBody] UpdateTaskRequest request,
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            var result = await _tableService.UpdateRowAsync(id, request);
+            var result = await _tableService.UpdateRowAsync(id, request, cancellationToken);
             if (result.NotFound)
                 return NotFound();
             return Ok(result.Data);
@@ -89,11 +130,11 @@ public class ProductionTasksController : ControllerBase
     }
 
     [HttpDelete("table/row/{id}")]
-    public async Task<IActionResult> DeleteTableRow(int id)
+    public async Task<IActionResult> DeleteTableRow(int id, CancellationToken cancellationToken = default)
     {
         try
         {
-            var result = await _tableService.DeleteRowAsync(id);
+            var result = await _tableService.DeleteRowAsync(id, cancellationToken);
             if (result.NotFound)
                 return NotFound();
             return Ok();
@@ -106,11 +147,13 @@ public class ProductionTasksController : ControllerBase
     }
 
     [HttpPost("table/reorder")]
-    public async Task<IActionResult> ReorderRows([FromBody] List<int> orderedIds)
+    public async Task<IActionResult> ReorderRows(
+        [FromBody] List<int> orderedIds,
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            await _tableService.ReorderRowsAsync(orderedIds);
+            await _tableService.ReorderRowsAsync(orderedIds, cancellationToken);
             return Ok();
         }
         catch (Exception ex)

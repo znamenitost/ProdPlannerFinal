@@ -1,4 +1,5 @@
-import { Fragment } from 'react';
+import { Fragment, memo } from 'react';
+import { areParentRowPropsEqual } from '../utils/taskTableRowMemo';
 import {
   TableRow,
   TableCell,
@@ -13,6 +14,7 @@ import {
   ExpandMore,
   ChevronRight,
   Person,
+  Groups,
   Comment as CommentIcon
 } from '@mui/icons-material';
 import {
@@ -39,7 +41,7 @@ import {
 } from '../utils/taskTableStyles';
 import { formatCommentForDisplay, commentDisplaySx } from '../utils/commentLimits';
 
-export default function ParentTaskRow({
+function ParentTaskRow({
   task,
   childrenTasks,
   isExpanded,
@@ -134,6 +136,12 @@ export default function ParentTaskRow({
             )}
             {!hasChildren && <Box sx={{ width: 28 }} />}
 
+            {task.isSplitTask && (
+              <Tooltip title="Общая задача" arrow>
+                <Groups fontSize="small" sx={{ color: '#6366f1', flexShrink: 0 }} />
+              </Tooltip>
+            )}
+
             <Tooltip title={`Открыть файл: ${fullFilePath}`} arrow>
               <IconButton size="small" onClick={() => onOpenFile(task)} sx={{ color: '#7c9ebf' }}>
                 <FolderOpen fontSize="small" />
@@ -209,7 +217,7 @@ export default function ParentTaskRow({
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center', justifyContent: 'flex-start' }}>
             {canEdit && canDelete && (
               <TaskAdminActionsMenu
-                onEdit={() => onEdit(task)}
+                onEdit={() => onEdit(task.id)}
                 onDelete={() => onDelete(task.id)}
               />
             )}
@@ -248,3 +256,5 @@ export default function ParentTaskRow({
     </Fragment>
   );
 }
+
+export default memo(ParentTaskRow, areParentRowPropsEqual);

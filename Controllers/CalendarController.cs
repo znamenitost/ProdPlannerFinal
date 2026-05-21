@@ -25,14 +25,21 @@ public class CalendarController : ControllerBase
     }
 
     [HttpGet("week")]
-    public async Task<IActionResult> GetWeek([FromQuery] string employee, [FromQuery] string? startDate)
+    public async Task<IActionResult> GetWeek(
+        [FromQuery] string employee,
+        [FromQuery] string? startDate,
+        CancellationToken cancellationToken)
     {
         try
         {
             if (string.IsNullOrEmpty(employee))
                 return BadRequest(new { error = "Employee name is required" });
 
-            var result = await _weekCalendar.GetWeekAsync(employee, startDate, _timeService.Now);
+            var result = await _weekCalendar.GetWeekAsync(
+                employee,
+                startDate,
+                _timeService.Now,
+                cancellationToken);
             return Ok(new { start = result.Start, days = result.Days });
         }
         catch (Exception ex)

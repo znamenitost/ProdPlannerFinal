@@ -17,6 +17,11 @@ if (args.Length > 0 && args[0].Equals("migrate-sqlite-to-postgres", StringCompar
     Environment.Exit(await MigrationCli.RunAsync(args));
 }
 
+if (args.Length > 0 && args[0].Equals("apply-migrations", StringComparison.OrdinalIgnoreCase))
+{
+    Environment.Exit(await SchemaMigrationCli.RunAsync(args));
+}
+
 try
 {
     var builder = WebApplication.CreateBuilder(args);

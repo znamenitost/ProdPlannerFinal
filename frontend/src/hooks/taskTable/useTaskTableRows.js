@@ -34,6 +34,11 @@ export default function useTaskTableRows(api, { refreshTrigger, selectedEmployee
     );
   }, []);
 
+  const removeRow = useCallback((id) => {
+    setRows((prev) => prev.filter((row) => row.id !== id));
+    setTotalCount((count) => Math.max(0, count - 1));
+  }, []);
+
   const toggleHighlight = () => setHighlightMyTasks(prev => !prev);
   const handleChangePage = (_event, newPage) => setPage(newPage);
   const handleChangeRowsPerPage = (event) => {
@@ -56,6 +61,7 @@ export default function useTaskTableRows(api, { refreshTrigger, selectedEmployee
     handleChangeRowsPerPage,
     refresh,
     loadRows,
-    patchRow
+    patchRow,
+    removeRow
   };
 }

@@ -4,17 +4,47 @@ import { combineDateTime, DEFAULT_TIME } from '../../utils/dateTimeHelpers';
 export default function useTaskTableActions({
   api,
   refresh,
-  refreshChildren,
+  patchRow,
+  removeRow,
+  selectedEmployeeForHighlight,
+  invalidateChildCache,
+  setChildrenForParent,
   loadChildrenForParent,
   expandParent,
   newRow,
   setNewRow,
   setEditingId,
+  onTaskUpdate,
   showError,
   showWarning,
   confirm
 }) {
   const [pendingLifecycleTaskId, setPendingLifecycleTaskId] = useState(null);
+
+  const syncRowFromServer = useCallback(async (row) => {
+    const employee = selectedEmployeeForHighlight || '';
+    const parentId = row.parentRowNumber;
+
+    if (parentId) {
+      invalidateChildCache(parentId);
+      const children = await api.loadChildren(parentId);
+      setChildrenForParent(parentId, children);
+      const parentDto = await api.fetchTableRow(parentId, employee);
+      patchRow(parentId, parentDto);
+    } else {
+      const updated = await api.fetchTableRow(row.id, employee);
+      patchRow(row.id, updated);
+    }
+
+    onTaskUpdate?.();
+  }, [
+    api,
+    selectedEmployeeForHighlight,
+    invalidateChildCache,
+    setChildrenForParent,
+    patchRow,
+    onTaskUpdate
+  ]);
 
   const handleSaveNewRow = useCallback(async () => {
     const isShared = newRow.isSharedTask && newRow.assigneeParts?.length >= 2;
@@ -87,12 +117,12 @@ export default function useTaskTableActions({
         statusText: row.statusText
       });
       setEditingId(null);
-      await refresh();
+      await syncRowFromServer(row);
     } catch (err) {
       console.error('Ошибка обновления:', err);
       showError('Ошибка обновления задачи');
     }
-  }, [api, refresh, setEditingId, showError]);
+  }, [api, syncRowFromServer, setEditingId, showError]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
     if (pendingLifecycleTaskId === row.id) return;
@@ -100,23 +130,17 @@ export default function useTaskTableActions({
     setPendingLifecycleTaskId(row.id);
     try {
       await action(row.id);
-      await refresh();
-      if (row.parentRowNumber) {
-        await refreshChildren(row.parentRowNumber);
-      }
+      await syncRowFromServer(row);
     } catch (err) {
       console.error(err);
       if (err?.code === 'concurrency_conflict') {
-        await refresh();
-        if (row.parentRowNumber) {
-          await refreshChildren(row.parentRowNumber);
-        }
+        await syncRowFromServer(row);
       }
       showError(err.message || 'Не удалось выполнить действие с задачей');
     } finally {
       setPendingLifecycleTaskId(null);
     }
-  }, [pendingLifecycleTaskId, refresh, refreshChildren, showError]);
+  }, [pendingLifecycleTaskId, syncRowFromServer, showError]);
 
   const handleStartTask = useCallback(
     (row) => runLifecycleAction(api.startTask, row),
@@ -145,11 +169,12 @@ export default function useTaskTableActions({
     if (!confirmed) return;
     try {
       await api.deleteRow(id);
-      refresh();
+      removeRow(id);
+      onTaskUpdate?.();
     } catch (err) {
       console.error(err);
     }
-  }, [api, refresh, confirm]);
+  }, [api, removeRow, onTaskUpdate, confirm]);
 
   const handleAddNewRow = useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -167,6 +192,10 @@ export default function useTaskTableActions({
     });
   }, [setNewRow]);
 
+  const handleEditRow = useCallback((id) => {
+    setEditingId(id);
+  }, [setEditingId]);
+
   return {
     pendingLifecycleTaskId,
     handleSaveNewRow,
@@ -176,6 +205,7 @@ export default function useTaskTableActions({
     handleResumeTask,
     handleCompleteTask,
     handleDeleteRow,
-    handleAddNewRow
+    handleAddNewRow,
+    handleEditRow
   };
 }

@@ -19,6 +19,7 @@ namespace ProductionPlanner.Services
     {
         public int TaskId { get; set; }
         public string TaskTitle { get; set; } = "";
+        public string FileName { get; set; } = "";
         public DateTime Deadline { get; set; }
         public double RequiredHours { get; set; }
         public double AvailableHoursBeforeDeadline { get; set; }

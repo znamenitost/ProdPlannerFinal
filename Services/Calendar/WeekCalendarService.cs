@@ -18,13 +18,21 @@ public class WeekCalendarService : IWeekCalendarService
         _scheduler = scheduler;
     }
 
-    public async Task<WeekCalendarResponseDto> GetWeekAsync(string employee, string? startDate, DateTime currentTime)
+    public async Task<WeekCalendarResponseDto> GetWeekAsync(
+        string employee,
+        string? startDate,
+        DateTime currentTime,
+        CancellationToken cancellationToken = default)
     {
         var weekStart = WeekCalendarDateHelper.ResolveWeekStart(startDate, currentTime);
         var weekEnd = weekStart.AddDays(7);
 
-        var allEmployeeTasks = await _repo.GetEmployeeTasksAsync(employee);
-        var intervals = await _repo.GetWorkIntervalsForDateRangeAsync(employee, weekStart, weekEnd);
+        var allEmployeeTasks = await _repo.GetEmployeeTasksAsync(employee, cancellationToken);
+        var intervals = await _repo.GetWorkIntervalsForDateRangeAsync(
+            employee,
+            weekStart,
+            weekEnd,
+            cancellationToken);
 
         var intervalsByTask = intervals
             .GroupBy(i => i.ProductionTaskId)

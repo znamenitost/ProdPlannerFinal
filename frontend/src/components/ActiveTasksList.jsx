@@ -8,7 +8,7 @@ import {
   PlayArrow,
   Pause,
   CheckCircle,
-  Assignment
+
 } from '@mui/icons-material';
 import {
   Tooltip,
@@ -27,8 +27,10 @@ import { openFileOnClient } from '../utils/openFileOnClient';
 import { normalizePathForOpen } from '../utils/filePathForOpen';
 import { glassCardSx, compactActionButtonSx } from '../theme/surfaces';
 import EmptyState from './ui/EmptyState';
+import { Assignment } from '@mui/icons-material';
+import TaskTitleTwoLines from './TaskTitleTwoLines';
 
-export default function ActiveTasksList({ tasks, onUpdate, onSplit, embedded = false }) {
+export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
   const { showError, showWarning } = useUiFeedback();
 
   const handleAction = async (id, action, progress = null) => {
@@ -71,18 +73,13 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit, embedded = f
     }
   };
 
-  const getShortTitle = (title) => {
-    if (!title) return '';
-    return title.split('\\').pop().split('/').pop();
-  };
-
   const getBorderColor = (status, theme) => {
     if (status === 1) return theme.palette.info.main;
     if (status === 2) return theme.palette.warning.main;
     return theme.palette.divider;
   };
 
-  const list = (
+  const content = (
     <Stack spacing={2}>
       {tasks.map((task) => {
         const risk = getRiskProps(task.riskLevel);
@@ -104,7 +101,7 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit, embedded = f
                     <FolderOpen fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Typography variant="subtitle2">{getShortTitle(task.title)}</Typography>
+                <TaskTitleTwoLines task={task} sx={{ flex: 1, minWidth: 0 }} />
                 <Chip label={task.type} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
                 {risk && (
                   <Chip icon={risk.icon} label={risk.label} size="small" color={risk.color} sx={{ height: 22, fontSize: '0.7rem' }} />
@@ -135,35 +132,81 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit, embedded = f
 
               <Stack direction="row" flexWrap="wrap" gap={0.75}>
                 {task.status === 0 && (
-                  <Button size="small" variant="outlined" color="success" startIcon={<PlayArrow />} onClick={() => handleAction(task.id, 'start')} sx={compactActionButtonSx}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="success"
+                    startIcon={<PlayArrow />}
+                    onClick={() => handleAction(task.id, 'start')}
+                    sx={compactActionButtonSx}
+                  >
                     Начал
                   </Button>
                 )}
                 {task.status === 1 && (
                   <>
-                    <Button size="small" variant="outlined" color="warning" startIcon={<Pause />} onClick={() => handleAction(task.id, 'pause')} sx={compactActionButtonSx}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      startIcon={<Pause />}
+                      onClick={() => handleAction(task.id, 'pause')}
+                      sx={compactActionButtonSx}
+                    >
                       Пауза
                     </Button>
-                    <Button size="small" variant="outlined" color="primary" startIcon={<CheckCircle />} onClick={() => handleAction(task.id, 'complete')} sx={compactActionButtonSx}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="primary"
+                      startIcon={<CheckCircle />}
+                      onClick={() => handleAction(task.id, 'complete')}
+                      sx={compactActionButtonSx}
+                    >
                       Готово
                     </Button>
                   </>
                 )}
                 {task.status === 2 && (
                   <>
-                    <Button size="small" variant="contained" color="success" startIcon={<PlayArrow />} onClick={() => handleAction(task.id, 'resume')} sx={compactActionButtonSx}>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="success"
+                      startIcon={<PlayArrow />}
+                      onClick={() => handleAction(task.id, 'resume')}
+                      sx={compactActionButtonSx}
+                    >
                       Продолжить
                     </Button>
-                    <Button size="small" variant="outlined" color="primary" startIcon={<CheckCircle />} onClick={() => handleAction(task.id, 'complete')} sx={compactActionButtonSx}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="primary"
+                      startIcon={<CheckCircle />}
+                      onClick={() => handleAction(task.id, 'complete')}
+                      sx={compactActionButtonSx}
+                    >
                       Готово
                     </Button>
                   </>
                 )}
-                {task.status !== 3 && [0.3, 0.6, 0.9].map((p) => (
-                  <Button key={p} size="small" variant="text" color="secondary" onClick={() => handleAction(task.id, 'progress', p)} sx={compactActionButtonSx}>
-                    {Math.round(p * 100)}%
-                  </Button>
-                ))}
+                {task.status !== 3 && (
+                  <>
+                    {[0.3, 0.6, 0.9].map((p) => (
+                      <Button
+                        key={p}
+                        size="small"
+                        variant="text"
+                        color="secondary"
+                        onClick={() => handleAction(task.id, 'progress', p)}
+                        sx={compactActionButtonSx}
+                      >
+                        {Math.round(p * 100)}%
+                      </Button>
+                    ))}
+                  </>
+                )}
               </Stack>
             </CardContent>
           </Card>
@@ -173,12 +216,14 @@ export default function ActiveTasksList({ tasks, onUpdate, onSplit, embedded = f
     </Stack>
   );
 
-  if (embedded) return list;
+  if (embedded) return content;
 
   return (
     <Box sx={{ mt: 3 }}>
-      <Typography variant="h2" sx={{ mb: 2 }}>Активные задачи</Typography>
-      {list}
+      <Typography variant="h2" sx={{ mb: 2 }}>
+        Активные задачи
+      </Typography>
+      {content}
     </Box>
   );
 }

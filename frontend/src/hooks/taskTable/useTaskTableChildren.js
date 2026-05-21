@@ -131,6 +131,8 @@ export default function useTaskTableChildren(api, refreshTrigger) {
     });
   }, []);
 
+  const invalidateChildCache = clearChildrenCache;
+
   return {
     expandedRows,
     childrenCache,
@@ -139,6 +141,7 @@ export default function useTaskTableChildren(api, refreshTrigger) {
     refreshChildren,
     setChildrenForParent,
     clearChildrenCache,
+    invalidateChildCache,
     expandParent,
     patchChildInCache
   };

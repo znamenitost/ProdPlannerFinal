@@ -29,9 +29,10 @@ public class TaskTableService : ITaskTableService
     public async Task<PaginatedResult<TaskTableRowDto>> GetRowsAsync(
         int page,
         int pageSize,
-        string targetEmployeeName)
+        string targetEmployeeName,
+        CancellationToken cancellationToken = default)
     {
-        var pageResult = await _repo.GetRootTasksPaginatedAsync(page, pageSize);
+        var pageResult = await _repo.GetRootTasksPaginatedAsync(page, pageSize, cancellationToken);
 
         if (pageResult.Items.Count == 0)
         {
@@ -45,7 +46,7 @@ public class TaskTableService : ITaskTableService
         }
 
         var parentIds = pageResult.Items.Select(p => p.Id).ToList();
-        var childrenByParent = await _repo.GetSplitChildrenByParentIdsAsync(parentIds);
+        var childrenByParent = await _repo.GetSplitChildrenByParentIdsAsync(parentIds, cancellationToken);
 
         var rows = pageResult.Items.Select(parent =>
         {
@@ -66,7 +67,38 @@ public class TaskTableService : ITaskTableService
         };
     }
 
-    public async Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(CreateTaskRequest request)
+    public async Task<TaskTableRowDto?> GetRowDtoAsync(
+        int id,
+        string targetEmployeeName,
+        CancellationToken cancellationToken = default)
+    {
+        var task = await _repo.GetTaskByIdAsync(id, cancellationToken);
+        if (task == null)
+            return null;
+
+        if (task.ParentRowNumber != null)
+        {
+            return TaskTableRowDto.FromParent(
+                task,
+                TaskStatusMapper.ToText(task.Status),
+                hasCurrentUserSubtask: false);
+        }
+
+        IReadOnlyList<ProductionTask>? children = null;
+        if (task.IsSplitTask)
+            children = await _repo.GetChildTasksAsync(task.Id, cancellationToken);
+
+        var (statusText, hasSubtask) = SplitTaskStatusAggregator.Aggregate(
+            task,
+            children ?? [],
+            targetEmployeeName);
+
+        return TaskTableRowDto.FromParent(task, statusText, hasSubtask, children);
+    }
+
+    public async Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(
+        CreateTaskRequest request,
+        CancellationToken cancellationToken = default)
     {
         var parts = request.Parts?
             .Where(p => !string.IsNullOrWhiteSpace(p.EmployeeName) && p.AllocatedHours > 0)
@@ -103,8 +135,8 @@ public class TaskTableService : ITaskTableService
                 UpdatedAt = _timeService.Now
             };
 
-            await _repo.AddTaskAsync(newTask);
-            await _splitService.SplitTaskAsync(newTask.Id, parts);
+            await _repo.AddTaskAsync(newTask, cancellationToken);
+            await _splitService.SplitTaskAsync(newTask.Id, parts, cancellationToken);
 
             return TaskTableServiceResult<ProductionTask>.Ok(newTask);
         }
@@ -133,19 +165,25 @@ public class TaskTableService : ITaskTableService
             UpdatedAt = _timeService.Now
         };
 
-        await _repo.AddTaskAsync(task);
+        await _repo.AddTaskAsync(task, cancellationToken);
 
-        var allRootIds = (await _repo.GetRootTasksAsync()).OrderBy(t => t.DisplayOrder).Select(t => t.Id).ToList();
-        await _repo.ReorderTasksAsync(allRootIds);
+        var allRootIds = (await _repo.GetRootTasksAsync(cancellationToken))
+            .OrderBy(t => t.DisplayOrder)
+            .Select(t => t.Id)
+            .ToList();
+        await _repo.ReorderTasksAsync(allRootIds, cancellationToken);
 
         await _notificationService.NotifyNewTaskAsync(task);
 
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }
 
-    public async Task<TaskTableServiceResult<ProductionTask>> UpdateRowAsync(int id, UpdateTaskRequest request)
+    public async Task<TaskTableServiceResult<ProductionTask>> UpdateRowAsync(
+        int id,
+        UpdateTaskRequest request,
+        CancellationToken cancellationToken = default)
     {
-        var task = await _repo.GetTaskByIdAsync(id);
+        var task = await _repo.GetTaskByIdAsync(id, cancellationToken);
         if (task == null)
             return TaskTableServiceResult<ProductionTask>.Missing();
 
@@ -166,12 +204,12 @@ public class TaskTableService : ITaskTableService
 
         if (task.IsSplitTask && task.ParentRowNumber == null)
         {
-            var childTasks = await _repo.GetChildTasksAsync(task.Id);
+            var childTasks = await _repo.GetChildTasksAsync(task.Id, cancellationToken);
             foreach (var child in childTasks)
             {
                 child.Deadline = request.Deadline;
                 child.UpdatedAt = _timeService.Now;
-                await _repo.UpdateTaskAsync(child);
+                await _repo.UpdateTaskAsync(child, cancellationToken);
             }
         }
 
@@ -182,7 +220,7 @@ public class TaskTableService : ITaskTableService
             if (newStatus != task.Status)
             {
                 if (newStatus == JobStatus.Completed && task.Status != JobStatus.Completed)
-                    await _lifecycle.CompleteTaskAsync(task.Id, _timeService.Now);
+                    await _lifecycle.CompleteTaskAsync(task.Id, _timeService.Now, cancellationToken);
                 else
                     task.Status = newStatus;
 
@@ -190,7 +228,7 @@ public class TaskTableService : ITaskTableService
             }
         }
 
-        await _repo.UpdateTaskAsync(task);
+        await _repo.UpdateTaskAsync(task, cancellationToken);
         await _notificationService.NotifyTaskUpdatedAsync(task, oldEmployeeName);
         if (statusChangedTo != null)
             await _notificationService.NotifyStatusChangedAsync(task, statusChangedTo);
@@ -198,9 +236,11 @@ public class TaskTableService : ITaskTableService
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }
 
-    public async Task<TaskTableServiceResult<bool>> DeleteRowAsync(int id)
+    public async Task<TaskTableServiceResult<bool>> DeleteRowAsync(
+        int id,
+        CancellationToken cancellationToken = default)
     {
-        var task = await _repo.GetTaskByIdAsync(id);
+        var task = await _repo.GetTaskByIdAsync(id, cancellationToken);
         if (task == null)
             return TaskTableServiceResult<bool>.Missing();
 
@@ -210,7 +250,7 @@ public class TaskTableService : ITaskTableService
 
         if (task.IsSplitTask)
         {
-            var children = await _repo.GetChildTasksAsync(task.Id);
+            var children = await _repo.GetChildTasksAsync(task.Id, cancellationToken);
             foreach (var child in children)
             {
                 if (!string.IsNullOrEmpty(child.EmployeeName))
@@ -218,11 +258,12 @@ public class TaskTableService : ITaskTableService
             }
         }
 
-        await _repo.DeleteTaskAsync(id);
+        await _repo.DeleteTaskAsync(id, cancellationToken);
         await _notificationService.NotifyTaskDeletedAsync(id, employeeNames);
 
         return TaskTableServiceResult<bool>.Ok(true);
     }
 
-    public Task ReorderRowsAsync(List<int> orderedIds) => _repo.ReorderTasksAsync(orderedIds);
+    public Task ReorderRowsAsync(List<int> orderedIds, CancellationToken cancellationToken = default) =>
+        _repo.ReorderTasksAsync(orderedIds, cancellationToken);
 }

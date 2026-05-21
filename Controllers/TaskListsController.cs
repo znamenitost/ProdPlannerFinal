@@ -25,14 +25,16 @@ public class TaskListsController : ControllerBase
     }
 
     [HttpGet("active")]
-    public async Task<IActionResult> GetActiveTasks([FromQuery] string employee)
+    public async Task<IActionResult> GetActiveTasks(
+        [FromQuery] string employee,
+        CancellationToken cancellationToken)
     {
         try
         {
             if (string.IsNullOrEmpty(employee))
                 return BadRequest(new { error = "Employee name is required" });
 
-            var result = await _taskLists.GetActiveTasksAsync(employee, _timeService.Now);
+            var result = await _taskLists.GetActiveTasksAsync(employee, _timeService.Now, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -43,14 +45,16 @@ public class TaskListsController : ControllerBase
     }
 
     [HttpGet("completed")]
-    public async Task<IActionResult> GetCompletedTasks([FromQuery] string employee)
+    public async Task<IActionResult> GetCompletedTasks(
+        [FromQuery] string employee,
+        CancellationToken cancellationToken)
     {
         try
         {
             if (string.IsNullOrEmpty(employee))
                 return BadRequest(new { error = "Employee name is required" });
 
-            var result = await _taskLists.GetCompletedTasksAsync(employee);
+            var result = await _taskLists.GetCompletedTasksAsync(employee, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -61,14 +65,16 @@ public class TaskListsController : ControllerBase
     }
 
     [HttpGet("deadline-risks")]
-    public async Task<IActionResult> GetDeadlineRisks([FromQuery] string employee)
+    public async Task<IActionResult> GetDeadlineRisks(
+        [FromQuery] string employee,
+        CancellationToken cancellationToken)
     {
         try
         {
             if (string.IsNullOrEmpty(employee))
                 return BadRequest(new { error = "Employee name is required" });
 
-            var risks = await _taskLists.GetDeadlineRisksAsync(employee, _timeService.Now);
+            var risks = await _taskLists.GetDeadlineRisksAsync(employee, _timeService.Now, cancellationToken);
             return Ok(risks);
         }
         catch (Exception ex)

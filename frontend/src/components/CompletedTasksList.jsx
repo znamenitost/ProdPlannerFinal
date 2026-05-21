@@ -31,6 +31,7 @@ import { getCompletedTasks } from '../services/api';
 import { alpha } from '@mui/material/styles';
 import { glassPaperSx, sectionTitleRowSx } from '../theme/surfaces';
 import EmptyState from './ui/EmptyState';
+import TaskTitleTwoLines from './TaskTitleTwoLines';
 
 export default function CompletedTasksList({ employee, refresh }) {
   const [completed, setCompleted] = useState([]);
@@ -50,14 +51,6 @@ export default function CompletedTasksList({ employee, refresh }) {
   }, [employee, refresh]);
 
   const totalDifference = stats.totalEstimate - stats.totalActual;
-
-  const getTaskDisplayName = (task) => {
-    if (task.folderPath && task.folderPath.trim() !== '') {
-      const segments = task.folderPath.split(/[\/\\]/).filter(s => s !== '');
-      if (segments.length > 0) return segments[segments.length - 1];
-    }
-    return task.fileName || 'Без названия';
-  };
 
   const formatWorkPeriod = (intervals) => {
     if (!intervals || intervals.length === 0) return '—';
@@ -86,7 +79,9 @@ export default function CompletedTasksList({ employee, refresh }) {
     <Paper sx={glassPaperSx}>
       <Box sx={{ ...sectionTitleRowSx, mb: 3 }}>
         <Assessment color="primary" />
-        <Typography variant="h2" component="h2">Выполненные задачи</Typography>
+        <Typography variant="h2" component="h2">
+          Выполненные задачи
+        </Typography>
       </Box>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -133,22 +128,21 @@ export default function CompletedTasksList({ employee, refresh }) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ 
-            bgcolor: totalDifference >= 0 ? '#f0fdf4' : '#fef2f2', 
-            border: '1px solid',
-            borderColor: totalDifference >= 0 ? '#dcfce7' : '#fee2e2'
-          }}>
+          <Card sx={(t) => ({
+            bgcolor: alpha(totalDifference >= 0 ? t.palette.success.main : t.palette.error.main, 0.08),
+            border: `1px solid ${alpha(totalDifference >= 0 ? t.palette.success.main : t.palette.error.main, 0.22)}`
+          })}>
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Экономия</Typography>
-                {totalDifference >= 0 ? <TrendingUp sx={{ color: '#22c55e' }} /> : <TrendingDown sx={{ color: '#ef4444' }} />}
+                {totalDifference >= 0 ? <TrendingUp color="success" /> : <TrendingDown color="error" />}
               </Box>
-              <Typography 
-                variant="h4" 
-                sx={{ 
-                  fontWeight: 700, 
-                  mt: 1, 
-                  color: totalDifference >= 0 ? '#22c55e' : '#ef4444' 
+              <Typography
+                variant="h4"
+                sx={{
+                  fontWeight: 700,
+                  mt: 1,
+                  color: totalDifference >= 0 ? 'success.main' : 'error.main'
                 }}
               >
                 {totalDifference >= 0 ? '+' : ''}{totalDifference.toFixed(1)} ч
@@ -161,7 +155,7 @@ export default function CompletedTasksList({ employee, refresh }) {
       <TableContainer>
         <Table sx={{ minWidth: 800 }}>
           <TableHead>
-            <TableRow sx={{ bgcolor: '#f8fafc' }}>
+            <TableRow>
               <TableCell sx={{ fontWeight: 600 }}>Задача</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>Тип</TableCell>
               <TableCell align="center" sx={{ fontWeight: 600 }}>Период выполнения</TableCell>
@@ -175,16 +169,18 @@ export default function CompletedTasksList({ employee, refresh }) {
               const diff = task.estimateHours - task.actualHours;
               const isPositive = diff >= 0;
               const workPeriod = formatWorkPeriod(task.workIntervals);
-              const displayName = getTaskDisplayName(task);
-              
               return (
                 <TableRow key={task.id} hover>
                   <TableCell>
-                    <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-                      <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} />
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {displayName}
-                      </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                      <CheckCircle sx={{ fontSize: 16, flexShrink: 0 }} color="success" />
+                      <TaskTitleTwoLines
+                        task={task}
+                        headingVariant="body2"
+                        fileVariant="caption"
+                        headingSx={{ fontWeight: 500 }}
+                        sx={{ flex: 1, minWidth: 0 }}
+                      />
                     </Box>
                   </TableCell>
                   <TableCell>
@@ -235,13 +231,7 @@ export default function CompletedTasksList({ employee, refresh }) {
         </Table>
       </TableContainer>
 
-      {completed.length === 0 && (
-        <Box sx={{ textAlign: 'center', py: 6 }}>
-          <Typography variant="body1" color="text.secondary">
-            Нет выполненных задач
-          </Typography>
-        </Box>
-      )}
+      {completed.length === 0 && <EmptyState message="Нет выполненных задач" icon={TaskAlt} />}
     </Paper>
   );
 }

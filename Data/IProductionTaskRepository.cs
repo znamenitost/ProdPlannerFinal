@@ -4,43 +4,39 @@ namespace ProductionPlanner.Data
 {
     public interface IProductionTaskRepository
     {
-        Task<List<ProductionTask>> GetActiveTasksAsync(string employeeName);
-        Task<List<ProductionTask>> GetCompletedTasksAsync(string employeeName);
-        Task<ProductionTask?> GetTaskByIdAsync(int id);
-        Task<ProductionTask?> GetTaskByRowNumberAsync(int rowNumber);
-        Task AddTaskAsync(ProductionTask task);
-        Task UpdateTaskAsync(ProductionTask task);
-        Task DeleteTaskAsync(int id);
-        Task DeleteAllTasksAsync();
-        Task AddWorkIntervalAsync(WorkInterval interval);
-        Task UpdateWorkIntervalAsync(WorkInterval interval);
-        Task DeleteWorkIntervalAsync(WorkInterval interval);
-        Task DeleteAllWorkIntervalsAsync();
-        Task<EmployeeStat?> GetEmployeeStatAsync(string employeeName);
-        Task UpdateEmployeeStatAsync(EmployeeStat stat);
-        Task<List<ProductionTask>> GetAllTasksAsync();
-        Task<List<ProductionTask>> GetRootTasksAsync();
-        Task<List<ProductionTask>> GetChildTasksAsync(int parentId);
-        Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize);
-        Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(IReadOnlyList<int> parentIds);
-        Task ReorderTasksAsync(List<int> orderedIds);
-        
-        // Новые методы для оптимизации календаря
-        Task<List<ProductionTask>> GetActiveTasksWithIntervalsByEmployeeAsync(string employeeName);
-        Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end);
-        
-        // Новый метод – все задачи сотрудника (без фильтра по статусу)
-        Task<List<ProductionTask>> GetEmployeeTasksAsync(string employeeName);
-
-        Task ExecuteInTransactionAsync(Func<Task> action);
-        Task<int> CloseOpenIntervalsAsync(int taskId, DateTime closedAt);
+        Task<List<ProductionTask>> GetActiveTasksAsync(string employeeName, CancellationToken cancellationToken = default);
+        Task<List<ProductionTask>> GetCompletedTasksAsync(string employeeName, CancellationToken cancellationToken = default);
+        Task<ProductionTask?> GetTaskByIdAsync(int id, CancellationToken cancellationToken = default);
+        Task<ProductionTask?> GetTaskByRowNumberAsync(int rowNumber, CancellationToken cancellationToken = default);
+        Task AddTaskAsync(ProductionTask task, CancellationToken cancellationToken = default);
+        Task UpdateTaskAsync(ProductionTask task, CancellationToken cancellationToken = default);
+        Task DeleteTaskAsync(int id, CancellationToken cancellationToken = default);
+        Task DeleteAllTasksAsync(CancellationToken cancellationToken = default);
+        Task AddWorkIntervalAsync(WorkInterval interval, CancellationToken cancellationToken = default);
+        Task UpdateWorkIntervalAsync(WorkInterval interval, CancellationToken cancellationToken = default);
+        Task DeleteWorkIntervalAsync(WorkInterval interval, CancellationToken cancellationToken = default);
+        Task DeleteAllWorkIntervalsAsync(CancellationToken cancellationToken = default);
+        Task<EmployeeStat?> GetEmployeeStatAsync(string employeeName, CancellationToken cancellationToken = default);
+        Task UpdateEmployeeStatAsync(EmployeeStat stat, CancellationToken cancellationToken = default);
+        Task<List<ProductionTask>> GetAllTasksAsync(CancellationToken cancellationToken = default);
+        Task<List<ProductionTask>> GetRootTasksAsync(CancellationToken cancellationToken = default);
+        Task<List<ProductionTask>> GetChildTasksAsync(int parentId, CancellationToken cancellationToken = default);
+        Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize, CancellationToken cancellationToken = default);
+        Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken = default);
+        Task ReorderTasksAsync(List<int> orderedIds, CancellationToken cancellationToken = default);
+        Task<List<ProductionTask>> GetActiveTasksWithIntervalsByEmployeeAsync(string employeeName, CancellationToken cancellationToken = default);
+        Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end, CancellationToken cancellationToken = default);
+        Task<List<ProductionTask>> GetEmployeeTasksAsync(string employeeName, CancellationToken cancellationToken = default);
+        Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);
+        Task<int> CloseOpenIntervalsAsync(int taskId, DateTime closedAt, CancellationToken cancellationToken = default);
         Task<int> TryTransitionStatusAsync(
             int taskId,
             JobStatus newStatus,
             DateTime updatedAt,
             IReadOnlyList<JobStatus>? expectedStatuses = null,
-            TaskStatusPatch? patch = null);
+            TaskStatusPatch? patch = null,
+            CancellationToken cancellationToken = default);
         void StageWorkInterval(WorkInterval interval);
-        Task SaveChangesAsync();
+        Task SaveChangesAsync(CancellationToken cancellationToken = default);
     }
 }

@@ -25,11 +25,16 @@ namespace ProductionPlanner.Controllers
 
         [HttpPost]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> SplitTask([FromBody] SplitTaskRequest request)
+        public async Task<IActionResult> SplitTask(
+            [FromBody] SplitTaskRequest request,
+            CancellationToken cancellationToken)
         {
             try
             {
-                var parent = await _splitService.SplitTaskAsync(request.ParentTaskId, request.Parts);
+                var parent = await _splitService.SplitTaskAsync(
+                    request.ParentTaskId,
+                    request.Parts,
+                    cancellationToken);
                 return Ok(new
                 {
                     message = "Задача успешно разделена",
@@ -47,11 +52,17 @@ namespace ProductionPlanner.Controllers
 
         [HttpPut("{parentTaskId}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> UpdateSplit(int parentTaskId, [FromBody] SplitTaskRequest request)
+        public async Task<IActionResult> UpdateSplit(
+            int parentTaskId,
+            [FromBody] SplitTaskRequest request,
+            CancellationToken cancellationToken)
         {
             try
             {
-                var parent = await _splitService.UpdateSplitAsync(parentTaskId, request.Parts);
+                var parent = await _splitService.UpdateSplitAsync(
+                    parentTaskId,
+                    request.Parts,
+                    cancellationToken);
                 return Ok(new
                 {
                     message = "Назначения обновлены",
@@ -68,12 +79,14 @@ namespace ProductionPlanner.Controllers
         }
 
         [HttpGet("children/{parentRowNumber}")]
-        public async Task<IActionResult> GetChildTasks(int parentRowNumber)
+        public async Task<IActionResult> GetChildTasks(
+            int parentRowNumber,
+            CancellationToken cancellationToken)
         {
             var currentUser = await _userManager.GetUserAsync(User);
             if (currentUser == null) return Unauthorized();
 
-            var children = await _splitService.GetChildTasksAsync(parentRowNumber);
+            var children = await _splitService.GetChildTasksAsync(parentRowNumber, cancellationToken);
 
             var result = children.Select(c => new
             {

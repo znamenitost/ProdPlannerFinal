@@ -1,6 +1,13 @@
-import { Box, Button } from '@mui/material';
-import { PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
-import { compactActionButtonSx } from '../theme/surfaces';
+import { useState } from 'react';
+import {
+  IconButton,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  CircularProgress
+} from '@mui/material';
+import { MoreVert, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
 
 export default function EmployeeStatusButtons({
   task,
@@ -10,53 +17,86 @@ export default function EmployeeStatusButtons({
   onResume,
   onComplete
 }) {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+
   const status = task.statusText || 'Назначена';
   const isDone = status === 'Готово';
   const isStarted = status === 'Начал';
   const isPaused = status === 'Пауза';
   const canStart = !isDone && !isStarted && !isPaused;
-  const isDisabled = pending;
+  const canPause = isStarted;
+  const canResume = isPaused;
+  const canComplete = !isDone;
 
-  const handlePauseClick = () => {
-    if (isPaused) onResume(task);
-    else onPause(task);
+  const handleOpen = (event) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
   };
 
+  const handleClose = () => setAnchorEl(null);
+
+  const runAction = (action) => () => {
+    handleClose();
+    action(task);
+  };
+
+  if (isDone) return null;
+
+  const hasActions = canStart || canPause || canResume || canComplete;
+  if (!hasActions) return null;
+
   return (
-    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center' }}>
-      <Button
+    <>
+      <IconButton
         size="small"
-        variant={isStarted ? 'contained' : 'outlined'}
-        color="success"
-        disabled={!canStart || isDisabled}
-        startIcon={<PlayArrow sx={{ fontSize: '14px !important' }} />}
-        onClick={() => onStart(task)}
-        sx={compactActionButtonSx}
+        onClick={handleOpen}
+        disabled={pending}
+        aria-label="Действия с задачей"
       >
-        Начал
-      </Button>
-      <Button
-        size="small"
-        variant={isPaused ? 'contained' : 'outlined'}
-        color="warning"
-        disabled={isDone || (!isStarted && !isPaused) || isDisabled}
-        startIcon={<Pause sx={{ fontSize: '14px !important' }} />}
-        onClick={handlePauseClick}
-        sx={compactActionButtonSx}
+        {pending ? <CircularProgress size={18} /> : <MoreVert fontSize="small" />}
+      </IconButton>
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        onClick={handleClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        Пауза
-      </Button>
-      <Button
-        size="small"
-        variant={isDone ? 'contained' : 'outlined'}
-        color="primary"
-        disabled={isDone || isDisabled}
-        startIcon={<CheckCircle sx={{ fontSize: '14px !important' }} />}
-        onClick={() => onComplete(task)}
-        sx={compactActionButtonSx}
-      >
-        Готово
-      </Button>
-    </Box>
+        {canStart && (
+          <MenuItem onClick={runAction(onStart)}>
+            <ListItemIcon>
+              <PlayArrow fontSize="small" color="success" />
+            </ListItemIcon>
+            <ListItemText>Начал</ListItemText>
+          </MenuItem>
+        )}
+        {canPause && (
+          <MenuItem onClick={runAction(onPause)}>
+            <ListItemIcon>
+              <Pause fontSize="small" color="warning" />
+            </ListItemIcon>
+            <ListItemText>Пауза</ListItemText>
+          </MenuItem>
+        )}
+        {canResume && (
+          <MenuItem onClick={runAction(onResume)}>
+            <ListItemIcon>
+              <PlayArrow fontSize="small" color="success" />
+            </ListItemIcon>
+            <ListItemText>Продолжить</ListItemText>
+          </MenuItem>
+        )}
+        {canComplete && (
+          <MenuItem onClick={runAction(onComplete)}>
+            <ListItemIcon>
+              <CheckCircle fontSize="small" color="primary" />
+            </ListItemIcon>
+            <ListItemText>Готово</ListItemText>
+          </MenuItem>
+        )}
+      </Menu>
+    </>
   );
 }

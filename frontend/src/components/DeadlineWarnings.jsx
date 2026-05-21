@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Alert, AlertTitle, Stack, Collapse, IconButton } from '@mui/material';
-import { Warning, Error, Close, Schedule, AccessTime, Flag, Event } from '@mui/icons-material';
+import { Warning, Error, Close, AccessTime, Flag, Event } from '@mui/icons-material';
+import TaskTitleTwoLines from './TaskTitleTwoLines';
 
 export default function DeadlineWarnings({ employee, refresh }) {
   const [risks, setRisks] = useState([]);
@@ -66,8 +67,12 @@ export default function DeadlineWarnings({ employee, refresh }) {
             shortMessage = `Осталось ${Math.round(risk.availableHoursBeforeDeadline)} из ${Math.round(risk.requiredHours)} ч`;
           }
           
-          const shortTitle = (risk.taskTitle || 'Без названия').split('\\').pop().split('/').pop();
-          
+          const riskTask = {
+            folderPath: risk.taskTitle,
+            heading: risk.taskTitle,
+            fileName: risk.fileName
+          };
+
           return (
             <Alert 
               key={risk.taskId}
@@ -86,8 +91,14 @@ export default function DeadlineWarnings({ employee, refresh }) {
               <AlertTitle sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.5 }}>
                 {title}
               </AlertTitle>
-              
-              <strong>{shortTitle}</strong>
+
+              <TaskTitleTwoLines
+                task={riskTask}
+                headingVariant="body2"
+                fileVariant="body2"
+                headingSx={{ fontWeight: 600 }}
+                fileSx={{ color: 'text.secondary', mt: 0.25 }}
+              />
               
               <Stack 
                 direction="row" 

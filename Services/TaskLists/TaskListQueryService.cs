@@ -20,15 +20,20 @@ public class TaskListQueryService : ITaskListQueryService
         _workHours = workHours;
     }
 
-    public async Task<List<object>> GetActiveTasksAsync(string employee, DateTime now)
+    public async Task<List<object>> GetActiveTasksAsync(
+        string employee,
+        DateTime now,
+        CancellationToken cancellationToken = default)
     {
-        var tasks = await _repo.GetActiveTasksAsync(employee);
+        var tasks = await _repo.GetActiveTasksAsync(employee, cancellationToken);
         return tasks.Select(task => MapTaskToResult(task, now)).Cast<object>().ToList();
     }
 
-    public async Task<object> GetCompletedTasksAsync(string employee)
+    public async Task<object> GetCompletedTasksAsync(
+        string employee,
+        CancellationToken cancellationToken = default)
     {
-        var completedTasks = await _repo.GetCompletedTasksAsync(employee);
+        var completedTasks = await _repo.GetCompletedTasksAsync(employee, cancellationToken);
         completedTasks = completedTasks
             .Where(t => !(t.IsSplitTask && t.ParentRowNumber == null))
             .ToList();
@@ -43,9 +48,12 @@ public class TaskListQueryService : ITaskListQueryService
         return new { tasks = completedTasks, stats };
     }
 
-    public async Task<List<DeadlineRisk>> GetDeadlineRisksAsync(string employee, DateTime now)
+    public async Task<List<DeadlineRisk>> GetDeadlineRisksAsync(
+        string employee,
+        DateTime now,
+        CancellationToken cancellationToken = default)
     {
-        var tasks = await _repo.GetActiveTasksAsync(employee);
+        var tasks = await _repo.GetActiveTasksAsync(employee, cancellationToken);
         return _scheduler.CheckDeadlineRisks(tasks, now);
     }
 
@@ -62,6 +70,9 @@ public class TaskListQueryService : ITaskListQueryService
         {
             task.Id,
             Title = task.TaskDisplayName,
+            Heading = task.TaskDisplayName,
+            FileName = task.FileName,
+            FolderPath = task.FolderPath,
             File = task.FullPath ?? string.Empty,
             task.Type,
             task.Deadline,

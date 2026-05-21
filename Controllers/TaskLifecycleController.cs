@@ -29,73 +29,76 @@ public class TaskLifecycleController : ControllerBase
     }
 
     [HttpPost("{id}/start")]
-    public async Task<IActionResult> Start(int id)
+    public async Task<IActionResult> Start(int id, CancellationToken cancellationToken)
     {
         return await RunLifecycle(id, "Start", async () =>
         {
-            if (await _repo.GetTaskByIdAsync(id) == null)
+            if (await _repo.GetTaskByIdAsync(id, cancellationToken) == null)
                 return NotFound(new { error = $"Задача с id {id} не найдена" });
 
-            await _lifecycle.StartTaskAsync(id, _timeService.Now);
+            await _lifecycle.StartTaskAsync(id, _timeService.Now, cancellationToken);
             return Ok(new { message = "Задача запущена" });
         });
     }
 
     [HttpPost("{id}/pause")]
-    public async Task<IActionResult> Pause(int id)
+    public async Task<IActionResult> Pause(int id, CancellationToken cancellationToken)
     {
         return await RunLifecycle(id, "Pause", async () =>
         {
-            if (await _repo.GetTaskByIdAsync(id) == null)
+            if (await _repo.GetTaskByIdAsync(id, cancellationToken) == null)
                 return NotFound(new { error = $"Задача с id {id} не найдена" });
 
-            await _lifecycle.PauseTaskAsync(id, _timeService.Now);
+            await _lifecycle.PauseTaskAsync(id, _timeService.Now, cancellationToken);
             return Ok(new { message = "Задача приостановлена" });
         });
     }
 
     [HttpPost("{id}/resume")]
-    public async Task<IActionResult> Resume(int id)
+    public async Task<IActionResult> Resume(int id, CancellationToken cancellationToken)
     {
         return await RunLifecycle(id, "Resume", async () =>
         {
-            if (await _repo.GetTaskByIdAsync(id) == null)
+            if (await _repo.GetTaskByIdAsync(id, cancellationToken) == null)
                 return NotFound(new { error = $"Задача с id {id} не найдена" });
 
-            await _lifecycle.ResumeTaskAsync(id, _timeService.Now);
+            await _lifecycle.ResumeTaskAsync(id, _timeService.Now, cancellationToken);
             return Ok(new { message = "Задача возобновлена" });
         });
     }
 
     [HttpPost("{id}/progress")]
-    public async Task<IActionResult> SetProgress(int id, [FromBody] double progress)
+    public async Task<IActionResult> SetProgress(
+        int id,
+        [FromBody] double progress,
+        CancellationToken cancellationToken)
     {
         return await RunLifecycle(id, "SetProgress", async () =>
         {
-            await _lifecycle.UpdateProgressAsync(id, progress, _timeService.Now);
+            await _lifecycle.UpdateProgressAsync(id, progress, _timeService.Now, cancellationToken);
             return Ok();
         });
     }
 
     [HttpPost("{id}/complete")]
-    public async Task<IActionResult> Complete(int id)
+    public async Task<IActionResult> Complete(int id, CancellationToken cancellationToken)
     {
         return await RunLifecycle(id, "Complete", async () =>
         {
-            if (await _repo.GetTaskByIdAsync(id) == null)
+            if (await _repo.GetTaskByIdAsync(id, cancellationToken) == null)
                 return NotFound(new { error = $"Задача с id {id} не найдена" });
 
-            await _lifecycle.CompleteTaskAsync(id, _timeService.Now);
+            await _lifecycle.CompleteTaskAsync(id, _timeService.Now, cancellationToken);
             return Ok(new { message = "Задача завершена" });
         });
     }
 
     [HttpPost("{id}/return")]
-    public async Task<IActionResult> Return(int id)
+    public async Task<IActionResult> Return(int id, CancellationToken cancellationToken)
     {
         return await RunLifecycle(id, "Return", async () =>
         {
-            await _lifecycle.ReturnTaskAsync(id, _timeService.Now);
+            await _lifecycle.ReturnTaskAsync(id, _timeService.Now, cancellationToken);
             return Ok();
         });
     }

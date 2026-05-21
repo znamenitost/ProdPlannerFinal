@@ -28,6 +28,15 @@ export default function useTaskTableApi() {
     return null;
   }, []);
 
+  const fetchTableRow = useCallback(async (id, selectedEmployee = '') => {
+    let url = `/api/tasks/table/row/${id}`;
+    if (selectedEmployee) {
+      url += `?employee=${encodeURIComponent(selectedEmployee)}`;
+    }
+    const response = await fetch(url);
+    return handleResponse(response);
+  }, [handleResponse]);
+
   const loadRows = useCallback(async (page = 1, pageSize = 50, selectedEmployee = '') => {
     let url = `/api/tasks/table?page=${page}&pageSize=${pageSize}`;
     if (selectedEmployee) {
@@ -142,6 +151,7 @@ export default function useTaskTableApi() {
   }, [handleResponse]);
 
   const api = useMemo(() => ({
+    fetchTableRow,
     loadRows,
     loadChildren,
     createRow,
@@ -154,7 +164,7 @@ export default function useTaskTableApi() {
     openFile,
     getTaskForSplit,
     splitTask
-  }), [loadRows, loadChildren, createRow, updateRow, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, getTaskForSplit, splitTask]);
+  }), [fetchTableRow, loadRows, loadChildren, createRow, updateRow, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, getTaskForSplit, splitTask]);
 
   return api;
 }

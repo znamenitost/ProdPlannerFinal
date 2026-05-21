@@ -27,9 +27,12 @@ namespace ProductionPlanner.Services
             _serviceProvider = serviceProvider;
         }
 
-        public async Task<ProductionTask> SplitTaskAsync(int parentTaskId, List<SplitPart> parts)
+        public async Task<ProductionTask> SplitTaskAsync(
+            int parentTaskId,
+            List<SplitPart> parts,
+            CancellationToken cancellationToken = default)
         {
-            var parentTask = await _repo.GetTaskByIdAsync(parentTaskId);
+            var parentTask = await _repo.GetTaskByIdAsync(parentTaskId, cancellationToken);
             if (parentTask == null)
                 throw new Exception($"Задача {parentTaskId} не найдена");
 
@@ -41,7 +44,7 @@ namespace ProductionPlanner.Services
             foreach (var part in parts)
             {
                 var childTask = CreateChildFromPart(parentTask, part);
-                await _repo.AddTaskAsync(childTask);
+                await _repo.AddTaskAsync(childTask, cancellationToken);
 
                 var split = new TaskSplit
                 {
@@ -59,19 +62,22 @@ namespace ProductionPlanner.Services
             parentTask.IsSplitTask = true;
             parentTask.EmployeeName = "";
             parentTask.UpdatedAt = _timeService.Now;
-            await _repo.UpdateTaskAsync(parentTask);
+            await _repo.UpdateTaskAsync(parentTask, cancellationToken);
 
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(cancellationToken);
 
-            var allRootIds = (await _repo.GetRootTasksAsync()).OrderBy(t => t.DisplayOrder).Select(t => t.Id).ToList();
-            await _repo.ReorderTasksAsync(allRootIds);
+            var allRootIds = (await _repo.GetRootTasksAsync(cancellationToken)).OrderBy(t => t.DisplayOrder).Select(t => t.Id).ToList();
+            await _repo.ReorderTasksAsync(allRootIds, cancellationToken);
 
             return parentTask;
         }
 
-        public async Task<ProductionTask> UpdateSplitAsync(int parentTaskId, List<SplitPart> parts)
+        public async Task<ProductionTask> UpdateSplitAsync(
+            int parentTaskId,
+            List<SplitPart> parts,
+            CancellationToken cancellationToken = default)
         {
-            var parentTask = await _repo.GetTaskByIdAsync(parentTaskId);
+            var parentTask = await _repo.GetTaskByIdAsync(parentTaskId, cancellationToken);
             if (parentTask == null)
                 throw new Exception($"Задача {parentTaskId} не найдена");
             if (parentTask.ParentRowNumber != null)
@@ -81,13 +87,15 @@ namespace ProductionPlanner.Services
                 throw new Exception("Укажите сотрудника");
 
             if (parts.Count == 1)
-                return await ConvertToRegularTaskAsync(parentTask, parts[0]);
+                return await ConvertToRegularTaskAsync(parentTask, parts[0], cancellationToken);
 
             if (!parentTask.IsSplitTask)
-                return await SplitTaskAsync(parentTaskId, parts);
+                return await SplitTaskAsync(parentTaskId, parts, cancellationToken);
 
-            var existingChildren = await GetChildTasksAsync(parentTaskId);
-            var splits = await _context.TaskSplits.Where(ts => ts.ParentRowNumber == parentTaskId).ToListAsync();
+            var existingChildren = await GetChildTasksAsync(parentTaskId, cancellationToken);
+            var splits = await _context.TaskSplits
+                .Where(ts => ts.ParentRowNumber == parentTaskId)
+                .ToListAsync(cancellationToken);
             var usedChildIds = new HashSet<int>();
             var now = _timeService.Now;
 
@@ -106,7 +114,7 @@ namespace ProductionPlanner.Services
                 {
                     usedChildIds.Add(child.Id);
                     ApplyPartToChild(child, parentTask, part);
-                    await _repo.UpdateTaskAsync(child);
+                    await _repo.UpdateTaskAsync(child, cancellationToken);
 
                     var splitRecord = splits.FirstOrDefault(s => s.ChildTaskId == child.Id);
                     if (splitRecord != null)
@@ -148,17 +156,17 @@ namespace ProductionPlanner.Services
                 }
                 else if (orphan.Status != JobStatus.Completed)
                 {
-                    await lifecycle.CompleteTaskAsync(orphan.Id, now);
+                    await lifecycle.CompleteTaskAsync(orphan.Id, now, cancellationToken);
                     var orphanSplits = splits.Where(s => s.ChildTaskId == orphan.Id).ToList();
                     if (orphanSplits.Any())
                         _context.TaskSplits.RemoveRange(orphanSplits);
                 }
             }
 
-            await _repo.UpdateTaskAsync(parentTask);
-            await _context.SaveChangesAsync();
+            await _repo.UpdateTaskAsync(parentTask, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
 
-            await RecalculateParentStatusAsync(parentTask.Id);
+            await RecalculateParentStatusAsync(parentTask.Id, cancellationToken);
 
             return parentTask;
         }
@@ -212,15 +220,20 @@ namespace ProductionPlanner.Services
         private static bool CanRemoveChild(ProductionTask child) =>
             child.Status == JobStatus.Assigned && child.ActualHours < 0.01 && child.Progress < 0.01;
 
-        private async Task<ProductionTask> ConvertToRegularTaskAsync(ProductionTask parent, SplitPart part)
+        private async Task<ProductionTask> ConvertToRegularTaskAsync(
+            ProductionTask parent,
+            SplitPart part,
+            CancellationToken cancellationToken)
         {
             var now = _timeService.Now;
-            var activeChildren = await GetChildTasksAsync(parent.Id);
+            var activeChildren = await GetChildTasksAsync(parent.Id, cancellationToken);
             var allChildren = await _context.ProductionTasks
                 .Include(t => t.WorkIntervals)
                 .Where(t => t.ParentRowNumber == parent.Id)
-                .ToListAsync();
-            var splits = await _context.TaskSplits.Where(ts => ts.ParentRowNumber == parent.Id).ToListAsync();
+                .ToListAsync(cancellationToken);
+            var splits = await _context.TaskSplits
+                .Where(ts => ts.ParentRowNumber == parent.Id)
+                .ToListAsync(cancellationToken);
             var lifecycle = _serviceProvider.GetRequiredService<ITaskLifecycleService>();
 
             var keptChild = ResolveChildForPart(part, activeChildren, new HashSet<int>());
@@ -233,7 +246,7 @@ namespace ProductionPlanner.Services
                 }
                 else if (child.Status != JobStatus.Completed)
                 {
-                    await lifecycle.CompleteTaskAsync(child.Id, now);
+                    await lifecycle.CompleteTaskAsync(child.Id, now, cancellationToken);
                 }
             }
 
@@ -254,7 +267,7 @@ namespace ProductionPlanner.Services
                 foreach (var interval in keptChild.WorkIntervals.ToList())
                 {
                     interval.ProductionTaskId = parent.Id;
-                    await _repo.UpdateWorkIntervalAsync(interval);
+                    await _repo.UpdateWorkIntervalAsync(interval, cancellationToken);
                 }
 
                 _context.ProductionTasks.Remove(keptChild);
@@ -270,8 +283,8 @@ namespace ProductionPlanner.Services
             if (splits.Any())
                 _context.TaskSplits.RemoveRange(splits);
 
-            await _repo.UpdateTaskAsync(parent);
-            await _context.SaveChangesAsync();
+            await _repo.UpdateTaskAsync(parent, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
 
             return parent;
         }
@@ -288,12 +301,12 @@ namespace ProductionPlanner.Services
             return parentFileName;
         }
 
-        private async Task RecalculateParentStatusAsync(int parentId)
+        private async Task RecalculateParentStatusAsync(int parentId, CancellationToken cancellationToken)
         {
-            var parent = await _repo.GetTaskByIdAsync(parentId);
+            var parent = await _repo.GetTaskByIdAsync(parentId, cancellationToken);
             if (parent == null || !parent.IsSplitTask) return;
 
-            var children = await GetChildTasksAsync(parentId);
+            var children = await GetChildTasksAsync(parentId, cancellationToken);
             if (!children.Any()) return;
 
             JobStatus newStatus;
@@ -311,33 +324,39 @@ namespace ProductionPlanner.Services
             parent.Progress = newStatus == JobStatus.Completed ? 1 : 0;
             parent.CompletedAt = newStatus == JobStatus.Completed ? _timeService.Now : null;
             parent.UpdatedAt = _timeService.Now;
-            await _repo.UpdateTaskAsync(parent);
-            await _context.SaveChangesAsync();
+            await _repo.UpdateTaskAsync(parent, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
         }
 
-        public async Task<bool> AreAllSubtasksCompletedAsync(int parentRowNumber)
+        public async Task<bool> AreAllSubtasksCompletedAsync(
+            int parentRowNumber,
+            CancellationToken cancellationToken = default)
         {
-            var children = await GetChildTasksAsync(parentRowNumber);
-            if (!children.Any()) return true;
+            var children = await GetChildTasksAsync(parentRowNumber, cancellationToken);
+            if (children.Count == 0) return true;
             return children.All(t => t.Status == JobStatus.Completed);
         }
 
-        public async Task UpdateParentCompletionStatusAsync(int parentRowNumber)
+        public async Task UpdateParentCompletionStatusAsync(
+            int parentRowNumber,
+            CancellationToken cancellationToken = default)
         {
-            await AreAllSubtasksCompletedAsync(parentRowNumber);
+            await AreAllSubtasksCompletedAsync(parentRowNumber, cancellationToken);
         }
 
-        public async Task<List<ProductionTask>> GetChildTasksAsync(int parentRowNumber)
+        public async Task<List<ProductionTask>> GetChildTasksAsync(
+            int parentRowNumber,
+            CancellationToken cancellationToken = default)
         {
             var activeChildIds = await _context.TaskSplits
                 .Where(ts => ts.ParentRowNumber == parentRowNumber)
                 .Select(ts => ts.ChildTaskId)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
 
             return await _context.ProductionTasks
                 .Include(t => t.WorkIntervals)
                 .Where(t => activeChildIds.Contains(t.Id))
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
     }
 }

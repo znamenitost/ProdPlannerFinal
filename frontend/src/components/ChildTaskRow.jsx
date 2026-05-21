@@ -1,4 +1,6 @@
+import { memo } from 'react';
 import { TableRow, TableCell, Box, IconButton, Tooltip, Typography, Chip } from '@mui/material';
+import { areChildRowPropsEqual } from '../utils/taskTableRowMemo';
 import { alpha } from '@mui/material/styles';
 import { Person, Comment as CommentIcon } from '@mui/icons-material';
 import {
@@ -28,7 +30,7 @@ function formatDeadline(deadline) {
   return `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-export default function ChildTaskRow({
+function ChildTaskRow({
   task,
   onOpenFile,
   onStart,
@@ -222,3 +224,5 @@ export default function ChildTaskRow({
     </TableRow>
   );
 }
+
+export default memo(ChildTaskRow, areChildRowPropsEqual);

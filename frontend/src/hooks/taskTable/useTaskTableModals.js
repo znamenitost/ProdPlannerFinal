@@ -9,12 +9,13 @@ export default function useTaskTableModals({
   setChildrenForParent,
   loadChildrenForParent,
   clearChildrenCache,
+  invalidateChildCache,
   refreshChildren,
   patchChildInCache,
   expandedRows,
   editingId,
-  refresh,
   patchRow,
+  selectedEmployeeForHighlight,
   newRow,
   setNewRow,
   showError
@@ -131,14 +132,11 @@ export default function useTaskTableModals({
       patchRow(parentId, rowPatch);
     }
     if (parentId) {
-      clearChildrenCache(parentId);
-    }
-    await refresh();
-    if (parentId) {
+      invalidateChildCache(parentId);
       const children = await api.loadChildren(parentId);
       setChildrenForParent(parentId, children);
       if (expandedRows.has(parentId)) {
-        await loadChildrenForParent(parentId);
+        await loadChildrenForParent(parentId, { force: true });
       }
     }
   };
@@ -154,16 +152,19 @@ export default function useTaskTableModals({
     const updatedTask = { ...task, comment: newComment };
     try {
       await updateRow(updatedTask.id, updatedTask);
+
       const parentId = task.parentRowNumber;
       if (parentId) {
         patchChildInCache(task.id, { comment: newComment });
-        await refreshChildren(parentId);
+        invalidateChildCache(parentId);
+        const children = await api.loadChildren(parentId);
+        setChildrenForParent(parentId, children);
       } else {
         patchRow(task.id, { comment: newComment });
       }
+
       setCommentDialogOpen(false);
       setSelectedCommentTask(null);
-      await refresh();
     } catch (err) {
       console.error(err);
       showError('Ошибка сохранения комментария');

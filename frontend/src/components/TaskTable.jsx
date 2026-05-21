@@ -76,7 +76,7 @@ export default function TaskTable({
                   onResume={table.handleResumeTask}
                   onComplete={table.handleCompleteTask}
                   pendingLifecycleTaskId={table.pendingLifecycleTaskId}
-                  onEdit={() => table.setEditingId(parent.id)}
+                  onEdit={table.handleEditRow}
                   onDelete={table.handleDeleteRow}
                   onOpenComment={table.handleOpenComment}
                   canEdit={isAdmin}

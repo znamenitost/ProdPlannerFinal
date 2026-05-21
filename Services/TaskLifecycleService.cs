@@ -44,10 +44,11 @@ public class TaskLifecycleService : ITaskLifecycleService
         JobStatus newStatus,
         DateTime updatedAt,
         TaskStatusPatch? patch,
-        string action)
+        string action,
+        CancellationToken cancellationToken)
     {
         var updated = await _repo.TryTransitionStatusAsync(
-            taskId, newStatus, updatedAt, expectedStatuses, patch);
+            taskId, newStatus, updatedAt, expectedStatuses, patch, cancellationToken);
 
         if (updated == 0)
         {
@@ -58,20 +59,23 @@ public class TaskLifecycleService : ITaskLifecycleService
         }
     }
 
-    private async Task CloseOpenIntervalsInTransactionAsync(int taskId, DateTime closedAt)
+    private async Task CloseOpenIntervalsInTransactionAsync(
+        int taskId,
+        DateTime closedAt,
+        CancellationToken cancellationToken)
     {
-        await _repo.CloseOpenIntervalsAsync(taskId, closedAt);
+        await _repo.CloseOpenIntervalsAsync(taskId, closedAt, cancellationToken);
     }
 
-    private async Task UpdateParentStatusAsync(int childTaskId)
+    private async Task UpdateParentStatusAsync(int childTaskId, CancellationToken cancellationToken)
     {
-        var child = await _repo.GetTaskByIdAsync(childTaskId);
+        var child = await _repo.GetTaskByIdAsync(childTaskId, cancellationToken);
         if (child?.ParentRowNumber == null) return;
 
-        var parent = await _repo.GetTaskByIdAsync(child.ParentRowNumber.Value);
+        var parent = await _repo.GetTaskByIdAsync(child.ParentRowNumber.Value, cancellationToken);
         if (parent == null || !parent.IsSplitTask) return;
 
-        var allChildren = await _repo.GetChildTasksAsync(parent.Id);
+        var allChildren = await _repo.GetChildTasksAsync(parent.Id, cancellationToken);
         if (!allChildren.Any()) return;
 
         JobStatus newStatus;
@@ -86,17 +90,17 @@ public class TaskLifecycleService : ITaskLifecycleService
         {
             parent.Status = newStatus;
             parent.UpdatedAt = _timeService.Now;
-            await _repo.UpdateTaskAsync(parent);
+            await _repo.UpdateTaskAsync(parent, cancellationToken);
         }
     }
 
-    public async Task StartTaskAsync(int taskId, DateTime now)
+    public async Task StartTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
     {
         var startTime = _workHours.GetNextWorkStart(now);
 
-        await _repo.ExecuteInTransactionAsync(async () =>
+        await _repo.ExecuteInTransactionAsync(async ct =>
         {
-            await CloseOpenIntervalsInTransactionAsync(taskId, now);
+            await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
             await RequireStatusTransitionAsync(
                 taskId,
@@ -104,7 +108,8 @@ public class TaskLifecycleService : ITaskLifecycleService
                 JobStatus.InProgress,
                 now,
                 patch: null,
-                action: "запуск");
+                action: "запуск",
+                ct);
 
             _repo.StageWorkInterval(new WorkInterval
             {
@@ -112,23 +117,23 @@ public class TaskLifecycleService : ITaskLifecycleService
                 StartTime = startTime,
                 EndTime = null
             });
-            await _repo.SaveChangesAsync();
-        });
+            await _repo.SaveChangesAsync(ct);
+        }, cancellationToken);
 
-        var task = await _repo.GetTaskByIdAsync(taskId);
+        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null) return;
 
         if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-            await UpdateParentStatusAsync(task.Id);
+            await UpdateParentStatusAsync(task.Id, cancellationToken);
 
         await _notificationService.NotifyStatusChangedAsync(task, "InProgress");
     }
 
-    public async Task PauseTaskAsync(int taskId, DateTime now)
+    public async Task PauseTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
     {
-        await _repo.ExecuteInTransactionAsync(async () =>
+        await _repo.ExecuteInTransactionAsync(async ct =>
         {
-            await CloseOpenIntervalsInTransactionAsync(taskId, now);
+            await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
             await RequireStatusTransitionAsync(
                 taskId,
@@ -136,25 +141,26 @@ public class TaskLifecycleService : ITaskLifecycleService
                 JobStatus.Paused,
                 now,
                 patch: null,
-                action: "пауза");
-        });
+                action: "пауза",
+                ct);
+        }, cancellationToken);
 
-        var task = await _repo.GetTaskByIdAsync(taskId);
+        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null) return;
 
         if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-            await UpdateParentStatusAsync(task.Id);
+            await UpdateParentStatusAsync(task.Id, cancellationToken);
 
         await _notificationService.NotifyStatusChangedAsync(task, "Paused");
     }
 
-    public async Task ResumeTaskAsync(int taskId, DateTime now)
+    public async Task ResumeTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
     {
         var startTime = _workHours.GetNextWorkStart(now);
 
-        await _repo.ExecuteInTransactionAsync(async () =>
+        await _repo.ExecuteInTransactionAsync(async ct =>
         {
-            await CloseOpenIntervalsInTransactionAsync(taskId, now);
+            await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
             await RequireStatusTransitionAsync(
                 taskId,
@@ -162,7 +168,8 @@ public class TaskLifecycleService : ITaskLifecycleService
                 JobStatus.InProgress,
                 now,
                 patch: null,
-                action: "возобновление");
+                action: "возобновление",
+                ct);
 
             _repo.StageWorkInterval(new WorkInterval
             {
@@ -170,28 +177,32 @@ public class TaskLifecycleService : ITaskLifecycleService
                 StartTime = startTime,
                 EndTime = null
             });
-            await _repo.SaveChangesAsync();
-        });
+            await _repo.SaveChangesAsync(ct);
+        }, cancellationToken);
 
-        var task = await _repo.GetTaskByIdAsync(taskId);
+        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null) return;
 
         if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-            await UpdateParentStatusAsync(task.Id);
+            await UpdateParentStatusAsync(task.Id, cancellationToken);
 
         await _notificationService.NotifyStatusChangedAsync(task, "InProgress");
     }
 
-    public async Task UpdateProgressAsync(int taskId, double newProgress, DateTime now)
+    public async Task UpdateProgressAsync(
+        int taskId,
+        double newProgress,
+        DateTime now,
+        CancellationToken cancellationToken = default)
     {
-        var task = await _repo.GetTaskByIdAsync(taskId);
+        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null || task.Status == JobStatus.Completed) return;
         if (newProgress > 0.99) newProgress = 0.99;
 
         if (task.Status == JobStatus.Assigned && newProgress > 0)
         {
-            await StartTaskAsync(taskId, now);
-            task = await _repo.GetTaskByIdAsync(taskId);
+            await StartTaskAsync(taskId, now, cancellationToken);
+            task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
             if (task == null) return;
         }
 
@@ -201,18 +212,18 @@ public class TaskLifecycleService : ITaskLifecycleService
         if (task.Status == JobStatus.Assigned && newProgress > 0)
             task.Status = JobStatus.InProgress;
 
-        await _repo.UpdateTaskAsync(task);
+        await _repo.UpdateTaskAsync(task, cancellationToken);
         await _notificationService.NotifyProgressChangedAsync(task, newProgress);
     }
 
-    public async Task CompleteTaskAsync(int taskId, DateTime now)
+    public async Task CompleteTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
     {
-        var task = await _repo.GetTaskByIdAsync(taskId);
+        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null || task.Status == JobStatus.Completed) return;
 
         if (task.Status == JobStatus.Assigned)
         {
-            await _repo.ExecuteInTransactionAsync(async () =>
+            await _repo.ExecuteInTransactionAsync(async ct =>
             {
                 await RequireStatusTransitionAsync(
                     taskId,
@@ -220,29 +231,30 @@ public class TaskLifecycleService : ITaskLifecycleService
                     JobStatus.Completed,
                     now,
                     new TaskStatusPatch { Progress = 1, CompletedAt = now },
-                    action: "завершение");
-            });
+                    action: "завершение",
+                    ct);
+            }, cancellationToken);
 
             await _statsService.AddSavedHoursAsync(task.EmployeeName, task.EstimateHours, now);
 
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-                await UpdateParentStatusAsync(task.Id);
+                await UpdateParentStatusAsync(task.Id, cancellationToken);
 
-            task = await _repo.GetTaskByIdAsync(taskId);
+            task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
             if (task != null)
                 await _notificationService.NotifyStatusChangedAsync(task, "Completed");
 
-            await TryCompleteParentAfterChildrenAsync(taskId, now);
+            await TryCompleteParentAfterChildrenAsync(taskId, now, cancellationToken);
             return;
         }
 
         var actualHours = 0.0;
 
-        await _repo.ExecuteInTransactionAsync(async () =>
+        await _repo.ExecuteInTransactionAsync(async ct =>
         {
-            await CloseOpenIntervalsInTransactionAsync(taskId, now);
+            await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
-            var intervals = (await _repo.GetTaskByIdAsync(taskId))?.WorkIntervals ?? [];
+            var intervals = (await _repo.GetTaskByIdAsync(taskId, ct))?.WorkIntervals ?? [];
             foreach (var interval in intervals)
             {
                 if (interval.EndTime.HasValue)
@@ -260,33 +272,37 @@ public class TaskLifecycleService : ITaskLifecycleService
                     CompletedAt = now,
                     ActualHours = actualHours
                 },
-                action: "завершение");
-        });
+                action: "завершение",
+                ct);
+        }, cancellationToken);
 
-        task = await _repo.GetTaskByIdAsync(taskId);
+        task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null) return;
 
         double saved = task.EstimateHours - task.ActualHours;
         await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
 
         if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-            await UpdateParentStatusAsync(task.Id);
+            await UpdateParentStatusAsync(task.Id, cancellationToken);
 
-        await TryCompleteParentAfterChildrenAsync(taskId, now);
+        await TryCompleteParentAfterChildrenAsync(taskId, now, cancellationToken);
 
         await _notificationService.NotifyStatusChangedAsync(task, "Completed");
     }
 
-    private async Task TryCompleteParentAfterChildrenAsync(int taskId, DateTime now)
+    private async Task TryCompleteParentAfterChildrenAsync(
+        int taskId,
+        DateTime now,
+        CancellationToken cancellationToken)
     {
-        var task = await _repo.GetTaskByIdAsync(taskId);
+        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task?.ParentRowNumber is not int parentId || !task.IsSplitTask)
             return;
 
-        var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId);
+        var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId, cancellationToken);
         if (!allCompleted) return;
 
-        var parentTask = await _repo.GetTaskByIdAsync(parentId);
+        var parentTask = await _repo.GetTaskByIdAsync(parentId, cancellationToken);
         if (parentTask == null || !parentTask.IsSplitTask || parentTask.Status == JobStatus.Completed)
             return;
 
@@ -295,15 +311,16 @@ public class TaskLifecycleService : ITaskLifecycleService
             JobStatus.Completed,
             now,
             [JobStatus.Assigned, JobStatus.InProgress, JobStatus.Paused],
-            new TaskStatusPatch { Progress = 1, CompletedAt = now });
+            new TaskStatusPatch { Progress = 1, CompletedAt = now },
+            cancellationToken);
 
         if (updated > 0)
             _logger.LogInformation("Parent task {ParentId} marked completed after all children done", parentId);
     }
 
-    public async Task ReturnTaskAsync(int taskId, DateTime now)
+    public async Task ReturnTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
     {
-        await _repo.ExecuteInTransactionAsync(async () =>
+        await _repo.ExecuteInTransactionAsync(async ct =>
         {
             await RequireStatusTransitionAsync(
                 taskId,
@@ -311,10 +328,11 @@ public class TaskLifecycleService : ITaskLifecycleService
                 JobStatus.Assigned,
                 now,
                 new TaskStatusPatch { Progress = 0, ClearCompletedAt = true },
-                action: "возврат в работу");
-        });
+                action: "возврат в работу",
+                ct);
+        }, cancellationToken);
 
-        var task = await _repo.GetTaskByIdAsync(taskId);
+        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null) return;
 
         await _notificationService.NotifyStatusChangedAsync(task, "Assigned");
