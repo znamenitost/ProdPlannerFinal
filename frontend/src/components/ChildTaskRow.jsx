@@ -11,6 +11,8 @@ import {
 import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import {
   COL_ICON,
+  ICON_SLOT_EXPAND,
+  ICON_SLOT_FILE,
   COL_TASK,
   COL_FILE,
   COL_COMMENT,
@@ -89,16 +91,12 @@ function ChildTaskRow({
   return (
     <TableRow sx={getRowStyle()}>
       <TableCell sx={COL_ICON}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap' }}>
           <Box
             sx={{
-              width: 28,
+              ...ICON_SLOT_EXPAND,
               height: 34,
-              flexShrink: 0,
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              position: 'relative'
             }}
           >
             <Box
@@ -114,7 +112,7 @@ function ChildTaskRow({
               }}
             />
           </Box>
-          <Box sx={{ width: 34, height: 34, flexShrink: 0 }} />
+          <Box sx={{ ...ICON_SLOT_FILE, height: 34 }} />
         </Box>
       </TableCell>
 

@@ -30,6 +30,9 @@ import EmployeeStatusButtons from './EmployeeStatusButtons';
 import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import {
   COL_ICON,
+  ICON_SLOT_EXPAND,
+  ICON_SLOT_GROUPS,
+  ICON_SLOT_FILE,
   COL_TASK,
   COL_FILE,
   COL_COMMENT,
@@ -128,25 +131,30 @@ function ParentTaskRow({
       <TableRow sx={getRowStyle()}>
         {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}
         <TableCell sx={COL_ICON}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
-            {hasChildren && (
-              <IconButton size="small" onClick={() => onToggleExpand(task.id)}>
-                {isExpanded ? <ExpandMore fontSize="small" /> : <ChevronRight fontSize="small" />}
-              </IconButton>
-            )}
-            {!hasChildren && <Box sx={{ width: 28 }} />}
+          <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', width: '100%' }}>
+            <Box sx={ICON_SLOT_EXPAND}>
+              {hasChildren ? (
+                <IconButton size="small" onClick={() => onToggleExpand(task.id)} sx={{ p: 0.5 }}>
+                  {isExpanded ? <ExpandMore fontSize="small" /> : <ChevronRight fontSize="small" />}
+                </IconButton>
+              ) : null}
+            </Box>
 
             {task.isSplitTask && (
-              <Tooltip title="Общая задача" arrow>
-                <Groups fontSize="small" sx={{ color: '#6366f1', flexShrink: 0 }} />
-              </Tooltip>
+              <Box sx={ICON_SLOT_GROUPS}>
+                <Tooltip title="Общая задача" arrow>
+                  <Groups fontSize="small" sx={{ color: '#6366f1' }} />
+                </Tooltip>
+              </Box>
             )}
 
-            <Tooltip title={`Открыть файл: ${fullFilePath}`} arrow>
-              <IconButton size="small" onClick={() => onOpenFile(task)} sx={{ color: '#7c9ebf' }}>
-                <FolderOpen fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            <Box sx={ICON_SLOT_FILE}>
+              <Tooltip title={`Открыть файл: ${fullFilePath}`} arrow>
+                <IconButton size="small" onClick={() => onOpenFile(task)} sx={{ color: '#7c9ebf', p: 0.5 }}>
+                  <FolderOpen fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
           </Box>
         </TableCell>
 

@@ -4,7 +4,6 @@ import { getActiveTasks } from '../services/api';
 export default function useActiveTasksRefresh(user, employee) {
   const [activeTasks, setActiveTasks] = useState([]);
   const [refresh, setRefresh] = useState(0);
-  const retryTimeoutRef = useRef(null);
   const mountedRef = useRef(true);
   const fetchSeqRef = useRef(0);
   const activeAbortRef = useRef(null);
@@ -14,10 +13,6 @@ export default function useActiveTasksRefresh(user, employee) {
     return () => {
       mountedRef.current = false;
       activeAbortRef.current?.abort();
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-        retryTimeoutRef.current = null;
-      }
     };
   }, []);
 
@@ -47,19 +42,28 @@ export default function useActiveTasksRefresh(user, employee) {
     loadActiveTasks();
   }, [loadActiveTasks, user]);
 
-  const refreshAll = useCallback(() => {
+  const bumpCalendarRefresh = useCallback(() => {
     setRefresh((r) => r + 1);
-    loadActiveTasks();
+  }, []);
 
-    if (retryTimeoutRef.current) {
-      clearTimeout(retryTimeoutRef.current);
-    }
-    retryTimeoutRef.current = setTimeout(() => {
-      setRefresh((r) => r + 1);
-      loadActiveTasks();
-      retryTimeoutRef.current = null;
-    }, 200);
+  const refreshActiveTasks = useCallback(() => {
+    loadActiveTasks();
   }, [loadActiveTasks]);
 
-  return { activeTasks, refresh, refreshAll };
+  /** Календарь + выполненные (счётчик refresh) и активные карточки */
+  const refreshCalendar = useCallback(() => {
+    bumpCalendarRefresh();
+    loadActiveTasks();
+  }, [bumpCalendarRefresh, loadActiveTasks]);
+
+  /** Полное обновление вкладки «Календарь» (без двойного fetch) */
+  const refreshAll = refreshCalendar;
+
+  return {
+    activeTasks,
+    refresh,
+    refreshActiveTasks,
+    refreshCalendar,
+    refreshAll
+  };
 }

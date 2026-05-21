@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Typography,
   Container,
@@ -59,8 +59,40 @@ function AppContent() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [avatarKey, setAvatarKey] = useState(Date.now());
-  const { activeTasks, refresh, refreshAll } = useActiveTasksRefresh(user, employee);
-  const { notifications, closeNotification } = useNotificationsHub(user, refreshAll);
+  const {
+    activeTasks,
+    refresh,
+    refreshActiveTasks,
+    refreshCalendar,
+    refreshAll
+  } = useActiveTasksRefresh(user, employee);
+
+  const tableHubHandlerRef = useRef(null);
+  const registerTableHubHandler = useCallback((handler) => {
+    tableHubHandlerRef.current = handler;
+  }, []);
+
+  const handleHubTaskEvent = useCallback(
+    (event) => {
+      if (activeTab !== 1 || !tableHubHandlerRef.current) {
+        return false;
+      }
+      return tableHubHandlerRef.current(event);
+    },
+    [activeTab]
+  );
+
+  const notificationHandlers = useMemo(
+    () => ({
+      onTaskEvent: handleHubTaskEvent,
+      onActiveTasksRefresh: refreshActiveTasks,
+      onCalendarRefresh: refreshCalendar,
+      onFullRefresh: refreshAll
+    }),
+    [handleHubTaskEvent, refreshActiveTasks, refreshCalendar, refreshAll]
+  );
+
+  const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers);
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
 
@@ -227,21 +259,22 @@ function AppContent() {
             <>
               <WeekCalendar employee={employee} refresh={refresh} />
               <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
-                <ActiveTasksList tasks={activeTasks} onUpdate={refreshAll} onSplit={handleSplit} embedded />
+                <ActiveTasksList tasks={activeTasks} onUpdate={refreshCalendar} onSplit={handleSplit} embedded />
               </SectionCard>
               <CompletedTasksList employee={employee} refresh={refresh} />
             </>
           )}
 
-          <Box sx={{ display: activeTab === 1 ? 'block' : 'none' }}>
+          {activeTab === 1 && (
             <TaskTable
               refreshTrigger={refresh}
-              onTaskUpdate={refreshAll}
+              onCalendarRefresh={refreshCalendar}
+              onRegisterHubHandler={registerTableHubHandler}
               userRole={user?.role}
               currentUser={user}
               selectedEmployeeForHighlight={employee}
             />
-          </Box>
+          )}
 
           {isAdmin && <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />}
           <SplitTaskModal open={splitModalOpen} task={selectedTaskForSplit} onClose={() => setSplitModalOpen(false)} onSuccess={handleSplitSuccess} />

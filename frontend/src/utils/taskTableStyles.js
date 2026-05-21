@@ -1,6 +1,10 @@
 /** Shared table column + field styles for task rows. */
 
-export const COL_ICON = { width: 48, minWidth: 48, maxWidth: 56, px: 0.5, whiteSpace: 'nowrap', verticalAlign: 'middle' };
+/** expand + shared-task + open-file (split parent rows need all three) */
+export const COL_ICON = { width: 104, minWidth: 104, maxWidth: 120, px: 0.5, whiteSpace: 'nowrap', verticalAlign: 'middle' };
+export const ICON_SLOT_EXPAND = { width: 32, minWidth: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+export const ICON_SLOT_GROUPS = { width: 22, minWidth: 22, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+export const ICON_SLOT_FILE = { width: 32, minWidth: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
 export const COL_TASK = { minWidth: 140, whiteSpace: 'nowrap', verticalAlign: 'middle' };
 export const COL_FILE = { minWidth: 100, whiteSpace: 'nowrap', verticalAlign: 'middle' };
 export const COL_COMMENT = { minWidth: 100, maxWidth: '24ch', whiteSpace: 'normal', verticalAlign: 'middle' };

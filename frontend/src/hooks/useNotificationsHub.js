@@ -25,21 +25,44 @@ function mapPendingDto(dto) {
   };
 }
 
-export default function useNotificationsHub(user, onRefresh) {
+/**
+ * @param {object} handlers
+ * @param {(event: { type: string, taskId?: number }) => Promise<boolean>|boolean} [handlers.onTaskEvent]
+ * @param {() => void} [handlers.onCalendarRefresh] — календарь / completed / активные
+ * @param {() => void} [handlers.onFullRefresh] — reconnect и т.п.
+ */
+export default function useNotificationsHub(user, handlers = {}) {
   const [notifications, setNotifications] = useState([]);
   const refreshTimeoutRef = useRef(null);
-  const onRefreshRef = useRef(onRefresh);
+  const handlersRef = useRef(handlers);
   const displayedServerIdsRef = useRef(new Set());
   const hiddenQueueRef = useRef([]);
 
   useEffect(() => {
-    onRefreshRef.current = onRefresh;
-  }, [onRefresh]);
+    handlersRef.current = handlers;
+  }, [handlers]);
 
-  const scheduleRefresh = useCallback(() => {
+  const scheduleCalendarRefresh = useCallback(() => {
     if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
     refreshTimeoutRef.current = setTimeout(() => {
-      onRefreshRef.current?.();
+      handlersRef.current.onCalendarRefresh?.();
+    }, 300);
+  }, []);
+
+  const scheduleTaskEvent = useCallback((event) => {
+    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    refreshTimeoutRef.current = setTimeout(async () => {
+      const h = handlersRef.current;
+      let tableHandled = false;
+      try {
+        tableHandled = Boolean(await h.onTaskEvent?.(event));
+      } catch (err) {
+        console.error('Hub task event handler error:', err);
+      }
+      h.onActiveTasksRefresh?.();
+      if (!tableHandled) {
+        h.onCalendarRefresh?.();
+      }
     }, 300);
   }, []);
 
@@ -120,19 +143,34 @@ export default function useNotificationsHub(user, onRefresh) {
         title: title || 'Новая задача',
         deadline: formatNotificationDeadline(args.deadline),
       });
-      scheduleRefresh();
+      scheduleCalendarRefresh();
     };
 
-    const handleRefreshEvent = () => {
+    const handleTaskDeleted = (taskId) => {
       if (!isMounted) return;
-      scheduleRefresh();
+      scheduleTaskEvent({ type: 'TaskDeleted', taskId });
+    };
+
+    const handleTaskUpdated = (taskId) => {
+      if (!isMounted) return;
+      scheduleTaskEvent({ type: 'TaskUpdated', taskId });
+    };
+
+    const handleTaskStatusChanged = (taskId) => {
+      if (!isMounted) return;
+      scheduleTaskEvent({ type: 'TaskStatusChanged', taskId });
+    };
+
+    const handleTaskProgressChanged = (taskId) => {
+      if (!isMounted) return;
+      scheduleTaskEvent({ type: 'TaskProgressChanged', taskId });
     };
 
     connection.on('NewTask', handleNewTask);
-    connection.on('TaskDeleted', handleRefreshEvent);
-    connection.on('TaskUpdated', handleRefreshEvent);
-    connection.on('TaskStatusChanged', handleRefreshEvent);
-    connection.on('TaskProgressChanged', handleRefreshEvent);
+    connection.on('TaskDeleted', handleTaskDeleted);
+    connection.on('TaskUpdated', handleTaskUpdated);
+    connection.on('TaskStatusChanged', handleTaskStatusChanged);
+    connection.on('TaskProgressChanged', handleTaskProgressChanged);
 
     const startConnection = async () => {
       try {
@@ -153,6 +191,7 @@ export default function useNotificationsHub(user, onRefresh) {
       await connection.invoke('JoinUserGroup', user.id).catch(() => {});
       await fetchPendingNotifications();
       flushHiddenQueue();
+      handlersRef.current.onFullRefresh?.();
     });
 
     const onVisibilityChange = () => {
@@ -174,10 +213,10 @@ export default function useNotificationsHub(user, onRefresh) {
         refreshTimeoutRef.current = null;
       }
       connection.off('NewTask', handleNewTask);
-      connection.off('TaskDeleted', handleRefreshEvent);
-      connection.off('TaskUpdated', handleRefreshEvent);
-      connection.off('TaskStatusChanged', handleRefreshEvent);
-      connection.off('TaskProgressChanged', handleRefreshEvent);
+      connection.off('TaskDeleted', handleTaskDeleted);
+      connection.off('TaskUpdated', handleTaskUpdated);
+      connection.off('TaskStatusChanged', handleTaskStatusChanged);
+      connection.off('TaskProgressChanged', handleTaskProgressChanged);
       connection.stop().catch((err) => console.error('SignalR stop error:', err));
     };
   }, [
@@ -185,7 +224,8 @@ export default function useNotificationsHub(user, onRefresh) {
     offerNotification,
     fetchPendingNotifications,
     flushHiddenQueue,
-    scheduleRefresh,
+    scheduleCalendarRefresh,
+    scheduleTaskEvent,
   ]);
 
   const closeNotification = useCallback((id) => {

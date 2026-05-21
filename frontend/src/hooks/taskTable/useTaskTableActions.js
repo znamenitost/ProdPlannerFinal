@@ -14,7 +14,7 @@ export default function useTaskTableActions({
   newRow,
   setNewRow,
   setEditingId,
-  onTaskUpdate,
+  onCalendarRefresh,
   showError,
   showWarning,
   confirm
@@ -36,14 +36,14 @@ export default function useTaskTableActions({
       patchRow(row.id, updated);
     }
 
-    onTaskUpdate?.();
+    onCalendarRefresh?.();
   }, [
     api,
     selectedEmployeeForHighlight,
     invalidateChildCache,
     setChildrenForParent,
     patchRow,
-    onTaskUpdate
+    onCalendarRefresh
   ]);
 
   const handleSaveNewRow = useCallback(async () => {
@@ -170,11 +170,11 @@ export default function useTaskTableActions({
     try {
       await api.deleteRow(id);
       removeRow(id);
-      onTaskUpdate?.();
+      onCalendarRefresh?.();
     } catch (err) {
       console.error(err);
     }
-  }, [api, removeRow, onTaskUpdate, confirm]);
+  }, [api, removeRow, onCalendarRefresh, confirm]);
 
   const handleAddNewRow = useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);

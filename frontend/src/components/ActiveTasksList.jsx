@@ -41,7 +41,6 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
       else if (action === 'progress') await setProgress(id, progress);
       else if (action === 'complete') await completeTask(id);
       await onUpdate();
-      setTimeout(() => onUpdate(), 100);
     } catch (err) {
       console.error('Ошибка действия:', err);
       showError('Не удалось выполнить действие. Проверьте консоль.');

@@ -21,6 +21,7 @@ namespace ProductionPlanner.Data
             CancellationToken cancellationToken = default)
         {
             return await _context.ProductionTasks
+                .AsNoTracking()
                 .Include(t => t.WorkIntervals)
                 .Where(t => t.EmployeeName == employeeName
                             && t.Status != JobStatus.Completed
@@ -33,6 +34,7 @@ namespace ProductionPlanner.Data
             CancellationToken cancellationToken = default)
         {
             return await _context.ProductionTasks
+                .AsNoTracking()
                 .Include(t => t.WorkIntervals)
                 .Where(t => t.EmployeeName == employeeName && t.Status == JobStatus.Completed)
                 .ToListAsync(cancellationToken);
@@ -159,6 +161,7 @@ namespace ProductionPlanner.Data
         public async Task<List<ProductionTask>> GetAllTasksAsync(CancellationToken cancellationToken = default)
         {
             return await _context.ProductionTasks
+                .AsNoTracking()
                 .Include(t => t.WorkIntervals)
                 .ToListAsync(cancellationToken);
         }
@@ -166,6 +169,7 @@ namespace ProductionPlanner.Data
         public async Task<List<ProductionTask>> GetRootTasksAsync(CancellationToken cancellationToken = default)
         {
             return await _context.ProductionTasks
+                .AsNoTracking()
                 .Include(t => t.WorkIntervals)
                 .Where(t => t.ParentRowNumber == null)
                 .OrderBy(t => t.DisplayOrder)
@@ -183,6 +187,7 @@ namespace ProductionPlanner.Data
                 return [];
 
             return await _context.ProductionTasks
+                .AsNoTracking()
                 .Include(t => t.WorkIntervals)
                 .Where(t => activeChildIds.Contains(t.Id))
                 .ToListAsync(cancellationToken);
@@ -194,6 +199,7 @@ namespace ProductionPlanner.Data
             CancellationToken cancellationToken = default)
         {
             var query = _context.ProductionTasks
+                .AsNoTracking()
                 .Where(t => t.ParentRowNumber == null)
                 .OrderBy(t => t.DisplayOrder);
 
@@ -220,6 +226,7 @@ namespace ProductionPlanner.Data
                 return new Dictionary<int, List<ProductionTask>>();
 
             var splits = await _context.TaskSplits
+                .AsNoTracking()
                 .Where(ts => parentIds.Contains(ts.ParentRowNumber))
                 .ToListAsync(cancellationToken);
 
@@ -228,6 +235,7 @@ namespace ProductionPlanner.Data
 
             var childIds = splits.Select(s => s.ChildTaskId).ToList();
             var children = await _context.ProductionTasks
+                .AsNoTracking()
                 .Where(c => childIds.Contains(c.Id) && c.IsSplitTask)
                 .ToListAsync(cancellationToken);
 
@@ -273,6 +281,7 @@ namespace ProductionPlanner.Data
             CancellationToken cancellationToken = default)
         {
             return await _context.ProductionTasks
+                .AsNoTracking()
                 .Where(t => t.EmployeeName == employeeName && t.Status != JobStatus.Completed)
                 .ToListAsync(cancellationToken);
         }
@@ -287,6 +296,7 @@ namespace ProductionPlanner.Data
             var rangeEnd = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(end) : end;
 
             return await _context.WorkIntervals
+                .AsNoTracking()
                 .Include(i => i.Task)
                 .Where(i => i.Task.EmployeeName == employeeName &&
                             i.StartTime >= rangeStart && i.StartTime < rangeEnd)
@@ -298,6 +308,7 @@ namespace ProductionPlanner.Data
             CancellationToken cancellationToken = default)
         {
             return await _context.ProductionTasks
+                .AsNoTracking()
                 .Where(t => t.EmployeeName == employeeName)
                 .ToListAsync(cancellationToken);
         }

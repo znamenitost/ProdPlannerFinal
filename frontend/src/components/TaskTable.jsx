@@ -16,7 +16,8 @@ import useTaskTableController from '../hooks/taskTable/useTaskTableController';
 
 export default function TaskTable({
   refreshTrigger,
-  onTaskUpdate,
+  onCalendarRefresh,
+  onRegisterHubHandler,
   userRole,
   currentUser,
   selectedEmployeeForHighlight
@@ -24,7 +25,8 @@ export default function TaskTable({
   const isAdmin = userRole === 'Admin';
   const table = useTaskTableController({
     refreshTrigger,
-    onTaskUpdate,
+    onCalendarRefresh,
+    onRegisterHubHandler,
     selectedEmployeeForHighlight
   });
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-export default function useTaskTableRows(api, { refreshTrigger, selectedEmployeeForHighlight, onTaskUpdate }) {
+export default function useTaskTableRows(api, { refreshTrigger, selectedEmployeeForHighlight, onCalendarRefresh }) {
   const [rows, setRows] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(0);
@@ -25,8 +25,8 @@ export default function useTaskTableRows(api, { refreshTrigger, selectedEmployee
 
   const refresh = useCallback(async () => {
     await loadRows();
-    onTaskUpdate?.();
-  }, [loadRows, onTaskUpdate]);
+    onCalendarRefresh?.();
+  }, [loadRows, onCalendarRefresh]);
 
   const patchRow = useCallback((id, patch) => {
     setRows((prev) =>
