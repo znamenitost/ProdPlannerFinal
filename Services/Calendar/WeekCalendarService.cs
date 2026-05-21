@@ -196,11 +196,13 @@ public class WeekCalendarService : IWeekCalendarService
             employeeTasks, dayDate, currentDate, dayStartTime, dayEndTime, timelineEnd);
 
         if (intervalsForDay.Count > 0)
-        {
             timeline.AddRange(BuildWorkTimelineSegments(intervalsForDay));
-            timeline.AddRange(BuildIdleSegments(day, intervalsForDay, timelineEnd));
+
+        // Простой с 10:00 даже если за день ещё не было интервалов работы
+        timeline.AddRange(BuildIdleSegments(day, intervalsForDay, timelineEnd));
+
+        if (timeline.Count > 0)
             timeline = timeline.OrderBy(t => t.Start.Ticks).ToList();
-        }
 
         return timeline;
     }
@@ -282,7 +284,6 @@ public class WeekCalendarService : IWeekCalendarService
 
         var activeLayers = new HashSet<int>();
         var layerForIndex = new int[intervalsForDay.Count];
-        var maxDepthForIndex = new int[intervalsForDay.Count];
         foreach (var ev in events)
         {
             if (ev.type == 1)
@@ -291,12 +292,27 @@ public class WeekCalendarService : IWeekCalendarService
                 while (activeLayers.Contains(layer)) layer++;
                 layerForIndex[ev.index] = layer;
                 activeLayers.Add(layer);
-                maxDepthForIndex[ev.index] = activeLayers.Count;
             }
             else
             {
                 activeLayers.Remove(layerForIndex[ev.index]);
             }
+        }
+
+        // Глубина = число одновременно пересекающихся интервалов (50% / 33% высоты на фронте)
+        var maxDepthForIndex = new int[intervalsForDay.Count];
+        for (var i = 0; i < intervalsForDay.Count; i++)
+        {
+            var curStart = intervalsForDay[i].start;
+            var curEnd = intervalsForDay[i].end;
+            var overlapCount = 0;
+            for (var j = 0; j < intervalsForDay.Count; j++)
+            {
+                if (intervalsForDay[j].start < curEnd && intervalsForDay[j].end > curStart)
+                    overlapCount++;
+            }
+
+            maxDepthForIndex[i] = Math.Max(1, overlapCount);
         }
 
         for (var i = 0; i < intervalsForDay.Count; i++)
