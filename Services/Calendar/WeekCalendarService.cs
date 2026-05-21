@@ -272,47 +272,27 @@ public class WeekCalendarService : IWeekCalendarService
         List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)> intervalsForDay)
     {
         var segments = new List<CalendarTimelineSegmentDto>();
+        if (intervalsForDay.Count == 0)
+            return segments;
+
         intervalsForDay = intervalsForDay.OrderBy(i => i.start).ToList();
 
-        var events = new List<(DateTime time, int type, int index)>();
-        for (var i = 0; i < intervalsForDay.Count; i++)
+        // Один слой (ряд) на задачу: утренний и послеобеденный кусок одной задачи — одна полоса
+        var taskIdToLayer = new Dictionary<int, int>();
+        var nextLayer = 0;
+        foreach (var iv in intervalsForDay.OrderBy(i => i.start))
         {
-            events.Add((intervalsForDay[i].start, 1, i));
-            events.Add((intervalsForDay[i].end, -1, i));
+            if (!taskIdToLayer.ContainsKey(iv.taskId))
+                taskIdToLayer[iv.taskId] = nextLayer++;
         }
-        events = events.OrderBy(e => e.time).ThenBy(e => e.type == 1 ? 0 : 1).ToList();
 
-        var activeLayers = new HashSet<int>();
         var layerForIndex = new int[intervalsForDay.Count];
-        foreach (var ev in events)
-        {
-            if (ev.type == 1)
-            {
-                var layer = 0;
-                while (activeLayers.Contains(layer)) layer++;
-                layerForIndex[ev.index] = layer;
-                activeLayers.Add(layer);
-            }
-            else
-            {
-                activeLayers.Remove(layerForIndex[ev.index]);
-            }
-        }
-
-        // Глубина = число одновременно пересекающихся интервалов (50% / 33% высоты на фронте)
         var maxDepthForIndex = new int[intervalsForDay.Count];
         for (var i = 0; i < intervalsForDay.Count; i++)
         {
-            var curStart = intervalsForDay[i].start;
-            var curEnd = intervalsForDay[i].end;
-            var overlapCount = 0;
-            for (var j = 0; j < intervalsForDay.Count; j++)
-            {
-                if (intervalsForDay[j].start < curEnd && intervalsForDay[j].end > curStart)
-                    overlapCount++;
-            }
-
-            maxDepthForIndex[i] = Math.Max(1, overlapCount);
+            var iv = intervalsForDay[i];
+            layerForIndex[i] = taskIdToLayer[iv.taskId];
+            maxDepthForIndex[i] = GetPeakConcurrency(intervalsForDay, iv.start, iv.end);
         }
 
         for (var i = 0; i < intervalsForDay.Count; i++)
@@ -332,6 +312,49 @@ public class WeekCalendarService : IWeekCalendarService
         }
 
         return segments;
+    }
+
+    /// <summary>
+    /// Пик одновременных интервалов на отрезке (пауза = два интервала одной задачи не дают «третий слой»).
+    /// </summary>
+    private static int GetPeakConcurrency(
+        List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)> intervals,
+        DateTime rangeStart,
+        DateTime rangeEnd)
+    {
+        var points = new List<(DateTime time, int delta)>();
+        foreach (var iv in intervals)
+        {
+            if (iv.start >= rangeEnd || iv.end <= rangeStart)
+                continue;
+
+            var clipStart = iv.start > rangeStart ? iv.start : rangeStart;
+            var clipEnd = iv.end < rangeEnd ? iv.end : rangeEnd;
+            if (clipStart >= clipEnd)
+                continue;
+
+            points.Add((clipStart, 1));
+            points.Add((clipEnd, -1));
+        }
+
+        if (points.Count == 0)
+            return 1;
+
+        points = points
+            .OrderBy(p => p.time)
+            .ThenBy(p => p.delta)
+            .ToList();
+
+        var running = 0;
+        var peak = 0;
+        foreach (var (_, delta) in points)
+        {
+            running += delta;
+            if (running > peak)
+                peak = running;
+        }
+
+        return Math.Max(1, peak);
     }
 
     private static List<CalendarTimelineSegmentDto> BuildIdleSegments(
