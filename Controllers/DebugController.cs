@@ -79,7 +79,7 @@ public class DebugController : ControllerBase
     public async Task<IActionResult> CloseInterval(int taskId)
     {
         if (DevOnly() is { } denied) return denied;
-        var task = await _repo.GetTaskByIdAsync(taskId);
+        var task = await _repo.GetTaskByIdAsync(taskId, includeIntervals: true);
         if (task == null) return NotFound();
 
         var openInterval = task.WorkIntervals.FirstOrDefault(i => i.EndTime == null);
@@ -96,7 +96,7 @@ public class DebugController : ControllerBase
     public async Task<IActionResult> CreateInterval(int taskId)
     {
         if (DevOnly() is { } denied) return denied;
-        var task = await _repo.GetTaskByIdAsync(taskId);
+        var task = await _repo.GetTaskByIdAsync(taskId, includeIntervals: true);
         if (task == null) return NotFound();
 
         // Закрываем все открытые интервалы
@@ -147,7 +147,7 @@ public class DebugController : ControllerBase
     public async Task<IActionResult> GetIntervals(int taskId)
     {
         if (DevOnly() is { } denied) return denied;
-        var task = await _repo.GetTaskByIdAsync(taskId);
+        var task = await _repo.GetTaskByIdAsync(taskId, includeIntervals: true);
         if (task == null) return NotFound();
         return Ok(task.WorkIntervals.Select(i => new { i.Id, i.StartTime, i.EndTime }));
     }

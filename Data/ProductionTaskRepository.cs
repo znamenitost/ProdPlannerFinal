@@ -106,54 +106,16 @@ namespace ProductionPlanner.Data
             var rangeStart = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(weekStart) : weekStart;
             var rangeEnd = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(weekEnd) : weekEnd;
 
-            var intervalTaskIds = await _context.WorkIntervals
-                .AsNoTracking()
-                .Where(i => i.Task.EmployeeName == employeeName
-                            && i.StartTime >= rangeStart
-                            && i.StartTime < rangeEnd)
-                .Select(i => i.ProductionTaskId)
-                .Distinct()
-                .ToListAsync(cancellationToken);
-
-            var activeTaskIds = await _context.ProductionTasks
-                .AsNoTracking()
-                .Where(t => t.EmployeeName == employeeName
-                            && t.Status != JobStatus.Completed
-                            && !(t.IsSplitTask && t.ParentRowNumber == null))
-                .Select(t => t.Id)
-                .ToListAsync(cancellationToken);
-
-            var deadlineTaskIds = await _context.ProductionTasks
-                .AsNoTracking()
-                .Where(t => t.EmployeeName == employeeName
-                            && t.Deadline >= weekStart
-                            && t.Deadline < weekEnd)
-                .Select(t => t.Id)
-                .ToListAsync(cancellationToken);
-
-            var completedTaskIds = await _context.ProductionTasks
-                .AsNoTracking()
-                .Where(t => t.EmployeeName == employeeName
-                            && t.Status == JobStatus.Completed
-                            && t.CompletedAt != null
-                            && t.CompletedAt >= weekStart
-                            && t.CompletedAt < weekEnd)
-                .Select(t => t.Id)
-                .ToListAsync(cancellationToken);
-
-            var allIds = intervalTaskIds
-                .Concat(activeTaskIds)
-                .Concat(deadlineTaskIds)
-                .Concat(completedTaskIds)
-                .Distinct()
-                .ToList();
-
-            if (allIds.Count == 0)
-                return [];
-
             return await _context.ProductionTasks
                 .AsNoTracking()
-                .Where(t => allIds.Contains(t.Id))
+                .Where(t => t.EmployeeName == employeeName && (
+                    t.WorkIntervals.Any(i => i.StartTime >= rangeStart && i.StartTime < rangeEnd)
+                    || (t.Status != JobStatus.Completed && !(t.IsSplitTask && t.ParentRowNumber == null))
+                    || (t.Deadline >= rangeStart && t.Deadline < rangeEnd)
+                    || (t.Status == JobStatus.Completed
+                        && t.CompletedAt != null
+                        && t.CompletedAt >= rangeStart
+                        && t.CompletedAt < rangeEnd)))
                 .ToListAsync(cancellationToken);
         }
 
@@ -178,18 +140,26 @@ namespace ProductionPlanner.Data
                             && t.Status == JobStatus.Completed
                             && !(t.IsSplitTask && t.ParentRowNumber == null));
 
-        public async Task<ProductionTask?> GetTaskByIdAsync(int id, CancellationToken cancellationToken = default)
+        public async Task<ProductionTask?> GetTaskByIdAsync(
+            int id,
+            CancellationToken cancellationToken = default,
+            bool includeIntervals = false)
         {
-            return await _context.ProductionTasks
-                .Include(t => t.WorkIntervals)
-                .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
+            var query = _context.ProductionTasks.AsNoTracking().AsQueryable();
+            if (includeIntervals)
+                query = query.Include(t => t.WorkIntervals);
+            return await query.FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
         }
 
-        public async Task<ProductionTask?> GetTaskByRowNumberAsync(int rowNumber, CancellationToken cancellationToken = default)
+        public async Task<ProductionTask?> GetTaskByRowNumberAsync(
+            int rowNumber,
+            CancellationToken cancellationToken = default,
+            bool includeIntervals = false)
         {
-            return await _context.ProductionTasks
-                .Include(t => t.WorkIntervals)
-                .FirstOrDefaultAsync(t => t.Id == rowNumber, cancellationToken);
+            var query = _context.ProductionTasks.AsNoTracking().AsQueryable();
+            if (includeIntervals)
+                query = query.Include(t => t.WorkIntervals);
+            return await query.FirstOrDefaultAsync(t => t.Id == rowNumber, cancellationToken);
         }
 
         public async Task AddTaskAsync(ProductionTask task, CancellationToken cancellationToken = default)
@@ -284,6 +254,7 @@ namespace ProductionPlanner.Data
             CancellationToken cancellationToken = default)
         {
             return await _context.EmployeeStats
+                .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.EmployeeName == employeeName, cancellationToken);
         }
 
@@ -298,18 +269,10 @@ namespace ProductionPlanner.Data
 
         public async Task<List<ProductionTask>> GetChildTasksAsync(int parentId, CancellationToken cancellationToken = default)
         {
-            var activeChildIds = await _context.TaskSplits
-                .Where(ts => ts.ParentRowNumber == parentId)
-                .Select(ts => ts.ChildTaskId)
-                .ToListAsync(cancellationToken);
-
-            if (activeChildIds.Count == 0)
-                return [];
-
-            return await _context.ProductionTasks
+            return await _context.TaskSplits
                 .AsNoTracking()
-                .Include(t => t.WorkIntervals)
-                .Where(t => activeChildIds.Contains(t.Id))
+                .Where(ts => ts.ParentRowNumber == parentId)
+                .Select(ts => ts.ChildTask)
                 .ToListAsync(cancellationToken);
         }
 

@@ -68,11 +68,20 @@ namespace ProductionPlanner.Data
                 .HasForeignKey(i => i.ProductionTaskId)
                 .OnDelete(DeleteBehavior.Cascade);
                 
-            modelBuilder.Entity<TaskSplit>()
-                .HasOne(ts => ts.ChildTask)
-                .WithMany(t => t.ChildSplits)
-                .HasForeignKey(ts => ts.ChildTaskId)
-                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<TaskSplit>(entity =>
+            {
+                entity.HasOne(ts => ts.ChildTask)
+                    .WithMany(t => t.ChildSplits)
+                    .HasForeignKey(ts => ts.ChildTaskId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(ts => ts.ParentRowNumber);
+            });
+
+            modelBuilder.Entity<ProductionTask>()
+                .HasIndex(t => new { t.EmployeeName, t.Status });
+
+            modelBuilder.Entity<WorkInterval>()
+                .HasIndex(i => new { i.ProductionTaskId, i.StartTime });
                 
             // Настройка таблиц Identity
             modelBuilder.Entity<User>(entity =>

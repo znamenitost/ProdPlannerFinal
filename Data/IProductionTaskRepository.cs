@@ -20,8 +20,14 @@ namespace ProductionPlanner.Data
             DateTime weekEnd,
             CancellationToken cancellationToken = default);
         Task AppendRootDisplayOrderAsync(int rootTaskId, CancellationToken cancellationToken = default);
-        Task<ProductionTask?> GetTaskByIdAsync(int id, CancellationToken cancellationToken = default);
-        Task<ProductionTask?> GetTaskByRowNumberAsync(int rowNumber, CancellationToken cancellationToken = default);
+        Task<ProductionTask?> GetTaskByIdAsync(
+            int id,
+            CancellationToken cancellationToken = default,
+            bool includeIntervals = false);
+        Task<ProductionTask?> GetTaskByRowNumberAsync(
+            int rowNumber,
+            CancellationToken cancellationToken = default,
+            bool includeIntervals = false);
         Task AddTaskAsync(ProductionTask task, CancellationToken cancellationToken = default);
         Task UpdateTaskAsync(ProductionTask task, CancellationToken cancellationToken = default);
         Task DeleteTaskAsync(int id, CancellationToken cancellationToken = default);

@@ -254,7 +254,7 @@ public class TaskLifecycleService : ITaskLifecycleService
         {
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
-            var intervals = (await _repo.GetTaskByIdAsync(taskId, ct))?.WorkIntervals ?? [];
+            var intervals = (await _repo.GetTaskByIdAsync(taskId, ct, includeIntervals: true))?.WorkIntervals ?? [];
             foreach (var interval in intervals)
             {
                 if (interval.EndTime.HasValue)
