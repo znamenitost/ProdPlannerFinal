@@ -286,13 +286,15 @@ public class WeekCalendarService : IWeekCalendarService
                 taskIdToLayer[iv.taskId] = nextLayer++;
         }
 
+        var maxDepthPerTaskId = ComputeMaxDepthPerTaskId(intervalsForDay);
+
         var layerForIndex = new int[intervalsForDay.Count];
         var maxDepthForIndex = new int[intervalsForDay.Count];
         for (var i = 0; i < intervalsForDay.Count; i++)
         {
             var iv = intervalsForDay[i];
             layerForIndex[i] = taskIdToLayer[iv.taskId];
-            maxDepthForIndex[i] = GetPeakConcurrency(intervalsForDay, iv.start, iv.end);
+            maxDepthForIndex[i] = maxDepthPerTaskId[iv.taskId];
         }
 
         for (var i = 0; i < intervalsForDay.Count; i++)
@@ -315,46 +317,57 @@ public class WeekCalendarService : IWeekCalendarService
     }
 
     /// <summary>
-    /// Пик одновременных интервалов на отрезке (пауза = два интервала одной задачи не дают «третий слой»).
+    /// Максимум одновременных <b>задач</b> (не интервалов) в моменты, когда задача активна.
+    /// Одна задача до и после обеда получает одну и ту же высоту, если днём была параллель с другой.
     /// </summary>
-    private static int GetPeakConcurrency(
-        List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)> intervals,
-        DateTime rangeStart,
-        DateTime rangeEnd)
+    private static Dictionary<int, int> ComputeMaxDepthPerTaskId(
+        List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)> intervals)
     {
-        var points = new List<(DateTime time, int delta)>();
+        var maxDepthPerTask = new Dictionary<int, int>();
         foreach (var iv in intervals)
+            maxDepthPerTask.TryAdd(iv.taskId, 1);
+
+        var refCountByTask = new Dictionary<int, int>();
+        var events = new List<(DateTime time, int type, int index)>();
+        for (var i = 0; i < intervals.Count; i++)
         {
-            if (iv.start >= rangeEnd || iv.end <= rangeStart)
-                continue;
-
-            var clipStart = iv.start > rangeStart ? iv.start : rangeStart;
-            var clipEnd = iv.end < rangeEnd ? iv.end : rangeEnd;
-            if (clipStart >= clipEnd)
-                continue;
-
-            points.Add((clipStart, 1));
-            points.Add((clipEnd, -1));
+            events.Add((intervals[i].start, 1, i));
+            events.Add((intervals[i].end, -1, i));
         }
 
-        if (points.Count == 0)
-            return 1;
-
-        points = points
-            .OrderBy(p => p.time)
-            .ThenBy(p => p.delta)
+        events = events
+            .OrderBy(e => e.time)
+            .ThenBy(e => e.type == 1 ? 0 : 1)
             .ToList();
 
-        var running = 0;
-        var peak = 0;
-        foreach (var (_, delta) in points)
+        foreach (var ev in events)
         {
-            running += delta;
-            if (running > peak)
-                peak = running;
+            var taskId = intervals[ev.index].taskId;
+            if (ev.type == 1)
+            {
+                refCountByTask.TryGetValue(taskId, out var count);
+                refCountByTask[taskId] = count + 1;
+            }
+            else
+            {
+                refCountByTask[taskId] = refCountByTask[taskId] - 1;
+                if (refCountByTask[taskId] <= 0)
+                    refCountByTask.Remove(taskId);
+            }
+
+            var distinctTasks = refCountByTask.Count;
+            if (distinctTasks == 0)
+                continue;
+
+            foreach (var activeTaskId in refCountByTask.Keys)
+            {
+                if (!maxDepthPerTask.TryGetValue(activeTaskId, out var current))
+                    current = 1;
+                maxDepthPerTask[activeTaskId] = Math.Max(current, distinctTasks);
+            }
         }
 
-        return Math.Max(1, peak);
+        return maxDepthPerTask;
     }
 
     private static List<CalendarTimelineSegmentDto> BuildIdleSegments(
