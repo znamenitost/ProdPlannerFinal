@@ -73,6 +73,21 @@ namespace ProductionPlanner.Data
             if (task == null)
                 return;
 
+            var closedAt = _timeService.Now;
+            var taskIdsToClose = new List<int> { id };
+
+            if (task.IsSplitTask)
+            {
+                var childIds = await _context.ProductionTasks
+                    .Where(t => t.ParentRowNumber == task.Id)
+                    .Select(t => t.Id)
+                    .ToListAsync(cancellationToken);
+                taskIdsToClose.AddRange(childIds);
+            }
+
+            foreach (var taskId in taskIdsToClose.Distinct())
+                await CloseOpenIntervalsAsync(taskId, closedAt, cancellationToken);
+
             if (task.IsSplitTask)
             {
                 var children = await _context.ProductionTasks
