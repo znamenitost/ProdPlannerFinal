@@ -14,16 +14,14 @@ import {
   ExpandMore,
   ChevronRight,
   Person,
-  Groups,
-  Comment as CommentIcon
+  Groups
 } from '@mui/icons-material';
-import {
-  getStatusColor,
-  getStatusIcon,
-  getParentEmployeeDisplay,
-  isOverdue,
-  getLastPathSegment
-} from '../utils/taskHelpers';
+import { getParentEmployeeDisplay, getLastPathSegment } from '../utils/taskHelpers';
+import TaskCommentCell from './taskTable/TaskCommentCell';
+import TaskDeadlineCell from './taskTable/TaskDeadlineCell';
+import TaskHoursCell from './taskTable/TaskHoursCell';
+import TaskTypeCell from './taskTable/TaskTypeCell';
+import TaskStatusCell from './taskTable/TaskStatusCell';
 import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionsMenu from './TaskAdminActionsMenu';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
@@ -42,7 +40,6 @@ import {
   COL_ACTIONS,
   cellDisplayTextSx
 } from '../utils/taskTableStyles';
-import { formatCommentForDisplay, commentDisplaySx } from '../utils/commentLimits';
 
 function ParentTaskRow({
   task,
@@ -66,12 +63,9 @@ function ParentTaskRow({
   selectedEmployeeForHighlight,
   showHoursTypeColumns = true
 }) {
-  const overdue = isOverdue(task.deadline, task.statusText);
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
 
-  let displayStatus = task.statusText || "Назначена";
-  let displayStatusIcon = getStatusIcon(displayStatus);
-  let displayStatusColor = getStatusColor(displayStatus);
+  const displayStatus = task.statusText || 'Назначена';
 
   // ========== ПОДСВЕТКА ДЛЯ АДМИНИСТРАТОРА И СОТРУДНИКА ==========
   let isMine = false;
@@ -112,7 +106,8 @@ function ParentTaskRow({
       '&:hover': { bgcolor: '#f8fafc' },
       borderLeft: 'none'
     };
-    let bgColor = overdue && task.statusText !== 'Готово' ? '#fef2f2' : 'inherit';
+    const overdue = task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
+    let bgColor = overdue ? '#fef2f2' : 'inherit';
     if (highlightMyTasks && isMine) {
       bgColor = '#e6f7ff';
       style.boxShadow = 'inset 0 0 0 2px #1890ff';
@@ -175,38 +170,19 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell sx={COL_COMMENT}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
-            <Tooltip title={task.comment || 'Нет комментария'} arrow placement="top"
-              slotProps={{ tooltip: { sx: { bgcolor: '#1e293b', fontSize: '12px', padding: '8px 15px', maxWidth: '400px', borderRadius: 2 } } }}
-            >
-              <Typography variant="body2" sx={{ color: 'text.secondary', ...commentDisplaySx, cursor: 'default' }}>
-                {formatCommentForDisplay(task.comment)}
-              </Typography>
-            </Tooltip>
-            <IconButton size="small" onClick={() => onOpenComment(task)} sx={{ p: 0.5, flexShrink: 0 }}>
-              <CommentIcon fontSize="small" sx={{ fontSize: 14, color: '#7c9ebf' }} />
-            </IconButton>
-          </Box>
+          <TaskCommentCell task={task} onOpenComment={onOpenComment} />
         </TableCell>
 
         <TableCell sx={COL_DEADLINE}>
-          <Typography variant="body2" sx={{ color: overdue ? '#dc2626' : 'inherit', ...cellDisplayTextSx }}>
-            {new Date(task.deadline).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-            {' '}
-            {new Date(task.deadline).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-          </Typography>
+          <TaskDeadlineCell deadline={task.deadline} statusText={task.statusText} />
         </TableCell>
 
         <TableCell align="center" sx={hoursColumnSx(showHoursTypeColumns)}>
-          <Typography variant="body2" sx={cellDisplayTextSx}>
-            {task.estimateHours?.toFixed(1) || '0.0'} ч
-          </Typography>
+          <TaskHoursCell estimateHours={task.estimateHours} />
         </TableCell>
 
         <TableCell sx={typeColumnSx(showHoursTypeColumns)}>
-          <Tooltip title={task.type} arrow>
-            <Chip label={task.type || '—'} size="small" variant="outlined" sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap', height: 'auto', '& .MuiChip-label': { whiteSpace: 'nowrap' } }} />
-          </Tooltip>
+          <TaskTypeCell type={task.type} />
         </TableCell>
 
         <TableCell sx={COL_EMPLOYEE}>
@@ -214,11 +190,10 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell sx={COL_STATUS}>
-          {hasChildren ? (
-            <Chip icon={displayStatusIcon} label={displayStatus} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
-          ) : (
-            <Chip icon={displayStatusIcon} label={task.statusText || "Назначена"} size="small" sx={{ bgcolor: displayStatusColor, color: 'white', fontSize: '0.7rem', whiteSpace: 'nowrap' }} />
-          )}
+          <TaskStatusCell
+            statusText={task.statusText}
+            label={hasChildren ? displayStatus : undefined}
+          />
         </TableCell>
 
         <TableCell sx={COL_ACTIONS}>

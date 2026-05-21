@@ -2,9 +2,13 @@ import { Box } from '@mui/material';
 import { Remove, Add } from '@mui/icons-material';
 import { NumberField } from '@base-ui/react/number-field';
 
-export const ESTIMATE_HOURS_MIN = 0.5;
-export const ESTIMATE_HOURS_MAX = 24;
-export const ESTIMATE_HOURS_STEP = 0.5;
+import {
+  ESTIMATE_HOURS_MIN,
+  ESTIMATE_HOURS_MAX,
+  ESTIMATE_HOURS_STEP
+} from '../constants';
+
+export { ESTIMATE_HOURS_MIN, ESTIMATE_HOURS_MAX, ESTIMATE_HOURS_STEP };
 
 export function clampEstimateHours(value) {
   return clampEstimateHoursToRange(value);

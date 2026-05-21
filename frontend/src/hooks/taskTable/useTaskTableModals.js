@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { childrenToModalParts, apiPartsToModalParts, taskToModalParts } from '../../components/SplitTaskModal';
+import { childrenToModalParts, apiPartsToModalParts, taskToModalParts } from '../../utils/splitTaskUtils';
 
 export default function useTaskTableModals({
   api,
