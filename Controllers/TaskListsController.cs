@@ -47,14 +47,16 @@ public class TaskListsController : ControllerBase
     [HttpGet("completed")]
     public async Task<IActionResult> GetCompletedTasks(
         [FromQuery] string employee,
-        CancellationToken cancellationToken)
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        CancellationToken cancellationToken = default)
     {
         try
         {
             if (string.IsNullOrEmpty(employee))
                 return BadRequest(new { error = "Employee name is required" });
 
-            var result = await _taskLists.GetCompletedTasksAsync(employee, cancellationToken);
+            var result = await _taskLists.GetCompletedTasksAsync(employee, page, pageSize, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)

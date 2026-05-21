@@ -31,22 +31,71 @@ public class TaskListQueryService : ITaskListQueryService
 
     public async Task<object> GetCompletedTasksAsync(
         string employee,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken = default)
     {
-        var completedTasks = await _repo.GetCompletedTasksAsync(employee, cancellationToken);
-        completedTasks = completedTasks
-            .Where(t => !(t.IsSplitTask && t.ParentRowNumber == null))
-            .ToList();
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var statsRow = await _repo.GetCompletedTasksStatsAsync(employee, cancellationToken);
+        var pageResult = await _repo.GetCompletedTasksPaginatedAsync(employee, page, pageSize, cancellationToken);
+
+        var taskIds = pageResult.Items.Select(t => t.Id).ToList();
+        var intervals = await _repo.GetWorkIntervalsForTaskIdsAsync(taskIds, cancellationToken);
+        var intervalsByTask = intervals
+            .GroupBy(i => i.ProductionTaskId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var tasks = pageResult.Items.Select(task =>
+        {
+            intervalsByTask.TryGetValue(task.Id, out var taskIntervals);
+            return MapCompletedTaskToResult(task, taskIntervals ?? []);
+        }).ToList();
 
         var stats = new
         {
-            totalTasks = completedTasks.Count,
-            totalEstimate = completedTasks.Sum(t => t.EstimateHours),
-            totalActual = completedTasks.Sum(t => t.ActualHours)
+            totalTasks = statsRow.TotalTasks,
+            totalEstimate = statsRow.TotalEstimate,
+            totalActual = statsRow.TotalActual
         };
 
-        return new { tasks = completedTasks, stats };
+        return new
+        {
+            tasks,
+            stats,
+            page = pageResult.Page,
+            pageSize = pageResult.PageSize,
+            totalCount = pageResult.TotalCount,
+            totalPages = pageResult.TotalPages
+        };
     }
+
+    private static object MapCompletedTaskToResult(ProductionTask task, List<WorkInterval> intervals) =>
+        new
+        {
+            task.Id,
+            Title = task.TaskDisplayName,
+            Heading = task.TaskDisplayName,
+            FileName = task.FileName,
+            FolderPath = task.FolderPath,
+            File = task.FullPath ?? string.Empty,
+            task.Type,
+            task.Deadline,
+            task.EstimateHours,
+            task.ActualHours,
+            task.CompletedAt,
+            task.Progress,
+            task.Status,
+            RowNumber = task.Id,
+            workIntervals = intervals.Select(i => new
+            {
+                i.Id,
+                i.ProductionTaskId,
+                startTime = i.StartTime,
+                endTime = i.EndTime
+            })
+        };
 
     public async Task<List<DeadlineRisk>> GetDeadlineRisksAsync(
         string employee,

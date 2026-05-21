@@ -6,6 +6,21 @@ namespace ProductionPlanner.Data
     {
         Task<List<ProductionTask>> GetActiveTasksAsync(string employeeName, CancellationToken cancellationToken = default);
         Task<List<ProductionTask>> GetCompletedTasksAsync(string employeeName, CancellationToken cancellationToken = default);
+        Task<CompletedTasksAggregateStats> GetCompletedTasksStatsAsync(string employeeName, CancellationToken cancellationToken = default);
+        Task<PaginatedResult<ProductionTask>> GetCompletedTasksPaginatedAsync(
+            string employeeName,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default);
+        Task<List<WorkInterval>> GetWorkIntervalsForTaskIdsAsync(
+            IReadOnlyList<int> taskIds,
+            CancellationToken cancellationToken = default);
+        Task<List<ProductionTask>> GetEmployeeTasksForCalendarWeekAsync(
+            string employeeName,
+            DateTime weekStart,
+            DateTime weekEnd,
+            CancellationToken cancellationToken = default);
+        Task AppendRootDisplayOrderAsync(int rootTaskId, CancellationToken cancellationToken = default);
         Task<ProductionTask?> GetTaskByIdAsync(int id, CancellationToken cancellationToken = default);
         Task<ProductionTask?> GetTaskByRowNumberAsync(int rowNumber, CancellationToken cancellationToken = default);
         Task AddTaskAsync(ProductionTask task, CancellationToken cancellationToken = default);

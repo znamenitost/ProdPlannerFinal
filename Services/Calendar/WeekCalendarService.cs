@@ -27,7 +27,11 @@ public class WeekCalendarService : IWeekCalendarService
         var weekStart = WeekCalendarDateHelper.ResolveWeekStart(startDate, currentTime);
         var weekEnd = weekStart.AddDays(7);
 
-        var allEmployeeTasks = await _repo.GetEmployeeTasksAsync(employee, cancellationToken);
+        var allEmployeeTasks = await _repo.GetEmployeeTasksForCalendarWeekAsync(
+            employee,
+            weekStart,
+            weekEnd,
+            cancellationToken);
         var intervals = await _repo.GetWorkIntervalsForDateRangeAsync(
             employee,
             weekStart,
@@ -276,35 +280,23 @@ public class WeekCalendarService : IWeekCalendarService
         }
         events = events.OrderBy(e => e.time).ThenBy(e => e.type == 1 ? 0 : 1).ToList();
 
-        var activeIndices = new List<int>();
+        var activeLayers = new HashSet<int>();
         var layerForIndex = new int[intervalsForDay.Count];
+        var maxDepthForIndex = new int[intervalsForDay.Count];
         foreach (var ev in events)
         {
             if (ev.type == 1)
             {
                 var layer = 0;
-                while (activeIndices.Contains(layer)) layer++;
+                while (activeLayers.Contains(layer)) layer++;
                 layerForIndex[ev.index] = layer;
-                activeIndices.Add(layer);
+                activeLayers.Add(layer);
+                maxDepthForIndex[ev.index] = activeLayers.Count;
             }
             else
             {
-                activeIndices.Remove(layerForIndex[ev.index]);
+                activeLayers.Remove(layerForIndex[ev.index]);
             }
-        }
-
-        var maxDepthForIndex = new int[intervalsForDay.Count];
-        for (var i = 0; i < intervalsForDay.Count; i++)
-        {
-            var maxDepth = 0;
-            var curStart = intervalsForDay[i].start;
-            var curEnd = intervalsForDay[i].end;
-            for (var j = 0; j < intervalsForDay.Count; j++)
-            {
-                if (intervalsForDay[j].start < curEnd && intervalsForDay[j].end > curStart)
-                    maxDepth++;
-            }
-            maxDepthForIndex[i] = maxDepth;
         }
 
         for (var i = 0; i < intervalsForDay.Count; i++)

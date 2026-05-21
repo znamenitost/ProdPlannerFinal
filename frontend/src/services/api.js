@@ -30,9 +30,14 @@ export async function getWeekCalendar(employee, startDate, options = {}) {
   return res.json();
 }
 
-// Получить список выполненных задач и статистику
-export async function getCompletedTasks(employee) {
-  const res = await fetch(`${API_BASE}/tasks/completed?employee=${encodeURIComponent(employee)}`, {
+// Получить список выполненных задач (пагинация) и агрегированную статистику
+export async function getCompletedTasks(employee, page = 1, pageSize = 25) {
+  const params = new URLSearchParams({
+    employee,
+    page: String(page),
+    pageSize: String(pageSize)
+  });
+  const res = await fetch(`${API_BASE}/tasks/completed?${params}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' }
   });

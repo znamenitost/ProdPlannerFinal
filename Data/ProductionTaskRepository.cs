@@ -40,6 +40,155 @@ namespace ProductionPlanner.Data
                 .ToListAsync(cancellationToken);
         }
 
+        public async Task<CompletedTasksAggregateStats> GetCompletedTasksStatsAsync(
+            string employeeName,
+            CancellationToken cancellationToken = default)
+        {
+            var query = CompletedTasksQuery(employeeName);
+
+            var totalTasks = await query.CountAsync(cancellationToken);
+            if (totalTasks == 0)
+            {
+                return new CompletedTasksAggregateStats();
+            }
+
+            var totals = await query
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    TotalEstimate = g.Sum(t => t.EstimateHours),
+                    TotalActual = g.Sum(t => t.ActualHours)
+                })
+                .FirstAsync(cancellationToken);
+
+            return new CompletedTasksAggregateStats
+            {
+                TotalTasks = totalTasks,
+                TotalEstimate = totals.TotalEstimate,
+                TotalActual = totals.TotalActual
+            };
+        }
+
+        public async Task<PaginatedResult<ProductionTask>> GetCompletedTasksPaginatedAsync(
+            string employeeName,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            var query = CompletedTasksQuery(employeeName)
+                .OrderByDescending(t => t.CompletedAt ?? t.UpdatedAt)
+                .ThenByDescending(t => t.Id);
+
+            var totalCount = await query.CountAsync(cancellationToken);
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(cancellationToken);
+
+            return new PaginatedResult<ProductionTask>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
+        public async Task<List<WorkInterval>> GetWorkIntervalsForTaskIdsAsync(
+            IReadOnlyList<int> taskIds,
+            CancellationToken cancellationToken = default)
+        {
+            if (taskIds.Count == 0)
+                return [];
+
+            return await _context.WorkIntervals
+                .AsNoTracking()
+                .Where(i => taskIds.Contains(i.ProductionTaskId))
+                .OrderBy(i => i.StartTime)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<List<ProductionTask>> GetEmployeeTasksForCalendarWeekAsync(
+            string employeeName,
+            DateTime weekStart,
+            DateTime weekEnd,
+            CancellationToken cancellationToken = default)
+        {
+            var rangeStart = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(weekStart) : weekStart;
+            var rangeEnd = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(weekEnd) : weekEnd;
+
+            var intervalTaskIds = await _context.WorkIntervals
+                .AsNoTracking()
+                .Where(i => i.Task.EmployeeName == employeeName
+                            && i.StartTime >= rangeStart
+                            && i.StartTime < rangeEnd)
+                .Select(i => i.ProductionTaskId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var activeTaskIds = await _context.ProductionTasks
+                .AsNoTracking()
+                .Where(t => t.EmployeeName == employeeName
+                            && t.Status != JobStatus.Completed
+                            && !(t.IsSplitTask && t.ParentRowNumber == null))
+                .Select(t => t.Id)
+                .ToListAsync(cancellationToken);
+
+            var deadlineTaskIds = await _context.ProductionTasks
+                .AsNoTracking()
+                .Where(t => t.EmployeeName == employeeName
+                            && t.Deadline >= weekStart
+                            && t.Deadline < weekEnd)
+                .Select(t => t.Id)
+                .ToListAsync(cancellationToken);
+
+            var completedTaskIds = await _context.ProductionTasks
+                .AsNoTracking()
+                .Where(t => t.EmployeeName == employeeName
+                            && t.Status == JobStatus.Completed
+                            && t.CompletedAt != null
+                            && t.CompletedAt >= weekStart
+                            && t.CompletedAt < weekEnd)
+                .Select(t => t.Id)
+                .ToListAsync(cancellationToken);
+
+            var allIds = intervalTaskIds
+                .Concat(activeTaskIds)
+                .Concat(deadlineTaskIds)
+                .Concat(completedTaskIds)
+                .Distinct()
+                .ToList();
+
+            if (allIds.Count == 0)
+                return [];
+
+            return await _context.ProductionTasks
+                .AsNoTracking()
+                .Where(t => allIds.Contains(t.Id))
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task AppendRootDisplayOrderAsync(int rootTaskId, CancellationToken cancellationToken = default)
+        {
+            var maxOrder = await _context.ProductionTasks
+                .AsNoTracking()
+                .Where(t => t.ParentRowNumber == null)
+                .MaxAsync(t => (int?)t.DisplayOrder, cancellationToken) ?? -1;
+
+            await _context.ProductionTasks
+                .Where(t => t.Id == rootTaskId && t.ParentRowNumber == null)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.DisplayOrder, maxOrder + 1),
+                    cancellationToken);
+        }
+
+        private IQueryable<ProductionTask> CompletedTasksQuery(string employeeName) =>
+            _context.ProductionTasks
+                .AsNoTracking()
+                .Where(t => t.EmployeeName == employeeName
+                            && t.Status == JobStatus.Completed
+                            && !(t.IsSplitTask && t.ParentRowNumber == null));
+
         public async Task<ProductionTask?> GetTaskByIdAsync(int id, CancellationToken cancellationToken = default)
         {
             return await _context.ProductionTasks

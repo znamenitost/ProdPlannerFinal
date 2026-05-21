@@ -13,7 +13,8 @@ import {
   Card,
   CardContent,
   Grid,
-  Tooltip
+  Tooltip,
+  TablePagination
 } from '@mui/material';
 import { 
   CheckCircle, 
@@ -36,19 +37,27 @@ import TaskTitleTwoLines from './TaskTitleTwoLines';
 export default function CompletedTasksList({ employee, refresh }) {
   const [completed, setCompleted] = useState([]);
   const [stats, setStats] = useState({ totalTasks: 0, totalEstimate: 0, totalActual: 0 });
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await getCompletedTasks(employee);
+        const data = await getCompletedTasks(employee, page + 1, rowsPerPage);
         setCompleted(data.tasks || []);
         setStats(data.stats || { totalTasks: 0, totalEstimate: 0, totalActual: 0 });
+        setTotalCount(data.totalCount ?? data.stats?.totalTasks ?? 0);
       } catch (err) {
         console.error('Ошибка загрузки выполненных задач:', err);
       }
     };
     fetchData();
-  }, [employee, refresh]);
+  }, [employee, refresh, page, rowsPerPage]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [employee]);
 
   const totalDifference = stats.totalEstimate - stats.totalActual;
 
@@ -232,6 +241,20 @@ export default function CompletedTasksList({ employee, refresh }) {
       </TableContainer>
 
       {completed.length === 0 && <EmptyState message="Нет выполненных задач" icon={TaskAlt} />}
+
+      <TablePagination
+        component="div"
+        count={totalCount}
+        page={page}
+        onPageChange={(_e, newPage) => setPage(newPage)}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={(e) => {
+          setRowsPerPage(parseInt(e.target.value, 10));
+          setPage(0);
+        }}
+        rowsPerPageOptions={[10, 25, 50]}
+        labelRowsPerPage="Строк на странице"
+      />
     </Paper>
   );
 }

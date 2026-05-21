@@ -166,12 +166,7 @@ public class TaskTableService : ITaskTableService
         };
 
         await _repo.AddTaskAsync(task, cancellationToken);
-
-        var allRootIds = (await _repo.GetRootTasksAsync(cancellationToken))
-            .OrderBy(t => t.DisplayOrder)
-            .Select(t => t.Id)
-            .ToList();
-        await _repo.ReorderTasksAsync(allRootIds, cancellationToken);
+        await _repo.AppendRootDisplayOrderAsync(task.Id, cancellationToken);
 
         await _notificationService.NotifyNewTaskAsync(task);
 

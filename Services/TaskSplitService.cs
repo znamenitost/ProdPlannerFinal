@@ -66,9 +66,6 @@ namespace ProductionPlanner.Services
 
             await _context.SaveChangesAsync(cancellationToken);
 
-            var allRootIds = (await _repo.GetRootTasksAsync(cancellationToken)).OrderBy(t => t.DisplayOrder).Select(t => t.Id).ToList();
-            await _repo.ReorderTasksAsync(allRootIds, cancellationToken);
-
             return parentTask;
         }
 
