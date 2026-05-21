@@ -55,9 +55,11 @@ function DeadlineTimeActionList({ selectedTime, onSelectTime }) {
           >
             <ListItemText
               primary={time}
-              primaryTypographyProps={{
-                variant: 'body2',
-                fontWeight: time === selected ? 600 : 400
+              slotProps={{
+                primary: {
+                  variant: 'body2',
+                  fontWeight: time === selected ? 600 : 400
+                }
               }}
             />
           </ListItemButton>
