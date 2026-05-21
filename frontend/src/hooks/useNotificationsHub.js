@@ -108,15 +108,20 @@ export default function useNotificationsHub(user, handlers = {}) {
     queued.forEach(offerNotification);
   }, [offerNotification]);
 
-  const fetchPendingNotifications = useCallback(async () => {
+  const fetchPendingNotifications = useCallback(async (signal) => {
     if (!user?.id) return;
     try {
-      const response = await fetch('/api/notifications/pending', { credentials: 'include' });
+      const response = await fetch('/api/notifications/pending', {
+        credentials: 'include',
+        signal,
+      });
       if (!response.ok) return;
       const pending = await response.json();
       pending.forEach((dto) => offerNotification(mapPendingDto(dto)));
     } catch (err) {
-      console.error('Fetch pending notifications error:', err);
+      if (signal?.aborted || err?.name === 'AbortError') return;
+      // NetworkError / "Load failed" — backend offline or proxy unreachable (dev)
+      console.warn('Pending notifications unavailable:', err?.message ?? err);
     }
   }, [user?.id, offerNotification]);
 
@@ -124,6 +129,7 @@ export default function useNotificationsHub(user, handlers = {}) {
     if (!user?.id) return undefined;
 
     let isMounted = true;
+    const abort = new AbortController();
     displayedServerIdsRef.current = new Set();
     hiddenQueueRef.current = [];
 
@@ -177,10 +183,10 @@ export default function useNotificationsHub(user, handlers = {}) {
         await connection.start();
         if (!isMounted) return;
         await connection.invoke('JoinUserGroup', user.id).catch(() => {});
-        await fetchPendingNotifications();
+        await fetchPendingNotifications(abort.signal);
       } catch (err) {
-        console.error('SignalR start error:', err);
-        await fetchPendingNotifications();
+        console.warn('SignalR start error:', err?.message ?? err);
+        await fetchPendingNotifications(abort.signal);
       }
     };
 
@@ -189,7 +195,7 @@ export default function useNotificationsHub(user, handlers = {}) {
     connection.onreconnected(async () => {
       if (!isMounted) return;
       await connection.invoke('JoinUserGroup', user.id).catch(() => {});
-      await fetchPendingNotifications();
+      await fetchPendingNotifications(abort.signal);
       flushHiddenQueue();
       handlersRef.current.onFullRefresh?.();
     });
@@ -197,7 +203,7 @@ export default function useNotificationsHub(user, handlers = {}) {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         flushHiddenQueue();
-        fetchPendingNotifications();
+        fetchPendingNotifications(abort.signal);
       }
     };
 
@@ -206,6 +212,7 @@ export default function useNotificationsHub(user, handlers = {}) {
 
     return () => {
       isMounted = false;
+      abort.abort();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', onVisibilityChange);
       if (refreshTimeoutRef.current) {
