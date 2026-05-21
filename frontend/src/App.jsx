@@ -36,7 +36,6 @@ import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
-import DeadlineWarnings from './components/DeadlineWarnings';
 import DebugPanel from './components/DebugPanel';
 import SplitTaskModal from './components/SplitTaskModal';
 import TaskTable from './components/TaskTable';
@@ -226,7 +225,6 @@ function AppContent() {
 
           {activeTab === 0 && (
             <>
-              <DeadlineWarnings employee={employee} refresh={refresh} />
               <WeekCalendar employee={employee} refresh={refresh} />
               <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
                 <ActiveTasksList tasks={activeTasks} onUpdate={refreshAll} onSplit={handleSplit} embedded />
