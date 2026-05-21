@@ -34,14 +34,7 @@ try
     builder.Logging.AddConsole();
     builder.Logging.AddProvider(
         new FileLoggerProvider(Path.Combine(StartupDiagnostics.LogsDirectory, "app.log")));
-    if (OperatingSystem.IsWindows() && !builder.Environment.IsDevelopment())
-    {
-        builder.Logging.AddEventLog(settings =>
-        {
-            settings.SourceName = "ProductionPlanner";
-            settings.LogName = "Application";
-        });
-    }
+    WindowsEventLogConfigurator.ConfigureIfSupported(builder, builder.Environment.IsDevelopment());
 
     if (builder.Environment.IsDevelopment())
         builder.WebHost.UseUrls("http://0.0.0.0:5234", "http://localhost:5234");
@@ -60,11 +53,11 @@ try
     var usePostgres = !string.IsNullOrWhiteSpace(postgresConnection);
     if (usePostgres)
     {
-        postgresConnection = PostgresConnectionHelper.Normalize(postgresConnection);
+        var postgresConnectionString = PostgresConnectionHelper.Normalize(postgresConnection!);
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options
                 .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-                .UseNpgsql(postgresConnection, npgsql =>
+                .UseNpgsql(postgresConnectionString, npgsql =>
                     npgsql.EnableRetryOnFailure(maxRetryCount: 3)));
     }
     else
