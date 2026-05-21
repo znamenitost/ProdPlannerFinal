@@ -20,26 +20,13 @@ export const getStatusIcon = (status) => {
   return null;
 };
 
-export const getParentStatus = (parent) => {
-  if (!parent.children || parent.children.length === 0) return "Назначена";
-  const allCompleted = parent.children.every(c => c.statusText === 'Готово');
-  if (allCompleted) return "Готово";
-  const anyStarted = parent.children.some(c => c.statusText === 'Начал' || c.statusText === 'Пауза');
-  return anyStarted ? "Начал" : "Назначена";
-};
-
-export const getUniqueEmployeesFromChildren = (children) => {
-  if (!children || children.length === 0) return '';
-  const employees = new Set();
-  children.forEach(child => {
-    if (child.employeeName) employees.add(child.employeeName);
-  });
-  return Array.from(employees).join('/');
-};
-
 export const getParentEmployeeDisplay = (task, childrenTasks) => {
   if (childrenTasks?.length > 0) {
-    return getUniqueEmployeesFromChildren(childrenTasks);
+    const employees = new Set();
+    childrenTasks.forEach((child) => {
+      if (child.employeeName) employees.add(child.employeeName);
+    });
+    return Array.from(employees).join('/');
   }
   if (task.splitEmployeeNames) {
     return task.splitEmployeeNames;
@@ -60,24 +47,4 @@ export const getLastPathSegment = (path) => {
   if (!path) return '';
   const parts = path.split(/[\/\\]/).filter(p => p !== '');
   return parts.length > 0 ? parts[parts.length - 1] : '';
-};
-
-// Исправленная функция: задача принадлежит пользователю, если это его задача ИЛИ он админ
-export const isTaskBelongsToUser = (task, currentUser, hasChildren) => {
-  if (!currentUser) return false;
-  
-  // Админ видит все задачи
-  if (currentUser.role === 'Admin') return true;
-  
-  if (!hasChildren) {
-    return task.employeeName === currentUser.fullName && task.statusText !== 'Готово';
-  }
-  
-  if (hasChildren && task.children?.length) {
-    return task.children.some(child => 
-      child.employeeName === currentUser.fullName && 
-      child.statusText !== 'Готово'
-    );
-  }
-  return false;
 };

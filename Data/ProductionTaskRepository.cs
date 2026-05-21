@@ -29,17 +29,6 @@ namespace ProductionPlanner.Data
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<List<ProductionTask>> GetCompletedTasksAsync(
-            string employeeName,
-            CancellationToken cancellationToken = default)
-        {
-            return await _context.ProductionTasks
-                .AsNoTracking()
-                .Include(t => t.WorkIntervals)
-                .Where(t => t.EmployeeName == employeeName && t.Status == JobStatus.Completed)
-                .ToListAsync(cancellationToken);
-        }
-
         public async Task<CompletedTasksAggregateStats> GetCompletedTasksStatsAsync(
             string employeeName,
             CancellationToken cancellationToken = default)
@@ -307,24 +296,6 @@ namespace ProductionPlanner.Data
             await _context.SaveChangesAsync(cancellationToken);
         }
 
-        public async Task<List<ProductionTask>> GetAllTasksAsync(CancellationToken cancellationToken = default)
-        {
-            return await _context.ProductionTasks
-                .AsNoTracking()
-                .Include(t => t.WorkIntervals)
-                .ToListAsync(cancellationToken);
-        }
-
-        public async Task<List<ProductionTask>> GetRootTasksAsync(CancellationToken cancellationToken = default)
-        {
-            return await _context.ProductionTasks
-                .AsNoTracking()
-                .Include(t => t.WorkIntervals)
-                .Where(t => t.ParentRowNumber == null)
-                .OrderBy(t => t.DisplayOrder)
-                .ToListAsync(cancellationToken);
-        }
-
         public async Task<List<ProductionTask>> GetChildTasksAsync(int parentId, CancellationToken cancellationToken = default)
         {
             var activeChildIds = await _context.TaskSplits
@@ -425,16 +396,6 @@ namespace ProductionPlanner.Data
             }, cancellationToken);
         }
 
-        public async Task<List<ProductionTask>> GetActiveTasksWithIntervalsByEmployeeAsync(
-            string employeeName,
-            CancellationToken cancellationToken = default)
-        {
-            return await _context.ProductionTasks
-                .AsNoTracking()
-                .Where(t => t.EmployeeName == employeeName && t.Status != JobStatus.Completed)
-                .ToListAsync(cancellationToken);
-        }
-
         public async Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(
             string employeeName,
             DateTime start,
@@ -449,16 +410,6 @@ namespace ProductionPlanner.Data
                 .Include(i => i.Task)
                 .Where(i => i.Task.EmployeeName == employeeName &&
                             i.StartTime >= rangeStart && i.StartTime < rangeEnd)
-                .ToListAsync(cancellationToken);
-        }
-
-        public async Task<List<ProductionTask>> GetEmployeeTasksAsync(
-            string employeeName,
-            CancellationToken cancellationToken = default)
-        {
-            return await _context.ProductionTasks
-                .AsNoTracking()
-                .Where(t => t.EmployeeName == employeeName)
                 .ToListAsync(cancellationToken);
         }
 

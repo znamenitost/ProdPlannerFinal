@@ -28,9 +28,7 @@ public static class DatabaseInitializer
                     ex);
             }
 
-            logger.LogInformation(
-                "Подключение к PostgreSQL установлено. SchemaRepair={Version}",
-                PostgresLegacySchemaRepair.RepairVersion);
+            logger.LogInformation("Подключение к PostgreSQL установлено.");
         }
 
         if (db.Database.IsNpgsql())

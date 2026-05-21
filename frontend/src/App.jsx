@@ -37,7 +37,6 @@ import WeekCalendar from './components/WeekCalendar';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
 import DebugPanel from './components/DebugPanel';
-import SplitTaskModal from './components/SplitTaskModal';
 import TaskTable from './components/TaskTable';
 import LoginForm from './components/LoginForm';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
@@ -53,8 +52,6 @@ import SectionCard from './components/ui/SectionCard';
 function AppContent() {
   const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
   const { showSuccess, showError, showWarning, showInfo, confirm } = useUiFeedback();
-  const [splitModalOpen, setSplitModalOpen] = useState(false);
-  const [selectedTaskForSplit, setSelectedTaskForSplit] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
@@ -188,12 +185,6 @@ function AppContent() {
     showSuccess('База данных очищена');
   };
 
-  const handleSplit = (task) => {
-    setSelectedTaskForSplit(task);
-    setSplitModalOpen(true);
-  };
-
-  const handleSplitSuccess = () => refreshAll();
   const handleTabChange = (_event, newValue) => setActiveTab(newValue);
   const isAdmin = user?.role === 'Admin';
 
@@ -259,7 +250,7 @@ function AppContent() {
             <>
               <WeekCalendar employee={employee} refresh={refresh} />
               <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
-                <ActiveTasksList tasks={activeTasks} onUpdate={refreshCalendar} onSplit={handleSplit} embedded />
+                <ActiveTasksList tasks={activeTasks} onUpdate={refreshCalendar} embedded />
               </SectionCard>
               <CompletedTasksList employee={employee} refresh={refresh} />
             </>
@@ -276,8 +267,9 @@ function AppContent() {
             />
           )}
 
-          {isAdmin && <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />}
-          <SplitTaskModal open={splitModalOpen} task={selectedTaskForSplit} onClose={() => setSplitModalOpen(false)} onSuccess={handleSplitSuccess} />
+          {import.meta.env.DEV && isAdmin && (
+            <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />
+          )}
         </Container>
       </Box>
 

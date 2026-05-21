@@ -19,7 +19,6 @@ public static class PostgresSchemaMigrator
         await db.Database.MigrateAsync(cancellationToken);
         logger.LogInformation("Схема PostgreSQL применена (EF migrations).");
 
-        await PostgresLegacySchemaRepair.RepairAsync(db, logger);
         await ApplyUserNotificationsPatchAsync(db, logger, cancellationToken);
     }
 

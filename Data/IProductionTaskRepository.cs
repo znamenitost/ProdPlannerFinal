@@ -5,7 +5,6 @@ namespace ProductionPlanner.Data
     public interface IProductionTaskRepository
     {
         Task<List<ProductionTask>> GetActiveTasksAsync(string employeeName, CancellationToken cancellationToken = default);
-        Task<List<ProductionTask>> GetCompletedTasksAsync(string employeeName, CancellationToken cancellationToken = default);
         Task<CompletedTasksAggregateStats> GetCompletedTasksStatsAsync(string employeeName, CancellationToken cancellationToken = default);
         Task<PaginatedResult<ProductionTask>> GetCompletedTasksPaginatedAsync(
             string employeeName,
@@ -33,15 +32,11 @@ namespace ProductionPlanner.Data
         Task DeleteAllWorkIntervalsAsync(CancellationToken cancellationToken = default);
         Task<EmployeeStat?> GetEmployeeStatAsync(string employeeName, CancellationToken cancellationToken = default);
         Task UpdateEmployeeStatAsync(EmployeeStat stat, CancellationToken cancellationToken = default);
-        Task<List<ProductionTask>> GetAllTasksAsync(CancellationToken cancellationToken = default);
-        Task<List<ProductionTask>> GetRootTasksAsync(CancellationToken cancellationToken = default);
         Task<List<ProductionTask>> GetChildTasksAsync(int parentId, CancellationToken cancellationToken = default);
         Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize, CancellationToken cancellationToken = default);
         Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken = default);
         Task ReorderTasksAsync(List<int> orderedIds, CancellationToken cancellationToken = default);
-        Task<List<ProductionTask>> GetActiveTasksWithIntervalsByEmployeeAsync(string employeeName, CancellationToken cancellationToken = default);
         Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end, CancellationToken cancellationToken = default);
-        Task<List<ProductionTask>> GetEmployeeTasksAsync(string employeeName, CancellationToken cancellationToken = default);
         Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);
         Task<int> CloseOpenIntervalsAsync(int taskId, DateTime closedAt, CancellationToken cancellationToken = default);
         Task<int> TryTransitionStatusAsync(
