@@ -39,7 +39,7 @@ jobs:
             exit 1
           fi
           export ConnectionStrings__DefaultConnection="$POSTGRES_CONNECTION_STRING"
-          dotnet run --project ProductionPlanner.csproj -c Release -- apply-migrations
+          dotnet run --project ProductionPlanner.csproj -c Release --no-launch-profile -- apply-migrations
 
       - name: Publish application
         run: |

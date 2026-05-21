@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ProductionPlanner.Data;
@@ -35,7 +36,9 @@ public static class SchemaMigrationCli
 
         var services = new ServiceCollection();
         services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseNpgsql(postgres, npgsql => npgsql.EnableRetryOnFailure(maxRetryCount: 3)));
+            options
+                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+                .UseNpgsql(postgres, npgsql => npgsql.EnableRetryOnFailure(maxRetryCount: 3)));
 
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
