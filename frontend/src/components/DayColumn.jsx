@@ -11,7 +11,13 @@ import {
   isWorkingWeekday
 } from '../utils/calendarDayUtils';
 
-export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover }) {
+export default function DayColumn({
+  day,
+  allDays,
+  highlightedTaskId,
+  onTaskHover,
+  detailedTimeline = false
+}) {
   const date = new Date(day.date);
   const isWorkingDay = isWorkingWeekday(date);
   const taskBlocksMap = buildTaskBlocksMap(allDays);
@@ -43,6 +49,7 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
         workSegments={workSegments}
         idleSegments={idleSegments}
         isWorkingDay={isWorkingDay}
+        detailedTimeline={detailedTimeline}
       />
     </Paper>
   );

@@ -13,17 +13,48 @@ export const CALENDAR_TOOLTIP_SX = {
   boxShadow: '0 4px 16px rgba(74, 82, 96, 0.12)'
 };
 
-export function getLeft(dateTime) {
-  const d = new Date(dateTime);
-  const hours = d.getHours() + d.getMinutes() / 60;
-  return ((hours - 10) / 9) * 100;
+export const WORKDAY_START_HOUR = 10;
+export const WORKDAY_END_HOUR = 19;
+export const DETAIL_AXIS_START_HOUR = 11;
+export const DETAIL_AXIS_END_HOUR = 19;
+
+export function getTimelineRange(detailed = false) {
+  if (detailed) {
+    return { start: DETAIL_AXIS_START_HOUR, end: DETAIL_AXIS_END_HOUR };
+  }
+  return { start: WORKDAY_START_HOUR, end: WORKDAY_END_HOUR };
 }
 
-export function getWidth(start, end) {
+export function getLeft(dateTime, range = getTimelineRange(false)) {
+  const d = new Date(dateTime);
+  const hours = d.getHours() + d.getMinutes() / 60;
+  const span = range.end - range.start;
+  return ((hours - range.start) / span) * 100;
+}
+
+export function getWidth(start, end, range = getTimelineRange(false)) {
   const s = new Date(start);
   const e = new Date(end);
   const duration = (e - s) / (1000 * 60 * 60);
-  return (duration / 9) * 100;
+  const span = range.end - range.start;
+  return (duration / span) * 100;
+}
+
+export function getLunchBandPercent(range = getTimelineRange(false)) {
+  const span = range.end - range.start;
+  const left = ((14 - range.start) / span) * 100;
+  const width = (1 / span) * 100;
+  return { left, width };
+}
+
+export function isSameCalendarDay(a, b) {
+  const d1 = new Date(a);
+  const d2 = new Date(b);
+  return (
+    d1.getFullYear() === d2.getFullYear()
+    && d1.getMonth() === d2.getMonth()
+    && d1.getDate() === d2.getDate()
+  );
 }
 
 export function getDuration(start, end) {
