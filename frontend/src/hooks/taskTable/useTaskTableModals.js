@@ -119,7 +119,8 @@ export default function useTaskTableModals({
 
   const handleSplitSuccess = async (result) => {
     const parentId = splitModalTask?.id;
-    if (parentId && result) {
+    try {
+      if (parentId && result) {
       const rowPatch = {
         estimateHours: result.estimateHours,
         isSplitTask: result.isSplitTask,
@@ -138,6 +139,10 @@ export default function useTaskTableModals({
       if (expandedRows.has(parentId)) {
         await loadChildrenForParent(parentId, { force: true });
       }
+    }
+    } catch (err) {
+      console.error(err);
+      showError(err.message || 'Не удалось обновить назначения');
     }
   };
 

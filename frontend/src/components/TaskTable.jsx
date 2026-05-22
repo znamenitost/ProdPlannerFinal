@@ -72,7 +72,7 @@ export default function TaskTable({
                   childrenTasks={children}
                   isExpanded={isExpanded}
                   onToggleExpand={table.toggleExpand}
-                  onOpenFile={table.api.openFile}
+                  onOpenFile={table.handleOpenFile}
                   onStart={table.handleStartTask}
                   onPause={table.handlePauseTask}
                   onResume={table.handleResumeTask}

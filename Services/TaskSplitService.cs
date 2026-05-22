@@ -32,9 +32,7 @@ namespace ProductionPlanner.Services
             List<SplitPart> parts,
             CancellationToken cancellationToken = default)
         {
-            var parentTask = await _repo.GetTaskByIdAsync(parentTaskId, cancellationToken);
-            if (parentTask == null)
-                throw new Exception($"Задача {parentTaskId} не найдена");
+            var parentTask = await LoadParentForMutationAsync(parentTaskId, cancellationToken);
 
             var totalAllocated = parts.Sum(p => p.AllocatedHours);
             parentTask.EstimateHours = totalAllocated;
@@ -74,9 +72,7 @@ namespace ProductionPlanner.Services
             List<SplitPart> parts,
             CancellationToken cancellationToken = default)
         {
-            var parentTask = await _repo.GetTaskByIdAsync(parentTaskId, cancellationToken);
-            if (parentTask == null)
-                throw new Exception($"Задача {parentTaskId} не найдена");
+            var parentTask = await LoadParentForMutationAsync(parentTaskId, cancellationToken);
             if (parentTask.ParentRowNumber != null)
                 throw new Exception("Нельзя редактировать назначения у подзадачи");
 
@@ -166,6 +162,31 @@ namespace ProductionPlanner.Services
             await RecalculateParentStatusAsync(parentTask.Id, cancellationToken);
 
             return parentTask;
+        }
+
+        /// <summary>
+        /// Returns a tracked parent when it is already in the change tracker (e.g. just created via AddTaskAsync).
+        /// </summary>
+        private async Task<ProductionTask?> TryLoadParentForMutationAsync(
+            int parentTaskId,
+            CancellationToken cancellationToken)
+        {
+            var tracked = _context.ProductionTasks.Local.FirstOrDefault(t => t.Id == parentTaskId);
+            if (tracked != null)
+                return tracked;
+
+            return await _context.ProductionTasks
+                .FirstOrDefaultAsync(t => t.Id == parentTaskId, cancellationToken);
+        }
+
+        private async Task<ProductionTask> LoadParentForMutationAsync(
+            int parentTaskId,
+            CancellationToken cancellationToken)
+        {
+            var parent = await TryLoadParentForMutationAsync(parentTaskId, cancellationToken);
+            if (parent == null)
+                throw new Exception($"Задача {parentTaskId} не найдена");
+            return parent;
         }
 
         private static ProductionTask CreateChildFromPart(ProductionTask parent, SplitPart part) => new()
@@ -300,7 +321,7 @@ namespace ProductionPlanner.Services
 
         private async Task RecalculateParentStatusAsync(int parentId, CancellationToken cancellationToken)
         {
-            var parent = await _repo.GetTaskByIdAsync(parentId, cancellationToken);
+            var parent = await TryLoadParentForMutationAsync(parentId, cancellationToken);
             if (parent == null || !parent.IsSplitTask) return;
 
             var children = await GetChildTasksAsync(parentId, cancellationToken);
@@ -353,6 +374,8 @@ namespace ProductionPlanner.Services
             return await _context.ProductionTasks
                 .Include(t => t.WorkIntervals)
                 .Where(t => activeChildIds.Contains(t.Id))
+                .OrderByDescending(t => t.DisplayOrder)
+                .ThenByDescending(t => t.Id)
                 .ToListAsync(cancellationToken);
         }
     }

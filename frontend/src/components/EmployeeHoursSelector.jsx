@@ -92,7 +92,7 @@ export default function EmployeeHoursSelector({ employees, totalHours, onChange,
           <Button size="small" onClick={distributeEqually} variant="outlined" sx={{ mr: 2 }}>
             Разделить поровну
           </Button>
-          <Typography variant="caption" color={remaining < -0.01 ? 'error' : 'textSecondary'} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+          <Typography variant="caption" color={remaining < -0.01 ? 'error' : 'text.secondary'} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
             Распределено: {totalAssigned.toFixed(1)} / {totalHours} ч.{' '}
             {remaining > 0.01
               ? `Осталось: ${remaining.toFixed(1)} ч`

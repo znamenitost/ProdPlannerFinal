@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { TableRow, TableCell, TextField, IconButton, Tooltip, Box, Typography } from '@mui/material';
 import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
+import { draftRowSx } from '../theme/surfaces';
 
 export default function EditTaskRow({
   task,
@@ -50,7 +51,7 @@ export default function EditTaskRow({
   };
 
   return (
-    <TableRow sx={{ bgcolor: '#fef3c7' }}>
+    <TableRow sx={draftRowSx}>
       <TableCell sx={{ width: '3%' }}>
         <Edit color="warning" fontSize="small" />
       </TableCell>
@@ -112,7 +113,7 @@ export default function EditTaskRow({
               onClick={() => onOpenAssigneeModal(localTask)}
               sx={{ flexShrink: 0 }}
             >
-              <PeopleAlt fontSize="small" sx={{ color: isShared ? '#8b5cf6' : '#64748b' }} />
+              <PeopleAlt fontSize="small" color={isShared ? 'secondary' : 'action'} />
             </IconButton>
           </Tooltip>
           <Typography variant="caption" sx={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

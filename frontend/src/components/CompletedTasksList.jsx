@@ -31,10 +31,12 @@ import {
 import { getCompletedTasks } from '../services/api';
 import { alpha } from '@mui/material/styles';
 import { glassPaperSx, sectionTitleRowSx } from '../theme/surfaces';
+import { useUiFeedback } from '../context/UiFeedbackContext';
 import EmptyState from './ui/EmptyState';
 import TaskTitleTwoLines from './TaskTitleTwoLines';
 
 export default function CompletedTasksList({ employee, refresh }) {
+  const { showError } = useUiFeedback();
   const [completed, setCompleted] = useState([]);
   const [stats, setStats] = useState({ totalTasks: 0, totalEstimate: 0, totalActual: 0 });
   const [page, setPage] = useState(0);
@@ -50,6 +52,7 @@ export default function CompletedTasksList({ employee, refresh }) {
         setTotalCount(data.totalCount ?? data.stats?.totalTasks ?? 0);
       } catch (err) {
         console.error('Ошибка загрузки выполненных задач:', err);
+        showError('Не удалось загрузить выполненные задачи');
       }
     };
     fetchData();
@@ -196,17 +199,17 @@ export default function CompletedTasksList({ employee, refresh }) {
                     <Chip 
                       label={task.type || 'Без типа'} 
                       size="small" 
-                      sx={{ bgcolor: '#f1f5f9', fontSize: 12 }}
+                      variant="outlined" sx={{ fontSize: 12 }}
                     />
                   </TableCell>
                   <TableCell align="center">
                     <Tooltip title={workPeriod} arrow placement="top">
                       <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}>
-                        <PlayArrow sx={{ fontSize: 12, color: '#4caf50' }} />
+                        <PlayArrow sx={{ fontSize: 12, color: 'success.main' }} />
                         <Typography variant="caption" color="text.secondary">
                           {workPeriod !== '—' ? workPeriod.substring(0, 20) + (workPeriod.length > 20 ? '...' : '') : '—'}
                         </Typography>
-                        <Stop sx={{ fontSize: 12, color: '#f44336' }} />
+                        <Stop sx={{ fontSize: 12, color: 'error.main' }} />
                       </Box>
                     </Tooltip>
                   </TableCell>
@@ -225,12 +228,9 @@ export default function CompletedTasksList({ employee, refresh }) {
                       size="small"
                       icon={isPositive ? <TrendingUp /> : <TrendingDown />}
                       label={`${isPositive ? '+' : ''}${diff.toFixed(1)} ч`}
-                      sx={{
-                        bgcolor: isPositive ? '#dcfce7' : '#fee2e2',
-                        color: isPositive ? '#166534' : '#991b1b',
-                        fontWeight: 500,
-                        '& .MuiChip-icon': { color: isPositive ? '#22c55e' : '#ef4444' }
-                      }}
+                      color={isPositive ? 'success' : 'error'}
+                      variant="outlined"
+                      sx={{ fontWeight: 500 }}
                     />
                   </TableCell>
                 </TableRow>

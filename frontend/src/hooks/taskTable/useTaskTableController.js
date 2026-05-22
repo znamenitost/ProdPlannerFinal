@@ -66,8 +66,17 @@ export default function useTaskTableController({
     return () => onRegisterHubHandler(null);
   }, [onRegisterHubHandler]);
 
+  const handleOpenFile = async (row) => {
+    try {
+      await api.openFile(row);
+    } catch (err) {
+      showError(err.message || 'Не удалось открыть файл');
+    }
+  };
+
   const modals = useTaskTableModals({
     api,
+    handleOpenFile,
     employees: TASK_TABLE_EMPLOYEES,
     taskTypes: TASK_TABLE_TYPES,
     childrenCache: childrenState.childrenCache,

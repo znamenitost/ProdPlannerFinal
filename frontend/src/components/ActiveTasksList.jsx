@@ -43,7 +43,7 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
       await onUpdate();
     } catch (err) {
       console.error('Ошибка действия:', err);
-      showError('Не удалось выполнить действие. Проверьте консоль.');
+      showError(err.message || 'Не удалось выполнить действие');
     }
   };
 
@@ -129,7 +129,7 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                 sx={{ mb: 1.5, borderRadius: 1 }}
               />
 
-              <Stack direction="row" flexWrap="wrap" gap={0.75}>
+              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
                 {task.status === 0 && (
                   <Button
                     size="small"

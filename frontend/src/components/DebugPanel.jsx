@@ -185,7 +185,7 @@ export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
               {activeTasks.map(task => (
                 <Paper key={task.id} variant="outlined" sx={{ p: 1 }}>
                   <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
-                    {task.title.substring(0, 40)}...
+                    {(() => { const label = task.title || task.fileName || `Задача ${task.id}`; return label.length > 40 ? `${label.substring(0, 40)}…` : label; })()}
                   </Typography>
                   <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1, mt: 0.5 }}>
                     <Chip 

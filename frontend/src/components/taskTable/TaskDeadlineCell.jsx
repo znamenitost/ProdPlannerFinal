@@ -11,7 +11,7 @@ function formatDeadline(deadline) {
 export default function TaskDeadlineCell({ deadline, statusText }) {
   const overdue = isOverdue(deadline, statusText);
   return (
-    <Typography variant="body2" sx={{ color: overdue ? '#dc2626' : 'inherit', ...cellDisplayTextSx }}>
+    <Typography variant="body2" sx={{ color: overdue ? 'error.dark' : 'inherit', ...cellDisplayTextSx }}>
       {formatDeadline(deadline)}
     </Typography>
   );

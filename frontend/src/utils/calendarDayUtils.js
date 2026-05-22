@@ -1,12 +1,16 @@
+import { alpha } from '@mui/material/styles';
+import { chrome, tokens } from '../theme/paletteTokens';
+
 export const CALENDAR_TOOLTIP_SX = {
-  bgcolor: '#1e293b',
+  bgcolor: alpha(chrome.tooltipBg, 0.94),
+  color: chrome.tooltipText,
   fontSize: '12px',
   padding: '8px 15px',
   minWidth: '350px',
   maxWidth: 'none',
   width: 'max-content',
   borderRadius: 2,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+  boxShadow: '0 4px 16px rgba(74, 82, 96, 0.12)'
 };
 
 export function getLeft(dateTime) {
@@ -38,9 +42,8 @@ export function isWorkingWeekday(date) {
 }
 
 export function getWorkColor(taskId, completed) {
-  if (completed) return '#86b386';
-  const colors = ['#7c9ebf', '#9bb5d4', '#a8c4e0', '#b8d0e8', '#8aadc9', '#6b8fae'];
-  return colors[taskId % colors.length];
+  if (completed) return tokens.workDone;
+  return tokens.work[taskId % tokens.work.length];
 }
 
 export function getTimelineSegments(dayDate, timeline) {

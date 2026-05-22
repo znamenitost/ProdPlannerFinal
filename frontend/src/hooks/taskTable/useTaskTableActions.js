@@ -173,8 +173,9 @@ export default function useTaskTableActions({
       onCalendarRefresh?.();
     } catch (err) {
       console.error(err);
+      showError(err.message || 'Не удалось удалить задачу');
     }
-  }, [api, removeRow, onCalendarRefresh, confirm]);
+  }, [api, removeRow, onCalendarRefresh, confirm, showError]);
 
   const handleAddNewRow = useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);

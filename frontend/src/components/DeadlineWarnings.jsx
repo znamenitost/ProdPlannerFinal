@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { Alert, AlertTitle, Stack, Collapse, IconButton } from '@mui/material';
 import { Warning, Error, Close, AccessTime, Flag, Event } from '@mui/icons-material';
 import TaskTitleTwoLines from './TaskTitleTwoLines';
+import { useUiFeedback } from '../context/UiFeedbackContext';
 
 export default function DeadlineWarnings({ employee, refresh }) {
+  const { showError } = useUiFeedback();
   const [risks, setRisks] = useState([]);
   const [open, setOpen] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -28,6 +30,7 @@ export default function DeadlineWarnings({ employee, refresh }) {
       } catch (err) {
         console.error('Ошибка загрузки рисков:', err);
         setRisks([]);
+        showError('Не удалось загрузить предупреждения по дедлайнам');
       } finally {
         setLoading(false);
       }
@@ -44,16 +47,16 @@ export default function DeadlineWarnings({ employee, refresh }) {
       <Stack sx={{ mb: 3 }} spacing={1}>
         {risks.map(risk => {
           let severity = 'warning';
-          let icon = <Warning sx={{ color: '#f39c12' }} />;
+          let icon = <Warning fontSize="inherit" />;
           let title = 'Дедлайн приближается';
           
           if (risk.riskLevel === 'overdue') {
             severity = 'error';
-            icon = <Flag sx={{ color: '#e74c3c' }} />;
+            icon = <Flag fontSize="inherit" />;
             title = 'Дедлайн сорван';
           } else if (risk.riskLevel === 'critical') {
             severity = 'error';
-            icon = <Error sx={{ color: '#e74c3c' }} />;
+            icon = <Error fontSize="inherit" />;
             title = 'Критично';
           }
           

@@ -1,4 +1,5 @@
 import { Paper } from '@mui/material';
+import { glassCardSx } from '../theme/surfaces';
 import DayHeader from './calendar/DayHeader';
 import PlannedBlocks from './calendar/PlannedBlocks';
 import DeadlineMarkers from './calendar/DeadlineMarkers';
@@ -26,7 +27,7 @@ export default function DayColumn({ day, allDays, highlightedTaskId, onTaskHover
     getTaskInfoForDeadline(taskBlocksMap, taskId, taskTitle, status);
 
   return (
-    <Paper elevation={0} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.95)', borderRadius: 1 }}>
+    <Paper elevation={0} sx={{ ...glassCardSx, p: 2, borderRadius: 2 }}>
       <DayHeader date={day.date} />
       <PlannedBlocks
         taskBlocks={day.taskBlocks}

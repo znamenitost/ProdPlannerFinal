@@ -90,8 +90,9 @@ function ChildTaskRow({
                 top: 0,
                 width: 14,
                 height: '50%',
-                borderLeft: '2px solid #cbd5e1',
-                borderBottom: '2px solid #cbd5e1',
+                borderLeft: '2px solid',
+                borderBottom: '2px solid',
+                borderColor: 'grey.300',
                 borderBottomLeftRadius: '6px'
               }}
             />

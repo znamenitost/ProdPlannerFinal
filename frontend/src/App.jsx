@@ -180,9 +180,17 @@ function AppContent() {
       confirmColor: 'error',
     });
     if (!confirmed) return;
-    await fetch('/api/debug/reset-db', { method: 'POST' });
-    refreshAll();
-    showSuccess('База данных очищена');
+    try {
+      const response = await fetch('/api/debug/reset-db', { method: 'POST', credentials: 'include' });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || `HTTP ${response.status}`);
+      }
+      refreshAll();
+      showSuccess('База данных очищена');
+    } catch (err) {
+      showError(err.message || 'Не удалось сбросить базу данных');
+    }
   };
 
   const handleTabChange = (_event, newValue) => setActiveTab(newValue);

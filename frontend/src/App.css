@@ -1,84 +1,37 @@
-/* Calendar timeline helpers — main UI via MUI theme */
-* { box-sizing: border-box; }
-
-.task-separators {
-  position: relative;
-  top: -30px;
-  height: 30px;
-  width: 100%;
-  pointer-events: none;
-}
-
+/* Calendar timeline — aligned with theme/paletteTokens.js */
 .task-separator {
-  position: absolute;
-  width: 2px;
-  height: 30px;
-  background: rgba(100, 116, 139, 0.35);
-  pointer-events: none;
+  background: rgba(154, 165, 181, 0.4);
 }
-
 .task-hours-label {
-  position: absolute;
-  top: -25px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #334155;
-  color: white;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 10px;
-  white-space: nowrap;
-  pointer-events: auto;
-  cursor: pointer;
-  font-weight: 500;
-  z-index: 10;
+  background: #4a5260;
+  color: #fafbfd;
 }
-
-.task-hours-label:hover { background: #5b8db8; }
-
-.deadline-markers {
-  position: relative;
-  top: -30px;
-  height: 10px;
-  pointer-events: none;
+.task-hours-label:hover {
+  background: #8faec9;
 }
-
-.deadline-marker {
-  position: absolute;
-  width: 3px;
-  height: 14px;
-  top: -4px;
-  pointer-events: auto;
-  cursor: pointer;
+.deadline-marker.pending {
+  background: #d9a8a8;
 }
-
-.deadline-marker.pending { background: #d48989; }
-.deadline-marker.completed { background: #94a3b8; opacity: 0.6; }
-
+.deadline-marker.completed {
+  background: #8fb9a8;
+  opacity: 0.75;
+}
 .timeline-container {
-  position: relative;
-  background: rgba(148, 163, 184, 0.25);
-  height: 40px;
-  border-radius: 8px;
-  margin: 15px 0;
-  overflow: hidden;
+  background: #eef1f6;
 }
-
-.timeline-segment { position: absolute; height: 100%; top: 0; }
-.timeline-segment.work { background: #5b8db8; opacity: 0.75; }
-.timeline-segment.work.completed { background: #94a3b8; opacity: 0.5; }
-.timeline-segment.idle { background: #94a3b8; opacity: 0.35; }
-
+.timeline-segment.work {
+  background: #8faec9;
+  opacity: 0.8;
+}
+.timeline-segment.work.completed {
+  background: #a8c4b4;
+}
+.timeline-segment.idle {
+  background: #d2dae3;
+  opacity: 0.5;
+}
 .custom-tooltip {
-  background: rgba(30, 41, 59, 0.92);
-  color: white;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  max-width: 260px;
-  line-height: 1.4;
-  box-shadow: 0 4px 12px rgba(91, 141, 184, 0.15);
-  font-weight: 500;
-  pointer-events: none;
-  z-index: 1000;
+  background: rgba(74, 82, 96, 0.94);
+  color: #fafbfd;
+  box-shadow: 0 4px 16px rgba(74, 82, 96, 0.12);
 }

@@ -136,9 +136,10 @@ public class TaskTableService : ITaskTableService
             };
 
             await _repo.AddTaskAsync(newTask, cancellationToken);
-            await _splitService.SplitTaskAsync(newTask.Id, parts, cancellationToken);
+            var parent = await _splitService.SplitTaskAsync(newTask.Id, parts, cancellationToken);
+            await _repo.AppendRootDisplayOrderAsync(parent.Id, cancellationToken);
 
-            return TaskTableServiceResult<ProductionTask>.Ok(newTask);
+            return TaskTableServiceResult<ProductionTask>.Ok(parent);
         }
 
         var singlePart = parts.Count == 1 ? parts[0] : null;

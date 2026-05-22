@@ -63,7 +63,7 @@ public class SplitTaskStatusAggregatorTests
     }
 
     [Fact]
-    public void NoChildrenStarted_ShowsEmptyStatus()
+    public void NoChildrenStarted_ShowsNaznachena()
     {
         var parent = Parent();
         var children = new List<ProductionTask>
@@ -74,7 +74,7 @@ public class SplitTaskStatusAggregatorTests
 
         var (statusText, _) = SplitTaskStatusAggregator.Aggregate(parent, children, "Дима");
 
-        Assert.Equal("", statusText);
+        Assert.Equal("Назначена", statusText);
     }
 
     [Fact]

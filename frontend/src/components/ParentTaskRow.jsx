@@ -26,6 +26,8 @@ import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionsMenu from './TaskAdminActionsMenu';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
 import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
+import { alpha } from '@mui/material/styles';
+import { highlightedTaskRowSx, overdueTaskRowSx } from '../theme/surfaces';
 import {
   COL_ICON,
   ICON_SLOT_EXPAND,
@@ -101,29 +103,34 @@ function ParentTaskRow({
     return false;
   };
 
-  const getRowStyle = () => {
-    let style = {
-      '&:hover': { bgcolor: '#f8fafc' },
-      borderLeft: 'none'
+  const getRowStyle = (theme) => {
+    const overdue =
+      task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
+    const base = {
+      borderLeft: 'none',
+      '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) }
     };
-    const overdue = task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
-    let bgColor = overdue ? '#fef2f2' : 'inherit';
     if (highlightMyTasks && isMine) {
-      bgColor = '#e6f7ff';
-      style.boxShadow = 'inset 0 0 0 2px #1890ff';
-      style.borderRadius = '4px';
-    } else if (highlightMyTasks && !isMine) {
-      style.opacity = '0.65';
-      style['&:hover'] = { bgcolor: '#f8fafc', opacity: '0.85' };
+      return { ...base, ...highlightedTaskRowSx(theme) };
     }
-    return { ...style, bgcolor: bgColor };
+    if (highlightMyTasks && !isMine) {
+      return {
+        ...base,
+        opacity: 0.65,
+        '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04), opacity: 0.85 }
+      };
+    }
+    if (overdue) {
+      return { ...base, ...overdueTaskRowSx(theme) };
+    }
+    return base;
   };
 
   const showActionButtons = canUserManage() && canChangeStatus && !hasChildren;
 
   return (
     <Fragment>
-      <TableRow sx={getRowStyle()}>
+      <TableRow sx={(theme) => getRowStyle(theme)}>
         {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}
         <TableCell sx={COL_ICON}>
           <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', width: '100%' }}>
@@ -138,14 +145,14 @@ function ParentTaskRow({
             {task.isSplitTask && (
               <Box sx={ICON_SLOT_GROUPS}>
                 <Tooltip title="Общая задача" arrow>
-                  <Groups fontSize="small" sx={{ color: '#6366f1' }} />
+                  <Groups fontSize="small" color="secondary" />
                 </Tooltip>
               </Box>
             )}
 
             <Box sx={ICON_SLOT_FILE}>
               <Tooltip title={`Открыть файл: ${fullFilePath}`} arrow>
-                <IconButton size="small" onClick={() => onOpenFile(task)} sx={{ color: '#7c9ebf', p: 0.5 }}>
+                <IconButton size="small" color="primary" onClick={() => onOpenFile(task)} sx={{ p: 0.5 }}>
                   <FolderOpen fontSize="small" />
                 </IconButton>
               </Tooltip>

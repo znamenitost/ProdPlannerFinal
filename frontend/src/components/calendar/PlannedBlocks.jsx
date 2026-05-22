@@ -1,6 +1,8 @@
 import { Box, Tooltip } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { Restaurant } from '@mui/icons-material';
 import { CALENDAR_TOOLTIP_SX } from '../../utils/calendarDayUtils';
+import { tokens } from '../../theme/paletteTokens';
 
 function LunchBreak() {
   return (
@@ -21,7 +23,7 @@ function LunchBreak() {
           width: '11.111%',
           height: '100%',
           top: 0,
-          backgroundColor: '#fef3c7',
+          backgroundColor: tokens.lunch,
           opacity: 0.8,
           zIndex: 1,
           cursor: 'pointer',
@@ -38,7 +40,7 @@ export default function PlannedBlocks({ taskBlocks, isWorkingDay, isHighlighted 
     <Box
       sx={{
         position: 'relative',
-        bgcolor: '#f1f5f9',
+        bgcolor: tokens.track,
         height: 32,
         borderRadius: 2,
         mb: 3,
@@ -65,7 +67,7 @@ export default function PlannedBlocks({ taskBlocks, isWorkingDay, isHighlighted 
                 width: `${block.widthPercent}%`,
                 height: '100%',
                 top: 0,
-                backgroundColor: highlighted ? '#f59e0b' : '#7c9ebf',
+                backgroundColor: (theme) => highlighted ? theme.palette.warning.main : theme.palette.primary.main,
                 opacity: highlighted ? 0.95 : 0.85,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
@@ -74,7 +76,7 @@ export default function PlannedBlocks({ taskBlocks, isWorkingDay, isHighlighted 
                 borderBottomLeftRadius: isFirst ? 2 : 0,
                 borderTopRightRadius: isLast ? 2 : 0,
                 borderBottomRightRadius: isLast ? 2 : 0,
-                boxShadow: highlighted ? '0 0 8px rgba(245,158,11,0.5)' : 'none',
+                boxShadow: (theme) => highlighted ? `0 0 8px ${alpha(theme.palette.warning.main, 0.5)}` : 'none',
                 '&:hover': { opacity: 1, filter: 'brightness(0.95)' }
               }}
             />
@@ -92,7 +94,7 @@ export default function PlannedBlocks({ taskBlocks, isWorkingDay, isHighlighted 
               left: `${block.leftPercent + block.widthPercent / 2}%`,
               top: -22,
               transform: 'translateX(-50%)',
-              backgroundColor: highlighted ? '#f59e0b' : '#1e293b',
+              backgroundColor: (theme) => highlighted ? theme.palette.warning.main : theme.palette.grey[800],
               color: 'white',
               fontSize: '10px',
               fontWeight: 500,

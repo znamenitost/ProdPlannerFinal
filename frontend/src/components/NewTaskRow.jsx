@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
+import { draftRowSx } from '../theme/surfaces';
 
 export default function NewTaskRow({
   newRow,
@@ -32,7 +33,7 @@ export default function NewTaskRow({
   };
 
   return (
-    <TableRow sx={{ bgcolor: '#fef3c7' }}>
+    <TableRow sx={draftRowSx}>
       <TableCell>
         <AutoAwesome color="warning" fontSize="small" />
       </TableCell>
@@ -94,7 +95,7 @@ export default function NewTaskRow({
             arrow
           >
             <IconButton size="small" onClick={onOpenAssigneeModal}>
-              <PeopleAlt fontSize="small" sx={{ color: hasAssignees ? (isShared ? '#8b5cf6' : '#64748b') : '#94a3b8' }} />
+              <PeopleAlt fontSize="small" color={hasAssignees ? (isShared ? 'secondary' : 'action') : 'disabled'} />
             </IconButton>
           </Tooltip>
           <Typography variant="caption" sx={{ color: hasAssignees ? 'text.primary' : 'text.disabled', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

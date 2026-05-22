@@ -1,6 +1,20 @@
 //const API_BASE = 'http://localhost:5234/api';  // Раскомментировать если нужно явно указать порт
 const API_BASE = '/api';
 
+async function throwIfNotOk(res, fallbackMessage) {
+  if (res.ok) return;
+  const text = await res.text();
+  let message = fallbackMessage;
+  try {
+    const body = JSON.parse(text);
+    if (body?.error) message = body.error;
+    else if (body?.message) message = body.message;
+  } catch {
+    if (text) message = text;
+  }
+  throw new Error(message);
+}
+
 // Получить активные задачи сотрудника
 export async function getActiveTasks(employee, options = {}) {
   const res = await fetch(`${API_BASE}/tasks/active?employee=${encodeURIComponent(employee)}`, {
@@ -89,7 +103,7 @@ export async function completeTask(id) {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' }
   });
-  if (!res.ok) throw new Error('Ошибка завершения задачи');
+  await throwIfNotOk(res, 'Ошибка завершения задачи');
 }
 
 export async function returnTask(id) {

@@ -173,7 +173,12 @@ namespace ProductionPlanner.Data
         public async Task UpdateTaskAsync(ProductionTask task, CancellationToken cancellationToken = default)
         {
             task.UpdatedAt = _timeService.Now;
-            _context.ProductionTasks.Update(task);
+            var tracked = _context.ProductionTasks.Local.FirstOrDefault(e => e.Id == task.Id);
+            if (tracked != null && !ReferenceEquals(tracked, task))
+                _context.Entry(tracked).CurrentValues.SetValues(task);
+            else if (_context.Entry(task).State == EntityState.Detached)
+                _context.ProductionTasks.Update(task);
+
             await _context.SaveChangesAsync(cancellationToken);
         }
 
@@ -261,9 +266,27 @@ namespace ProductionPlanner.Data
         public async Task UpdateEmployeeStatAsync(EmployeeStat stat, CancellationToken cancellationToken = default)
         {
             if (stat.Id == 0)
+            {
                 await _context.EmployeeStats.AddAsync(stat, cancellationToken);
+            }
             else
-                _context.EmployeeStats.Update(stat);
+            {
+                var tracked = _context.ChangeTracker.Entries<EmployeeStat>()
+                    .FirstOrDefault(e => e.Entity.Id == stat.Id)?.Entity;
+
+                if (tracked != null)
+                {
+                    tracked.EmployeeName = stat.EmployeeName;
+                    tracked.TotalSavedHours = stat.TotalSavedHours;
+                    tracked.TodaySavedHours = stat.TodaySavedHours;
+                    tracked.LastResetDate = stat.LastResetDate;
+                }
+                else
+                {
+                    _context.EmployeeStats.Update(stat);
+                }
+            }
+
             await _context.SaveChangesAsync(cancellationToken);
         }
 
@@ -284,7 +307,8 @@ namespace ProductionPlanner.Data
             var query = _context.ProductionTasks
                 .AsNoTracking()
                 .Where(t => t.ParentRowNumber == null)
-                .OrderBy(t => t.DisplayOrder);
+                .OrderByDescending(t => t.DisplayOrder)
+                .ThenByDescending(t => t.Id);
 
             var totalCount = await query.CountAsync(cancellationToken);
             var items = await query
@@ -327,7 +351,9 @@ namespace ProductionPlanner.Data
             return children
                 .Where(c => parentByChildId.ContainsKey(c.Id))
                 .GroupBy(c => parentByChildId[c.Id])
-                .ToDictionary(g => g.Key, g => g.ToList());
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderByDescending(c => c.DisplayOrder).ThenByDescending(c => c.Id).ToList());
         }
 
         public async Task ReorderTasksAsync(List<int> orderedIds, CancellationToken cancellationToken = default)

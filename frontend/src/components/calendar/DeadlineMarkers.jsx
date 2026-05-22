@@ -19,14 +19,14 @@ function DeadlineTooltipContent({ dl, taskInfoObj }) {
     return (
       <Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <DoneAll sx={{ fontSize: 16, color: '#10b981' }} />
+          <DoneAll sx={{ fontSize: 16 }} color="success" />
           <strong>{title}</strong>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
-          <CheckCircle sx={{ fontSize: 12, color: '#10b981' }} /> Выполнена
+          <CheckCircle sx={{ fontSize: 12 }} color="success" /> Выполнена
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
-          <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {deadlineStr}
+          <Event sx={{ fontSize: 12, color: 'text.secondary' }} /> Дедлайн: {deadlineStr}
         </Box>
       </Box>
     );
@@ -36,14 +36,14 @@ function DeadlineTooltipContent({ dl, taskInfoObj }) {
     return (
       <Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <PlayArrow sx={{ fontSize: 16, color: '#3b82f6' }} />
+          <PlayArrow sx={{ fontSize: 16 }} color="info" />
           <strong>{title}</strong>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
-          <Schedule sx={{ fontSize: 12, color: '#f59e0b' }} /> В процессе выполнения
+          <Schedule sx={{ fontSize: 12 }} color="warning" /> В процессе выполнения
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
-          <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {deadlineStr}
+          <Event sx={{ fontSize: 12, color: 'text.secondary' }} /> Дедлайн: {deadlineStr}
         </Box>
       </Box>
     );
@@ -53,14 +53,14 @@ function DeadlineTooltipContent({ dl, taskInfoObj }) {
     return (
       <Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Assignment sx={{ fontSize: 16, color: '#f59e0b' }} />
+          <Assignment sx={{ fontSize: 16 }} color="warning" />
           <strong>{title}</strong>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
-          <HourglassEmpty sx={{ fontSize: 12, color: '#94a3b8' }} /> Назначена
+          <HourglassEmpty sx={{ fontSize: 12 }} color="secondary" /> Назначена
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
-          <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {deadlineStr}
+          <Event sx={{ fontSize: 12, color: 'text.secondary' }} /> Дедлайн: {deadlineStr}
         </Box>
       </Box>
     );
@@ -70,14 +70,14 @@ function DeadlineTooltipContent({ dl, taskInfoObj }) {
     return (
       <Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Pause sx={{ fontSize: 16, color: '#f59e0b' }} />
+          <Pause sx={{ fontSize: 16 }} color="warning" />
           <strong>{title}</strong>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
           <Pause sx={{ fontSize: 12 }} /> Приостановлена
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 12, mt: 0.5 }}>
-          <Event sx={{ fontSize: 12, color: '#6b7c93' }} /> Дедлайн: {deadlineStr}
+          <Event sx={{ fontSize: 12, color: 'text.secondary' }} /> Дедлайн: {deadlineStr}
         </Box>
       </Box>
     );
@@ -113,11 +113,11 @@ export default function DeadlineMarkers({ deadlines, getTaskInfo, onTaskHover })
                 transform: 'translateX(-50%)',
                 width: 4,
                 height: 20,
-                bgcolor: dl.status === 'Completed' ? '#10b981' : '#ef4444',
+                bgcolor: dl.status === 'Completed' ? 'success.main' : 'error.main',
                 borderRadius: 2,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
-                '&:hover': { width: 6, boxShadow: '0 0 4px rgba(0,0,0,0.3)' },
+                '&:hover': { width: 6, boxShadow: (theme) => `0 0 6px ${theme.palette.grey[400]}` },
                 zIndex: 10
               }}
               onMouseEnter={() => onTaskHover?.(dl.taskId)}

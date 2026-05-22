@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import { Schedule } from '@mui/icons-material';
+import { metaPanelSx } from '../theme/surfaces';
 
 const MOSCOW_TZ = 'Europe/Moscow';
 
@@ -30,8 +31,8 @@ export default function CurrentDateTime() {
   }, []);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2, bgcolor: '#f0f4f8', px: 2, py: 1, borderRadius: 3 }}>
-      <Schedule sx={{ color: '#7c9ebf' }} />
+    <Box sx={metaPanelSx}>
+      <Schedule color="primary" />
       <Box sx={{ textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
           {formatDate(now)}

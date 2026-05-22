@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
+using ProductionPlanner.Services.TaskTable;
 using ProductionPlanner.Data;
 
 namespace ProductionPlanner.Controllers
@@ -95,7 +96,7 @@ namespace ProductionPlanner.Controllers
                 c.FolderPath,
                 c.FileName,
                 c.Comment,
-                StatusText = MapStatusToText(c.Status),
+                StatusText = TaskStatusMapper.ToText(c.Status),
                 Status = c.Status.ToString(),
                 c.Deadline,
                 c.EstimateHours,
@@ -118,13 +119,5 @@ namespace ProductionPlanner.Controllers
             return Ok(new { parentRowNumber, allCompleted = completed });
         }
 
-        private string MapStatusToText(JobStatus status) => status switch
-        {
-            JobStatus.Assigned => "",
-            JobStatus.InProgress => "Начал",
-            JobStatus.Paused => "Пауза",
-            JobStatus.Completed => "Готово",
-            _ => ""
-        };
     }
 }

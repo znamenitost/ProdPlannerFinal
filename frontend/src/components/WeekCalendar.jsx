@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { Box, Paper, IconButton, Typography, Button } from '@mui/material';
 import { ChevronLeft, ChevronRight, CalendarMonth, Weekend } from '@mui/icons-material';
 import { glassPaperSx, softIconButtonSx } from '../theme/surfaces';
+import { useUiFeedback } from '../context/UiFeedbackContext';
 import { getWeekCalendar } from '../services/api';
 import useClockMinute from '../hooks/useClockMinute';
 import DayColumn from './DayColumn';
 import { CalendarLoadingState } from './LoadingState';
 
 export default function WeekCalendar({ employee, refresh }) {
+  const { showError } = useUiFeedback();
   const clockMinute = useClockMinute(true);
   const [weekData, setWeekData] = useState(null);
   const [currentMonday, setCurrentMonday] = useState(() => getMonday(new Date()));
@@ -31,6 +33,7 @@ export default function WeekCalendar({ employee, refresh }) {
         if (err.name !== 'AbortError') {
           console.error('Ошибка загрузки календаря:', err);
           setWeekData(null);
+          showError('Не удалось загрузить календарь');
         }
       }
     };

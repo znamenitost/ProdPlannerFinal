@@ -26,7 +26,7 @@ public static class SplitTaskStatusAggregator
                      c.Status == JobStatus.Paused))
             statusText = "Начал";
         else
-            statusText = "";
+            statusText = "Назначена";
 
         return (statusText, hasCurrentUserSubtask);
     }

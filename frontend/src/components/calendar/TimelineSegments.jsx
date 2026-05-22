@@ -1,4 +1,6 @@
 import { Box, Tooltip } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { tokens } from '../../theme/paletteTokens';
 import { Restaurant } from '@mui/icons-material';
 import {
   CALENDAR_TOOLTIP_SX,
@@ -28,7 +30,7 @@ function LunchBreak({ opacity = 0.7 }) {
           width: '11.111%',
           height: '100%',
           top: 0,
-          backgroundColor: '#fef3c7',
+          backgroundColor: tokens.lunch,
           opacity,
           zIndex: 1,
           cursor: 'pointer',
@@ -45,7 +47,7 @@ export default function TimelineSegments({ workSegments, idleSegments, isWorking
     <Box
       sx={{
         position: 'relative',
-        bgcolor: '#f1f5f9',
+        bgcolor: tokens.track,
         height: 36,
         borderRadius: 2,
         mb: 2,
@@ -108,7 +110,7 @@ export default function TimelineSegments({ workSegments, idleSegments, isWorking
                 width: `${getWidth(segment.start, segment.end)}%`,
                 height: `${idleHeight}px`,
                 top: `${idleTop}px`,
-                backgroundColor: '#e2e8f0',
+                backgroundColor: (theme) => alpha(theme.palette.secondary.light, 0.85),
                 opacity: 0.7,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',

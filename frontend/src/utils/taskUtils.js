@@ -49,12 +49,7 @@ export const getShortName = (fullPath, isChild = false) => {
 };
 
 // Цвет статуса
-export const getStatusColor = (status) => {
-  if (status === 'Готово') return '#22c55e';
-  if (status === 'Начал') return '#3b82f6';
-  if (status === 'Пауза') return '#f59e0b';
-  return '#64748b';
-};
+export { getStatusChipColor as getStatusColor } from '../theme/statusColors';
 
 // Иконка статуса
 export const getStatusIcon = (status) => {

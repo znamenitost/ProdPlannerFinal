@@ -8,6 +8,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { MoreVert, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
+import { softIconButtonSx } from '../theme/surfaces';
 
 export default function EmployeeStatusButtons({
   task,
@@ -53,6 +54,7 @@ export default function EmployeeStatusButtons({
         onClick={handleOpen}
         disabled={pending}
         aria-label="Действия с задачей"
+        sx={softIconButtonSx('primary')}
       >
         {pending ? <CircularProgress size={18} /> : <MoreVert fontSize="small" />}
       </IconButton>
