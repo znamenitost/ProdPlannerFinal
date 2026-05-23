@@ -158,7 +158,7 @@ export const getStatusIcon = (status) => {
   }
   if (status === 'Начал') return <PlayArrow sx={{ fontSize: 16 }} />;
   if (status === 'Пауза') return <Pause sx={{ fontSize: 16 }} />;
-  if (status === 'На согласовании') return <FactCheck sx={{ fontSize: 16 }} />;
+  if (status === 'Согласование' || status === 'На согласовании') return <FactCheck sx={{ fontSize: 16 }} />;
   if (status === 'Нет изделий') return <Inventory2 sx={{ fontSize: 16 }} />;
   if (status === 'Назначена') return <HourglassEmpty sx={{ fontSize: 16 }} />;
   return null;
@@ -204,9 +204,91 @@ export default function EmptyState({ message = 'Нет данных', icon: Icon
     </Box>
   );
 }
+=== ./frontend/src/components/ui/MotionSection.jsx ===
+import { forwardRef } from 'react';
+import { Box, Collapse, Fade, Grow } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import { fadeEnterTimeout, fadeExitTimeout, growTimeout } from '../../theme/motion';
+
+export const MotionFade = forwardRef(function MotionFade(
+  { children, in: inProp = true, appear = false, sx, ...rest },
+  ref
+) {
+  const theme = useTheme();
+  return (
+    <Fade
+      in={inProp}
+      appear={appear}
+      timeout={{
+        enter: fadeEnterTimeout(theme),
+        exit: fadeExitTimeout(theme)
+      }}
+      easing={{
+        enter: theme.transitions.easing.easeOut,
+        exit: theme.transitions.easing.easeIn
+      }}
+      {...rest}
+    >
+      <Box ref={ref} sx={sx}>
+        {children}
+      </Box>
+    </Fade>
+  );
+});
+
+export function MotionSwitch({ transitionKey, children, sx, mode = 'fade' }) {
+  const theme = useTheme();
+
+  if (mode === 'grow') {
+    return (
+      <Grow
+        in
+        appear
+        key={transitionKey}
+        timeout={growTimeout(theme)}
+        easing={theme.transitions.easing.easeOut}
+      >
+        <Box sx={sx}>{children}</Box>
+      </Grow>
+    );
+  }
+
+  return (
+    <Fade
+      in
+      appear
+      key={transitionKey}
+      timeout={{
+        enter: fadeEnterTimeout(theme),
+        exit: fadeExitTimeout(theme)
+      }}
+      easing={{
+        enter: theme.transitions.easing.easeOut,
+        exit: theme.transitions.easing.easeIn
+      }}
+    >
+      <Box sx={sx}>{children}</Box>
+    </Fade>
+  );
+}
+
+export function MotionCollapse({ in: inProp, children, sx, ...rest }) {
+  const theme = useTheme();
+  return (
+    <Collapse
+      in={inProp}
+      timeout={theme.transitions.duration.standard}
+      easing={theme.transitions.easing.easeInOut}
+      {...rest}
+    >
+      <Box sx={sx}>{children}</Box>
+    </Collapse>
+  );
+}
 === ./frontend/src/components/ui/SectionCard.jsx ===
 import { Paper, Box, Typography } from '@mui/material';
 import { glassPaperSx, sectionHeaderSx, sectionTitleRowSx } from '../../theme/surfaces';
+import { MotionFade } from './MotionSection';
 
 /**
  * Unified section container: glass paper + optional icon title + actions.
@@ -222,6 +304,7 @@ export default function SectionCard({
   ...paperProps
 }) {
   return (
+    <MotionFade appear>
     <Paper sx={[glassPaperSx, sx]} {...paperProps}>
       {(title || action) && (
         <Box sx={sectionHeaderSx}>
@@ -240,6 +323,7 @@ export default function SectionCard({
         {children}
       </Box>
     </Paper>
+    </MotionFade>
   );
 }
 === ./frontend/src/components/taskTable/TaskDeadlineCell.jsx ===
@@ -328,6 +412,54 @@ export default function TaskTypeCell({ type }) {
     </Tooltip>
   );
 }
+=== ./frontend/src/components/taskTable/TaskPlannedTimeBar.jsx ===
+import { Box, LinearProgress } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import useClockMinute from '../../hooks/useClockMinute';
+import {
+  getPlannedTimeProgress,
+  shouldShowPlannedTimeBar
+} from '../../utils/plannedTimeProgress';
+
+/** Тонкая полоса планового прогресса по времени внизу строки таблицы. */
+export default function TaskPlannedTimeBar({ task, hideForSplitParent = false }) {
+  useClockMinute(true);
+
+  if (hideForSplitParent || !shouldShowPlannedTimeBar(task)) {
+    return null;
+  }
+
+  const percent = getPlannedTimeProgress(task);
+
+  return (
+    <Box
+      sx={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 3,
+        zIndex: 2,
+        pointerEvents: 'none'
+      }}
+      aria-hidden
+    >
+      <LinearProgress
+        variant="determinate"
+        value={percent}
+        sx={(theme) => ({
+          height: 3,
+          borderRadius: 0,
+          bgcolor: alpha(theme.palette.primary.main, 0.08),
+          '& .MuiLinearProgress-bar': {
+            borderRadius: 0,
+            bgcolor: alpha(theme.palette.primary.main, 0.45)
+          }
+        })}
+      />
+    </Box>
+  );
+}
 === ./frontend/src/components/taskTable/TaskStatusCell.jsx ===
 import { Chip } from '@mui/material';
 import { getStatusIcon } from '../../utils/taskHelpers';
@@ -358,6 +490,7 @@ export default function TaskStatusCell({ statusText, label }) {
 }
 === ./frontend/src/components/calendar/TimelineHourAxis.jsx ===
 import { Box, Typography } from '@mui/material';
+import { positionLeftTransitionSx } from '../../theme/motion';
 import { DETAIL_AXIS_END_HOUR, DETAIL_AXIS_START_HOUR } from '../../utils/calendarDayUtils';
 
 export default function TimelineHourAxis({
@@ -417,7 +550,7 @@ export default function TimelineHourAxis({
             borderColor: 'background.paper',
             boxShadow: (theme) => `0 0 0 1px ${theme.palette.error.main}`,
             zIndex: 2,
-            transition: 'left 0.35s ease'
+            ...positionLeftTransitionSx
           }}
         />
       )}
@@ -428,9 +561,11 @@ export default function TimelineHourAxis({
 import { Box, Tooltip } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { tokens } from '../../theme/paletteTokens';
+import { hoverInteractiveSx } from '../../theme/motion';
 import { Restaurant } from '@mui/icons-material';
 import {
   CALENDAR_TOOLTIP_SX,
+  formatCalendarTaskTooltip,
   formatCalendarTime,
   getDuration,
   getLeft,
@@ -526,7 +661,10 @@ export default function TimelineSegments({
         return (
           <Tooltip
             key={`work-${idx}`}
-            title={`${segment.taskTitle || `Задача #${segment.taskId}`}\n⏱ ${formatCalendarTime(segment.start)} - ${formatCalendarTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`}
+            title={formatCalendarTaskTooltip(
+              segment,
+              `⏱ ${formatCalendarTime(segment.start)} - ${formatCalendarTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`
+            )}
             arrow
             placement="top"
             slotProps={{ tooltip: { sx: CALENDAR_TOOLTIP_SX } }}
@@ -541,7 +679,7 @@ export default function TimelineSegments({
                 backgroundColor: getWorkColor(segment.taskId, segment.completed),
                 opacity: 0.85,
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                ...hoverInteractiveSx,
                 borderRadius: '2px',
                 zIndex: 2,
                 '&:hover': { opacity: 1, filter: 'brightness(0.95)' }
@@ -572,7 +710,7 @@ export default function TimelineSegments({
                 backgroundColor: (theme) => alpha(theme.palette.secondary.light, 0.85),
                 opacity: 0.7,
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                ...hoverInteractiveSx,
                 zIndex: 2,
                 '&:hover': { opacity: 0.9 }
               }}
@@ -618,6 +756,7 @@ export default function TimelineSegments({
 }
 === ./frontend/src/components/calendar/DeadlineMarkers.jsx ===
 import { Box, Tooltip } from '@mui/material';
+import { hoverInteractiveSx } from '../../theme/motion';
 import {
   CheckCircle,
   DoneAll,
@@ -735,7 +874,7 @@ export default function DeadlineMarkers({ deadlines, getTaskInfo, onTaskHover })
                 bgcolor: dl.status === 'Completed' ? 'success.main' : 'error.main',
                 borderRadius: 2,
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                ...hoverInteractiveSx,
                 '&:hover': { width: 6, boxShadow: (theme) => `0 0 6px ${theme.palette.grey[400]}` },
                 zIndex: 10
               }}
@@ -819,10 +958,12 @@ import { Restaurant } from '@mui/icons-material';
 import {
   CALENDAR_TOOLTIP_SX,
   getLunchBandPercent,
+  formatCalendarTaskTooltip,
   getPlannedBlockColor,
   getTimelineRange
 } from '../../utils/calendarDayUtils';
 import { tokens } from '../../theme/paletteTokens';
+import { hoverInteractiveSx } from '../../theme/motion';
 import TimelineGridLines from './TimelineGridLines';
 
 function LunchBreak({ range }) {
@@ -886,11 +1027,11 @@ export default function PlannedBlocks({
         const highlighted = isHighlighted(block);
         const isFirst = idx === 0;
         const isLast = idx === taskBlocks.length - 1;
-        const pendingColor = getPlannedBlockColor(block, highlighted);
+        const statusColor = getPlannedBlockColor(block);
         return (
           <Tooltip
             key={idx}
-            title={`${block.fullTitle || block.title}: ${block.hours.toFixed(1)} ч`}
+            title={formatCalendarTaskTooltip(block, `${block.hours.toFixed(1)} ч`)}
             arrow
             placement="top"
             slotProps={{ tooltip: { sx: CALENDAR_TOOLTIP_SX } }}
@@ -903,12 +1044,12 @@ export default function PlannedBlocks({
                 height: '100%',
                 top: 0,
                 backgroundColor: (theme) => {
-                  if (pendingColor) return pendingColor;
+                  if (statusColor) return statusColor;
                   return highlighted ? theme.palette.warning.main : theme.palette.primary.main;
                 },
                 opacity: highlighted ? 0.95 : 0.85,
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                ...hoverInteractiveSx,
                 borderRight: idx !== taskBlocks.length - 1 ? '1px solid rgba(255,255,255,0.3)' : 'none',
                 borderTopLeftRadius: isFirst ? 2 : 0,
                 borderBottomLeftRadius: isFirst ? 2 : 0,
@@ -1619,6 +1760,8 @@ export function CalendarLoadingState() {
 }
 === ./frontend/src/components/WorkHourDial.jsx ===
 import { Box, Typography } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import { createMuiTransition } from '../theme/motion';
 import {
   WORK_HOUR_MIN,
   WORK_HOUR_MAX,
@@ -1647,9 +1790,20 @@ function getHourPosition(index, total) {
 }
 
 export default function WorkHourDial({ value, onChange }) {
+  const theme = useTheme();
   const selectedHour = parseTimeToHour(value);
   const selectedIndex = HOURS.indexOf(selectedHour);
   const pointerAngle = (selectedIndex / HOURS.length) * 2 * Math.PI - Math.PI / 2;
+  const pointerTransition = createMuiTransition(theme, ['transform', 'height'], {
+    duration: theme.transitions.duration.standard,
+    easing: theme.transitions.easing.easeInOut
+  });
+  const hourButtonTransition = createMuiTransition(theme, [
+    'background-color',
+    'color',
+    'box-shadow',
+    'border-color'
+  ], { duration: theme.transitions.duration.shorter });
 
   return (
     <Box
@@ -1683,7 +1837,7 @@ export default function WorkHourDial({ value, onChange }) {
           bgcolor: 'primary.main',
           transformOrigin: 'center bottom',
           transform: `translateY(-100%) rotate(${pointerAngle}rad)`,
-          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), height 0.2s',
+          transition: pointerTransition,
           borderRadius: 1,
           zIndex: 0,
           pointerEvents: 'none',
@@ -1759,7 +1913,7 @@ export default function WorkHourDial({ value, onChange }) {
               border: '1px solid',
               borderColor: selected ? 'primary.main' : 'divider',
               boxShadow: selected ? 2 : 0,
-              transition: 'background-color 0.15s, color 0.15s, box-shadow 0.15s',
+              transition: hourButtonTransition,
               zIndex: 3,
               '&:hover': {
                 bgcolor: selected ? 'primary.dark' : 'action.hover',
@@ -1780,6 +1934,11 @@ export default function WorkHourDial({ value, onChange }) {
 }
 === ./frontend/src/components/TaskTitleTwoLines.jsx ===
 import { Box, Typography } from '@mui/material';
+import {
+  STATUS_FINISHED_LABEL,
+  STATUS_NO_ITEMS,
+  STATUS_PENDING_APPROVAL
+} from '../constants/taskStatuses';
 import { getLastPathSegment } from '../utils/taskHelpers';
 
 /** Заголовок (столбец «Задача») + имя файла (столбец «Файл»), как в таблице. */
@@ -1802,16 +1961,39 @@ export function getTaskFileLabel(task) {
   return '—';
 }
 
+/** Первая строка: «Задача / имя файла». */
+export function getTaskTitleSlashFile(task) {
+  const heading = getTaskHeading(task);
+  const fileLabel = getTaskFileLabel(task);
+  if (fileLabel === '—') return heading;
+  if (heading === '—') return fileLabel;
+  return `${heading} / ${fileLabel}`;
+}
+
+/** Вторая строка: статус задачи. */
+export function getTaskStatusLine(task) {
+  if (!task) return '';
+  if (task.statusText) return task.statusText;
+  if (task.status === 3) return STATUS_FINISHED_LABEL;
+  if (task.status === 4) return STATUS_PENDING_APPROVAL;
+  if (task.status === 5) return STATUS_NO_ITEMS;
+  if (task.status === 1) return 'В работе';
+  if (task.status === 2) return 'На паузе';
+  if (task.status === 0) return 'Назначена';
+  return '';
+}
+
 export default function TaskTitleTwoLines({
   task,
   headingVariant = 'subtitle2',
-  fileVariant = 'caption',
+  statusVariant = 'caption',
   headingSx,
-  fileSx,
+  statusSx,
+  showStatus = true,
   sx
 }) {
-  const heading = getTaskHeading(task);
-  const fileLabel = getTaskFileLabel(task);
+  const titleLine = getTaskTitleSlashFile(task);
+  const statusLine = showStatus ? getTaskStatusLine(task) : '';
 
   return (
     <Box sx={{ minWidth: 0, ...sx }}>
@@ -1826,22 +2008,24 @@ export default function TaskTitleTwoLines({
           ...headingSx
         }}
       >
-        {heading}
+        {titleLine}
       </Typography>
-      <Typography
-        variant={fileVariant}
-        color="text.secondary"
-        sx={{
-          display: 'block',
-          lineHeight: 1.3,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          ...fileSx
-        }}
-      >
-        {fileLabel}
-      </Typography>
+      {statusLine ? (
+        <Typography
+          variant={statusVariant}
+          color="text.secondary"
+          sx={{
+            display: 'block',
+            lineHeight: 1.3,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            ...statusSx
+          }}
+        >
+          {statusLine}
+        </Typography>
+      ) : null}
     </Box>
   );
 }
@@ -1873,6 +2057,7 @@ import TaskStatusCell from './taskTable/TaskStatusCell';
 import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionsMenu from './TaskAdminActionsMenu';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
+import TaskPlannedTimeBar from './taskTable/TaskPlannedTimeBar';
 import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import { alpha } from '@mui/material/styles';
 import { highlightedTaskRowSx, overdueTaskRowSx } from '../theme/surfaces';
@@ -1979,7 +2164,7 @@ function ParentTaskRow({
 
   return (
     <Fragment>
-      <TableRow sx={(theme) => getRowStyle(theme)}>
+      <TableRow sx={(theme) => ({ ...getRowStyle(theme), position: 'relative' })}>
         {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}
         <TableCell sx={COL_ICON}>
           <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', width: '100%' }}>
@@ -2075,6 +2260,7 @@ function ParentTaskRow({
             )}
           </Box>
         </TableCell>
+        <TaskPlannedTimeBar task={task} hideForSplitParent={hasChildren} />
       </TableRow>
 
       {hasChildren && isExpanded && (childrenTasks || []).map((child) => (
@@ -2125,6 +2311,7 @@ import TaskHoursCell from './taskTable/TaskHoursCell';
 import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
+import TaskPlannedTimeBar from './taskTable/TaskPlannedTimeBar';
 import { childRowSx } from '../theme/surfaces';
 
 function ChildTaskRow({
@@ -2161,6 +2348,7 @@ function ChildTaskRow({
   const getRowStyle = () => {
     let style = {
       ...childRowSx,
+      position: 'relative',
       '&:hover': { bgcolor: 'action.hover' }
     };
     let bgColor;
@@ -2256,6 +2444,7 @@ function ChildTaskRow({
           />
         )}
       </TableCell>
+      <TaskPlannedTimeBar task={task} />
     </TableRow>
   );
 }
@@ -2453,7 +2642,7 @@ export default function CompletedTasksList({ employee, refresh }) {
                       <TaskTitleTwoLines
                         task={task}
                         headingVariant="body2"
-                        fileVariant="caption"
+                        statusVariant="caption"
                         headingSx={{ fontWeight: 500 }}
                         sx={{ flex: 1, minWidth: 0 }}
                       />
@@ -2832,9 +3021,9 @@ export default function DeadlineWarnings({ employee, refresh }) {
               <TaskTitleTwoLines
                 task={riskTask}
                 headingVariant="body2"
-                fileVariant="body2"
+                statusVariant="body2"
                 headingSx={{ fontWeight: 600 }}
-                fileSx={{ color: 'text.secondary', mt: 0.25 }}
+                statusSx={{ color: 'text.secondary', mt: 0.25 }}
               />
               
               <Stack 
@@ -2878,6 +3067,7 @@ import {
 import { Login as LoginIcon, Person, AdminPanelSettings } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { glassPaperSx } from '../theme/surfaces';
+import { createMuiTransition } from '../theme/motion';
 
 export default function LoginForm({ onLogin }) {
   const [loginType, setLoginType] = useState('employee'); // 'employee' or 'admin'
@@ -3023,7 +3213,11 @@ export default function LoginForm({ onLogin }) {
                           bgcolor: selectedEmployee === emp
                             ? alpha(theme.palette.primary.main, 0.08)
                             : alpha('#ffffff', 0.5),
-                          transition: 'all 0.2s',
+                          transition: createMuiTransition(theme, [
+                            'box-shadow',
+                            'border-color',
+                            'background-color'
+                          ]),
                           '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.light }
                         })}
                       >
@@ -3088,15 +3282,24 @@ export default function LoginForm({ onLogin }) {
   );
 }=== ./frontend/src/components/WeekCalendar.jsx ===
 import { useState, useEffect, useMemo } from 'react';
-import { Box, Paper, IconButton, Typography, Button } from '@mui/material';
-import { ChevronLeft, ChevronRight, CalendarMonth, Weekend, ViewDay, CalendarViewWeek, Today } from '@mui/icons-material';
+import {
+  Box,
+  Paper,
+  IconButton,
+  Typography,
+  Button,
+  ToggleButton,
+  ToggleButtonGroup
+} from '@mui/material';
+import { ChevronLeft, ChevronRight, CalendarMonth, Today } from '@mui/icons-material';
 import { glassPaperSx, softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import { getWeekCalendar } from '../services/api';
 import useClockMinute from '../hooks/useClockMinute';
 import DayColumn from './DayColumn';
 import { CalendarLoadingState } from './LoadingState';
-import { isSameCalendarDay } from '../utils/calendarDayUtils';
+import { MotionSwitch } from './ui/MotionSection';
+import { isSameCalendarDay, toCalendarDayKey } from '../utils/calendarDayUtils';
 
 export default function WeekCalendar({ employee, refresh }) {
   const { showError } = useUiFeedback();
@@ -3158,14 +3361,12 @@ export default function WeekCalendar({ employee, refresh }) {
     });
   };
 
-  const toggleViewMode = () => {
-    setViewMode((mode) => {
-      if (mode === 'week') {
-        setAnchorDate(startOfDay(new Date()));
-        return 'day';
-      }
-      return 'week';
-    });
+  const handleViewModeChange = (_, newMode) => {
+    if (!newMode || newMode === viewMode) return;
+    if (newMode === 'day') {
+      setAnchorDate(startOfDay(new Date()));
+    }
+    setViewMode(newMode);
   };
 
   if (!weekData) return <CalendarLoadingState />;
@@ -3193,8 +3394,18 @@ export default function WeekCalendar({ employee, refresh }) {
 
   return (
     <Paper sx={{ ...glassPaperSx, mb: 3 }}>
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', mb: 4, flexWrap: 'wrap', gap: 2 }}>
-        <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 1,
+          mb: 4
+        }}
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
           <IconButton onClick={goPrev} sx={softIconButtonSx('primary')} aria-label={`Предыдущая ${navLabel}`}>
             <ChevronLeft />
           </IconButton>
@@ -3207,74 +3418,71 @@ export default function WeekCalendar({ employee, refresh }) {
           <IconButton onClick={goNext} sx={softIconButtonSx('primary')} aria-label={`Следующая ${navLabel}`}>
             <ChevronRight />
           </IconButton>
-          {viewMode === 'day' && (
-            <Button
-              size="small"
-              variant="outlined"
-              color="primary"
-              startIcon={<Today />}
-              onClick={() => setAnchorDate(startOfDay(new Date()))}
-              disabled={isAnchorToday}
-              sx={{ ml: 0.5 }}
-            >
-              Сегодня
-            </Button>
-          )}
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={handleViewModeChange}
+            size="small"
+            color="primary"
+            aria-label="Режим календаря"
+          >
+            <ToggleButton value="day" aria-label="Один день">
+              1 день
+            </ToggleButton>
+            <ToggleButton value="week" aria-label="Неделя">
+              Неделя
+            </ToggleButton>
+          </ToggleButtonGroup>
         </Box>
 
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+        {viewMode === 'day' && (
           <Button
             size="small"
-            variant={viewMode === 'day' ? 'contained' : 'outlined'}
+            variant="outlined"
             color="primary"
-            startIcon={viewMode === 'week' ? <ViewDay /> : <CalendarViewWeek />}
-            onClick={toggleViewMode}
+            startIcon={<Today />}
+            onClick={() => setAnchorDate(startOfDay(new Date()))}
+            disabled={isAnchorToday}
+            sx={{ flexShrink: 0 }}
           >
-            {viewMode === 'week' ? '1 день' : 'Неделя'}
+            Сегодня
           </Button>
-          {viewMode === 'week' && (
-            <Button
-              size="small"
-              variant={showWeekend ? 'contained' : 'outlined'}
-              color="primary"
-              startIcon={<Weekend />}
-              onClick={() => setShowWeekend(!showWeekend)}
-            >
-              {showWeekend ? 'Скрыть выходные' : 'Показать выходные'}
-            </Button>
-          )}
-        </Box>
+        )}
       </Box>
 
-      {daysToShow.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-          Нет данных за выбранный день
-        </Typography>
-      ) : (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: viewMode === 'day'
-              ? '1fr'
-              : (showWeekend ? 'repeat(7, 1fr)' : 'repeat(5, 1fr)'),
-            gap: 2,
-            maxWidth: viewMode === 'day' ? 720 : 'none',
-            mx: viewMode === 'day' ? 'auto' : 0
-          }}
-        >
-          {daysToShow.map((day) => (
-            <DayColumn
-              key={day.date}
-              day={day}
-              allDays={weekData.days}
-              highlightedTaskId={highlightedTaskId}
-              onTaskHover={setHighlightedTaskId}
-              detailedTimeline={viewMode === 'day'}
-              clockMinute={clockMinute}
-            />
-          ))}
-        </Box>
-      )}
+      <MotionSwitch
+        transitionKey={`${viewMode}-${toCalendarDayKey(anchorDate)}-${daysToShow.length}`}
+      >
+        {daysToShow.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+            Нет данных за выбранный день
+          </Typography>
+        ) : (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: viewMode === 'day'
+                ? '1fr'
+                : (showWeekend ? 'repeat(7, 1fr)' : 'repeat(5, 1fr)'),
+              gap: 2,
+              maxWidth: viewMode === 'day' ? 720 : 'none',
+              mx: viewMode === 'day' ? 'auto' : 0
+            }}
+          >
+            {daysToShow.map((day) => (
+              <DayColumn
+                key={day.date}
+                day={day}
+                allDays={weekData.days}
+                highlightedTaskId={highlightedTaskId}
+                onTaskHover={setHighlightedTaskId}
+                detailedTimeline={viewMode === 'day'}
+                clockMinute={clockMinute}
+              />
+            ))}
+          </Box>
+        )}
+      </MotionSwitch>
     </Paper>
   );
 }
@@ -4388,7 +4596,13 @@ export default function SplitTaskModal({
   );
 }
 === ./frontend/src/components/ActiveTasksList.jsx ===
-import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../services/api';
+import {
+  startTask,
+  pauseTask,
+  resumeTask,
+  setProgress,
+  completeTask
+} from '../services/api';
 import {
   Warning,
   Error,
@@ -4418,7 +4632,14 @@ import { normalizePathForOpen } from '../utils/filePathForOpen';
 import { glassCardSx, compactActionButtonSx } from '../theme/surfaces';
 import EmptyState from './ui/EmptyState';
 import { Assignment } from '@mui/icons-material';
-import TaskTitleTwoLines from './TaskTitleTwoLines';
+import TaskTitleTwoLines, { getTaskStatusLine } from './TaskTitleTwoLines';
+import TaskStatusCell from './taskTable/TaskStatusCell';
+import {
+  isInfoStatus,
+  isPendingApprovalCalendar,
+  STATUS_NO_ITEMS,
+  STATUS_PENDING_APPROVAL
+} from '../constants/taskStatuses';
 
 export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
   const { showError, showWarning } = useUiFeedback();
@@ -4462,9 +4683,14 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
     }
   };
 
-  const getBorderColor = (status, theme) => {
-    if (status === 1) return theme.palette.info.main;
-    if (status === 2) return theme.palette.warning.main;
+  const getBorderColor = (task, theme) => {
+    const text = getTaskStatusLine(task);
+    if (text === STATUS_PENDING_APPROVAL || isPendingApprovalCalendar(text)) {
+      return theme.palette.secondary.main;
+    }
+    if (text === STATUS_NO_ITEMS) return theme.palette.error.light;
+    if (task.status === 1) return theme.palette.info.main;
+    if (task.status === 2) return theme.palette.warning.main;
     return theme.palette.divider;
   };
 
@@ -4473,14 +4699,15 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
       {tasks.map((task) => {
         const risk = getRiskProps(task.riskLevel);
         const progressValue = Math.round((task.progress || 0) * 100);
-
+        const statusLabel = getTaskStatusLine(task);
+        const showInfoStatus = isInfoStatus(statusLabel);
         return (
           <Card
             key={task.id}
             sx={(theme) => ({
               ...glassCardSx,
               borderLeft: '4px solid',
-              borderLeftColor: getBorderColor(task.status, theme)
+              borderLeftColor: getBorderColor(task, theme)
             })}
           >
             <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -4491,6 +4718,9 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                   </IconButton>
                 </Tooltip>
                 <TaskTitleTwoLines task={task} sx={{ flex: 1, minWidth: 0 }} />
+                {showInfoStatus && (
+                  <TaskStatusCell statusText={statusLabel} label={statusLabel} />
+                )}
                 <Chip label={task.type} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
                 {risk && (
                   <Chip icon={risk.icon} label={risk.label} size="small" color={risk.color} sx={{ height: 22, fontSize: '0.7rem' }} />
@@ -4519,8 +4749,8 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                 sx={{ mb: 1.5, borderRadius: 1 }}
               />
 
-              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
-                {task.status === 0 && (
+              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
+                {task.status === 0 && !showInfoStatus && (
                   <Button
                     size="small"
                     variant="outlined"
@@ -4532,7 +4762,7 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                     Начал
                   </Button>
                 )}
-                {task.status === 1 && (
+                {task.status === 1 && !showInfoStatus && (
                   <>
                     <Button
                       size="small"
@@ -4556,7 +4786,7 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                     </Button>
                   </>
                 )}
-                {task.status === 2 && (
+                {task.status === 2 && !showInfoStatus && (
                   <>
                     <Button
                       size="small"
@@ -4580,7 +4810,7 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                     </Button>
                   </>
                 )}
-                {task.status !== 3 && (
+                {!isInfoStatus(getTaskStatusLine(task)) && task.status !== 3 && (
                   <>
                     {[0.3, 0.6, 0.9].map((p) => (
                       <Button
@@ -4885,6 +5115,7 @@ import useNotificationsHub from './hooks/useNotificationsHub';
 import appTheme from './theme/appTheme';
 import { glassPaperSx, pageShellSx } from './theme/surfaces';
 import SectionCard from './components/ui/SectionCard';
+import { MotionSwitch } from './components/ui/MotionSection';
 
 function AppContent() {
   const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
@@ -5091,26 +5322,26 @@ function AppContent() {
             </Tabs>
           </Paper>
 
-          {activeTab === 0 && (
-            <>
-              <WeekCalendar employee={employee} refresh={refresh} />
-              <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
-                <ActiveTasksList tasks={activeTasks} onUpdate={refreshCalendar} embedded />
-              </SectionCard>
-              <CompletedTasksList employee={employee} refresh={refresh} />
-            </>
-          )}
-
-          {activeTab === 1 && (
-            <TaskTable
-              refreshTrigger={refresh}
-              onCalendarRefresh={refreshCalendar}
-              onRegisterHubHandler={registerTableHubHandler}
-              userRole={user?.role}
-              currentUser={user}
-              selectedEmployeeForHighlight={employee}
-            />
-          )}
+          <MotionSwitch transitionKey={activeTab}>
+            {activeTab === 0 ? (
+              <>
+                <WeekCalendar employee={employee} refresh={refresh} />
+                <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
+                  <ActiveTasksList tasks={activeTasks} onUpdate={refreshCalendar} embedded />
+                </SectionCard>
+                <CompletedTasksList employee={employee} refresh={refresh} />
+              </>
+            ) : (
+              <TaskTable
+                refreshTrigger={refresh}
+                onCalendarRefresh={refreshCalendar}
+                onRegisterHubHandler={registerTableHubHandler}
+                userRole={user?.role}
+                currentUser={user}
+                selectedEmployeeForHighlight={employee}
+              />
+            )}
+          </MotionSwitch>
 
           {import.meta.env.DEV && isAdmin && (
             <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />

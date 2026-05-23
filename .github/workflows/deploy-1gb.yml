@@ -2,7 +2,7 @@ name: Deploy to 1gb.ru
 
 on:
   push:
-    branches: [codexOPT, codexOpt3, codexOpt4, codexOpt5]
+    branches: [codexOPT, codexOpt3, codexOpt4, codexOpt5, codexOPT7, codexOPT8]
   workflow_dispatch:
 
 jobs:
@@ -63,7 +63,7 @@ jobs:
           JS=$(basename "$(ls publish/wwwroot/assets/index-*.js)")
           echo "wwwroot bundle: $JS"
           {
-            echo "branch=codexOpt4"
+            echo "branch=${{ github.ref_name }}"
             echo "sha=${{ github.sha }}"
             echo "bundle=$JS"
             echo "features=ux-menu,two-line-titles,shared-task-icon,migrations-ci"

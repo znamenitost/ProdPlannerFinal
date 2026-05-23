@@ -11,6 +11,7 @@ public class TaskTableRowDto
     public string FileName { get; set; } = "";
     public string Comment { get; set; } = "";
     public string StatusText { get; set; } = "";
+    public JobStatus Status { get; set; }
     public DateTime Deadline { get; set; }
     public double EstimateHours { get; set; }
     public string Type { get; set; } = "";
@@ -61,6 +62,7 @@ public class TaskTableRowDto
             FileName = parent.FileName,
             Comment = parent.Comment,
             StatusText = statusText,
+            Status = parent.Status,
             Deadline = parent.Deadline,
             EstimateHours = parent.EstimateHours,
             Type = parent.Type,
@@ -75,7 +77,8 @@ public class TaskTableRowDto
             WorkIntervals = intervals.Select(WorkIntervalDto.FromEntity).ToList(),
             PlannedTimeProgress = PlannedTimeProgressCalculator.GetPercent(parent, intervals, at),
             ShowPlannedTimeProgress = !hidePlannedBar
-                && PlannedTimeProgressCalculator.ShouldShow(parent, intervals)
+                && (PlannedTimeProgressCalculator.ShouldShow(parent, intervals)
+                    || statusText is "Начал" or "Пауза" or "Готово")
         };
     }
 }

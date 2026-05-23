@@ -3,8 +3,11 @@ import {
   pauseTask,
   resumeTask,
   setProgress,
-  completeTask
+  completeTask,
+  updateTaskRow,
+  buildTaskUpdatePayload
 } from '../services/api';
+import { runWorkflowWithInfoGuard } from '../utils/infoStatusWorkflow';
 import {
   Warning,
   Error,
@@ -43,17 +46,31 @@ import {
   STATUS_PENDING_APPROVAL
 } from '../constants/taskStatuses';
 
-export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
-  const { showError, showWarning } = useUiFeedback();
+const blockedButtonSx = { opacity: 0.5 };
 
-  const handleAction = async (id, action, progress = null) => {
-    try {
-      if (action === 'start') await startTask(id);
-      else if (action === 'pause') await pauseTask(id);
-      else if (action === 'resume') await resumeTask(id);
-      else if (action === 'progress') await setProgress(id, progress);
-      else if (action === 'complete') await completeTask(id);
+export default function ActiveTasksList({ tasks, onUpdate, embedded = false, employee = '' }) {
+  const { showError, showWarning, confirm } = useUiFeedback();
+
+  const runGuardedAction = async (task, action, progress = null) => {
+    const runApi = async () => {
+      if (action === 'start') await startTask(task.id);
+      else if (action === 'pause') await pauseTask(task.id);
+      else if (action === 'resume') await resumeTask(task.id);
+      else if (action === 'progress') await setProgress(task.id, progress);
+      else if (action === 'complete') await completeTask(task.id);
       await onUpdate();
+    };
+
+    try {
+      await runWorkflowWithInfoGuard({
+        task,
+        statusText: getTaskStatusLine(task),
+        confirm,
+        resolveStatus: async (t, targetStatus) => {
+          await updateTaskRow(t.id, buildTaskUpdatePayload(t, employee, targetStatus));
+        },
+        runAction: runApi
+      });
     } catch (err) {
       console.error('Ошибка действия:', err);
       showError(err.message || 'Не удалось выполнить действие');
@@ -103,6 +120,11 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
         const progressValue = Math.round((task.progress || 0) * 100);
         const statusLabel = getTaskStatusLine(task);
         const showInfoStatus = isInfoStatus(statusLabel);
+        const blocked = showInfoStatus;
+        const isAssignedLike = task.status === 0 || task.status === 6 || task.status === 7;
+        const isInProgress = task.status === 1;
+        const isPaused = task.status === 2;
+        const isCompleted = task.status === 3;
         return (
           <Card
             key={task.id}
@@ -152,26 +174,26 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
               />
 
               <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
-                {task.status === 0 && !showInfoStatus && (
+                {(isAssignedLike || blocked) && !isCompleted && (
                   <Button
                     size="small"
                     variant="outlined"
                     color="success"
                     startIcon={<PlayArrow />}
-                    onClick={() => handleAction(task.id, 'start')}
-                    sx={compactActionButtonSx}
+                    onClick={() => runGuardedAction(task, 'start')}
+                    sx={{ ...compactActionButtonSx, ...(blocked ? blockedButtonSx : {}) }}
                   >
                     Начал
                   </Button>
                 )}
-                {task.status === 1 && !showInfoStatus && (
+                {isInProgress && !blocked && (
                   <>
                     <Button
                       size="small"
                       variant="outlined"
                       color="warning"
                       startIcon={<Pause />}
-                      onClick={() => handleAction(task.id, 'pause')}
+                      onClick={() => runGuardedAction(task, 'pause')}
                       sx={compactActionButtonSx}
                     >
                       Пауза
@@ -181,21 +203,21 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                       variant="outlined"
                       color="primary"
                       startIcon={<CheckCircle />}
-                      onClick={() => handleAction(task.id, 'complete')}
+                      onClick={() => runGuardedAction(task, 'complete')}
                       sx={compactActionButtonSx}
                     >
                       Готово
                     </Button>
                   </>
                 )}
-                {task.status === 2 && !showInfoStatus && (
+                {isPaused && !blocked && (
                   <>
                     <Button
                       size="small"
                       variant="contained"
                       color="success"
                       startIcon={<PlayArrow />}
-                      onClick={() => handleAction(task.id, 'resume')}
+                      onClick={() => runGuardedAction(task, 'resume')}
                       sx={compactActionButtonSx}
                     >
                       Продолжить
@@ -205,14 +227,26 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                       variant="outlined"
                       color="primary"
                       startIcon={<CheckCircle />}
-                      onClick={() => handleAction(task.id, 'complete')}
+                      onClick={() => runGuardedAction(task, 'complete')}
                       sx={compactActionButtonSx}
                     >
                       Готово
                     </Button>
                   </>
                 )}
-                {!isInfoStatus(getTaskStatusLine(task)) && task.status !== 3 && (
+                {blocked && !isCompleted && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<CheckCircle />}
+                    onClick={() => runGuardedAction(task, 'complete')}
+                    sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
+                  >
+                    Готово
+                  </Button>
+                )}
+                {!blocked && !isCompleted && (
                   <>
                     {[0.3, 0.6, 0.9].map((p) => (
                       <Button
@@ -220,7 +254,7 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                         size="small"
                         variant="text"
                         color="secondary"
-                        onClick={() => handleAction(task.id, 'progress', p)}
+                        onClick={() => runGuardedAction(task, 'progress', p)}
                         sx={compactActionButtonSx}
                       >
                         {Math.round(p * 100)}%

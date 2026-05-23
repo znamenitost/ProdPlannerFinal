@@ -9,7 +9,7 @@ public class PlannedTimeProgressCalculatorTests
     public void GetPercent_BeforeStart_ReturnsZero()
     {
         var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.Assigned };
-        var percent = PlannedTimeProgressCalculator.GetPercent(task, [], new DateTime(2026, 5, 23, 12, 0, 0));
+        var percent = PlannedTimeProgressCalculator.GetPercent(task, [], new DateTime(2026, 5, 22, 12, 0, 0));
         Assert.Equal(0, percent);
     }
 
@@ -17,8 +17,8 @@ public class PlannedTimeProgressCalculatorTests
     public void GetPercent_OneHourOfTwo_ReturnsFifty()
     {
         var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.InProgress };
-        var start = new DateTime(2026, 5, 23, 11, 0, 0);
-        var now = new DateTime(2026, 5, 23, 12, 0, 0);
+        var start = new DateTime(2026, 5, 22, 11, 0, 0);
+        var now = new DateTime(2026, 5, 22, 12, 0, 0);
         var intervals = new List<WorkInterval>
         {
             new() { StartTime = start, EndTime = null }
@@ -35,12 +35,12 @@ public class PlannedTimeProgressCalculatorTests
         {
             new()
             {
-                StartTime = new DateTime(2026, 5, 23, 11, 0, 0),
-                EndTime = new DateTime(2026, 5, 23, 11, 30, 0)
+                StartTime = new DateTime(2026, 5, 22, 11, 0, 0),
+                EndTime = new DateTime(2026, 5, 22, 11, 30, 0)
             }
         };
         var percent = PlannedTimeProgressCalculator.GetPercent(
-            task, intervals, new DateTime(2026, 5, 23, 14, 0, 0));
+            task, intervals, new DateTime(2026, 5, 22, 14, 0, 0));
         Assert.Equal(25, percent, 1);
     }
 
@@ -49,7 +49,7 @@ public class PlannedTimeProgressCalculatorTests
     {
         var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.Completed };
         var percent = PlannedTimeProgressCalculator.GetPercent(
-            task, [], new DateTime(2026, 5, 23, 12, 0, 0));
+            task, [], new DateTime(2026, 5, 22, 12, 0, 0));
         Assert.Equal(100, percent);
     }
 }

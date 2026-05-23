@@ -2026,7 +2026,7 @@ namespace ProductionPlanner.Models
         InProgress = 1,
         Paused = 2,
         Completed = 3,
-        /// <summary>На согласовании (инфостатус сотрудника).</summary>
+        /// <summary>Согласование (инфостатус сотрудника).</summary>
         PendingApproval = 4,
         /// <summary>Нет изделий (инфостатус сотрудника).</summary>
         NoItems = 5,
@@ -2261,6 +2261,8 @@ public class CalendarTaskBlockDto
     public string FullTitle { get; set; } = "";
     public int TaskId { get; set; }
     public string Title { get; set; } = "";
+    public string FolderPath { get; set; } = "";
+    public string FileName { get; set; } = "";
     public string StatusText { get; set; } = "";
 }
 
@@ -2271,7 +2273,10 @@ public class CalendarTimelineSegmentDto
     public string Type { get; set; } = "";
     public int? TaskId { get; set; }
     public string? TaskTitle { get; set; }
+    public string FolderPath { get; set; } = "";
+    public string FileName { get; set; } = "";
     public bool Completed { get; set; }
+    public string StatusText { get; set; } = "";
     public int Layer { get; set; }
     public int MaxDepth { get; set; }
 }
@@ -2296,8 +2301,25 @@ public class NotificationDto
     public DateTime? Deadline { get; set; }
     public DateTime CreatedAt { get; set; }
 }
+=== ./Models/Dtos/WorkIntervalDto.cs ===
+using ProductionPlanner.Models;
+
+namespace ProductionPlanner.Models.Dtos;
+
+public class WorkIntervalDto
+{
+    public DateTime StartTime { get; set; }
+    public DateTime? EndTime { get; set; }
+
+    public static WorkIntervalDto FromEntity(WorkInterval interval) => new()
+    {
+        StartTime = interval.StartTime,
+        EndTime = interval.EndTime
+    };
+}
 === ./Models/Dtos/TaskTableRowDto.cs ===
 using ProductionPlanner.Models;
+using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Models.Dtos;
 
@@ -2322,11 +2344,20 @@ public class TaskTableRowDto
     /// <summary>Имена сотрудников дочерних подзадач (через «/») для общих задач.</summary>
     public string SplitEmployeeNames { get; set; } = "";
 
+    public List<WorkIntervalDto> WorkIntervals { get; set; } = new();
+
+    /// <summary>Плановый % по времени (отработано / выделено), 0–100.</summary>
+    public double PlannedTimeProgress { get; set; }
+
+    public bool ShowPlannedTimeProgress { get; set; }
+
     public static TaskTableRowDto FromParent(
         ProductionTask parent,
         string statusText,
         bool hasCurrentUserSubtask,
-        IReadOnlyList<ProductionTask>? children = null)
+        IReadOnlyList<ProductionTask>? children = null,
+        IReadOnlyList<WorkInterval>? workIntervals = null,
+        DateTime? now = null)
     {
         var splitEmployeeNames = "";
         if (parent.IsSplitTask && children is { Count: > 0 })
@@ -2337,6 +2368,10 @@ public class TaskTableRowDto
                     .Where(n => !string.IsNullOrWhiteSpace(n))
                     .Distinct());
         }
+
+        var at = now ?? DateTime.UtcNow;
+        var intervals = workIntervals ?? Array.Empty<WorkInterval>();
+        var hidePlannedBar = parent.IsSplitTask && children is { Count: > 0 };
 
         return new TaskTableRowDto
         {
@@ -2356,7 +2391,11 @@ public class TaskTableRowDto
             IsSplitTask = parent.IsSplitTask,
             Progress = parent.Progress,
             HasCurrentUserSubtask = hasCurrentUserSubtask,
-            SplitEmployeeNames = splitEmployeeNames
+            SplitEmployeeNames = splitEmployeeNames,
+            WorkIntervals = intervals.Select(WorkIntervalDto.FromEntity).ToList(),
+            PlannedTimeProgress = PlannedTimeProgressCalculator.GetPercent(parent, intervals, at),
+            ShowPlannedTimeProgress = !hidePlannedBar
+                && PlannedTimeProgressCalculator.ShouldShow(parent, intervals)
         };
     }
 }
@@ -3058,6 +3097,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
+using ProductionPlanner.Models.Dtos;
 using ProductionPlanner.Services.TaskTable;
 using ProductionPlanner.Data;
 
@@ -3070,12 +3110,18 @@ namespace ProductionPlanner.Controllers
     {
         private readonly ITaskSplitService _splitService;
         private readonly IProductionTaskRepository _repo;
+        private readonly IAppTimeService _timeService;
         private readonly UserManager<User> _userManager;
 
-        public TaskSplitController(ITaskSplitService splitService, IProductionTaskRepository repo, UserManager<User> userManager)
+        public TaskSplitController(
+            ITaskSplitService splitService,
+            IProductionTaskRepository repo,
+            IAppTimeService timeService,
+            UserManager<User> userManager)
         {
             _splitService = splitService;
             _repo = repo;
+            _timeService = timeService;
             _userManager = userManager;
         }
 
@@ -3143,26 +3189,42 @@ namespace ProductionPlanner.Controllers
             if (currentUser == null) return Unauthorized();
 
             var children = await _splitService.GetChildTasksAsync(parentRowNumber, cancellationToken);
+            var childIds = children.Select(c => c.Id).ToList();
+            var intervalsByTask = (await _repo.GetWorkIntervalsForTaskIdsAsync(childIds, cancellationToken))
+                .GroupBy(i => i.ProductionTaskId)
+                .ToDictionary(g => g.Key, g => g.ToList());
 
-            var result = children.Select(c => new
+            var result = children.Select(c =>
             {
-                c.Id,
-                c.DisplayOrder,
-                c.FolderPath,
-                c.FileName,
-                c.Comment,
-                StatusText = TaskStatusMapper.ToText(c.Status),
-                Status = c.Status.ToString(),
-                c.Deadline,
-                c.EstimateHours,
-                c.ActualHours,
-                c.Type,
-                c.EmployeeName,
-                c.CreatedAt,
-                c.UpdatedAt,
-                c.ParentRowNumber,
-                c.IsSplitTask,
-                c.Progress
+                intervalsByTask.TryGetValue(c.Id, out var intervals);
+                intervals ??= [];
+                var workIntervals = intervals.Select(WorkIntervalDto.FromEntity).ToList();
+                return new
+                {
+                    c.Id,
+                    c.DisplayOrder,
+                    c.FolderPath,
+                    c.FileName,
+                    c.Comment,
+                    StatusText = TaskStatusMapper.ToText(c.Status),
+                    Status = c.Status.ToString(),
+                    c.Deadline,
+                    c.EstimateHours,
+                    c.ActualHours,
+                    c.Type,
+                    c.EmployeeName,
+                    c.CreatedAt,
+                    c.UpdatedAt,
+                    c.ParentRowNumber,
+                    c.IsSplitTask,
+                    c.Progress,
+                    workIntervals,
+                    showPlannedTimeProgress = PlannedTimeProgressCalculator.ShouldShow(c, intervals),
+                    plannedTimeProgress = PlannedTimeProgressCalculator.GetPercent(
+                        c,
+                        intervals,
+                        _timeService.Now)
+                };
             });
             return Ok(result);
         }
@@ -4988,6 +5050,62 @@ public class SplitTaskStatusAggregatorTests
         Assert.False(hasSubtask);
     }
 }
+=== ./ProductionPlanner.Tests/PlannedTimeProgressCalculatorTests.cs ===
+using ProductionPlanner.Models;
+using ProductionPlanner.Services.TaskTable;
+
+namespace ProductionPlanner.Tests;
+
+public class PlannedTimeProgressCalculatorTests
+{
+    [Fact]
+    public void GetPercent_BeforeStart_ReturnsZero()
+    {
+        var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.Assigned };
+        var percent = PlannedTimeProgressCalculator.GetPercent(task, [], new DateTime(2026, 5, 23, 12, 0, 0));
+        Assert.Equal(0, percent);
+    }
+
+    [Fact]
+    public void GetPercent_OneHourOfTwo_ReturnsFifty()
+    {
+        var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.InProgress };
+        var start = new DateTime(2026, 5, 23, 11, 0, 0);
+        var now = new DateTime(2026, 5, 23, 12, 0, 0);
+        var intervals = new List<WorkInterval>
+        {
+            new() { StartTime = start, EndTime = null }
+        };
+        var percent = PlannedTimeProgressCalculator.GetPercent(task, intervals, now);
+        Assert.Equal(50, percent, 1);
+    }
+
+    [Fact]
+    public void GetPercent_WhenPaused_DoesNotGrow()
+    {
+        var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.Paused };
+        var intervals = new List<WorkInterval>
+        {
+            new()
+            {
+                StartTime = new DateTime(2026, 5, 23, 11, 0, 0),
+                EndTime = new DateTime(2026, 5, 23, 11, 30, 0)
+            }
+        };
+        var percent = PlannedTimeProgressCalculator.GetPercent(
+            task, intervals, new DateTime(2026, 5, 23, 14, 0, 0));
+        Assert.Equal(25, percent, 1);
+    }
+
+    [Fact]
+    public void GetPercent_WhenCompleted_Returns100()
+    {
+        var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.Completed };
+        var percent = PlannedTimeProgressCalculator.GetPercent(
+            task, [], new DateTime(2026, 5, 23, 12, 0, 0));
+        Assert.Equal(100, percent);
+    }
+}
 === ./ProductionPlanner.Tests/FilePathNormalizerTests.cs ===
 using ProductionPlanner.Services;
 using Xunit;
@@ -5087,7 +5205,7 @@ public class TaskStatusMapperTests
     [InlineData(JobStatus.InProgress, "Начал")]
     [InlineData(JobStatus.Paused, "Пауза")]
     [InlineData(JobStatus.Completed, "Готово")]
-    [InlineData(JobStatus.PendingApproval, "На согласовании")]
+    [InlineData(JobStatus.PendingApproval, "Согласование")]
     [InlineData(JobStatus.NoItems, "Нет изделий")]
     [InlineData(JobStatus.Approved, "Согласовано")]
     [InlineData(JobStatus.InStock, "В наличии")]
@@ -5102,6 +5220,7 @@ public class TaskStatusMapperTests
     [InlineData("Пауза", JobStatus.Paused)]
     [InlineData("", JobStatus.Assigned)]
     [InlineData("Назначена", JobStatus.Assigned)]
+    [InlineData("Согласование", JobStatus.PendingApproval)]
     [InlineData("На согласовании", JobStatus.PendingApproval)]
     [InlineData("Нет изделий", JobStatus.NoItems)]
     [InlineData("Согласовано", JobStatus.Approved)]
@@ -5300,6 +5419,10 @@ public class TaskTableService : ITaskTableService
 
         var parentIds = pageResult.Items.Select(p => p.Id).ToList();
         var childrenByParent = await _repo.GetSplitChildrenByParentIdsAsync(parentIds, cancellationToken);
+        var intervalsByTask = (await _repo.GetWorkIntervalsForTaskIdsAsync(parentIds, cancellationToken))
+            .GroupBy(i => i.ProductionTaskId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<WorkInterval>)g.ToList());
+        var now = _timeService.Now;
 
         var rows = pageResult.Items.Select(parent =>
         {
@@ -5308,7 +5431,10 @@ public class TaskTableService : ITaskTableService
                 parent,
                 children,
                 targetEmployeeName);
-            return TaskTableRowDto.FromParent(parent, statusText, hasSubtask, children);
+            intervalsByTask.TryGetValue(parent.Id, out var intervals);
+            intervals ??= Array.Empty<WorkInterval>();
+            return TaskTableRowDto.FromParent(
+                parent, statusText, hasSubtask, children, intervals, now);
         }).ToList();
 
         return new PaginatedResult<TaskTableRowDto>
@@ -5325,16 +5451,21 @@ public class TaskTableService : ITaskTableService
         string targetEmployeeName,
         CancellationToken cancellationToken = default)
     {
-        var task = await _repo.GetTaskByIdAsync(id, cancellationToken);
+        var task = await _repo.GetTaskByIdAsync(id, cancellationToken, includeIntervals: true);
         if (task == null)
             return null;
+
+        var now = _timeService.Now;
+        var intervals = (IReadOnlyList<WorkInterval>)(task.WorkIntervals ?? []);
 
         if (task.ParentRowNumber != null)
         {
             return TaskTableRowDto.FromParent(
                 task,
                 TaskStatusMapper.ToText(task.Status),
-                hasCurrentUserSubtask: false);
+                hasCurrentUserSubtask: false,
+                workIntervals: intervals,
+                now: now);
         }
 
         IReadOnlyList<ProductionTask>? children = null;
@@ -5346,7 +5477,8 @@ public class TaskTableService : ITaskTableService
             children ?? [],
             targetEmployeeName);
 
-        return TaskTableRowDto.FromParent(task, statusText, hasSubtask, children);
+        return TaskTableRowDto.FromParent(
+            task, statusText, hasSubtask, children, intervals, now);
     }
 
     public async Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(
@@ -5469,7 +5601,7 @@ public class TaskTableService : ITaskTableService
             if (newStatus != task.Status)
             {
                 if (newStatus == JobStatus.Approved && task.Status != JobStatus.PendingApproval)
-                    return TaskTableServiceResult<ProductionTask>.Fail("Согласовано можно выставить только для задачи «На согласовании».");
+                    return TaskTableServiceResult<ProductionTask>.Fail("Согласовано можно выставить только для задачи «Согласование».");
                 if (newStatus == JobStatus.InStock && task.Status != JobStatus.NoItems)
                     return TaskTableServiceResult<ProductionTask>.Fail("«В наличии» можно выставить только для задачи «Нет изделий».");
 
@@ -5552,7 +5684,7 @@ public static class SplitTaskStatusAggregator
             c.EmployeeName == targetEmployeeName && c.Status != JobStatus.Completed);
 
         if (children.Any(c => c.Status == JobStatus.PendingApproval))
-            statusText = "На согласовании";
+            statusText = TaskStatusMapper.ToText(JobStatus.PendingApproval);
         else if (children.Any(c => c.Status == JobStatus.NoItems))
             statusText = "Нет изделий";
         else if (children.All(c => c.Status == JobStatus.Completed))
@@ -5597,6 +5729,61 @@ public interface ITaskTableService
     Task<TaskTableServiceResult<bool>> DeleteRowAsync(int id, CancellationToken cancellationToken = default);
     Task ReorderRowsAsync(List<int> orderedIds, CancellationToken cancellationToken = default);
 }
+=== ./Services/TaskTable/PlannedTimeProgressCalculator.cs ===
+using ProductionPlanner.Models;
+
+namespace ProductionPlanner.Services.TaskTable;
+
+/// <summary>
+/// Плановый % выполнения по времени: отработанные часы / выделенные часы после старта задачи.
+/// </summary>
+public static class PlannedTimeProgressCalculator
+{
+    public static double GetPercent(
+        ProductionTask task,
+        IReadOnlyList<WorkInterval> intervals,
+        DateTime now)
+    {
+        if (task.EstimateHours <= 0)
+            return 0;
+
+        if (task.Status == JobStatus.Completed)
+            return 100;
+
+        if (!HasWorkStarted(task.Status, intervals))
+            return 0;
+
+        var elapsedHours = GetElapsedWorkHours(intervals, now);
+        var percent = elapsedHours / task.EstimateHours * 100;
+        return Math.Clamp(percent, 0, 100);
+    }
+
+    public static bool ShouldShow(ProductionTask task, IReadOnlyList<WorkInterval> intervals) =>
+        task.EstimateHours > 0
+        && (HasWorkStarted(task.Status, intervals) || task.Status == JobStatus.Completed);
+
+    private static bool HasWorkStarted(JobStatus status, IReadOnlyList<WorkInterval> intervals)
+    {
+        if (intervals.Count > 0)
+            return true;
+
+        return status is JobStatus.InProgress or JobStatus.Paused or JobStatus.Completed;
+    }
+
+    private static double GetElapsedWorkHours(IReadOnlyList<WorkInterval> intervals, DateTime now)
+    {
+        double totalMs = 0;
+        foreach (var interval in intervals)
+        {
+            var end = interval.EndTime ?? now;
+            if (end <= interval.StartTime)
+                continue;
+            totalMs += (end - interval.StartTime).TotalMilliseconds;
+        }
+
+        return totalMs / (1000 * 60 * 60);
+    }
+}
 === ./Services/TaskTable/TaskTableServiceResult.cs ===
 namespace ProductionPlanner.Services.TaskTable;
 
@@ -5623,7 +5810,7 @@ public static class TaskStatusMapper
         JobStatus.InProgress => "Начал",
         JobStatus.Paused => "Пауза",
         JobStatus.Completed => "Готово",
-        JobStatus.PendingApproval => "На согласовании",
+        JobStatus.PendingApproval => "Согласование",
         JobStatus.NoItems => "Нет изделий",
         JobStatus.Approved => "Согласовано",
         JobStatus.InStock => "В наличии",
@@ -5636,6 +5823,7 @@ public static class TaskStatusMapper
         "Начал" => JobStatus.InProgress,
         "Пауза" => JobStatus.Paused,
         "Назначена" => JobStatus.Assigned,
+        "Согласование" => JobStatus.PendingApproval,
         "На согласовании" => JobStatus.PendingApproval,
         "Нет изделий" => JobStatus.NoItems,
         "Согласовано" => JobStatus.Approved,
@@ -5813,6 +6001,8 @@ public class WeekCalendarService : IWeekCalendarService
                     FullTitle = slot.Task.TaskDisplayName,
                     TaskId = slot.Task.Id,
                     Title = slot.Task.TaskDisplayName,
+                    FolderPath = slot.Task.FolderPath ?? "",
+                    FileName = slot.Task.FileName ?? "",
                     StatusText = TaskTable.TaskStatusMapper.ToText(slot.Task.Status)
                 });
             }
@@ -5865,7 +6055,7 @@ public class WeekCalendarService : IWeekCalendarService
         return timeline;
     }
 
-    private static List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)>
+    private static List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)>
         CollectIntervalsForDay(
             List<ProductionTask> employeeTasks,
             DateTime dayDate,
@@ -5874,10 +6064,11 @@ public class WeekCalendarService : IWeekCalendarService
             DateTime dayEndTime,
             DateTime timelineEnd)
     {
-        var intervalsForDay = new List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)>();
+        var intervalsForDay = new List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)>();
 
         foreach (var task in employeeTasks)
         {
+            var statusText = TaskTable.TaskStatusMapper.ToText(task.Status);
             foreach (var interval in task.WorkIntervals)
             {
                 if (task.Status == JobStatus.Completed && interval.EndTime == null)
@@ -5906,19 +6097,19 @@ public class WeekCalendarService : IWeekCalendarService
                 {
                     var segmentEnd = endInDay < lunchStartToday ? endInDay : lunchStartToday;
                     if (startInDay < segmentEnd)
-                        intervalsForDay.Add((startInDay, segmentEnd, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
+                        intervalsForDay.Add((startInDay, segmentEnd, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText));
                 }
 
                 if (startInDay < lunchEndToday && endInDay > lunchEndToday)
                 {
                     var segmentStart = startInDay > lunchEndToday ? startInDay : lunchEndToday;
                     if (segmentStart < endInDay)
-                        intervalsForDay.Add((segmentStart, endInDay, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
+                        intervalsForDay.Add((segmentStart, endInDay, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText));
                 }
 
                 if (endInDay <= lunchStartToday || startInDay >= lunchEndToday)
                 {
-                    intervalsForDay.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
+                    intervalsForDay.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText));
                 }
             }
         }
@@ -5927,7 +6118,7 @@ public class WeekCalendarService : IWeekCalendarService
     }
 
     private static List<CalendarTimelineSegmentDto> BuildWorkTimelineSegments(
-        List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)> intervalsForDay)
+        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervalsForDay)
     {
         var segments = new List<CalendarTimelineSegmentDto>();
         if (intervalsForDay.Count == 0)
@@ -5965,7 +6156,10 @@ public class WeekCalendarService : IWeekCalendarService
                 Type = "work",
                 TaskId = iv.taskId,
                 TaskTitle = iv.taskTitle,
+                FolderPath = iv.folderPath,
+                FileName = iv.fileName,
                 Completed = iv.completed,
+                StatusText = iv.statusText,
                 Layer = layerForIndex[i],
                 MaxDepth = maxDepthForIndex[i]
             });
@@ -5979,7 +6173,7 @@ public class WeekCalendarService : IWeekCalendarService
     /// Одна задача до и после обеда получает одну и ту же высоту, если днём была параллель с другой.
     /// </summary>
     private static Dictionary<int, int> ComputeMaxDepthPerTaskId(
-        List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)> intervals)
+        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervals)
     {
         var maxDepthPerTask = new Dictionary<int, int>();
         foreach (var iv in intervals)
@@ -6030,7 +6224,7 @@ public class WeekCalendarService : IWeekCalendarService
 
     private static List<CalendarTimelineSegmentDto> BuildIdleSegments(
         DateTime day,
-        List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)> intervalsForDay,
+        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervalsForDay,
         DateTime timelineEnd)
     {
         var idleSegments = new List<CalendarTimelineSegmentDto>();
@@ -7075,6 +7269,7 @@ public class TaskNotificationService : ITaskNotificationService
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
+using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Services.TaskLists;
 
@@ -7161,6 +7356,7 @@ public class TaskListQueryService : ITaskListQueryService
             task.CompletedAt,
             task.Progress,
             task.Status,
+            StatusText = TaskStatusMapper.ToText(task.Status),
             RowNumber = task.Id,
             workIntervals = intervals.Select(i => new
             {
@@ -7202,6 +7398,7 @@ public class TaskListQueryService : ITaskListQueryService
             task.EstimateHours,
             task.Progress,
             task.Status,
+            StatusText = TaskStatusMapper.ToText(task.Status),
             RowNumber = task.Id,
             RiskLevel = riskLevel
         };
@@ -7240,7 +7437,7 @@ namespace ProductionPlanner.Services
         public List<ScheduledSlot> GetSchedule(List<ProductionTask> activeTasks, DateTime now)
         {
             var tasks = activeTasks
-                .Where(t => t.Status == JobStatus.Assigned || t.Status == JobStatus.InProgress || t.Status == JobStatus.Paused)
+                .Where(t => t.Status != JobStatus.Completed)
                 .OrderBy(t => t.Deadline)
                 .ToList();
 

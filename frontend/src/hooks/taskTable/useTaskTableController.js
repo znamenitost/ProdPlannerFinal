@@ -34,6 +34,7 @@ export default function useTaskTableController({
     selectedEmployeeForHighlight,
     invalidateChildCache: childrenState.invalidateChildCache,
     setChildrenForParent: childrenState.setChildrenForParent,
+    patchChildInCache: childrenState.patchChildInCache,
     loadChildrenForParent: childrenState.loadChildrenForParent,
     expandParent: childrenState.expandParent,
     newRow: rowsState.newRow,

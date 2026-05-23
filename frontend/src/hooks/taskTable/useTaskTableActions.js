@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 import { combineDateTime, DEFAULT_TIME } from '../../utils/dateTimeHelpers';
+import { buildTaskUpdatePayload } from '../../services/api';
+import { runWorkflowWithInfoGuard } from '../../utils/infoStatusWorkflow';
 
 export default function useTaskTableActions({
   api,
@@ -9,6 +11,7 @@ export default function useTaskTableActions({
   selectedEmployeeForHighlight,
   invalidateChildCache,
   setChildrenForParent,
+  patchChildInCache,
   loadChildrenForParent,
   expandParent,
   newRow,
@@ -27,6 +30,8 @@ export default function useTaskTableActions({
 
     if (parentId) {
       invalidateChildCache(parentId);
+      const updatedChild = await api.fetchTableRow(row.id, employee);
+      patchChildInCache(row.id, updatedChild);
       const children = await api.loadChildren(parentId);
       setChildrenForParent(parentId, children);
       const parentDto = await api.fetchTableRow(parentId, employee);
@@ -42,6 +47,7 @@ export default function useTaskTableActions({
     selectedEmployeeForHighlight,
     invalidateChildCache,
     setChildrenForParent,
+    patchChildInCache,
     patchRow,
     onCalendarRefresh
   ]);
@@ -129,8 +135,26 @@ export default function useTaskTableActions({
 
     setPendingLifecycleTaskId(row.id);
     try {
-      await action(row.id);
-      await syncRowFromServer(row);
+      await runWorkflowWithInfoGuard({
+        task: row,
+        statusText: row.statusText,
+        confirm,
+        resolveStatus: async (task, targetStatus) => {
+          await api.updateRow(
+            task.id,
+            buildTaskUpdatePayload(
+              task,
+              selectedEmployeeForHighlight || task.employeeName,
+              targetStatus
+            )
+          );
+          await syncRowFromServer(task);
+        },
+        runAction: async () => {
+          await action(row.id);
+          await syncRowFromServer(row);
+        }
+      });
     } catch (err) {
       console.error(err);
       if (err?.code === 'concurrency_conflict') {
@@ -140,7 +164,14 @@ export default function useTaskTableActions({
     } finally {
       setPendingLifecycleTaskId(null);
     }
-  }, [pendingLifecycleTaskId, syncRowFromServer, showError]);
+  }, [
+    pendingLifecycleTaskId,
+    syncRowFromServer,
+    showError,
+    confirm,
+    api,
+    selectedEmployeeForHighlight
+  ]);
 
   const handleStartTask = useCallback(
     (row) => runLifecycleAction(api.startTask, row),

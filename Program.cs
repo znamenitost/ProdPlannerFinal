@@ -5,6 +5,7 @@ using ProductionPlanner.Data;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Infrastructure.Logging;
 using ProductionPlanner.Models;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 // Moscow wall-clock DateTime values (Unspecified) in queries against timestamptz
@@ -34,6 +35,7 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
         options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
     });
 
 builder.Services.AddEndpointsApiExplorer();

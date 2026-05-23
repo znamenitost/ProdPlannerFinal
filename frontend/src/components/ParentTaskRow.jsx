@@ -23,9 +23,10 @@ import TaskHoursCell from './taskTable/TaskHoursCell';
 import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 import ChildTaskRow from './ChildTaskRow';
-import TaskAdminActionsMenu from './TaskAdminActionsMenu';
+import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
-import TaskPlannedTimeBar from './taskTable/TaskPlannedTimeBar';
+import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
+import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import { alpha } from '@mui/material/styles';
 import { highlightedTaskRowSx, overdueTaskRowSx } from '../theme/surfaces';
@@ -129,10 +130,11 @@ function ParentTaskRow({
   };
 
   const showActionButtons = canUserManage() && canChangeStatus && !hasChildren;
+  const tableColSpan = taskTableColumnCount(showHoursTypeColumns);
 
   return (
     <Fragment>
-      <TableRow sx={(theme) => ({ ...getRowStyle(theme), position: 'relative' })}>
+      <TableRow sx={(theme) => getRowStyle(theme)}>
         {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}
         <TableCell sx={COL_ICON}>
           <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', width: '100%' }}>
@@ -206,13 +208,19 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell sx={COL_ACTIONS}>
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center', justifyContent: 'flex-start' }}>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start' }}>
             {canEdit && canDelete && (
-              <TaskAdminActionsMenu
+              <TaskAdminActionStacks
                 task={task}
+                pending={pendingLifecycleTaskId === task.id}
                 onEdit={() => onEdit(task.id)}
                 onDelete={() => onDelete(task.id)}
+                onStart={onStart}
+                onPause={onPause}
+                onResume={onResume}
+                onComplete={onComplete}
                 onSetStatus={onSetStatus}
+                showWorkflow={!hasChildren}
               />
             )}
             {showActionButtons && (
@@ -228,8 +236,13 @@ function ParentTaskRow({
             )}
           </Box>
         </TableCell>
-        <TaskPlannedTimeBar task={task} hideForSplitParent={hasChildren} />
       </TableRow>
+
+      <TaskPlannedProgressFooter
+        task={task}
+        colSpan={tableColSpan}
+        hideForSplitParent={hasChildren}
+      />
 
       {hasChildren && isExpanded && (childrenTasks || []).map((child) => (
         <ChildTaskRow
@@ -242,7 +255,10 @@ function ParentTaskRow({
           onComplete={onComplete}
           onSetStatus={onSetStatus}
           pendingLifecycleTaskId={pendingLifecycleTaskId}
+          onEdit={onEdit}
+          onDelete={onDelete}
           onOpenComment={onOpenComment}
+          isAdmin={canEdit}
           canChangeStatus={canChangeStatus}
           currentUser={currentUser}
           highlightMyTasks={highlightMyTasks}

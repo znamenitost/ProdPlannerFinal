@@ -21,8 +21,10 @@ import TaskDeadlineCell from './taskTable/TaskDeadlineCell';
 import TaskHoursCell from './taskTable/TaskHoursCell';
 import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
+import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
-import TaskPlannedTimeBar from './taskTable/TaskPlannedTimeBar';
+import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
+import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { childRowSx } from '../theme/surfaces';
 
 function ChildTaskRow({
@@ -34,7 +36,10 @@ function ChildTaskRow({
   onComplete,
   onSetStatus,
   pendingLifecycleTaskId = null,
+  onEdit,
+  onDelete,
   onOpenComment,
+  isAdmin = false,
   canChangeStatus,
   currentUser,
   highlightMyTasks,
@@ -80,8 +85,10 @@ function ChildTaskRow({
   };
 
   const showActionButtons = canUserManage() && canChangeStatus;
+  const tableColSpan = taskTableColumnCount(showHoursTypeColumns);
 
   return (
+    <>
     <TableRow sx={getRowStyle()}>
       <TableCell sx={COL_ICON}>
         <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap' }}>
@@ -143,8 +150,22 @@ function ChildTaskRow({
       </TableCell>
 
       <TableCell sx={COL_ACTIONS}>
-        {showActionButtons && (
-          <EmployeeStatusButtons
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
+          {isAdmin && onEdit && onDelete && (
+            <TaskAdminActionStacks
+              task={task}
+              pending={pendingLifecycleTaskId === task.id}
+              onEdit={() => onEdit(task.id)}
+              onDelete={() => onDelete(task.id)}
+              onStart={onStart}
+              onPause={onPause}
+              onResume={onResume}
+              onComplete={onComplete}
+              onSetStatus={onSetStatus}
+            />
+          )}
+          {showActionButtons && (
+            <EmployeeStatusButtons
             task={task}
             pending={pendingLifecycleTaskId === task.id}
             onStart={onStart}
@@ -153,10 +174,12 @@ function ChildTaskRow({
             onComplete={onComplete}
             onSetStatus={onSetStatus}
           />
-        )}
+          )}
+        </Box>
       </TableCell>
-      <TaskPlannedTimeBar task={task} />
     </TableRow>
+    <TaskPlannedProgressFooter task={task} colSpan={tableColSpan} />
+    </>
   );
 }
 

@@ -42,6 +42,8 @@ export function getTaskStatusLine(task) {
   if (task.status === 3) return STATUS_FINISHED_LABEL;
   if (task.status === 4) return STATUS_PENDING_APPROVAL;
   if (task.status === 5) return STATUS_NO_ITEMS;
+  if (task.status === 6) return 'Согласовано';
+  if (task.status === 7) return 'В наличии';
   if (task.status === 1) return 'В работе';
   if (task.status === 2) return 'На паузе';
   if (task.status === 0) return 'Назначена';

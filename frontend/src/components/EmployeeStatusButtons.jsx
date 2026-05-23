@@ -17,14 +17,19 @@ import {
   Inventory2
 } from '@mui/icons-material';
 import { softIconButtonSx } from '../theme/surfaces';
+import { useUiFeedback } from '../context/UiFeedbackContext';
+import { runWorkflowWithInfoGuard } from '../utils/infoStatusWorkflow';
 import {
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
   STATUS_NO_ITEMS,
   STATUS_PAUSED,
   STATUS_PENDING_APPROVAL,
+  canSetInfoStatus,
   isInfoStatus
 } from '../constants/taskStatuses';
+
+const blockedMenuItemSx = { opacity: 0.45 };
 
 export default function EmployeeStatusButtons({
   task,
@@ -37,16 +42,21 @@ export default function EmployeeStatusButtons({
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
+  const { confirm } = useUiFeedback();
 
   const status = task.statusText || 'Назначена';
   const isDone = status === STATUS_COMPLETED;
   const isStarted = status === STATUS_IN_PROGRESS;
   const isPaused = status === STATUS_PAUSED;
-  const isInfo = isInfoStatus(status);
+  const blocked = isInfoStatus(status);
   const canStart = !isDone && !isStarted && !isPaused;
   const canPause = isStarted;
   const canResume = isPaused;
   const canComplete = !isDone;
+  const itemSx = blocked ? blockedMenuItemSx : undefined;
+
+  const canSetPendingApproval = canSetInfoStatus(task, STATUS_PENDING_APPROVAL);
+  const canSetNoItems = canSetInfoStatus(task, STATUS_NO_ITEMS);
 
   const handleOpen = (event) => {
     event.stopPropagation();
@@ -55,23 +65,22 @@ export default function EmployeeStatusButtons({
 
   const handleClose = () => setAnchorEl(null);
 
-  const runLifecycle = (action) => () => {
-    handleClose();
-    action(task);
-  };
-
   const runInfoStatus = (statusText) => () => {
     handleClose();
-    onSetStatus(task, statusText);
+    if (!canSetInfoStatus(task, statusText)) return;
+    onSetStatus?.(task, statusText);
   };
 
-  const runWorkflowStatus = (statusText, lifecycleAction) => () => {
+  const runWorkflowClick = (lifecycleAction) => async () => {
     handleClose();
-    if (isInfo && onSetStatus) {
-      onSetStatus(task, statusText);
-    } else {
-      lifecycleAction(task);
-    }
+    if (pending) return;
+    await runWorkflowWithInfoGuard({
+      task,
+      statusText: status,
+      confirm,
+      resolveStatus: onSetStatus ? (t, target) => onSetStatus(t, target) : null,
+      runAction: async () => lifecycleAction(task)
+    });
   };
 
   if (isDone) return null;
@@ -100,7 +109,7 @@ export default function EmployeeStatusButtons({
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
         {canStart && (
-          <MenuItem onClick={runWorkflowStatus(STATUS_IN_PROGRESS, onStart)}>
+          <MenuItem sx={itemSx} onClick={runWorkflowClick(onStart)}>
             <ListItemIcon>
               <PlayArrow fontSize="small" color="success" />
             </ListItemIcon>
@@ -108,7 +117,7 @@ export default function EmployeeStatusButtons({
           </MenuItem>
         )}
         {canPause && (
-          <MenuItem onClick={runWorkflowStatus(STATUS_PAUSED, onPause)}>
+          <MenuItem sx={itemSx} onClick={runWorkflowClick(onPause)}>
             <ListItemIcon>
               <Pause fontSize="small" color="warning" />
             </ListItemIcon>
@@ -116,7 +125,7 @@ export default function EmployeeStatusButtons({
           </MenuItem>
         )}
         {canResume && (
-          <MenuItem onClick={runWorkflowStatus(STATUS_IN_PROGRESS, onResume)}>
+          <MenuItem sx={itemSx} onClick={runWorkflowClick(onResume)}>
             <ListItemIcon>
               <PlayArrow fontSize="small" color="success" />
             </ListItemIcon>
@@ -124,7 +133,7 @@ export default function EmployeeStatusButtons({
           </MenuItem>
         )}
         {canComplete && (
-          <MenuItem onClick={runWorkflowStatus(STATUS_COMPLETED, onComplete)}>
+          <MenuItem sx={itemSx} onClick={runWorkflowClick(onComplete)}>
             <ListItemIcon>
               <CheckCircle fontSize="small" color="primary" />
             </ListItemIcon>
@@ -133,7 +142,7 @@ export default function EmployeeStatusButtons({
         )}
         {hasWorkflow && hasInfo && <Divider sx={{ my: 0.5 }} />}
         {hasInfo && (
-          <MenuItem onClick={runInfoStatus(STATUS_PENDING_APPROVAL)}>
+          <MenuItem disabled={!canSetPendingApproval} onClick={runInfoStatus(STATUS_PENDING_APPROVAL)}>
             <ListItemIcon>
               <FactCheck fontSize="small" color="secondary" />
             </ListItemIcon>
@@ -141,7 +150,7 @@ export default function EmployeeStatusButtons({
           </MenuItem>
         )}
         {hasInfo && (
-          <MenuItem onClick={runInfoStatus(STATUS_NO_ITEMS)}>
+          <MenuItem disabled={!canSetNoItems} onClick={runInfoStatus(STATUS_NO_ITEMS)}>
             <ListItemIcon>
               <Inventory2 fontSize="small" color="secondary" />
             </ListItemIcon>

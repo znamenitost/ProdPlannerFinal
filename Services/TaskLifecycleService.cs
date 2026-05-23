@@ -104,7 +104,7 @@ public class TaskLifecycleService : ITaskLifecycleService
 
             await RequireStatusTransitionAsync(
                 taskId,
-                [JobStatus.Assigned],
+                [JobStatus.Assigned, JobStatus.Approved, JobStatus.InStock],
                 JobStatus.InProgress,
                 now,
                 patch: null,
@@ -221,13 +221,13 @@ public class TaskLifecycleService : ITaskLifecycleService
         var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null || task.Status == JobStatus.Completed) return;
 
-        if (task.Status == JobStatus.Assigned)
+        if (task.Status is JobStatus.Assigned or JobStatus.Approved or JobStatus.InStock)
         {
             await _repo.ExecuteInTransactionAsync(async ct =>
             {
                 await RequireStatusTransitionAsync(
                     taskId,
-                    [JobStatus.Assigned],
+                    [JobStatus.Assigned, JobStatus.Approved, JobStatus.InStock],
                     JobStatus.Completed,
                     now,
                     new TaskStatusPatch { Progress = 1, CompletedAt = now },
@@ -337,4 +337,7 @@ public class TaskLifecycleService : ITaskLifecycleService
 
         await _notificationService.NotifyStatusChangedAsync(task, "Assigned");
     }
+
+    public Task SyncSplitParentStatusAsync(int childTaskId, CancellationToken cancellationToken = default) =>
+        UpdateParentStatusAsync(childTaskId, cancellationToken);
 }

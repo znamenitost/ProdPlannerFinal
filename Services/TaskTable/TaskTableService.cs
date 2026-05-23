@@ -242,16 +242,31 @@ public class TaskTableService : ITaskTableService
                     }
                     await _lifecycle.CompleteTaskAsync(task.Id, _timeService.Now, cancellationToken);
                 }
+                else if (TaskStatusMapper.IsEmployeeInfoStatus(newStatus))
+                {
+                    var now = _timeService.Now;
+                    await _repo.CloseOpenIntervalsAsync(task.Id, now, cancellationToken);
+                    task.Status = newStatus;
+                    statusChangedTo = newStatus.ToString();
+                }
                 else
                 {
                     task.Status = newStatus;
                 }
 
-                statusChangedTo = newStatus.ToString();
+                if (statusChangedTo == null)
+                    statusChangedTo = newStatus.ToString();
             }
         }
 
         await _repo.UpdateTaskAsync(task, cancellationToken);
+        if (TaskStatusMapper.IsEmployeeInfoStatus(task.Status)
+            && task.ParentRowNumber.HasValue
+            && task.IsSplitTask)
+        {
+            await _lifecycle.SyncSplitParentStatusAsync(task.Id, cancellationToken);
+        }
+
         await _notificationService.NotifyTaskUpdatedAsync(task, oldEmployeeName);
         if (statusChangedTo != null)
             await _notificationService.NotifyStatusChangedAsync(task, statusChangedTo);

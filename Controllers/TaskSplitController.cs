@@ -113,7 +113,7 @@ namespace ProductionPlanner.Controllers
                     c.FileName,
                     c.Comment,
                     StatusText = TaskStatusMapper.ToText(c.Status),
-                    Status = c.Status.ToString(),
+                    status = (int)c.Status,
                     c.Deadline,
                     c.EstimateHours,
                     c.ActualHours,

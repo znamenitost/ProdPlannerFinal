@@ -1,12 +1,15 @@
 using ProductionPlanner.Models;
+using ProductionPlanner.Services;
 
 namespace ProductionPlanner.Services.TaskTable;
 
 /// <summary>
-/// Плановый % выполнения по времени: отработанные часы / выделенные часы после старта задачи.
+/// Плановый % выполнения по времени: отработанные рабочие часы / выделенные часы после старта.
 /// </summary>
 public static class PlannedTimeProgressCalculator
 {
+    private static readonly WorkHoursCalculator WorkHours = new();
+
     public static double GetPercent(
         ProductionTask task,
         IReadOnlyList<WorkInterval> intervals,
@@ -23,7 +26,7 @@ public static class PlannedTimeProgressCalculator
 
         var elapsedHours = GetElapsedWorkHours(intervals, now);
         var percent = elapsedHours / task.EstimateHours * 100;
-        return Math.Clamp(percent, 0, 100);
+        return Math.Clamp(Math.Round(percent), 0, 100);
     }
 
     public static bool ShouldShow(ProductionTask task, IReadOnlyList<WorkInterval> intervals) =>
@@ -40,15 +43,15 @@ public static class PlannedTimeProgressCalculator
 
     private static double GetElapsedWorkHours(IReadOnlyList<WorkInterval> intervals, DateTime now)
     {
-        double totalMs = 0;
+        double totalHours = 0;
         foreach (var interval in intervals)
         {
             var end = interval.EndTime ?? now;
             if (end <= interval.StartTime)
                 continue;
-            totalMs += (end - interval.StartTime).TotalMilliseconds;
+            totalHours += WorkHours.GetWorkHoursBetween(interval.StartTime, end);
         }
 
-        return totalMs / (1000 * 60 * 60);
+        return totalHours;
     }
 }

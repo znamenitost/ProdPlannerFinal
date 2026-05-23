@@ -260,7 +260,7 @@ function AppContent() {
               <>
                 <WeekCalendar employee={employee} refresh={refresh} />
                 <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
-                  <ActiveTasksList tasks={activeTasks} onUpdate={refreshCalendar} embedded />
+                  <ActiveTasksList tasks={activeTasks} onUpdate={refreshCalendar} embedded employee={employee} />
                 </SectionCard>
                 <CompletedTasksList employee={employee} refresh={refresh} />
               </>

@@ -10,5 +10,7 @@ namespace ProductionPlanner.Services
         Task UpdateProgressAsync(int taskId, double newProgress, DateTime now, CancellationToken cancellationToken = default);
         Task CompleteTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default);
         Task ReturnTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default);
+        /// <summary>Обновить статус родителя сплит-задачи после изменения дочерней.</summary>
+        Task SyncSplitParentStatusAsync(int childTaskId, CancellationToken cancellationToken = default);
     }
 }
