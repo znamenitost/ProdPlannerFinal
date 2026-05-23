@@ -77,6 +77,7 @@ export default function TaskTable({
                   onPause={table.handlePauseTask}
                   onResume={table.handleResumeTask}
                   onComplete={table.handleCompleteTask}
+                  onSetStatus={table.handleSetStatus}
                   pendingLifecycleTaskId={table.pendingLifecycleTaskId}
                   onEdit={table.handleEditRow}
                   onDelete={table.handleDeleteRow}

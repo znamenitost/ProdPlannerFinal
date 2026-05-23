@@ -106,6 +106,27 @@ export async function completeTask(id) {
   await throwIfNotOk(res, 'Ошибка завершения задачи');
 }
 
+/** Обновление строки задачи (в т.ч. инфостатусы «Согласование», «Нет изделий»). */
+export async function updateTaskRow(id, rowData) {
+  const res = await fetch(`${API_BASE}/tasks/table/row/${id}`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      folderPath: rowData.folderPath ?? '',
+      fileName: rowData.fileName ?? '',
+      comment: rowData.comment ?? '',
+      deadline: rowData.deadline,
+      estimateHours: rowData.estimateHours,
+      type: rowData.type ?? '',
+      employeeName: rowData.employeeName,
+      parentRowNumber: rowData.parentRowNumber,
+      statusText: rowData.statusText
+    })
+  });
+  await throwIfNotOk(res, 'Не удалось обновить задачу');
+}
+
 export async function returnTask(id) {
   const res = await fetch(`${API_BASE}/tasks/${id}/return`, {
     method: 'POST',

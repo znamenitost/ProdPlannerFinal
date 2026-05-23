@@ -1,4 +1,5 @@
 using ProductionPlanner.Models;
+using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Models.Dtos;
 
@@ -23,11 +24,20 @@ public class TaskTableRowDto
     /// <summary>Имена сотрудников дочерних подзадач (через «/») для общих задач.</summary>
     public string SplitEmployeeNames { get; set; } = "";
 
+    public List<WorkIntervalDto> WorkIntervals { get; set; } = new();
+
+    /// <summary>Плановый % по времени (отработано / выделено), 0–100.</summary>
+    public double PlannedTimeProgress { get; set; }
+
+    public bool ShowPlannedTimeProgress { get; set; }
+
     public static TaskTableRowDto FromParent(
         ProductionTask parent,
         string statusText,
         bool hasCurrentUserSubtask,
-        IReadOnlyList<ProductionTask>? children = null)
+        IReadOnlyList<ProductionTask>? children = null,
+        IReadOnlyList<WorkInterval>? workIntervals = null,
+        DateTime? now = null)
     {
         var splitEmployeeNames = "";
         if (parent.IsSplitTask && children is { Count: > 0 })
@@ -38,6 +48,10 @@ public class TaskTableRowDto
                     .Where(n => !string.IsNullOrWhiteSpace(n))
                     .Distinct());
         }
+
+        var at = now ?? DateTime.UtcNow;
+        var intervals = workIntervals ?? Array.Empty<WorkInterval>();
+        var hidePlannedBar = parent.IsSplitTask && children is { Count: > 0 };
 
         return new TaskTableRowDto
         {
@@ -57,7 +71,11 @@ public class TaskTableRowDto
             IsSplitTask = parent.IsSplitTask,
             Progress = parent.Progress,
             HasCurrentUserSubtask = hasCurrentUserSubtask,
-            SplitEmployeeNames = splitEmployeeNames
+            SplitEmployeeNames = splitEmployeeNames,
+            WorkIntervals = intervals.Select(WorkIntervalDto.FromEntity).ToList(),
+            PlannedTimeProgress = PlannedTimeProgressCalculator.GetPercent(parent, intervals, at),
+            ShowPlannedTimeProgress = !hidePlannedBar
+                && PlannedTimeProgressCalculator.ShouldShow(parent, intervals)
         };
     }
 }

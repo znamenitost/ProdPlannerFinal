@@ -17,7 +17,7 @@ namespace ProductionPlanner.Services
         public List<ScheduledSlot> GetSchedule(List<ProductionTask> activeTasks, DateTime now)
         {
             var tasks = activeTasks
-                .Where(t => t.Status == JobStatus.Assigned || t.Status == JobStatus.InProgress || t.Status == JobStatus.Paused)
+                .Where(t => t.Status != JobStatus.Completed)
                 .OrderBy(t => t.Deadline)
                 .ToList();
 

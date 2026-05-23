@@ -23,6 +23,9 @@ public class CalendarTaskBlockDto
     public string FullTitle { get; set; } = "";
     public int TaskId { get; set; }
     public string Title { get; set; } = "";
+    public string FolderPath { get; set; } = "";
+    public string FileName { get; set; } = "";
+    public string StatusText { get; set; } = "";
 }
 
 public class CalendarTimelineSegmentDto
@@ -32,7 +35,10 @@ public class CalendarTimelineSegmentDto
     public string Type { get; set; } = "";
     public int? TaskId { get; set; }
     public string? TaskTitle { get; set; }
+    public string FolderPath { get; set; } = "";
+    public string FileName { get; set; } = "";
     public bool Completed { get; set; }
+    public string StatusText { get; set; } = "";
     public int Layer { get; set; }
     public int MaxDepth { get; set; }
 }

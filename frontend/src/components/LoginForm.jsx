@@ -15,6 +15,7 @@ import {
 import { Login as LoginIcon, Person, AdminPanelSettings } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { glassPaperSx } from '../theme/surfaces';
+import { createMuiTransition } from '../theme/motion';
 
 export default function LoginForm({ onLogin }) {
   const [loginType, setLoginType] = useState('employee'); // 'employee' or 'admin'
@@ -160,7 +161,11 @@ export default function LoginForm({ onLogin }) {
                           bgcolor: selectedEmployee === emp
                             ? alpha(theme.palette.primary.main, 0.08)
                             : alpha('#ffffff', 0.5),
-                          transition: 'all 0.2s',
+                          transition: createMuiTransition(theme, [
+                            'box-shadow',
+                            'border-color',
+                            'background-color'
+                          ]),
                           '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.light }
                         })}
                       >

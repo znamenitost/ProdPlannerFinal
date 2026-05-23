@@ -1,4 +1,6 @@
 import { Box, Typography } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import { createMuiTransition } from '../theme/motion';
 import {
   WORK_HOUR_MIN,
   WORK_HOUR_MAX,
@@ -27,9 +29,20 @@ function getHourPosition(index, total) {
 }
 
 export default function WorkHourDial({ value, onChange }) {
+  const theme = useTheme();
   const selectedHour = parseTimeToHour(value);
   const selectedIndex = HOURS.indexOf(selectedHour);
   const pointerAngle = (selectedIndex / HOURS.length) * 2 * Math.PI - Math.PI / 2;
+  const pointerTransition = createMuiTransition(theme, ['transform', 'height'], {
+    duration: theme.transitions.duration.standard,
+    easing: theme.transitions.easing.easeInOut
+  });
+  const hourButtonTransition = createMuiTransition(theme, [
+    'background-color',
+    'color',
+    'box-shadow',
+    'border-color'
+  ], { duration: theme.transitions.duration.shorter });
 
   return (
     <Box
@@ -63,7 +76,7 @@ export default function WorkHourDial({ value, onChange }) {
           bgcolor: 'primary.main',
           transformOrigin: 'center bottom',
           transform: `translateY(-100%) rotate(${pointerAngle}rad)`,
-          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), height 0.2s',
+          transition: pointerTransition,
           borderRadius: 1,
           zIndex: 0,
           pointerEvents: 'none',
@@ -139,7 +152,7 @@ export default function WorkHourDial({ value, onChange }) {
               border: '1px solid',
               borderColor: selected ? 'primary.main' : 'divider',
               boxShadow: selected ? 2 : 0,
-              transition: 'background-color 0.15s, color 0.15s, box-shadow 0.15s',
+              transition: hourButtonTransition,
               zIndex: 3,
               '&:hover': {
                 bgcolor: selected ? 'primary.dark' : 'action.hover',

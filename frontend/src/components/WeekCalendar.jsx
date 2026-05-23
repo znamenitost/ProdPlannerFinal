@@ -1,13 +1,22 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Box, Paper, IconButton, Typography, Button } from '@mui/material';
-import { ChevronLeft, ChevronRight, CalendarMonth, Weekend, ViewDay, CalendarViewWeek } from '@mui/icons-material';
+import {
+  Box,
+  Paper,
+  IconButton,
+  Typography,
+  Button,
+  ToggleButton,
+  ToggleButtonGroup
+} from '@mui/material';
+import { ChevronLeft, ChevronRight, CalendarMonth, Today } from '@mui/icons-material';
 import { glassPaperSx, softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import { getWeekCalendar } from '../services/api';
 import useClockMinute from '../hooks/useClockMinute';
 import DayColumn from './DayColumn';
 import { CalendarLoadingState } from './LoadingState';
-import { isSameCalendarDay } from '../utils/calendarDayUtils';
+import { MotionSwitch } from './ui/MotionSection';
+import { isSameCalendarDay, toCalendarDayKey } from '../utils/calendarDayUtils';
 
 export default function WeekCalendar({ employee, refresh }) {
   const { showError } = useUiFeedback();
@@ -69,14 +78,12 @@ export default function WeekCalendar({ employee, refresh }) {
     });
   };
 
-  const toggleViewMode = () => {
-    setViewMode((mode) => {
-      if (mode === 'week') {
-        setAnchorDate(startOfDay(new Date()));
-        return 'day';
-      }
-      return 'week';
-    });
+  const handleViewModeChange = (_, newMode) => {
+    if (!newMode || newMode === viewMode) return;
+    if (newMode === 'day') {
+      setAnchorDate(startOfDay(new Date()));
+    }
+    setViewMode(newMode);
   };
 
   if (!weekData) return <CalendarLoadingState />;
@@ -100,11 +107,22 @@ export default function WeekCalendar({ employee, refresh }) {
     : (showWeekend ? weekData.days : weekData.days.filter((_, index) => index < 5));
 
   const navLabel = viewMode === 'day' ? 'день' : 'неделю';
+  const isAnchorToday = isSameCalendarDay(anchorDate, new Date());
 
   return (
     <Paper sx={{ ...glassPaperSx, mb: 3 }}>
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', mb: 4, flexWrap: 'wrap', gap: 2 }}>
-        <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 1,
+          mb: 4
+        }}
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
           <IconButton onClick={goPrev} sx={softIconButtonSx('primary')} aria-label={`Предыдущая ${navLabel}`}>
             <ChevronLeft />
           </IconButton>
@@ -117,60 +135,71 @@ export default function WeekCalendar({ employee, refresh }) {
           <IconButton onClick={goNext} sx={softIconButtonSx('primary')} aria-label={`Следующая ${navLabel}`}>
             <ChevronRight />
           </IconButton>
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={handleViewModeChange}
+            size="small"
+            color="primary"
+            aria-label="Режим календаря"
+          >
+            <ToggleButton value="day" aria-label="Один день">
+              1 день
+            </ToggleButton>
+            <ToggleButton value="week" aria-label="Неделя">
+              Неделя
+            </ToggleButton>
+          </ToggleButtonGroup>
         </Box>
 
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+        {viewMode === 'day' && (
           <Button
             size="small"
-            variant={viewMode === 'day' ? 'contained' : 'outlined'}
+            variant="outlined"
             color="primary"
-            startIcon={viewMode === 'week' ? <ViewDay /> : <CalendarViewWeek />}
-            onClick={toggleViewMode}
+            startIcon={<Today />}
+            onClick={() => setAnchorDate(startOfDay(new Date()))}
+            disabled={isAnchorToday}
+            sx={{ flexShrink: 0 }}
           >
-            {viewMode === 'week' ? '1 день' : 'Неделя'}
+            Сегодня
           </Button>
-          {viewMode === 'week' && (
-            <Button
-              size="small"
-              variant={showWeekend ? 'contained' : 'outlined'}
-              color="primary"
-              startIcon={<Weekend />}
-              onClick={() => setShowWeekend(!showWeekend)}
-            >
-              {showWeekend ? 'Скрыть выходные' : 'Показать выходные'}
-            </Button>
-          )}
-        </Box>
+        )}
       </Box>
 
-      {daysToShow.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-          Нет данных за выбранный день
-        </Typography>
-      ) : (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: viewMode === 'day'
-              ? '1fr'
-              : (showWeekend ? 'repeat(7, 1fr)' : 'repeat(5, 1fr)'),
-            gap: 2,
-            maxWidth: viewMode === 'day' ? 720 : 'none',
-            mx: viewMode === 'day' ? 'auto' : 0
-          }}
-        >
-          {daysToShow.map((day) => (
-            <DayColumn
-              key={day.date}
-              day={day}
-              allDays={weekData.days}
-              highlightedTaskId={highlightedTaskId}
-              onTaskHover={setHighlightedTaskId}
-              detailedTimeline={viewMode === 'day'}
-            />
-          ))}
-        </Box>
-      )}
+      <MotionSwitch
+        transitionKey={`${viewMode}-${toCalendarDayKey(anchorDate)}-${daysToShow.length}`}
+      >
+        {daysToShow.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+            Нет данных за выбранный день
+          </Typography>
+        ) : (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: viewMode === 'day'
+                ? '1fr'
+                : (showWeekend ? 'repeat(7, 1fr)' : 'repeat(5, 1fr)'),
+              gap: 2,
+              maxWidth: viewMode === 'day' ? 720 : 'none',
+              mx: viewMode === 'day' ? 'auto' : 0
+            }}
+          >
+            {daysToShow.map((day) => (
+              <DayColumn
+                key={day.date}
+                day={day}
+                allDays={weekData.days}
+                highlightedTaskId={highlightedTaskId}
+                onTaskHover={setHighlightedTaskId}
+                detailedTimeline={viewMode === 'day'}
+                clockMinute={clockMinute}
+              />
+            ))}
+          </Box>
+        )}
+      </MotionSwitch>
     </Paper>
   );
 }

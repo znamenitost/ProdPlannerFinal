@@ -16,7 +16,8 @@ export default function DayColumn({
   allDays,
   highlightedTaskId,
   onTaskHover,
-  detailedTimeline = false
+  detailedTimeline = false,
+  clockMinute = null
 }) {
   const date = new Date(day.date);
   const isWorkingDay = isWorkingWeekday(date);
@@ -39,6 +40,7 @@ export default function DayColumn({
         taskBlocks={day.taskBlocks}
         isWorkingDay={isWorkingDay}
         isHighlighted={isHighlighted}
+        detailedTimeline={detailedTimeline}
       />
       <DeadlineMarkers
         deadlines={day.deadlines}
@@ -50,6 +52,8 @@ export default function DayColumn({
         idleSegments={idleSegments}
         isWorkingDay={isWorkingDay}
         detailedTimeline={detailedTimeline}
+        dayDate={day.date}
+        clockMinute={clockMinute}
       />
     </Paper>
   );

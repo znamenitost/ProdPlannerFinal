@@ -1,4 +1,6 @@
 import { alpha } from '@mui/material/styles';
+import { STATUS_PENDING_APPROVAL } from '../constants/taskStatuses';
+import { getTaskStatusLine, getTaskTitleSlashFile } from '../components/TaskTitleTwoLines';
 import { chrome, tokens } from '../theme/paletteTokens';
 
 export const CALENDAR_TOOLTIP_SX = {
@@ -10,12 +12,13 @@ export const CALENDAR_TOOLTIP_SX = {
   maxWidth: 'none',
   width: 'max-content',
   borderRadius: 2,
-  boxShadow: '0 4px 16px rgba(74, 82, 96, 0.12)'
+  boxShadow: '0 4px 16px rgba(74, 82, 96, 0.12)',
+  whiteSpace: 'pre-line'
 };
 
 export const WORKDAY_START_HOUR = 10;
 export const WORKDAY_END_HOUR = 19;
-export const DETAIL_AXIS_START_HOUR = 11;
+export const DETAIL_AXIS_START_HOUR = 10;
 export const DETAIL_AXIS_END_HOUR = 19;
 
 export function getTimelineRange(detailed = false) {
@@ -47,14 +50,26 @@ export function getLunchBandPercent(range = getTimelineRange(false)) {
   return { left, width };
 }
 
+/** Локальный ключ даты YYYY-MM-DD (без сдвига UTC при сравнении с API). */
+export function toCalendarDayKey(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Позиция «сейчас» на шкале 10–19; до/после рабочего окна — у края. */
+export function getNowMarkerPercent(now, range = getTimelineRange(true)) {
+  const hours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+  const span = range.end - range.start;
+  if (hours <= range.start) return 0;
+  if (hours >= range.end) return 100;
+  return ((hours - range.start) / span) * 100;
+}
+
 export function isSameCalendarDay(a, b) {
-  const d1 = new Date(a);
-  const d2 = new Date(b);
-  return (
-    d1.getFullYear() === d2.getFullYear()
-    && d1.getMonth() === d2.getMonth()
-    && d1.getDate() === d2.getDate()
-  );
+  return toCalendarDayKey(a) === toCalendarDayKey(b);
 }
 
 export function getDuration(start, end) {
@@ -67,6 +82,15 @@ export function formatCalendarTime(dateTime) {
   return new Date(dateTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
+/** Многострочный тултип: «задача / файл», статус, доп. строка. */
+export function formatCalendarTaskTooltip(task, extraLine) {
+  const lines = [getTaskTitleSlashFile(task) || 'Задача'];
+  const statusLine = getTaskStatusLine(task);
+  if (statusLine) lines.push(statusLine);
+  if (extraLine) lines.push(extraLine);
+  return lines.join('\n');
+}
+
 export function isWorkingWeekday(date) {
   const day = date.getDay();
   return day >= 1 && day <= 5;
@@ -75,6 +99,14 @@ export function isWorkingWeekday(date) {
 export function getWorkColor(taskId, completed) {
   if (completed) return tokens.workDone;
   return tokens.work[taskId % tokens.work.length];
+}
+
+export function getPlannedBlockColor(block) {
+  if (block?.statusText === STATUS_PENDING_APPROVAL || block?.statusText === 'На согласовании') {
+    return tokens.pendingApproval;
+  }
+  if (block?.statusText === 'Нет изделий') return tokens.noItems;
+  return null;
 }
 
 export function getTimelineSegments(dayDate, timeline) {

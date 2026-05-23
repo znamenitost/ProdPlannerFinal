@@ -1,6 +1,7 @@
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
+using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Services.TaskLists;
 
@@ -87,6 +88,7 @@ public class TaskListQueryService : ITaskListQueryService
             task.CompletedAt,
             task.Progress,
             task.Status,
+            StatusText = TaskStatusMapper.ToText(task.Status),
             RowNumber = task.Id,
             workIntervals = intervals.Select(i => new
             {
@@ -128,6 +130,7 @@ public class TaskListQueryService : ITaskListQueryService
             task.EstimateHours,
             task.Progress,
             task.Status,
+            StatusText = TaskStatusMapper.ToText(task.Status),
             RowNumber = task.Id,
             RiskLevel = riskLevel
         };

@@ -5,10 +5,26 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
-  CircularProgress
+  CircularProgress,
+  Divider
 } from '@mui/material';
-import { MoreVert, PlayArrow, Pause, CheckCircle } from '@mui/icons-material';
+import {
+  MoreVert,
+  PlayArrow,
+  Pause,
+  CheckCircle,
+  FactCheck,
+  Inventory2
+} from '@mui/icons-material';
 import { softIconButtonSx } from '../theme/surfaces';
+import {
+  STATUS_COMPLETED,
+  STATUS_IN_PROGRESS,
+  STATUS_NO_ITEMS,
+  STATUS_PAUSED,
+  STATUS_PENDING_APPROVAL,
+  isInfoStatus
+} from '../constants/taskStatuses';
 
 export default function EmployeeStatusButtons({
   task,
@@ -16,15 +32,17 @@ export default function EmployeeStatusButtons({
   onStart,
   onPause,
   onResume,
-  onComplete
+  onComplete,
+  onSetStatus
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
 
   const status = task.statusText || 'Назначена';
-  const isDone = status === 'Готово';
-  const isStarted = status === 'Начал';
-  const isPaused = status === 'Пауза';
+  const isDone = status === STATUS_COMPLETED;
+  const isStarted = status === STATUS_IN_PROGRESS;
+  const isPaused = status === STATUS_PAUSED;
+  const isInfo = isInfoStatus(status);
   const canStart = !isDone && !isStarted && !isPaused;
   const canPause = isStarted;
   const canResume = isPaused;
@@ -37,15 +55,30 @@ export default function EmployeeStatusButtons({
 
   const handleClose = () => setAnchorEl(null);
 
-  const runAction = (action) => () => {
+  const runLifecycle = (action) => () => {
     handleClose();
     action(task);
   };
 
+  const runInfoStatus = (statusText) => () => {
+    handleClose();
+    onSetStatus(task, statusText);
+  };
+
+  const runWorkflowStatus = (statusText, lifecycleAction) => () => {
+    handleClose();
+    if (isInfo && onSetStatus) {
+      onSetStatus(task, statusText);
+    } else {
+      lifecycleAction(task);
+    }
+  };
+
   if (isDone) return null;
 
-  const hasActions = canStart || canPause || canResume || canComplete;
-  if (!hasActions) return null;
+  const hasWorkflow = canStart || canPause || canResume || canComplete;
+  const hasInfo = Boolean(onSetStatus);
+  if (!hasWorkflow && !hasInfo) return null;
 
   return (
     <>
@@ -67,23 +100,23 @@ export default function EmployeeStatusButtons({
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
         {canStart && (
-          <MenuItem onClick={runAction(onStart)}>
+          <MenuItem onClick={runWorkflowStatus(STATUS_IN_PROGRESS, onStart)}>
             <ListItemIcon>
               <PlayArrow fontSize="small" color="success" />
             </ListItemIcon>
-            <ListItemText>Начал</ListItemText>
+            <ListItemText>{STATUS_IN_PROGRESS}</ListItemText>
           </MenuItem>
         )}
         {canPause && (
-          <MenuItem onClick={runAction(onPause)}>
+          <MenuItem onClick={runWorkflowStatus(STATUS_PAUSED, onPause)}>
             <ListItemIcon>
               <Pause fontSize="small" color="warning" />
             </ListItemIcon>
-            <ListItemText>Пауза</ListItemText>
+            <ListItemText>{STATUS_PAUSED}</ListItemText>
           </MenuItem>
         )}
         {canResume && (
-          <MenuItem onClick={runAction(onResume)}>
+          <MenuItem onClick={runWorkflowStatus(STATUS_IN_PROGRESS, onResume)}>
             <ListItemIcon>
               <PlayArrow fontSize="small" color="success" />
             </ListItemIcon>
@@ -91,11 +124,28 @@ export default function EmployeeStatusButtons({
           </MenuItem>
         )}
         {canComplete && (
-          <MenuItem onClick={runAction(onComplete)}>
+          <MenuItem onClick={runWorkflowStatus(STATUS_COMPLETED, onComplete)}>
             <ListItemIcon>
               <CheckCircle fontSize="small" color="primary" />
             </ListItemIcon>
-            <ListItemText>Готово</ListItemText>
+            <ListItemText>{STATUS_COMPLETED}</ListItemText>
+          </MenuItem>
+        )}
+        {hasWorkflow && hasInfo && <Divider sx={{ my: 0.5 }} />}
+        {hasInfo && (
+          <MenuItem onClick={runInfoStatus(STATUS_PENDING_APPROVAL)}>
+            <ListItemIcon>
+              <FactCheck fontSize="small" color="secondary" />
+            </ListItemIcon>
+            <ListItemText>{STATUS_PENDING_APPROVAL}</ListItemText>
+          </MenuItem>
+        )}
+        {hasInfo && (
+          <MenuItem onClick={runInfoStatus(STATUS_NO_ITEMS)}>
+            <ListItemIcon>
+              <Inventory2 fontSize="small" color="secondary" />
+            </ListItemIcon>
+            <ListItemText>{STATUS_NO_ITEMS}</ListItemText>
           </MenuItem>
         )}
       </Menu>

@@ -48,6 +48,7 @@ import useNotificationsHub from './hooks/useNotificationsHub';
 import appTheme from './theme/appTheme';
 import { glassPaperSx, pageShellSx } from './theme/surfaces';
 import SectionCard from './components/ui/SectionCard';
+import { MotionSwitch } from './components/ui/MotionSection';
 
 function AppContent() {
   const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
@@ -254,26 +255,26 @@ function AppContent() {
             </Tabs>
           </Paper>
 
-          {activeTab === 0 && (
-            <>
-              <WeekCalendar employee={employee} refresh={refresh} />
-              <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
-                <ActiveTasksList tasks={activeTasks} onUpdate={refreshCalendar} embedded />
-              </SectionCard>
-              <CompletedTasksList employee={employee} refresh={refresh} />
-            </>
-          )}
-
-          {activeTab === 1 && (
-            <TaskTable
-              refreshTrigger={refresh}
-              onCalendarRefresh={refreshCalendar}
-              onRegisterHubHandler={registerTableHubHandler}
-              userRole={user?.role}
-              currentUser={user}
-              selectedEmployeeForHighlight={employee}
-            />
-          )}
+          <MotionSwitch transitionKey={activeTab}>
+            {activeTab === 0 ? (
+              <>
+                <WeekCalendar employee={employee} refresh={refresh} />
+                <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
+                  <ActiveTasksList tasks={activeTasks} onUpdate={refreshCalendar} embedded />
+                </SectionCard>
+                <CompletedTasksList employee={employee} refresh={refresh} />
+              </>
+            ) : (
+              <TaskTable
+                refreshTrigger={refresh}
+                onCalendarRefresh={refreshCalendar}
+                onRegisterHubHandler={registerTableHubHandler}
+                userRole={user?.role}
+                currentUser={user}
+                selectedEmployeeForHighlight={employee}
+              />
+            )}
+          </MotionSwitch>
 
           {import.meta.env.DEV && isAdmin && (
             <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />

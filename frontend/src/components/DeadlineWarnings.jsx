@@ -98,9 +98,9 @@ export default function DeadlineWarnings({ employee, refresh }) {
               <TaskTitleTwoLines
                 task={riskTask}
                 headingVariant="body2"
-                fileVariant="body2"
+                statusVariant="body2"
                 headingSx={{ fontWeight: 600 }}
-                fileSx={{ color: 'text.secondary', mt: 0.25 }}
+                statusSx={{ color: 'text.secondary', mt: 0.25 }}
               />
               
               <Stack 

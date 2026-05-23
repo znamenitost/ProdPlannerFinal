@@ -1,5 +1,13 @@
 // ./frontend/src/utils/taskHelpers.js
-import { PlayArrow, Pause, CheckCircle, HourglassEmpty } from '@mui/icons-material';
+import {
+  PlayArrow,
+  Pause,
+  CheckCircle,
+  HourglassEmpty,
+  FactCheck,
+  Inventory2,
+  TaskAlt
+} from '@mui/icons-material';
 
 export const truncate = (str, maxLen) => {
   if (!str) return '';
@@ -14,9 +22,13 @@ export const getStatusColor = (status) => {
 };
 
 export const getStatusIcon = (status) => {
-  if (status === 'Готово') return <CheckCircle sx={{ fontSize: 16 }} />;
+  if (status === 'Готово' || status === 'Согласовано' || status === 'В наличии') {
+    return <CheckCircle sx={{ fontSize: 16 }} />;
+  }
   if (status === 'Начал') return <PlayArrow sx={{ fontSize: 16 }} />;
   if (status === 'Пауза') return <Pause sx={{ fontSize: 16 }} />;
+  if (status === 'Согласование' || status === 'На согласовании') return <FactCheck sx={{ fontSize: 16 }} />;
+  if (status === 'Нет изделий') return <Inventory2 sx={{ fontSize: 16 }} />;
   if (status === 'Назначена') return <HourglassEmpty sx={{ fontSize: 16 }} />;
   return null;
 };

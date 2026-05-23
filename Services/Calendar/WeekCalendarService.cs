@@ -155,7 +155,10 @@ public class WeekCalendarService : IWeekCalendarService
                     Hours = Math.Round(hours, 1),
                     FullTitle = slot.Task.TaskDisplayName,
                     TaskId = slot.Task.Id,
-                    Title = slot.Task.TaskDisplayName
+                    Title = slot.Task.TaskDisplayName,
+                    FolderPath = slot.Task.FolderPath ?? "",
+                    FileName = slot.Task.FileName ?? "",
+                    StatusText = TaskTable.TaskStatusMapper.ToText(slot.Task.Status)
                 });
             }
 
@@ -207,7 +210,7 @@ public class WeekCalendarService : IWeekCalendarService
         return timeline;
     }
 
-    private static List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)>
+    private static List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)>
         CollectIntervalsForDay(
             List<ProductionTask> employeeTasks,
             DateTime dayDate,
@@ -216,10 +219,11 @@ public class WeekCalendarService : IWeekCalendarService
             DateTime dayEndTime,
             DateTime timelineEnd)
     {
-        var intervalsForDay = new List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)>();
+        var intervalsForDay = new List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)>();
 
         foreach (var task in employeeTasks)
         {
+            var statusText = TaskTable.TaskStatusMapper.ToText(task.Status);
             foreach (var interval in task.WorkIntervals)
             {
                 if (task.Status == JobStatus.Completed && interval.EndTime == null)
@@ -248,19 +252,19 @@ public class WeekCalendarService : IWeekCalendarService
                 {
                     var segmentEnd = endInDay < lunchStartToday ? endInDay : lunchStartToday;
                     if (startInDay < segmentEnd)
-                        intervalsForDay.Add((startInDay, segmentEnd, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
+                        intervalsForDay.Add((startInDay, segmentEnd, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText));
                 }
 
                 if (startInDay < lunchEndToday && endInDay > lunchEndToday)
                 {
                     var segmentStart = startInDay > lunchEndToday ? startInDay : lunchEndToday;
                     if (segmentStart < endInDay)
-                        intervalsForDay.Add((segmentStart, endInDay, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
+                        intervalsForDay.Add((segmentStart, endInDay, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText));
                 }
 
                 if (endInDay <= lunchStartToday || startInDay >= lunchEndToday)
                 {
-                    intervalsForDay.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.Status == JobStatus.Completed));
+                    intervalsForDay.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText));
                 }
             }
         }
@@ -269,7 +273,7 @@ public class WeekCalendarService : IWeekCalendarService
     }
 
     private static List<CalendarTimelineSegmentDto> BuildWorkTimelineSegments(
-        List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)> intervalsForDay)
+        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervalsForDay)
     {
         var segments = new List<CalendarTimelineSegmentDto>();
         if (intervalsForDay.Count == 0)
@@ -307,7 +311,10 @@ public class WeekCalendarService : IWeekCalendarService
                 Type = "work",
                 TaskId = iv.taskId,
                 TaskTitle = iv.taskTitle,
+                FolderPath = iv.folderPath,
+                FileName = iv.fileName,
                 Completed = iv.completed,
+                StatusText = iv.statusText,
                 Layer = layerForIndex[i],
                 MaxDepth = maxDepthForIndex[i]
             });
@@ -321,7 +328,7 @@ public class WeekCalendarService : IWeekCalendarService
     /// Одна задача до и после обеда получает одну и ту же высоту, если днём была параллель с другой.
     /// </summary>
     private static Dictionary<int, int> ComputeMaxDepthPerTaskId(
-        List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)> intervals)
+        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervals)
     {
         var maxDepthPerTask = new Dictionary<int, int>();
         foreach (var iv in intervals)
@@ -372,7 +379,7 @@ public class WeekCalendarService : IWeekCalendarService
 
     private static List<CalendarTimelineSegmentDto> BuildIdleSegments(
         DateTime day,
-        List<(DateTime start, DateTime end, int taskId, string taskTitle, bool completed)> intervalsForDay,
+        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervalsForDay,
         DateTime timelineEnd)
     {
         var idleSegments = new List<CalendarTimelineSegmentDto>();

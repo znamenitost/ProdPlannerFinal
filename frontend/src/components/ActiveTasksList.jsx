@@ -1,4 +1,10 @@
-import { startTask, pauseTask, resumeTask, setProgress, completeTask } from '../services/api';
+import {
+  startTask,
+  pauseTask,
+  resumeTask,
+  setProgress,
+  completeTask
+} from '../services/api';
 import {
   Warning,
   Error,
@@ -28,7 +34,14 @@ import { normalizePathForOpen } from '../utils/filePathForOpen';
 import { glassCardSx, compactActionButtonSx } from '../theme/surfaces';
 import EmptyState from './ui/EmptyState';
 import { Assignment } from '@mui/icons-material';
-import TaskTitleTwoLines from './TaskTitleTwoLines';
+import TaskTitleTwoLines, { getTaskStatusLine } from './TaskTitleTwoLines';
+import TaskStatusCell from './taskTable/TaskStatusCell';
+import {
+  isInfoStatus,
+  isPendingApprovalCalendar,
+  STATUS_NO_ITEMS,
+  STATUS_PENDING_APPROVAL
+} from '../constants/taskStatuses';
 
 export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
   const { showError, showWarning } = useUiFeedback();
@@ -72,9 +85,14 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
     }
   };
 
-  const getBorderColor = (status, theme) => {
-    if (status === 1) return theme.palette.info.main;
-    if (status === 2) return theme.palette.warning.main;
+  const getBorderColor = (task, theme) => {
+    const text = getTaskStatusLine(task);
+    if (text === STATUS_PENDING_APPROVAL || isPendingApprovalCalendar(text)) {
+      return theme.palette.secondary.main;
+    }
+    if (text === STATUS_NO_ITEMS) return theme.palette.error.light;
+    if (task.status === 1) return theme.palette.info.main;
+    if (task.status === 2) return theme.palette.warning.main;
     return theme.palette.divider;
   };
 
@@ -83,14 +101,15 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
       {tasks.map((task) => {
         const risk = getRiskProps(task.riskLevel);
         const progressValue = Math.round((task.progress || 0) * 100);
-
+        const statusLabel = getTaskStatusLine(task);
+        const showInfoStatus = isInfoStatus(statusLabel);
         return (
           <Card
             key={task.id}
             sx={(theme) => ({
               ...glassCardSx,
               borderLeft: '4px solid',
-              borderLeftColor: getBorderColor(task.status, theme)
+              borderLeftColor: getBorderColor(task, theme)
             })}
           >
             <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -101,6 +120,9 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                   </IconButton>
                 </Tooltip>
                 <TaskTitleTwoLines task={task} sx={{ flex: 1, minWidth: 0 }} />
+                {showInfoStatus && (
+                  <TaskStatusCell statusText={statusLabel} label={statusLabel} />
+                )}
                 <Chip label={task.type} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
                 {risk && (
                   <Chip icon={risk.icon} label={risk.label} size="small" color={risk.color} sx={{ height: 22, fontSize: '0.7rem' }} />
@@ -129,8 +151,8 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                 sx={{ mb: 1.5, borderRadius: 1 }}
               />
 
-              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
-                {task.status === 0 && (
+              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
+                {task.status === 0 && !showInfoStatus && (
                   <Button
                     size="small"
                     variant="outlined"
@@ -142,7 +164,7 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                     Начал
                   </Button>
                 )}
-                {task.status === 1 && (
+                {task.status === 1 && !showInfoStatus && (
                   <>
                     <Button
                       size="small"
@@ -166,7 +188,7 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                     </Button>
                   </>
                 )}
-                {task.status === 2 && (
+                {task.status === 2 && !showInfoStatus && (
                   <>
                     <Button
                       size="small"
@@ -190,7 +212,7 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false }) {
                     </Button>
                   </>
                 )}
-                {task.status !== 3 && (
+                {!isInfoStatus(getTaskStatusLine(task)) && task.status !== 3 && (
                   <>
                     {[0.3, 0.6, 0.9].map((p) => (
                       <Button

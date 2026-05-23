@@ -1,18 +1,23 @@
 import { Box, Tooltip } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { tokens } from '../../theme/paletteTokens';
+import { hoverInteractiveSx } from '../../theme/motion';
 import { Restaurant } from '@mui/icons-material';
 import {
   CALENDAR_TOOLTIP_SX,
+  formatCalendarTaskTooltip,
   formatCalendarTime,
   getDuration,
   getLeft,
   getLunchBandPercent,
+  getNowMarkerPercent,
   getTimelineRange,
   getWidth,
-  getWorkColor
+  getWorkColor,
+  isSameCalendarDay
 } from '../../utils/calendarDayUtils';
 import TimelineHourAxis from './TimelineHourAxis';
+import TimelineGridLines from './TimelineGridLines';
 
 function LunchBreak({ range, opacity = 0.7 }) {
   const { left, width } = getLunchBandPercent(range);
@@ -50,94 +55,142 @@ export default function TimelineSegments({
   workSegments,
   idleSegments,
   isWorkingDay,
-  detailedTimeline = false
+  detailedTimeline = false,
+  dayDate = null,
+  clockMinute = null
 }) {
   const range = getTimelineRange(detailedTimeline);
   const trackHeight = detailedTimeline ? 48 : 36;
+  const axisBlockHeight = 26;
+
+  const now = new Date();
+  void clockMinute;
+  const nowLeft = detailedTimeline
+    && dayDate
+    && isSameCalendarDay(dayDate, now)
+    ? getNowMarkerPercent(now, range)
+    : null;
+
+  const track = (
+    <Box
+      sx={{
+        position: 'relative',
+        bgcolor: tokens.track,
+        height: trackHeight,
+        borderRadius: 2,
+        overflow: 'hidden',
+        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)',
+        zIndex: 1
+      }}
+    >
+      {detailedTimeline && (
+        <Box sx={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+          <TimelineGridLines range={range} />
+        </Box>
+      )}
+
+      {isWorkingDay && <LunchBreak range={range} />}
+
+      {workSegments.map((segment, idx) => {
+        const layer = segment.layer ?? 0;
+        const maxDepth = segment.maxDepth ?? 1;
+        const layerHeight = trackHeight / maxDepth;
+        const topPos = layer * layerHeight;
+        const segmentHeight = layerHeight - 1;
+
+        return (
+          <Tooltip
+            key={`work-${idx}`}
+            title={formatCalendarTaskTooltip(
+              segment,
+              `⏱ ${formatCalendarTime(segment.start)} - ${formatCalendarTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`
+            )}
+            arrow
+            placement="top"
+            slotProps={{ tooltip: { sx: CALENDAR_TOOLTIP_SX } }}
+          >
+            <Box
+              sx={{
+                position: 'absolute',
+                left: `${getLeft(segment.start, range)}%`,
+                width: `${getWidth(segment.start, segment.end, range)}%`,
+                height: `${segmentHeight}px`,
+                top: `${topPos}px`,
+                backgroundColor: getWorkColor(segment.taskId, segment.completed),
+                opacity: 0.85,
+                cursor: 'pointer',
+                ...hoverInteractiveSx,
+                borderRadius: '2px',
+                zIndex: 2,
+                '&:hover': { opacity: 1, filter: 'brightness(0.95)' }
+              }}
+            />
+          </Tooltip>
+        );
+      })}
+
+      {idleSegments.map((segment, idx) => {
+        const idleTop = trackHeight - 4;
+        const idleHeight = 4;
+        return (
+          <Tooltip
+            key={`idle-${idx}`}
+            title={`Простой\n⏱ ${formatCalendarTime(segment.start)} - ${formatCalendarTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`}
+            arrow
+            placement="top"
+            slotProps={{ tooltip: { sx: CALENDAR_TOOLTIP_SX } }}
+          >
+            <Box
+              sx={{
+                position: 'absolute',
+                left: `${getLeft(segment.start, range)}%`,
+                width: `${getWidth(segment.start, segment.end, range)}%`,
+                height: `${idleHeight}px`,
+                top: `${idleTop}px`,
+                backgroundColor: (theme) => alpha(theme.palette.secondary.light, 0.85),
+                opacity: 0.7,
+                cursor: 'pointer',
+                ...hoverInteractiveSx,
+                zIndex: 2,
+                '&:hover': { opacity: 0.9 }
+              }}
+            />
+          </Tooltip>
+        );
+      })}
+
+    </Box>
+  );
+
+  if (!detailedTimeline) {
+    return <Box sx={{ mb: 2 }}>{track}</Box>;
+  }
 
   return (
-    <Box sx={{ mb: detailedTimeline ? 0 : 2 }}>
+    <Box sx={{ position: 'relative', mb: 2 }}>
       <Box
         sx={{
-          position: 'relative',
-          bgcolor: tokens.track,
-          height: trackHeight,
-          borderRadius: 2,
-          overflow: 'hidden',
-          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)'
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: trackHeight + axisBlockHeight,
+          zIndex: 0,
+          pointerEvents: 'none'
         }}
       >
-        {isWorkingDay && <LunchBreak range={range} />}
-
-        {workSegments.map((segment, idx) => {
-          const layer = segment.layer ?? 0;
-          const maxDepth = segment.maxDepth ?? 1;
-          const layerHeight = trackHeight / maxDepth;
-          const topPos = layer * layerHeight;
-          const segmentHeight = layerHeight - 1;
-
-          return (
-            <Tooltip
-              key={`work-${idx}`}
-              title={`${segment.taskTitle || `Задача #${segment.taskId}`}\n⏱ ${formatCalendarTime(segment.start)} - ${formatCalendarTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`}
-              arrow
-              placement="top"
-              slotProps={{ tooltip: { sx: CALENDAR_TOOLTIP_SX } }}
-            >
-              <Box
-                sx={{
-                  position: 'absolute',
-                  left: `${getLeft(segment.start, range)}%`,
-                  width: `${getWidth(segment.start, segment.end, range)}%`,
-                  height: `${segmentHeight}px`,
-                  top: `${topPos}px`,
-                  backgroundColor: getWorkColor(segment.taskId, segment.completed),
-                  opacity: 0.85,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  borderRadius: '2px',
-                  zIndex: 2,
-                  '&:hover': { opacity: 1, filter: 'brightness(0.95)' }
-                }}
-              />
-            </Tooltip>
-          );
-        })}
-
-        {idleSegments.map((segment, idx) => {
-          const idleTop = trackHeight - 4;
-          const idleHeight = 4;
-          return (
-            <Tooltip
-              key={`idle-${idx}`}
-              title={`Простой\n⏱ ${formatCalendarTime(segment.start)} - ${formatCalendarTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`}
-              arrow
-              placement="top"
-              slotProps={{ tooltip: { sx: CALENDAR_TOOLTIP_SX } }}
-            >
-              <Box
-                sx={{
-                  position: 'absolute',
-                  left: `${getLeft(segment.start, range)}%`,
-                  width: `${getWidth(segment.start, segment.end, range)}%`,
-                  height: `${idleHeight}px`,
-                  top: `${idleTop}px`,
-                  backgroundColor: (theme) => alpha(theme.palette.secondary.light, 0.85),
-                  opacity: 0.7,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  zIndex: 1,
-                  '&:hover': { opacity: 0.9 }
-                }}
-              />
-            </Tooltip>
-          );
-        })}
+        <TimelineGridLines range={range} />
       </Box>
 
-      {detailedTimeline && (
-        <TimelineHourAxis startHour={range.start} endHour={range.end} />
-      )}
+      {track}
+
+      <Box sx={{ position: 'relative', zIndex: 1, mt: 0.5 }}>
+        <TimelineHourAxis
+          startHour={range.start}
+          endHour={range.end}
+          nowLeft={nowLeft}
+        />
+      </Box>
     </Box>
   );
 }

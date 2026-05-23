@@ -47,6 +47,10 @@ public class TaskTableService : ITaskTableService
 
         var parentIds = pageResult.Items.Select(p => p.Id).ToList();
         var childrenByParent = await _repo.GetSplitChildrenByParentIdsAsync(parentIds, cancellationToken);
+        var intervalsByTask = (await _repo.GetWorkIntervalsForTaskIdsAsync(parentIds, cancellationToken))
+            .GroupBy(i => i.ProductionTaskId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<WorkInterval>)g.ToList());
+        var now = _timeService.Now;
 
         var rows = pageResult.Items.Select(parent =>
         {
@@ -55,7 +59,10 @@ public class TaskTableService : ITaskTableService
                 parent,
                 children,
                 targetEmployeeName);
-            return TaskTableRowDto.FromParent(parent, statusText, hasSubtask, children);
+            intervalsByTask.TryGetValue(parent.Id, out var intervals);
+            intervals ??= Array.Empty<WorkInterval>();
+            return TaskTableRowDto.FromParent(
+                parent, statusText, hasSubtask, children, intervals, now);
         }).ToList();
 
         return new PaginatedResult<TaskTableRowDto>
@@ -72,16 +79,21 @@ public class TaskTableService : ITaskTableService
         string targetEmployeeName,
         CancellationToken cancellationToken = default)
     {
-        var task = await _repo.GetTaskByIdAsync(id, cancellationToken);
+        var task = await _repo.GetTaskByIdAsync(id, cancellationToken, includeIntervals: true);
         if (task == null)
             return null;
+
+        var now = _timeService.Now;
+        var intervals = (IReadOnlyList<WorkInterval>)(task.WorkIntervals ?? []);
 
         if (task.ParentRowNumber != null)
         {
             return TaskTableRowDto.FromParent(
                 task,
                 TaskStatusMapper.ToText(task.Status),
-                hasCurrentUserSubtask: false);
+                hasCurrentUserSubtask: false,
+                workIntervals: intervals,
+                now: now);
         }
 
         IReadOnlyList<ProductionTask>? children = null;
@@ -93,7 +105,8 @@ public class TaskTableService : ITaskTableService
             children ?? [],
             targetEmployeeName);
 
-        return TaskTableRowDto.FromParent(task, statusText, hasSubtask, children);
+        return TaskTableRowDto.FromParent(
+            task, statusText, hasSubtask, children, intervals, now);
     }
 
     public async Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(
@@ -215,10 +228,24 @@ public class TaskTableService : ITaskTableService
             var newStatus = TaskStatusMapper.FromText(request.StatusText);
             if (newStatus != task.Status)
             {
+                if (newStatus == JobStatus.Approved && task.Status != JobStatus.PendingApproval)
+                    return TaskTableServiceResult<ProductionTask>.Fail("Согласовано можно выставить только для задачи «Согласование».");
+                if (newStatus == JobStatus.InStock && task.Status != JobStatus.NoItems)
+                    return TaskTableServiceResult<ProductionTask>.Fail("«В наличии» можно выставить только для задачи «Нет изделий».");
+
                 if (newStatus == JobStatus.Completed && task.Status != JobStatus.Completed)
+                {
+                    if (TaskStatusMapper.IsEmployeeInfoStatus(task.Status))
+                    {
+                        task.Status = JobStatus.Assigned;
+                        await _repo.UpdateTaskAsync(task, cancellationToken);
+                    }
                     await _lifecycle.CompleteTaskAsync(task.Id, _timeService.Now, cancellationToken);
+                }
                 else
+                {
                     task.Status = newStatus;
+                }
 
                 statusChangedTo = newStatus.ToString();
             }

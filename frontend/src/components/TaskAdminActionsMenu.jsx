@@ -1,11 +1,35 @@
 import { useState } from 'react';
-import { IconButton, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
-import { MoreVert, Edit, Delete } from '@mui/icons-material';
+import {
+  IconButton,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Divider
+} from '@mui/material';
+import { MoreVert, Edit, Delete, TaskAlt, Inventory } from '@mui/icons-material';
 import { softIconButtonSx } from '../theme/surfaces';
+import {
+  STATUS_APPROVED,
+  STATUS_IN_STOCK,
+  STATUS_NO_ITEMS,
+  STATUS_PENDING_APPROVAL
+} from '../constants/taskStatuses';
 
-export default function TaskAdminActionsMenu({ onEdit, onDelete, disabled = false }) {
+export default function TaskAdminActionsMenu({
+  task,
+  onEdit,
+  onDelete,
+  onSetStatus,
+  disabled = false
+}) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
+
+  const status = task?.statusText || '';
+  const showApprove = status === STATUS_PENDING_APPROVAL && onSetStatus;
+  const showInStock = status === STATUS_NO_ITEMS && onSetStatus;
+  const showAdminBlock = showApprove || showInStock;
 
   const handleOpen = (event) => {
     event.stopPropagation();
@@ -17,6 +41,12 @@ export default function TaskAdminActionsMenu({ onEdit, onDelete, disabled = fals
   const run = (fn) => (event) => {
     event.stopPropagation();
     fn();
+    handleClose();
+  };
+
+  const runStatus = (statusText) => (event) => {
+    event.stopPropagation();
+    onSetStatus(task, statusText);
     handleClose();
   };
 
@@ -51,6 +81,23 @@ export default function TaskAdminActionsMenu({ onEdit, onDelete, disabled = fals
           </ListItemIcon>
           <ListItemText>Удалить</ListItemText>
         </MenuItem>
+        {showAdminBlock && <Divider sx={{ my: 0.5 }} />}
+        {showApprove && (
+          <MenuItem onClick={runStatus(STATUS_APPROVED)}>
+            <ListItemIcon>
+              <TaskAlt fontSize="small" color="success" />
+            </ListItemIcon>
+            <ListItemText>{STATUS_APPROVED}</ListItemText>
+          </MenuItem>
+        )}
+        {showInStock && (
+          <MenuItem onClick={runStatus(STATUS_IN_STOCK)}>
+            <ListItemIcon>
+              <Inventory fontSize="small" color="success" />
+            </ListItemIcon>
+            <ListItemText>{STATUS_IN_STOCK}</ListItemText>
+          </MenuItem>
+        )}
       </Menu>
     </>
   );

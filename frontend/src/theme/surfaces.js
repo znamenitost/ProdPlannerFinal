@@ -1,5 +1,6 @@
 import { alpha } from '@mui/material/styles';
 import { tokens } from './paletteTokens';
+import { cardHoverSx, iconButtonTintTransitionSx, panelHoverSx } from './motion';
 
 const { neutral } = tokens;
 
@@ -10,11 +11,12 @@ export const pageShellSx = {
   px: { xs: 1, sm: 0 }
 };
 
-/** Section panel */
+/** Section panel — hover через theme.transitions (см. theme/motion.js). */
 export const glassPaperSx = {
   p: { xs: 2, md: 3 },
   borderRadius: 3,
-  bgcolor: 'background.paper'
+  bgcolor: 'background.paper',
+  ...panelHoverSx
 };
 
 /** Nested card */
@@ -22,10 +24,7 @@ export const glassCardSx = {
   borderRadius: 2,
   bgcolor: neutral[50],
   border: `1px solid ${alpha(neutral[200], 0.95)}`,
-  transition: 'box-shadow 0.2s',
-  '&:hover': {
-    boxShadow: (theme) => `0 4px 16px ${alpha(theme.palette.primary.main, 0.08)}`
-  }
+  ...cardHoverSx
 };
 
 export const sectionHeaderSx = {
@@ -46,6 +45,7 @@ export const sectionTitleRowSx = {
 export const softIconButtonSx = (color = 'primary') => ({
   bgcolor: (theme) => alpha(theme.palette[color]?.main || theme.palette.primary.main, 0.1),
   color: `${color}.main`,
+  ...iconButtonTintTransitionSx,
   '&:hover': {
     bgcolor: (theme) => alpha(theme.palette[color]?.main || theme.palette.primary.main, 0.16)
   }
@@ -63,6 +63,9 @@ export const compactActionButtonSx = {
 export const childRowSx = {
   bgcolor: alpha(neutral[100], 0.7),
   '& td': { borderBottom: `1px solid ${alpha(neutral[200], 0.9)}` },
+  transition: (theme) => theme.transitions.create('background-color', {
+    duration: theme.transitions.duration.shorter
+  }),
   '&:hover': { bgcolor: alpha(neutral[200], 0.5) }
 };
 
@@ -86,10 +89,16 @@ export const highlightedTaskRowSx = (theme) => ({
   bgcolor: alpha(theme.palette.primary.light, 0.4),
   boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.35)}`,
   borderRadius: 1,
+  transition: theme.transitions.create('background-color', {
+    duration: theme.transitions.duration.shorter
+  }),
   '&:hover': { bgcolor: alpha(theme.palette.primary.light, 0.5) }
 });
 
 export const overdueTaskRowSx = (theme) => ({
   bgcolor: alpha(theme.palette.error.light, 0.35),
+  transition: theme.transitions.create('background-color', {
+    duration: theme.transitions.duration.shorter
+  }),
   '&:hover': { bgcolor: alpha(theme.palette.error.light, 0.45) }
 });

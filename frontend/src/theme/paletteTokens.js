@@ -22,6 +22,10 @@ export const tokens = {
   /** Task block hues (calendar) — muted blue family */
   work: ['#9BB5CE', '#A8C0D6', '#B5CBDE', '#8FAEC9', '#7E9FBA', '#9AAEC4'],
   workDone: '#A8C4B4',
+  /** Плановый блок «Согласование» в календаре */
+  pendingApproval: '#C9B8E0',
+  /** Плановый блок «Нет изделий» в календаре */
+  noItems: '#E8C9A8',
   lunch: '#F5EDD8',
   track: '#EEF1F6'
 };

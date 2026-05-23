@@ -1,5 +1,6 @@
 import { createTheme, alpha } from '@mui/material/styles';
 import { tokens, chrome } from './paletteTokens';
+import { createMuiTransition } from './motion';
 
 const { neutral, primary, secondary, success, warning, error, info } = tokens;
 
@@ -82,17 +83,27 @@ export const appTheme = createTheme({
     MuiCard: {
       defaultProps: { elevation: 0 },
       styleOverrides: {
-        root: {
+        root: ({ theme }) => ({
           backgroundImage: 'none',
           border: `1px solid ${borderSubtle}`,
-          boxShadow: `0 2px 12px ${alpha(neutral[600], 0.04)}`
-        }
+          boxShadow: `0 2px 12px ${alpha(neutral[600], 0.04)}`,
+          transition: createMuiTransition(theme, 'box-shadow')
+        })
       }
     },
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: {
-        root: { borderRadius: 10, padding: '6px 16px' },
+        root: ({ theme }) => ({
+          borderRadius: 10,
+          padding: '6px 16px',
+          transition: createMuiTransition(theme, [
+            'background-color',
+            'border-color',
+            'box-shadow',
+            'color'
+          ])
+        }),
         contained: {
           boxShadow: 'none',
           '&:hover': { boxShadow: `0 2px 8px ${alpha(primary.main, 0.2)}` }
@@ -111,16 +122,23 @@ export const appTheme = createTheme({
     },
     MuiIconButton: {
       styleOverrides: {
-        root: {
+        root: ({ theme }) => ({
           borderRadius: 10,
-          transition: 'background-color 0.2s',
+          transition: theme.transitions.create('background-color', {
+            duration: theme.transitions.duration.short,
+            easing: theme.transitions.easing.easeInOut
+          }),
           '&:hover': { backgroundColor: alpha(primary.main, 0.08) }
-        }
+        })
       }
     },
     MuiChip: {
       styleOverrides: {
-        root: { fontWeight: 500, borderRadius: 8 },
+        root: ({ theme }) => ({
+          fontWeight: 500,
+          borderRadius: 8,
+          transition: createMuiTransition(theme, ['background-color', 'border-color', 'box-shadow'])
+        }),
         filled: { border: `1px solid ${alpha(neutral[300], 0.5)}` },
         outlined: { borderColor: alpha(neutral[400], 0.45) }
       }
@@ -156,9 +174,12 @@ export const appTheme = createTheme({
     },
     MuiTableRow: {
       styleOverrides: {
-        root: {
+        root: ({ theme }) => ({
+          transition: createMuiTransition(theme, 'background-color', {
+            duration: theme.transitions.duration.shorter
+          }),
           '&:hover': { backgroundColor: alpha(primary.main, 0.03) }
-        }
+        })
       }
     },
     MuiTabs: {
@@ -176,15 +197,23 @@ export const appTheme = createTheme({
     },
     MuiTab: {
       styleOverrides: {
-        root: {
+        root: ({ theme }) => ({
           minHeight: 48,
           fontWeight: 500,
           color: neutral[500],
+          transition: createMuiTransition(theme, ['color', 'background-color']),
           '&.Mui-selected': {
             fontWeight: 600,
             color: primary.dark
           }
-        }
+        })
+      }
+    },
+    MuiToggleButton: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          transition: createMuiTransition(theme, ['background-color', 'color', 'border-color'])
+        })
       }
     },
     MuiDialog: {
@@ -240,12 +269,15 @@ export const appTheme = createTheme({
     },
     MuiMenuItem: {
       styleOverrides: {
-        root: {
+        root: ({ theme }) => ({
           borderRadius: 8,
           margin: '2px 6px',
           padding: '8px 12px',
+          transition: createMuiTransition(theme, 'background-color', {
+            duration: theme.transitions.duration.shorter
+          }),
           '&:hover': { backgroundColor: alpha(primary.main, 0.06) }
-        }
+        })
       }
     },
     MuiSnackbar: {

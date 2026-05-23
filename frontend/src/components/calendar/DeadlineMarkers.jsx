@@ -1,4 +1,5 @@
 import { Box, Tooltip } from '@mui/material';
+import { hoverInteractiveSx } from '../../theme/motion';
 import {
   CheckCircle,
   DoneAll,
@@ -116,7 +117,7 @@ export default function DeadlineMarkers({ deadlines, getTaskInfo, onTaskHover })
                 bgcolor: dl.status === 'Completed' ? 'success.main' : 'error.main',
                 borderRadius: 2,
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                ...hoverInteractiveSx,
                 '&:hover': { width: 6, boxShadow: (theme) => `0 0 6px ${theme.palette.grey[400]}` },
                 zIndex: 10
               }}

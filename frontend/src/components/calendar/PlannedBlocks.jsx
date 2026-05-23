@@ -1,10 +1,19 @@
 import { Box, Tooltip } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { Restaurant } from '@mui/icons-material';
-import { CALENDAR_TOOLTIP_SX } from '../../utils/calendarDayUtils';
+import {
+  CALENDAR_TOOLTIP_SX,
+  getLunchBandPercent,
+  formatCalendarTaskTooltip,
+  getPlannedBlockColor,
+  getTimelineRange
+} from '../../utils/calendarDayUtils';
 import { tokens } from '../../theme/paletteTokens';
+import { hoverInteractiveSx } from '../../theme/motion';
+import TimelineGridLines from './TimelineGridLines';
 
-function LunchBreak() {
+function LunchBreak({ range }) {
+  const { left, width } = getLunchBandPercent(range);
   return (
     <Tooltip
       title={(
@@ -19,8 +28,8 @@ function LunchBreak() {
       <Box
         sx={{
           position: 'absolute',
-          left: '44.444%',
-          width: '11.111%',
+          left: `${left}%`,
+          width: `${width}%`,
           height: '100%',
           top: 0,
           backgroundColor: tokens.lunch,
@@ -35,7 +44,14 @@ function LunchBreak() {
   );
 }
 
-export default function PlannedBlocks({ taskBlocks, isWorkingDay, isHighlighted }) {
+export default function PlannedBlocks({
+  taskBlocks,
+  isWorkingDay,
+  isHighlighted,
+  detailedTimeline = false
+}) {
+  const range = getTimelineRange(detailedTimeline);
+
   return (
     <Box
       sx={{
@@ -48,14 +64,20 @@ export default function PlannedBlocks({ taskBlocks, isWorkingDay, isHighlighted 
         boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)'
       }}
     >
+      {detailedTimeline && (
+        <Box sx={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+          <TimelineGridLines range={range} />
+        </Box>
+      )}
       {taskBlocks?.map((block, idx) => {
         const highlighted = isHighlighted(block);
         const isFirst = idx === 0;
         const isLast = idx === taskBlocks.length - 1;
+        const statusColor = getPlannedBlockColor(block);
         return (
           <Tooltip
             key={idx}
-            title={`${block.fullTitle || block.title}: ${block.hours.toFixed(1)} ч`}
+            title={formatCalendarTaskTooltip(block, `${block.hours.toFixed(1)} ч`)}
             arrow
             placement="top"
             slotProps={{ tooltip: { sx: CALENDAR_TOOLTIP_SX } }}
@@ -67,10 +89,13 @@ export default function PlannedBlocks({ taskBlocks, isWorkingDay, isHighlighted 
                 width: `${block.widthPercent}%`,
                 height: '100%',
                 top: 0,
-                backgroundColor: (theme) => highlighted ? theme.palette.warning.main : theme.palette.primary.main,
+                backgroundColor: (theme) => {
+                  if (statusColor) return statusColor;
+                  return highlighted ? theme.palette.warning.main : theme.palette.primary.main;
+                },
                 opacity: highlighted ? 0.95 : 0.85,
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                ...hoverInteractiveSx,
                 borderRight: idx !== taskBlocks.length - 1 ? '1px solid rgba(255,255,255,0.3)' : 'none',
                 borderTopLeftRadius: isFirst ? 2 : 0,
                 borderBottomLeftRadius: isFirst ? 2 : 0,
@@ -83,7 +108,7 @@ export default function PlannedBlocks({ taskBlocks, isWorkingDay, isHighlighted 
           </Tooltip>
         );
       })}
-      {isWorkingDay && <LunchBreak />}
+      {isWorkingDay && <LunchBreak range={range} />}
       {taskBlocks?.map((block, idx) => {
         const highlighted = isHighlighted(block);
         return (

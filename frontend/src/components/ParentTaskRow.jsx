@@ -25,6 +25,7 @@ import TaskStatusCell from './taskTable/TaskStatusCell';
 import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionsMenu from './TaskAdminActionsMenu';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
+import TaskPlannedTimeBar from './taskTable/TaskPlannedTimeBar';
 import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import { alpha } from '@mui/material/styles';
 import { highlightedTaskRowSx, overdueTaskRowSx } from '../theme/surfaces';
@@ -53,6 +54,7 @@ function ParentTaskRow({
   onPause,
   onResume,
   onComplete,
+  onSetStatus,
   pendingLifecycleTaskId = null,
   onEdit,
   onDelete,
@@ -130,7 +132,7 @@ function ParentTaskRow({
 
   return (
     <Fragment>
-      <TableRow sx={(theme) => getRowStyle(theme)}>
+      <TableRow sx={(theme) => ({ ...getRowStyle(theme), position: 'relative' })}>
         {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}
         <TableCell sx={COL_ICON}>
           <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', width: '100%' }}>
@@ -207,8 +209,10 @@ function ParentTaskRow({
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', alignItems: 'center', justifyContent: 'flex-start' }}>
             {canEdit && canDelete && (
               <TaskAdminActionsMenu
+                task={task}
                 onEdit={() => onEdit(task.id)}
                 onDelete={() => onDelete(task.id)}
+                onSetStatus={onSetStatus}
               />
             )}
             {showActionButtons && (
@@ -219,10 +223,12 @@ function ParentTaskRow({
                 onPause={onPause}
                 onResume={onResume}
                 onComplete={onComplete}
+                onSetStatus={onSetStatus}
               />
             )}
           </Box>
         </TableCell>
+        <TaskPlannedTimeBar task={task} hideForSplitParent={hasChildren} />
       </TableRow>
 
       {hasChildren && isExpanded && (childrenTasks || []).map((child) => (
@@ -234,6 +240,7 @@ function ParentTaskRow({
           onPause={onPause}
           onResume={onResume}
           onComplete={onComplete}
+          onSetStatus={onSetStatus}
           pendingLifecycleTaskId={pendingLifecycleTaskId}
           onOpenComment={onOpenComment}
           canChangeStatus={canChangeStatus}

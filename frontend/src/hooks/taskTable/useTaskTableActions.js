@@ -159,6 +159,31 @@ export default function useTaskTableActions({
     [api.completeTask, runLifecycleAction]
   );
 
+  const handleSetStatus = useCallback(async (row, statusText) => {
+    if (pendingLifecycleTaskId === row.id) return;
+
+    setPendingLifecycleTaskId(row.id);
+    try {
+      await api.updateRow(row.id, {
+        folderPath: row.folderPath,
+        fileName: row.fileName,
+        comment: row.comment,
+        deadline: row.deadline,
+        estimateHours: row.estimateHours,
+        type: row.type,
+        employeeName: row.employeeName,
+        parentRowNumber: row.parentRowNumber,
+        statusText
+      });
+      await syncRowFromServer(row);
+    } catch (err) {
+      console.error(err);
+      showError(err.message || 'Не удалось изменить статус задачи');
+    } finally {
+      setPendingLifecycleTaskId(null);
+    }
+  }, [api, pendingLifecycleTaskId, syncRowFromServer, showError]);
+
   const handleDeleteRow = useCallback(async (id) => {
     const confirmed = await confirm({
       title: 'Удалить задачу?',
@@ -205,6 +230,7 @@ export default function useTaskTableActions({
     handlePauseTask,
     handleResumeTask,
     handleCompleteTask,
+    handleSetStatus,
     handleDeleteRow,
     handleAddNewRow,
     handleEditRow

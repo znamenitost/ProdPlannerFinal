@@ -189,7 +189,7 @@ export default function CompletedTasksList({ employee, refresh }) {
                       <TaskTitleTwoLines
                         task={task}
                         headingVariant="body2"
-                        fileVariant="caption"
+                        statusVariant="caption"
                         headingSx={{ fontWeight: 500 }}
                         sx={{ flex: 1, minWidth: 0 }}
                       />

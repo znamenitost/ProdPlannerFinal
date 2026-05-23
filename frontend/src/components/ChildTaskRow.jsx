@@ -22,6 +22,7 @@ import TaskHoursCell from './taskTable/TaskHoursCell';
 import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
+import TaskPlannedTimeBar from './taskTable/TaskPlannedTimeBar';
 import { childRowSx } from '../theme/surfaces';
 
 function ChildTaskRow({
@@ -31,6 +32,7 @@ function ChildTaskRow({
   onPause,
   onResume,
   onComplete,
+  onSetStatus,
   pendingLifecycleTaskId = null,
   onOpenComment,
   canChangeStatus,
@@ -57,6 +59,7 @@ function ChildTaskRow({
   const getRowStyle = () => {
     let style = {
       ...childRowSx,
+      position: 'relative',
       '&:hover': { bgcolor: 'action.hover' }
     };
     let bgColor;
@@ -148,9 +151,11 @@ function ChildTaskRow({
             onPause={onPause}
             onResume={onResume}
             onComplete={onComplete}
+            onSetStatus={onSetStatus}
           />
         )}
       </TableCell>
+      <TaskPlannedTimeBar task={task} />
     </TableRow>
   );
 }

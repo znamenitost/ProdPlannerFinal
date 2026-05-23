@@ -1,9 +1,11 @@
 import { Box, Typography } from '@mui/material';
+import { positionLeftTransitionSx } from '../../theme/motion';
 import { DETAIL_AXIS_END_HOUR, DETAIL_AXIS_START_HOUR } from '../../utils/calendarDayUtils';
 
 export default function TimelineHourAxis({
   startHour = DETAIL_AXIS_START_HOUR,
-  endHour = DETAIL_AXIS_END_HOUR
+  endHour = DETAIL_AXIS_END_HOUR,
+  nowLeft = null
 }) {
   const hours = [];
   for (let h = startHour; h <= endHour; h += 1) {
@@ -42,6 +44,25 @@ export default function TimelineHourAxis({
           </Typography>
         );
       })}
+      {nowLeft != null && (
+        <Box
+          sx={{
+            position: 'absolute',
+            left: `${nowLeft}%`,
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            bgcolor: 'error.main',
+            border: '2px solid',
+            borderColor: 'background.paper',
+            boxShadow: (theme) => `0 0 0 1px ${theme.palette.error.main}`,
+            zIndex: 2,
+            ...positionLeftTransitionSx
+          }}
+        />
+      )}
     </Box>
   );
 }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
+using ProductionPlanner.Models.Dtos;
 using ProductionPlanner.Services.TaskTable;
 using ProductionPlanner.Data;
 
@@ -15,12 +16,18 @@ namespace ProductionPlanner.Controllers
     {
         private readonly ITaskSplitService _splitService;
         private readonly IProductionTaskRepository _repo;
+        private readonly IAppTimeService _timeService;
         private readonly UserManager<User> _userManager;
 
-        public TaskSplitController(ITaskSplitService splitService, IProductionTaskRepository repo, UserManager<User> userManager)
+        public TaskSplitController(
+            ITaskSplitService splitService,
+            IProductionTaskRepository repo,
+            IAppTimeService timeService,
+            UserManager<User> userManager)
         {
             _splitService = splitService;
             _repo = repo;
+            _timeService = timeService;
             _userManager = userManager;
         }
 
@@ -88,26 +95,42 @@ namespace ProductionPlanner.Controllers
             if (currentUser == null) return Unauthorized();
 
             var children = await _splitService.GetChildTasksAsync(parentRowNumber, cancellationToken);
+            var childIds = children.Select(c => c.Id).ToList();
+            var intervalsByTask = (await _repo.GetWorkIntervalsForTaskIdsAsync(childIds, cancellationToken))
+                .GroupBy(i => i.ProductionTaskId)
+                .ToDictionary(g => g.Key, g => g.ToList());
 
-            var result = children.Select(c => new
+            var result = children.Select(c =>
             {
-                c.Id,
-                c.DisplayOrder,
-                c.FolderPath,
-                c.FileName,
-                c.Comment,
-                StatusText = TaskStatusMapper.ToText(c.Status),
-                Status = c.Status.ToString(),
-                c.Deadline,
-                c.EstimateHours,
-                c.ActualHours,
-                c.Type,
-                c.EmployeeName,
-                c.CreatedAt,
-                c.UpdatedAt,
-                c.ParentRowNumber,
-                c.IsSplitTask,
-                c.Progress
+                intervalsByTask.TryGetValue(c.Id, out var intervals);
+                intervals ??= [];
+                var workIntervals = intervals.Select(WorkIntervalDto.FromEntity).ToList();
+                return new
+                {
+                    c.Id,
+                    c.DisplayOrder,
+                    c.FolderPath,
+                    c.FileName,
+                    c.Comment,
+                    StatusText = TaskStatusMapper.ToText(c.Status),
+                    Status = c.Status.ToString(),
+                    c.Deadline,
+                    c.EstimateHours,
+                    c.ActualHours,
+                    c.Type,
+                    c.EmployeeName,
+                    c.CreatedAt,
+                    c.UpdatedAt,
+                    c.ParentRowNumber,
+                    c.IsSplitTask,
+                    c.Progress,
+                    workIntervals,
+                    showPlannedTimeProgress = PlannedTimeProgressCalculator.ShouldShow(c, intervals),
+                    plannedTimeProgress = PlannedTimeProgressCalculator.GetPercent(
+                        c,
+                        intervals,
+                        _timeService.Now)
+                };
             });
             return Ok(result);
         }

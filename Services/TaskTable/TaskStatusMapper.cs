@@ -10,6 +10,10 @@ public static class TaskStatusMapper
         JobStatus.InProgress => "Начал",
         JobStatus.Paused => "Пауза",
         JobStatus.Completed => "Готово",
+        JobStatus.PendingApproval => "Согласование",
+        JobStatus.NoItems => "Нет изделий",
+        JobStatus.Approved => "Согласовано",
+        JobStatus.InStock => "В наличии",
         _ => ""
     };
 
@@ -19,7 +23,22 @@ public static class TaskStatusMapper
         "Начал" => JobStatus.InProgress,
         "Пауза" => JobStatus.Paused,
         "Назначена" => JobStatus.Assigned,
+        "Согласование" => JobStatus.PendingApproval,
+        "На согласовании" => JobStatus.PendingApproval,
+        "Нет изделий" => JobStatus.NoItems,
+        "Согласовано" => JobStatus.Approved,
+        "В наличии" => JobStatus.InStock,
         "" => JobStatus.Assigned,
         _ => JobStatus.Assigned
     };
+
+    public static bool IsEmployeeInfoStatus(JobStatus status) =>
+        status is JobStatus.PendingApproval or JobStatus.NoItems;
+
+    public static bool IsCalendarPendingHighlight(JobStatus status) =>
+        status == JobStatus.PendingApproval;
+
+    public static bool UsesNormalCalendarColor(JobStatus status) =>
+        status is JobStatus.Approved or JobStatus.InStock or JobStatus.Assigned
+            or JobStatus.InProgress or JobStatus.Paused or JobStatus.Completed;
 }
