@@ -2,6 +2,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LOCAL_K6="$ROOT/.tools/k6/k6"
+if [[ -x "$LOCAL_K6" ]]; then
+  export PATH="$(dirname "$LOCAL_K6"):$PATH"
+fi
+
 SCENARIO="${1:-full-stack}"
 MODE="${2:-}"
 

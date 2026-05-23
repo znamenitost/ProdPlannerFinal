@@ -13,4 +13,5 @@ node_modules/
 frontend/dist/
 loadtests/results*.json
 loadtests/summary*.html
+.tools/
 .DS_Store
