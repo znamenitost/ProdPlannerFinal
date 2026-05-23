@@ -61,7 +61,7 @@ export default function useNotificationsHub(user, handlers = {}) {
       }
       h.onActiveTasksRefresh?.();
       if (!tableHandled) {
-        h.onCalendarRefresh?.();
+        h.onCalendarRefresh?.(event);
       }
     }, 300);
   }, []);

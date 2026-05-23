@@ -1,45 +1,61 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import useTaskTableQuery from '../queries/useTaskTableQuery';
+import { queryKeys } from '../../lib/queryKeys';
 
-export default function useTaskTableRows(api, { refreshTrigger, selectedEmployeeForHighlight, onCalendarRefresh }) {
-  const [rows, setRows] = useState([]);
-  const [totalCount, setTotalCount] = useState(0);
+export default function useTaskTableRows(api, { selectedEmployeeForHighlight, onCalendarRefresh }) {
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
   const [editingId, setEditingId] = useState(null);
   const [newRow, setNewRow] = useState(null);
   const [highlightMyTasks, setHighlightMyTasks] = useState(false);
 
-  const loadRows = useCallback(async () => {
-    try {
-      const result = await api.loadRows(page + 1, rowsPerPage, selectedEmployeeForHighlight || '');
-      setRows(result.items);
-      setTotalCount(result.totalCount);
-    } catch (err) {
-      console.error('Ошибка загрузки задач:', err);
-    }
-  }, [api, page, rowsPerPage, selectedEmployeeForHighlight]);
+  const employeeFilter = selectedEmployeeForHighlight || '';
 
-  useEffect(() => {
-    loadRows();
-  }, [refreshTrigger, page, rowsPerPage, selectedEmployeeForHighlight, loadRows]);
+  const { data, refetch, dataUpdatedAt } = useTaskTableQuery(
+    api,
+    page,
+    rowsPerPage,
+    employeeFilter
+  );
+
+  const rows = data?.items ?? [];
+  const totalCount = data?.totalCount ?? 0;
 
   const refresh = useCallback(async () => {
-    await loadRows();
+    await refetch();
     onCalendarRefresh?.();
-  }, [loadRows, onCalendarRefresh]);
+  }, [refetch, onCalendarRefresh]);
 
-  const patchRow = useCallback((id, patch) => {
-    setRows((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, ...patch } : row))
-    );
-  }, []);
+  const patchRow = useCallback(
+    (id, patch) => {
+      queryClient.setQueriesData({ queryKey: queryKeys.taskTableAll() }, (old) => {
+        if (!old?.items?.some((row) => row.id === id)) return old;
+        return {
+          ...old,
+          items: old.items.map((row) => (row.id === id ? { ...row, ...patch } : row))
+        };
+      });
+    },
+    [queryClient]
+  );
 
-  const removeRow = useCallback((id) => {
-    setRows((prev) => prev.filter((row) => row.id !== id));
-    setTotalCount((count) => Math.max(0, count - 1));
-  }, []);
+  const removeRow = useCallback(
+    (id) => {
+      queryClient.setQueriesData({ queryKey: queryKeys.taskTableAll() }, (old) => {
+        if (!old?.items?.some((row) => row.id === id)) return old;
+        return {
+          ...old,
+          items: old.items.filter((row) => row.id !== id),
+          totalCount: Math.max(0, (old.totalCount ?? 0) - 1)
+        };
+      });
+    },
+    [queryClient]
+  );
 
-  const toggleHighlight = () => setHighlightMyTasks(prev => !prev);
+  const toggleHighlight = () => setHighlightMyTasks((prev) => !prev);
   const handleChangePage = (_event, newPage) => setPage(newPage);
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
@@ -60,8 +76,8 @@ export default function useTaskTableRows(api, { refreshTrigger, selectedEmployee
     handleChangePage,
     handleChangeRowsPerPage,
     refresh,
-    loadRows,
     patchRow,
-    removeRow
+    removeRow,
+    tableDataUpdatedAt: dataUpdatedAt
   };
 }

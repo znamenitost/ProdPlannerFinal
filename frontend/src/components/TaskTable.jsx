@@ -15,7 +15,6 @@ import CommentDialog from './CommentDialog';
 import useTaskTableController from '../hooks/taskTable/useTaskTableController';
 
 export default function TaskTable({
-  refreshTrigger,
   onCalendarRefresh,
   onRegisterHubHandler,
   userRole,
@@ -24,7 +23,6 @@ export default function TaskTable({
 }) {
   const isAdmin = userRole === 'Admin';
   const table = useTaskTableController({
-    refreshTrigger,
     onCalendarRefresh,
     onRegisterHubHandler,
     selectedEmployeeForHighlight
@@ -96,17 +94,16 @@ export default function TaskTable({
         </Table>
       </TableContainer>
 
-      {isAdmin && (
-        <TablePagination
-          rowsPerPageOptions={[25, 50, 100]}
-          component="div"
-          count={table.totalCount}
-          rowsPerPage={table.rowsPerPage}
-          page={table.page}
-          onPageChange={table.handleChangePage}
-          onRowsPerPageChange={table.handleChangeRowsPerPage}
-        />
-      )}
+      <TablePagination
+        rowsPerPageOptions={isAdmin ? [25, 50, 100] : []}
+        component="div"
+        count={table.totalCount}
+        rowsPerPage={table.rowsPerPage}
+        page={table.page}
+        onPageChange={table.handleChangePage}
+        onRowsPerPageChange={isAdmin ? table.handleChangeRowsPerPage : undefined}
+        labelRowsPerPage=""
+      />
 
       <CommentDialog
         open={table.commentDialogOpen}

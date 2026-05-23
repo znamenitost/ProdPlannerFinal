@@ -1,5 +1,3 @@
-using ProductionPlanner.Models;
-
 namespace ProductionPlanner.Models.Dtos;
 
 public class WorkIntervalDto

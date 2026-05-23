@@ -16,8 +16,7 @@ export default function DayColumn({
   allDays,
   highlightedTaskId,
   onTaskHover,
-  detailedTimeline = false,
-  clockMinute = null
+  detailedTimeline = false
 }) {
   const date = new Date(day.date);
   const isWorkingDay = isWorkingWeekday(date);
@@ -53,7 +52,6 @@ export default function DayColumn({
         isWorkingDay={isWorkingDay}
         detailedTimeline={detailedTimeline}
         dayDate={day.date}
-        clockMinute={clockMinute}
       />
     </Paper>
   );

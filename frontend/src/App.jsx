@@ -34,6 +34,7 @@ import {
 } from '@mui/icons-material';
 import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
+import DeadlineWarnings from './components/DeadlineWarnings';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
 import DebugPanel from './components/DebugPanel';
@@ -41,7 +42,10 @@ import TaskTable from './components/TaskTable';
 import LoginForm from './components/LoginForm';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
 import { LoadingState } from './components/LoadingState';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { UiFeedbackProvider, useUiFeedback } from './context/UiFeedbackContext';
+import { ClockProvider } from './context/ClockContext';
+import { queryClient } from './lib/queryClient';
 import useActiveTasksRefresh from './hooks/useActiveTasksRefresh';
 import useAuth from './hooks/useAuth';
 import useNotificationsHub from './hooks/useNotificationsHub';
@@ -58,10 +62,9 @@ function AppContent() {
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [avatarKey, setAvatarKey] = useState(Date.now());
   const {
-    activeTasks,
-    refresh,
     refreshActiveTasks,
     refreshCalendar,
+    refreshTable,
     refreshAll
   } = useActiveTasksRefresh(user, employee);
 
@@ -80,14 +83,25 @@ function AppContent() {
     [activeTab]
   );
 
+  const handleHubSideRefresh = useCallback((event) => {
+    if (activeTab === 1) {
+      // Задача не на экране — полная перезагрузка таблицы не нужна
+      if (!event?.taskId) {
+        refreshTable();
+      }
+    } else {
+      refreshCalendar();
+    }
+  }, [activeTab, refreshTable, refreshCalendar]);
+
   const notificationHandlers = useMemo(
     () => ({
       onTaskEvent: handleHubTaskEvent,
       onActiveTasksRefresh: refreshActiveTasks,
-      onCalendarRefresh: refreshCalendar,
+      onCalendarRefresh: handleHubSideRefresh,
       onFullRefresh: refreshAll
     }),
-    [handleHubTaskEvent, refreshActiveTasks, refreshCalendar, refreshAll]
+    [handleHubTaskEvent, refreshActiveTasks, handleHubSideRefresh, refreshAll]
   );
 
   const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers);
@@ -258,15 +272,15 @@ function AppContent() {
           <MotionSwitch transitionKey={activeTab}>
             {activeTab === 0 ? (
               <>
-                <WeekCalendar employee={employee} refresh={refresh} />
+                <WeekCalendar employee={employee} />
+                <DeadlineWarnings employee={employee} />
                 <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
-                  <ActiveTasksList tasks={activeTasks} onUpdate={refreshCalendar} embedded employee={employee} />
+                  <ActiveTasksList onUpdate={refreshCalendar} embedded employee={employee} />
                 </SectionCard>
-                <CompletedTasksList employee={employee} refresh={refresh} />
+                <CompletedTasksList employee={employee} />
               </>
             ) : (
               <TaskTable
-                refreshTrigger={refresh}
                 onCalendarRefresh={refreshCalendar}
                 onRegisterHubHandler={registerTableHubHandler}
                 userRole={user?.role}
@@ -276,7 +290,7 @@ function AppContent() {
             )}
           </MotionSwitch>
 
-          {import.meta.env.DEV && isAdmin && (
+          {isAdmin && (
             <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />
           )}
         </Container>
@@ -333,9 +347,13 @@ function App() {
   return (
     <ThemeProvider theme={appTheme}>
       <CssBaseline />
+      <QueryClientProvider client={queryClient}>
         <UiFeedbackProvider>
-          <AppContent />
+          <ClockProvider>
+            <AppContent />
+          </ClockProvider>
         </UiFeedbackProvider>
+      </QueryClientProvider>
     </ThemeProvider>
   );
 }

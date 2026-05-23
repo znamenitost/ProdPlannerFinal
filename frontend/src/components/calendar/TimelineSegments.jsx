@@ -18,6 +18,7 @@ import {
 } from '../../utils/calendarDayUtils';
 import TimelineHourAxis from './TimelineHourAxis';
 import TimelineGridLines from './TimelineGridLines';
+import { useClockMinuteTick } from '../../context/ClockContext';
 
 function LunchBreak({ range, opacity = 0.7 }) {
   const { left, width } = getLunchBandPercent(range);
@@ -56,20 +57,18 @@ export default function TimelineSegments({
   idleSegments,
   isWorkingDay,
   detailedTimeline = false,
-  dayDate = null,
-  clockMinute = null
+  dayDate = null
 }) {
   const range = getTimelineRange(detailedTimeline);
   const trackHeight = detailedTimeline ? 48 : 36;
   const axisBlockHeight = 26;
 
+  const isToday =
+    detailedTimeline && dayDate && isSameCalendarDay(dayDate, new Date());
+  useClockMinuteTick(isToday);
+
   const now = new Date();
-  void clockMinute;
-  const nowLeft = detailedTimeline
-    && dayDate
-    && isSameCalendarDay(dayDate, now)
-    ? getNowMarkerPercent(now, range)
-    : null;
+  const nowLeft = isToday ? getNowMarkerPercent(now, range) : null;
 
   const track = (
     <Box

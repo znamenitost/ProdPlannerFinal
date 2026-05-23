@@ -62,7 +62,7 @@ export const getStatusIcon = (status) => {
 // Иконка типа
 export const getTypeIcon = (type) => {
   if (type?.includes('Резка')) return 'Build';
-  if (type?.includes('УФ печать')) return 'Print';
+  if (type?.includes('УФ')) return 'Print';
   return null;
 };
 

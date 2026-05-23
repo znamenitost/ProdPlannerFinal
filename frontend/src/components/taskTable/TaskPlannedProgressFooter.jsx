@@ -1,24 +1,20 @@
-import { useMemo } from 'react';
 import { TableRow, TableCell, LinearProgress } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import useClockMinute from '../../hooks/useClockMinute';
-import {
-  getPlannedTimeProgress,
-  shouldShowPlannedTimeBar
-} from '../../utils/plannedTimeProgress';
 
-/** Отдельная строка под задачей — тонкий плановый прогресс по времени. */
 export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitParent = false }) {
-  const tick = useClockMinute(true);
+  const show =
+    task.showPlannedTimeProgress ??
+    task.ShowPlannedTimeProgress ??
+    false;
 
-  const percent = useMemo(
-    () => getPlannedTimeProgress(task),
-    [task, tick]
-  );
-
-  if (hideForSplitParent || !shouldShowPlannedTimeBar(task)) {
+  if (hideForSplitParent || !show) {
     return null;
   }
+
+  const percent = Math.min(
+    100,
+    Math.max(0, task.plannedTimeProgress ?? task.PlannedTimeProgress ?? 0)
+  );
 
   return (
     <TableRow>

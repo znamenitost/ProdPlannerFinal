@@ -1,6 +1,6 @@
 import { STATUS_COMPLETED } from '../constants/taskStatuses';
-import { getWorkHoursBetween } from './workHours';
 
+/** PascalCase / camelCase из API. */
 export function getTaskPlannedFields(task) {
   if (!task) return {};
   const status = task.status ?? task.Status;
@@ -9,24 +9,13 @@ export function getTaskPlannedFields(task) {
     status,
     statusText: task.statusText ?? task.StatusText ?? '',
     estimateHours: task.estimateHours ?? task.EstimateHours,
-    workIntervals: task.workIntervals ?? task.WorkIntervals ?? [],
-    plannedTimeProgress: task.plannedTimeProgress ?? task.PlannedTimeProgress
+    workIntervals: task.workIntervals ?? task.WorkIntervals ?? []
   };
 }
 
 function parseDate(value) {
-  if (value == null) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function getIntervalStart(interval) {
-  return interval?.startTime ?? interval?.StartTime ?? null;
-}
-
-function getIntervalEnd(interval) {
-  const v = interval?.endTime ?? interval?.EndTime;
-  return v == null || v === '' ? null : v;
 }
 
 export function hasWorkStarted(task) {
@@ -47,20 +36,18 @@ export function hasWorkStarted(task) {
 
 export function getElapsedWorkHours(task, now = new Date()) {
   const intervals = getTaskPlannedFields(task).workIntervals || [];
-  let total = 0;
-
+  let totalMs = 0;
   for (const interval of intervals) {
-    const start = parseDate(getIntervalStart(interval));
+    const start = parseDate(interval.startTime);
     if (!start) continue;
-    const endRaw = getIntervalEnd(interval);
-    const end = endRaw ? parseDate(endRaw) : now;
-    if (!end) continue;
-    total += getWorkHoursBetween(start, end);
+    const end = interval.endTime ? parseDate(interval.endTime) : now;
+    if (!end || end <= start) continue;
+    totalMs += end - start;
   }
-
-  return total;
+  return totalMs / (1000 * 60 * 60);
 }
 
+/** Плановый %: отработано / выделено (0–100). */
 export function getPlannedTimeProgress(task, now = new Date()) {
   const t = getTaskPlannedFields(task);
   const estimate = Number(t.estimateHours);
@@ -69,14 +56,7 @@ export function getPlannedTimeProgress(task, now = new Date()) {
   if (!hasWorkStarted(t)) return 0;
 
   const elapsed = getElapsedWorkHours(t, now);
-  if (elapsed > 0) {
-    return Math.min(100, Math.round((elapsed / estimate) * 100));
-  }
-
-  const server = Number(t.plannedTimeProgress);
-  if (Number.isFinite(server) && server > 0) return Math.min(100, server);
-
-  return 0;
+  return Math.min(100, Math.round((elapsed / estimate) * 100));
 }
 
 export function shouldShowPlannedTimeBar(task) {

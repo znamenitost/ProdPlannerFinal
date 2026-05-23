@@ -35,33 +35,54 @@ export function needsAdminResolution(statusText) {
 }
 
 export function getInfoStatusResolveTarget(statusText) {
-  if (statusText === STATUS_PENDING_APPROVAL || statusText === 'На согласовании') {
+  const text = normalizeStatusText(statusText);
+  if (text === STATUS_PENDING_APPROVAL) {
     return STATUS_APPROVED;
   }
-  if (statusText === STATUS_NO_ITEMS) {
+  if (text === STATUS_NO_ITEMS) {
     return STATUS_IN_STOCK;
   }
   return null;
 }
 
 export function getInfoStatusConfirmOptions(statusText) {
-  if (statusText === STATUS_PENDING_APPROVAL || statusText === 'На согласовании') {
+  const text = normalizeStatusText(statusText);
+  if (text === STATUS_PENDING_APPROVAL) {
     return {
-      title: 'Согласование',
-      message: 'Задача на согласовании. Задача действительно согласована?',
-      confirmLabel: 'Да, согласована',
+      title: 'Подтверждение',
+      message: 'Действительно подтверждаете? Статус задачи: «Согласование».',
+      confirmLabel: 'Подтвердить',
       confirmColor: 'primary'
     };
   }
-  if (statusText === STATUS_NO_ITEMS) {
+  if (text === STATUS_NO_ITEMS) {
     return {
-      title: 'Нет изделий',
-      message: 'Задача без изделий. Материал действительно в наличии?',
-      confirmLabel: 'Да, в наличии',
+      title: 'Подтверждение',
+      message: 'Действительно подтверждаете? Статус задачи: «Нет изделий».',
+      confirmLabel: 'Подтвердить',
       confirmColor: 'primary'
     };
   }
   return null;
+}
+
+/**
+ * Пункты меню инфостатусов:
+ * — в «Согласование» / «Нет изделий» показываем «Согласовано» / «В наличии»;
+ * — иначе — установку «Согласование» и «Нет изделий».
+ */
+export function getInfoMenuItems(statusText) {
+  const text = normalizeStatusText(statusText);
+  if (text === STATUS_PENDING_APPROVAL) {
+    return [{ label: STATUS_APPROVED, statusText: STATUS_APPROVED, kind: 'approved' }];
+  }
+  if (text === STATUS_NO_ITEMS) {
+    return [{ label: STATUS_IN_STOCK, statusText: STATUS_IN_STOCK, kind: 'inStock' }];
+  }
+  return [
+    { label: STATUS_PENDING_APPROVAL, statusText: STATUS_PENDING_APPROVAL, kind: 'pending' },
+    { label: STATUS_NO_ITEMS, statusText: STATUS_NO_ITEMS, kind: 'noItems' }
+  ];
 }
 
 /** Статусы, с которых можно нажать «Начал» без подтверждения. */

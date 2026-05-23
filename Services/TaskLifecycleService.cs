@@ -225,6 +225,8 @@ public class TaskLifecycleService : ITaskLifecycleService
         {
             await _repo.ExecuteInTransactionAsync(async ct =>
             {
+                await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
+
                 await RequireStatusTransitionAsync(
                     taskId,
                     [JobStatus.Assigned, JobStatus.Approved, JobStatus.InStock],

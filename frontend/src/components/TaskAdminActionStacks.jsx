@@ -16,7 +16,8 @@ import {
   Pause,
   CheckCircle,
   FactCheck,
-  Inventory2
+  Inventory2,
+  TaskAlt
 } from '@mui/icons-material';
 import { softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
@@ -24,15 +25,20 @@ import { runWorkflowWithInfoGuard } from '../utils/infoStatusWorkflow';
 import {
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
-  STATUS_NO_ITEMS,
   STATUS_PAUSED,
-  STATUS_PENDING_APPROVAL,
-  isInfoStatus,
-  canSetInfoStatus
+  getInfoMenuItems,
+  isInfoStatus
 } from '../constants/taskStatuses';
 
 const blockedMenuItemSx = { opacity: 0.45 };
 const menuDividerSx = { my: 0.75 };
+
+function infoMenuIcon(kind) {
+  if (kind === 'approved') return <TaskAlt fontSize="small" color="success" />;
+  if (kind === 'inStock') return <Inventory2 fontSize="small" color="success" />;
+  if (kind === 'noItems') return <Inventory2 fontSize="small" color="secondary" />;
+  return <FactCheck fontSize="small" color="secondary" />;
+}
 
 export default function TaskAdminActionStacks({
   task,
@@ -68,7 +74,7 @@ export default function TaskAdminActionStacks({
   const canPause = isStarted;
   const startAction = isPaused ? onResume : onStart;
 
-  const runWorkflow = (lifecycleAction) => async (event) => {
+  const runWorkflow = (lifecycleAction, actionLabel) => async (event) => {
     event.stopPropagation();
     handleClose();
     if (pending) return;
@@ -79,22 +85,21 @@ export default function TaskAdminActionStacks({
       resolveStatus: onSetStatus
         ? (t, target) => onSetStatus(t, target)
         : null,
-      runAction: async () => lifecycleAction(task)
+      runAction: async () => lifecycleAction(task),
+      actionLabel
     });
   };
 
   const runInfo = (statusText) => (event) => {
     event.stopPropagation();
     handleClose();
-    if (pending || !onSetStatus || !canSetInfoStatus(task, statusText)) return;
+    if (pending || !onSetStatus) return;
     onSetStatus(task, statusText);
   };
 
-  const canSetPendingApproval = canSetInfoStatus(task, STATUS_PENDING_APPROVAL);
-  const canSetNoItems = canSetInfoStatus(task, STATUS_NO_ITEMS);
-
   const showWorkflowBlock = showWorkflow && !isDone;
   const showInfoBlock = Boolean(onSetStatus);
+  const infoMenuItems = getInfoMenuItems(status);
 
   return (
     <>
@@ -147,24 +152,25 @@ export default function TaskAdminActionStacks({
             <MenuItem
               disabled={!blocked && !canStart && !isPaused}
               sx={workflowItemSx}
-              onClick={runWorkflow(startAction)}
+              onClick={runWorkflow(startAction, STATUS_IN_PROGRESS)}
             >
               <ListItemIcon>
                 <PlayArrow fontSize="small" color="success" />
               </ListItemIcon>
               <ListItemText>{STATUS_IN_PROGRESS}</ListItemText>
             </MenuItem>
-            <MenuItem
-              disabled={!blocked && !canPause}
-              sx={workflowItemSx}
-              onClick={runWorkflow(onPause)}
-            >
-              <ListItemIcon>
-                <Pause fontSize="small" color="warning" />
-              </ListItemIcon>
-              <ListItemText>{STATUS_PAUSED}</ListItemText>
-            </MenuItem>
-            <MenuItem sx={workflowItemSx} onClick={runWorkflow(onComplete)}>
+            {canPause && (
+              <MenuItem
+                sx={workflowItemSx}
+                onClick={runWorkflow(onPause, STATUS_PAUSED)}
+              >
+                <ListItemIcon>
+                  <Pause fontSize="small" color="warning" />
+                </ListItemIcon>
+                <ListItemText>{STATUS_PAUSED}</ListItemText>
+              </MenuItem>
+            )}
+            <MenuItem sx={workflowItemSx} onClick={runWorkflow(onComplete, STATUS_COMPLETED)}>
               <ListItemIcon>
                 <CheckCircle fontSize="small" color="primary" />
               </ListItemIcon>
@@ -173,21 +179,15 @@ export default function TaskAdminActionStacks({
           </>
         )}
 
-        {showInfoBlock && (
+        {showInfoBlock && infoMenuItems.length > 0 && (
           <>
             <Divider sx={menuDividerSx} />
-            <MenuItem disabled={!canSetPendingApproval} onClick={runInfo(STATUS_PENDING_APPROVAL)}>
-              <ListItemIcon>
-                <FactCheck fontSize="small" color="secondary" />
-              </ListItemIcon>
-              <ListItemText>{STATUS_PENDING_APPROVAL}</ListItemText>
-            </MenuItem>
-            <MenuItem disabled={!canSetNoItems} onClick={runInfo(STATUS_NO_ITEMS)}>
-              <ListItemIcon>
-                <Inventory2 fontSize="small" color="secondary" />
-              </ListItemIcon>
-              <ListItemText>{STATUS_NO_ITEMS}</ListItemText>
-            </MenuItem>
+            {infoMenuItems.map((item) => (
+              <MenuItem key={item.statusText} onClick={runInfo(item.statusText)}>
+                <ListItemIcon>{infoMenuIcon(item.kind)}</ListItemIcon>
+                <ListItemText>{item.label}</ListItemText>
+              </MenuItem>
+            ))}
           </>
         )}
       </Menu>

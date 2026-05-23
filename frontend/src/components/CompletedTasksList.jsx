@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import useCompletedTasksQuery from '../hooks/queries/useCompletedTasksQuery';
 import { 
   Paper, 
   Typography, 
@@ -28,39 +29,32 @@ import {
   Stop,
   EventNote  // добавлена для иконки периода выполнения (опционально)
 } from '@mui/icons-material';
-import { getCompletedTasks } from '../services/api';
 import { alpha } from '@mui/material/styles';
 import { glassPaperSx, sectionTitleRowSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import EmptyState from './ui/EmptyState';
 import TaskTitleTwoLines from './TaskTitleTwoLines';
 
-export default function CompletedTasksList({ employee, refresh }) {
+export default function CompletedTasksList({ employee }) {
   const { showError } = useUiFeedback();
-  const [completed, setCompleted] = useState([]);
-  const [stats, setStats] = useState({ totalTasks: 0, totalEstimate: 0, totalActual: 0 });
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
-  const [totalCount, setTotalCount] = useState(0);
+
+  const { data, isError } = useCompletedTasksQuery(employee, page, rowsPerPage);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const data = await getCompletedTasks(employee, page + 1, rowsPerPage);
-        setCompleted(data.tasks || []);
-        setStats(data.stats || { totalTasks: 0, totalEstimate: 0, totalActual: 0 });
-        setTotalCount(data.totalCount ?? data.stats?.totalTasks ?? 0);
-      } catch (err) {
-        console.error('Ошибка загрузки выполненных задач:', err);
-        showError('Не удалось загрузить выполненные задачи');
-      }
-    };
-    fetchData();
-  }, [employee, refresh, page, rowsPerPage]);
+    if (isError) {
+      showError('Не удалось загрузить выполненные задачи');
+    }
+  }, [isError, showError]);
 
   useEffect(() => {
     setPage(0);
   }, [employee]);
+
+  const completed = data?.tasks ?? [];
+  const stats = data?.stats ?? { totalTasks: 0, totalEstimate: 0, totalActual: 0 };
+  const totalCount = data?.totalCount ?? stats.totalTasks ?? 0;
 
   const totalDifference = stats.totalEstimate - stats.totalActual;
 

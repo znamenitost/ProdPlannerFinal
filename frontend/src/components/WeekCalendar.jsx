@@ -11,17 +11,14 @@ import {
 import { ChevronLeft, ChevronRight, CalendarMonth, Today } from '@mui/icons-material';
 import { glassPaperSx, softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
-import { getWeekCalendar } from '../services/api';
-import useClockMinute from '../hooks/useClockMinute';
+import useWeekCalendarQuery from '../hooks/queries/useWeekCalendarQuery';
 import DayColumn from './DayColumn';
 import { CalendarLoadingState } from './LoadingState';
 import { MotionSwitch } from './ui/MotionSection';
 import { isSameCalendarDay, toCalendarDayKey } from '../utils/calendarDayUtils';
 
-export default function WeekCalendar({ employee, refresh }) {
+export default function WeekCalendar({ employee }) {
   const { showError } = useUiFeedback();
-  const clockMinute = useClockMinute(true);
-  const [weekData, setWeekData] = useState(null);
   const [viewMode, setViewMode] = useState('week');
   const [anchorDate, setAnchorDate] = useState(() => startOfDay(new Date()));
   const [highlightedTaskId, setHighlightedTaskId] = useState(null);
@@ -32,35 +29,26 @@ export default function WeekCalendar({ employee, refresh }) {
     [anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate()]
   );
 
-  useEffect(() => {
-    const controller = new AbortController();
+  const { data: weekData, isPending, isError } = useWeekCalendarQuery(employee, weekStart);
 
-    const fetchData = async () => {
-      try {
-        const data = await getWeekCalendar(employee, weekStart, { signal: controller.signal });
-        setWeekData(data);
-        if (data?.start) {
-          const serverMonday = startOfDay(new Date(data.start));
-          if (serverMonday.toDateString() !== weekStart.toDateString()) {
-            setAnchorDate((prev) => {
-              const dayOffset = (prev.getDay() + 6) % 7;
-              const aligned = new Date(serverMonday);
-              aligned.setDate(serverMonday.getDate() + dayOffset);
-              return aligned;
-            });
-          }
-        }
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          console.error('Ошибка загрузки календаря:', err);
-          setWeekData(null);
-          showError('Не удалось загрузить календарь');
-        }
-      }
-    };
-    fetchData();
-    return () => controller.abort();
-  }, [employee, refresh, weekStart, clockMinute]);
+  useEffect(() => {
+    if (isError) {
+      showError('Не удалось загрузить календарь');
+    }
+  }, [isError, showError]);
+
+  useEffect(() => {
+    if (!weekData?.start) return;
+    const serverMonday = startOfDay(new Date(weekData.start));
+    if (serverMonday.toDateString() !== weekStart.toDateString()) {
+      setAnchorDate((prev) => {
+        const dayOffset = (prev.getDay() + 6) % 7;
+        const aligned = new Date(serverMonday);
+        aligned.setDate(serverMonday.getDate() + dayOffset);
+        return aligned;
+      });
+    }
+  }, [weekData?.start, weekStart]);
 
   const goPrev = () => {
     setAnchorDate((prev) => {
@@ -86,7 +74,7 @@ export default function WeekCalendar({ employee, refresh }) {
     setViewMode(newMode);
   };
 
-  if (!weekData) return <CalendarLoadingState />;
+  if (isPending || !weekData) return <CalendarLoadingState />;
 
   const start = new Date(weekData.start);
   const end = new Date(start);
@@ -194,7 +182,6 @@ export default function WeekCalendar({ employee, refresh }) {
                 highlightedTaskId={highlightedTaskId}
                 onTaskHover={setHighlightedTaskId}
                 detailedTimeline={viewMode === 'day'}
-                clockMinute={clockMinute}
               />
             ))}
           </Box>

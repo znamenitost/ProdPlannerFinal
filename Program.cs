@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using ProductionPlanner.Data;
+using ProductionPlanner.Hubs;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Infrastructure.Logging;
 using ProductionPlanner.Models;
@@ -96,7 +97,14 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 builder.Services.AddProductionPlannerServices();
-builder.Services.AddSignalR();
+builder.Services.AddSingleton<NotificationConnectionRegistry>();
+builder.Services.AddSignalR(options =>
+{
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    options.HandshakeTimeout = TimeSpan.FromSeconds(15);
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+});
 
 var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
     ?? ["http://localhost:5173"];

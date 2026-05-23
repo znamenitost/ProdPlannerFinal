@@ -12,7 +12,8 @@ export async function runWorkflowWithInfoGuard({
   statusText,
   confirm,
   resolveStatus,
-  runAction
+  runAction,
+  actionLabel
 }) {
   const text = statusText || task?.statusText || '';
   if (!isInfoStatus(text)) {
@@ -23,7 +24,10 @@ export async function runWorkflowWithInfoGuard({
   const options = getInfoStatusConfirmOptions(text);
   if (!options || !confirm) return false;
 
-  const ok = await confirm(options);
+  const ok = await confirm({
+    ...options,
+    title: actionLabel ? `${options.title}: ${actionLabel}` : options.title
+  });
   if (!ok) return false;
 
   const target = getInfoStatusResolveTarget(text);

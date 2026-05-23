@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 
-export default function useTaskTableChildren(api, refreshTrigger) {
+export default function useTaskTableChildren(api, tableDataUpdatedAt) {
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [childrenCache, setChildrenCache] = useState(new Map());
   const [loadingChildren, setLoadingChildren] = useState(new Set());
@@ -84,7 +84,7 @@ export default function useTaskTableChildren(api, refreshTrigger) {
     return () => {
       cancelled = true;
     };
-  }, [refreshTrigger, api]);
+  }, [tableDataUpdatedAt, api]);
 
   const toggleExpand = async (parentId) => {
     if (expandedRows.has(parentId)) {

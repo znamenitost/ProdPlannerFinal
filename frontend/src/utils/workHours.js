@@ -12,6 +12,7 @@ function minutesOfDay(date) {
   return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
 }
 
+/** Следующий момент начала работы (логика как WorkHoursCalculator.GetNextWorkStart). */
 export function getNextWorkStart(from) {
   let t = new Date(from);
 
@@ -36,6 +37,7 @@ export function getNextWorkStart(from) {
   return t;
 }
 
+/** Рабочие часы между двумя моментами (как WorkHoursCalculator.GetWorkHoursBetween). */
 export function getWorkHoursBetween(start, end) {
   if (!start || !end || start >= end) return 0;
 

@@ -3,53 +3,36 @@ import { Alert, AlertTitle, Stack, Collapse, IconButton } from '@mui/material';
 import { Warning, Error, Close, AccessTime, Flag, Event } from '@mui/icons-material';
 import TaskTitleTwoLines from './TaskTitleTwoLines';
 import { useUiFeedback } from '../context/UiFeedbackContext';
+import useDeadlineRisksQuery from '../hooks/queries/useDeadlineRisksQuery';
 
-export default function DeadlineWarnings({ employee, refresh }) {
+export default function DeadlineWarnings({ employee }) {
   const { showError } = useUiFeedback();
-  const [risks, setRisks] = useState([]);
   const [open, setOpen] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const { data: risks = [], isPending, isError, isFetching } = useDeadlineRisksQuery(employee);
 
   useEffect(() => {
-    const fetchRisks = async () => {
-      if (!employee) return;
-      
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/tasks/deadline-risks?employee=${encodeURIComponent(employee)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        // Фильтруем только риски (не 'ok')
-        const risksData = Array.isArray(data) ? data.filter(r => r.riskLevel !== 'ok') : [];
-        setRisks(risksData);
-        
-        // Если появились новые риски, раскрываем предупреждения
-        if (risksData.length > 0 && risks.length === 0) {
-          setOpen(true);
-        }
-      } catch (err) {
-        console.error('Ошибка загрузки рисков:', err);
-        setRisks([]);
-        showError('Не удалось загрузить предупреждения по дедлайнам');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchRisks();
-  }, [employee, refresh]); // refresh вызывает перезагрузку
+    if (isError) {
+      showError('Не удалось загрузить предупреждения по дедлайнам');
+    }
+  }, [isError, showError]);
 
-  if (loading && risks.length === 0) return null;
+  useEffect(() => {
+    if (risks.length > 0) {
+      setOpen(true);
+    }
+  }, [risks.length]);
+
+  if ((isPending || isFetching) && risks.length === 0) return null;
   if (risks.length === 0) return null;
 
   return (
     <Collapse in={open}>
       <Stack sx={{ mb: 3 }} spacing={1}>
-        {risks.map(risk => {
+        {risks.map((risk) => {
           let severity = 'warning';
           let icon = <Warning fontSize="inherit" />;
           let title = 'Дедлайн приближается';
-          
+
           if (risk.riskLevel === 'overdue') {
             severity = 'error';
             icon = <Flag fontSize="inherit" />;
@@ -59,7 +42,7 @@ export default function DeadlineWarnings({ employee, refresh }) {
             icon = <Error fontSize="inherit" />;
             title = 'Критично';
           }
-          
+
           let shortMessage = '';
           if (risk.riskLevel === 'overdue') {
             shortMessage = 'Задача просрочена';
@@ -69,7 +52,7 @@ export default function DeadlineWarnings({ employee, refresh }) {
           } else {
             shortMessage = `Осталось ${Math.round(risk.availableHoursBeforeDeadline)} из ${Math.round(risk.requiredHours)} ч`;
           }
-          
+
           const riskTask = {
             folderPath: risk.taskTitle,
             heading: risk.taskTitle,
@@ -77,11 +60,11 @@ export default function DeadlineWarnings({ employee, refresh }) {
           };
 
           return (
-            <Alert 
+            <Alert
               key={risk.taskId}
               severity={severity}
               icon={icon}
-              sx={{ 
+              sx={{
                 borderRadius: 2,
                 '& .MuiAlert-icon': { alignItems: 'center' }
               }}
@@ -102,10 +85,10 @@ export default function DeadlineWarnings({ employee, refresh }) {
                 headingSx={{ fontWeight: 600 }}
                 statusSx={{ color: 'text.secondary', mt: 0.25 }}
               />
-              
-              <Stack 
-                direction="row" 
-                spacing={2} 
+
+              <Stack
+                direction="row"
+                spacing={2}
                 sx={{ mt: 1, fontSize: '0.8rem', color: 'text.secondary', alignItems: 'center' }}
               >
                 <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
@@ -115,8 +98,11 @@ export default function DeadlineWarnings({ employee, refresh }) {
                 <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
                   <Event sx={{ fontSize: 14 }} />
                   <span>
-                    {new Date(risk.deadline).toLocaleDateString()} {' '}
-                    {new Date(risk.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(risk.deadline).toLocaleDateString()}{' '}
+                    {new Date(risk.deadline).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
                   </span>
                 </Stack>
               </Stack>

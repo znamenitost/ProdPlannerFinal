@@ -10,7 +10,6 @@ import { shouldShowHoursTypeColumns } from '../../utils/taskTableColumns';
 import { handleTaskTableHubEvent } from '../../utils/taskTableHubHandler';
 
 export default function useTaskTableController({
-  refreshTrigger,
   onCalendarRefresh,
   onRegisterHubHandler,
   selectedEmployeeForHighlight
@@ -19,12 +18,11 @@ export default function useTaskTableController({
   const api = useTaskTableApi();
 
   const rowsState = useTaskTableRows(api, {
-    refreshTrigger,
     selectedEmployeeForHighlight,
     onCalendarRefresh
   });
 
-  const childrenState = useTaskTableChildren(api, refreshTrigger);
+  const childrenState = useTaskTableChildren(api, rowsState.tableDataUpdatedAt);
 
   const actions = useTaskTableActions({
     api,

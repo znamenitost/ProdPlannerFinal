@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,8 @@ namespace ProductionPlanner.Services
 {
     public class TaskSplitService : ITaskSplitService
     {
+        private static readonly ConcurrentDictionary<int, SemaphoreSlim> SplitLocks = new();
+
         private readonly IProductionTaskRepository _repo;
         private readonly ApplicationDbContext _context;
         private readonly IAppTimeService _timeService;
@@ -32,7 +35,22 @@ namespace ProductionPlanner.Services
             List<SplitPart> parts,
             CancellationToken cancellationToken = default)
         {
+            ProductionTask? result = null;
+            await RunWithParentSplitLockAsync(parentTaskId, async ct =>
+            {
+                result = await SplitTaskCoreAsync(parentTaskId, parts, ct);
+            }, cancellationToken);
+            return result!;
+        }
+
+        private async Task<ProductionTask> SplitTaskCoreAsync(
+            int parentTaskId,
+            List<SplitPart> parts,
+            CancellationToken cancellationToken)
+        {
             var parentTask = await LoadParentForMutationAsync(parentTaskId, cancellationToken);
+            if (parentTask.IsSplitTask)
+                throw new InvalidOperationException("Задача уже разделена между сотрудниками");
 
             var totalAllocated = parts.Sum(p => p.AllocatedHours);
             parentTask.EstimateHours = totalAllocated;
@@ -72,6 +90,19 @@ namespace ProductionPlanner.Services
             List<SplitPart> parts,
             CancellationToken cancellationToken = default)
         {
+            ProductionTask? result = null;
+            await RunWithParentSplitLockAsync(parentTaskId, async ct =>
+            {
+                result = await UpdateSplitCoreAsync(parentTaskId, parts, ct);
+            }, cancellationToken);
+            return result!;
+        }
+
+        private async Task<ProductionTask> UpdateSplitCoreAsync(
+            int parentTaskId,
+            List<SplitPart> parts,
+            CancellationToken cancellationToken)
+        {
             var parentTask = await LoadParentForMutationAsync(parentTaskId, cancellationToken);
             if (parentTask.ParentRowNumber != null)
                 throw new Exception("Нельзя редактировать назначения у подзадачи");
@@ -83,7 +114,7 @@ namespace ProductionPlanner.Services
                 return await ConvertToRegularTaskAsync(parentTask, parts[0], cancellationToken);
 
             if (!parentTask.IsSplitTask)
-                return await SplitTaskAsync(parentTaskId, parts, cancellationToken);
+                return await SplitTaskCoreAsync(parentTaskId, parts, cancellationToken);
 
             var existingChildren = await GetChildTasksAsync(parentTaskId, cancellationToken);
             var splits = await _context.TaskSplits
@@ -162,6 +193,36 @@ namespace ProductionPlanner.Services
             await RecalculateParentStatusAsync(parentTask.Id, cancellationToken);
 
             return parentTask;
+        }
+
+        private async Task RunWithParentSplitLockAsync(
+            int parentTaskId,
+            Func<CancellationToken, Task> action,
+            CancellationToken cancellationToken)
+        {
+            if (_context.Database.IsNpgsql())
+            {
+                await _repo.ExecuteInTransactionAsync(async ct =>
+                {
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "SELECT pg_advisory_xact_lock({0})",
+                        parentTaskId,
+                        ct);
+                    await action(ct);
+                }, cancellationToken);
+                return;
+            }
+
+            var sem = SplitLocks.GetOrAdd(parentTaskId, _ => new SemaphoreSlim(1, 1));
+            await sem.WaitAsync(cancellationToken);
+            try
+            {
+                await action(cancellationToken);
+            }
+            finally
+            {
+                sem.Release();
+            }
         }
 
         /// <summary>

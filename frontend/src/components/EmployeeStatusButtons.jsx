@@ -14,7 +14,8 @@ import {
   Pause,
   CheckCircle,
   FactCheck,
-  Inventory2
+  Inventory2,
+  TaskAlt
 } from '@mui/icons-material';
 import { softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
@@ -22,14 +23,19 @@ import { runWorkflowWithInfoGuard } from '../utils/infoStatusWorkflow';
 import {
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
-  STATUS_NO_ITEMS,
   STATUS_PAUSED,
-  STATUS_PENDING_APPROVAL,
-  canSetInfoStatus,
+  getInfoMenuItems,
   isInfoStatus
 } from '../constants/taskStatuses';
 
 const blockedMenuItemSx = { opacity: 0.45 };
+
+function infoMenuIcon(kind) {
+  if (kind === 'approved') return <TaskAlt fontSize="small" color="success" />;
+  if (kind === 'inStock') return <Inventory2 fontSize="small" color="success" />;
+  if (kind === 'noItems') return <Inventory2 fontSize="small" color="secondary" />;
+  return <FactCheck fontSize="small" color="secondary" />;
+}
 
 export default function EmployeeStatusButtons({
   task,
@@ -48,15 +54,12 @@ export default function EmployeeStatusButtons({
   const isDone = status === STATUS_COMPLETED;
   const isStarted = status === STATUS_IN_PROGRESS;
   const isPaused = status === STATUS_PAUSED;
-  const blocked = isInfoStatus(status);
+  const isInfo = isInfoStatus(status);
   const canStart = !isDone && !isStarted && !isPaused;
   const canPause = isStarted;
   const canResume = isPaused;
   const canComplete = !isDone;
-  const itemSx = blocked ? blockedMenuItemSx : undefined;
-
-  const canSetPendingApproval = canSetInfoStatus(task, STATUS_PENDING_APPROVAL);
-  const canSetNoItems = canSetInfoStatus(task, STATUS_NO_ITEMS);
+  const workflowItemSx = isInfo ? blockedMenuItemSx : undefined;
 
   const handleOpen = (event) => {
     event.stopPropagation();
@@ -65,29 +68,34 @@ export default function EmployeeStatusButtons({
 
   const handleClose = () => setAnchorEl(null);
 
-  const runInfoStatus = (statusText) => () => {
-    handleClose();
-    if (!canSetInfoStatus(task, statusText)) return;
-    onSetStatus?.(task, statusText);
-  };
-
-  const runWorkflowClick = (lifecycleAction) => async () => {
+  const runWorkflow = (lifecycleAction, actionLabel) => async () => {
     handleClose();
     if (pending) return;
     await runWorkflowWithInfoGuard({
       task,
       statusText: status,
       confirm,
-      resolveStatus: onSetStatus ? (t, target) => onSetStatus(t, target) : null,
-      runAction: async () => lifecycleAction(task)
+      resolveStatus: onSetStatus
+        ? (t, target) => onSetStatus(t, target)
+        : null,
+      runAction: async () => lifecycleAction(task),
+      actionLabel
     });
+  };
+
+  const runInfoStatus = (statusText) => () => {
+    handleClose();
+    if (pending || !onSetStatus) return;
+    onSetStatus(task, statusText);
   };
 
   if (isDone) return null;
 
-  const hasWorkflow = canStart || canPause || canResume || canComplete;
+  const hasWorkflow = canStart || canPause || canResume || canComplete || isInfo;
   const hasInfo = Boolean(onSetStatus);
   if (!hasWorkflow && !hasInfo) return null;
+
+  const infoMenuItems = getInfoMenuItems(status);
 
   return (
     <>
@@ -108,8 +116,11 @@ export default function EmployeeStatusButtons({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        {canStart && (
-          <MenuItem sx={itemSx} onClick={runWorkflowClick(onStart)}>
+        {(canStart || isInfo) && (
+          <MenuItem
+            sx={workflowItemSx}
+            onClick={runWorkflow(onStart, STATUS_IN_PROGRESS)}
+          >
             <ListItemIcon>
               <PlayArrow fontSize="small" color="success" />
             </ListItemIcon>
@@ -117,7 +128,10 @@ export default function EmployeeStatusButtons({
           </MenuItem>
         )}
         {canPause && (
-          <MenuItem sx={itemSx} onClick={runWorkflowClick(onPause)}>
+          <MenuItem
+            sx={workflowItemSx}
+            onClick={runWorkflow(onPause, STATUS_PAUSED)}
+          >
             <ListItemIcon>
               <Pause fontSize="small" color="warning" />
             </ListItemIcon>
@@ -125,7 +139,7 @@ export default function EmployeeStatusButtons({
           </MenuItem>
         )}
         {canResume && (
-          <MenuItem sx={itemSx} onClick={runWorkflowClick(onResume)}>
+          <MenuItem onClick={runWorkflow(onResume, 'Продолжить')}>
             <ListItemIcon>
               <PlayArrow fontSize="small" color="success" />
             </ListItemIcon>
@@ -133,30 +147,24 @@ export default function EmployeeStatusButtons({
           </MenuItem>
         )}
         {canComplete && (
-          <MenuItem sx={itemSx} onClick={runWorkflowClick(onComplete)}>
+          <MenuItem
+            sx={workflowItemSx}
+            onClick={runWorkflow(onComplete, STATUS_COMPLETED)}
+          >
             <ListItemIcon>
               <CheckCircle fontSize="small" color="primary" />
             </ListItemIcon>
             <ListItemText>{STATUS_COMPLETED}</ListItemText>
           </MenuItem>
         )}
-        {hasWorkflow && hasInfo && <Divider sx={{ my: 0.5 }} />}
-        {hasInfo && (
-          <MenuItem disabled={!canSetPendingApproval} onClick={runInfoStatus(STATUS_PENDING_APPROVAL)}>
-            <ListItemIcon>
-              <FactCheck fontSize="small" color="secondary" />
-            </ListItemIcon>
-            <ListItemText>{STATUS_PENDING_APPROVAL}</ListItemText>
-          </MenuItem>
-        )}
-        {hasInfo && (
-          <MenuItem disabled={!canSetNoItems} onClick={runInfoStatus(STATUS_NO_ITEMS)}>
-            <ListItemIcon>
-              <Inventory2 fontSize="small" color="secondary" />
-            </ListItemIcon>
-            <ListItemText>{STATUS_NO_ITEMS}</ListItemText>
-          </MenuItem>
-        )}
+        {hasWorkflow && hasInfo && infoMenuItems.length > 0 && <Divider sx={{ my: 0.5 }} />}
+        {hasInfo &&
+          infoMenuItems.map((item) => (
+            <MenuItem key={item.statusText} onClick={runInfoStatus(item.statusText)}>
+              <ListItemIcon>{infoMenuIcon(item.kind)}</ListItemIcon>
+              <ListItemText>{item.label}</ListItemText>
+            </MenuItem>
+          ))}
       </Menu>
     </>
   );

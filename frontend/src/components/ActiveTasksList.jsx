@@ -32,6 +32,7 @@ import {
   Stack
 } from '@mui/material';
 import { useUiFeedback } from '../context/UiFeedbackContext';
+import useActiveTasksQuery from '../hooks/queries/useActiveTasksQuery';
 import { openFileOnClient } from '../utils/openFileOnClient';
 import { normalizePathForOpen } from '../utils/filePathForOpen';
 import { glassCardSx, compactActionButtonSx } from '../theme/surfaces';
@@ -48,8 +49,9 @@ import {
 
 const blockedButtonSx = { opacity: 0.5 };
 
-export default function ActiveTasksList({ tasks, onUpdate, embedded = false, employee = '' }) {
+export default function ActiveTasksList({ onUpdate, embedded = false, employee = '' }) {
   const { showError, showWarning, confirm } = useUiFeedback();
+  const { data: tasks = [] } = useActiveTasksQuery(employee, Boolean(employee));
 
   const runGuardedAction = async (task, action, progress = null) => {
     const runApi = async () => {
@@ -174,53 +176,17 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false, emp
               />
 
               <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
-                {(isAssignedLike || blocked) && !isCompleted && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="success"
-                    startIcon={<PlayArrow />}
-                    onClick={() => runGuardedAction(task, 'start')}
-                    sx={{ ...compactActionButtonSx, ...(blocked ? blockedButtonSx : {}) }}
-                  >
-                    Начал
-                  </Button>
-                )}
-                {isInProgress && !blocked && (
+                {blocked && !isCompleted && (
                   <>
                     <Button
                       size="small"
                       variant="outlined"
-                      color="warning"
-                      startIcon={<Pause />}
-                      onClick={() => runGuardedAction(task, 'pause')}
-                      sx={compactActionButtonSx}
-                    >
-                      Пауза
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="primary"
-                      startIcon={<CheckCircle />}
-                      onClick={() => runGuardedAction(task, 'complete')}
-                      sx={compactActionButtonSx}
-                    >
-                      Готово
-                    </Button>
-                  </>
-                )}
-                {isPaused && !blocked && (
-                  <>
-                    <Button
-                      size="small"
-                      variant="contained"
                       color="success"
                       startIcon={<PlayArrow />}
-                      onClick={() => runGuardedAction(task, 'resume')}
-                      sx={compactActionButtonSx}
+                      onClick={() => runGuardedAction(task, 'start')}
+                      sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
                     >
-                      Продолжить
+                      Начал
                     </Button>
                     <Button
                       size="small"
@@ -228,23 +194,51 @@ export default function ActiveTasksList({ tasks, onUpdate, embedded = false, emp
                       color="primary"
                       startIcon={<CheckCircle />}
                       onClick={() => runGuardedAction(task, 'complete')}
-                      sx={compactActionButtonSx}
+                      sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
                     >
                       Готово
                     </Button>
                   </>
                 )}
-                {blocked && !isCompleted && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="primary"
-                    startIcon={<CheckCircle />}
-                    onClick={() => runGuardedAction(task, 'complete')}
-                    sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
-                  >
-                    Готово
-                  </Button>
+                {!blocked && (isAssignedLike || isInProgress || isPaused) && !isCompleted && (
+                  <>
+                    {(isAssignedLike || isPaused) && (
+                      <Button
+                        size="small"
+                        variant={isPaused ? 'contained' : 'outlined'}
+                        color="success"
+                        startIcon={<PlayArrow />}
+                        onClick={() => runGuardedAction(task, isPaused ? 'resume' : 'start')}
+                        sx={compactActionButtonSx}
+                      >
+                        {isPaused ? 'Продолжить' : 'Начал'}
+                      </Button>
+                    )}
+                    {isInProgress && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        startIcon={<Pause />}
+                        onClick={() => runGuardedAction(task, 'pause')}
+                        sx={compactActionButtonSx}
+                      >
+                        Пауза
+                      </Button>
+                    )}
+                    {(isInProgress || isPaused) && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="primary"
+                        startIcon={<CheckCircle />}
+                        onClick={() => runGuardedAction(task, 'complete')}
+                        sx={compactActionButtonSx}
+                      >
+                        Готово
+                      </Button>
+                    )}
+                  </>
                 )}
                 {!blocked && !isCompleted && (
                   <>

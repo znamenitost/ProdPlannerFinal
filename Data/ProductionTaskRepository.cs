@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
@@ -374,13 +375,9 @@ namespace ProductionPlanner.Data
                             ct);
                 }
 
-                for (var i = 0; i < orderedIds.Count; i++)
+                if (orderedIds.Count > 0)
                 {
-                    await _context.ProductionTasks
-                        .Where(t => t.Id == orderedIds[i])
-                        .ExecuteUpdateAsync(
-                            setter => setter.SetProperty(t => t.DisplayOrder, i),
-                            ct);
+                    await ApplyDisplayOrderBulkUpdateAsync(orderedIds, ct);
                 }
             }, cancellationToken);
         }
@@ -427,6 +424,32 @@ namespace ProductionPlanner.Data
                     throw;
                 }
             });
+        }
+
+        private async Task ApplyDisplayOrderBulkUpdateAsync(
+            IReadOnlyList<int> orderedIds,
+            CancellationToken cancellationToken)
+        {
+            var sql = new StringBuilder();
+            sql.Append("UPDATE \"ProductionTasks\" SET \"DisplayOrder\" = CASE ");
+            var args = new List<object>(orderedIds.Count * 2);
+
+            for (var i = 0; i < orderedIds.Count; i++)
+            {
+                sql.Append($"WHEN \"Id\" = {{{i}}} THEN {i} ");
+                args.Add(orderedIds[i]);
+            }
+
+            sql.Append("END WHERE \"Id\" IN (");
+            for (var i = 0; i < orderedIds.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                sql.Append($"{{{args.Count}}}");
+                args.Add(orderedIds[i]);
+            }
+
+            sql.Append(')');
+            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), args, cancellationToken);
         }
 
         public async Task<int> CloseOpenIntervalsAsync(

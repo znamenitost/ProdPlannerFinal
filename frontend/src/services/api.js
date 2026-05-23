@@ -45,7 +45,7 @@ export async function getWeekCalendar(employee, startDate, options = {}) {
 }
 
 // Получить список выполненных задач (пагинация) и агрегированную статистику
-export async function getCompletedTasks(employee, page = 1, pageSize = 25) {
+export async function getCompletedTasks(employee, page = 1, pageSize = 25, options = {}) {
   const params = new URLSearchParams({
     employee,
     page: String(page),
@@ -53,7 +53,8 @@ export async function getCompletedTasks(employee, page = 1, pageSize = 25) {
   });
   const res = await fetch(`${API_BASE}/tasks/completed?${params}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
+    signal: options.signal
   });
   if (!res.ok) throw new Error('Ошибка загрузки выполненных задач');
   return res.json();
@@ -189,4 +190,18 @@ export async function splitTask(parentTaskId, parts) {
     throw new Error(error.message || 'Ошибка разделения задачи');
   }
   return res.json();
+}
+
+export async function getDeadlineRisks(employee, options = {}) {
+  const res = await fetch(
+    `${API_BASE}/tasks/deadline-risks?employee=${encodeURIComponent(employee)}`,
+    {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      signal: options.signal
+    }
+  );
+  if (!res.ok) throw new Error('Ошибка загрузки предупреждений по дедлайнам');
+  const data = await res.json();
+  return Array.isArray(data) ? data.filter((r) => r.riskLevel !== 'ok') : [];
 }
