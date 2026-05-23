@@ -38,12 +38,12 @@ export function setup() {
 }
 
 export function apiScenario() {
-  const employee = employeeForVu(__VU.id);
+  const employee = employeeForVu(__VU);
   const jar = http.cookieJar();
 
-  if (!vuLoggedIn[__VU.id]) {
+  if (!vuLoggedIn[__VU]) {
     loginEmployee(jar, employee);
-    vuLoggedIn[__VU.id] = true;
+    vuLoggedIn[__VU] = true;
   }
 
   employeeAppCycle(jar, employee);

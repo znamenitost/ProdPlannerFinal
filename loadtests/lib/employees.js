@@ -1,27 +1,12 @@
-/** 20 виртуальных сотрудников: 3 штатных + 17 создаются при первом логине. */
+/** 20 VUs mapped to employees (cycle). Cyrillic + LoadTest ASCII. */
 export const EMPLOYEES = [
-  'Дима',
-  'Яромир',
-  'Павел',
-  'Тест-01',
-  'Тест-02',
-  'Тест-03',
-  'Тест-04',
-  'Тест-05',
-  'Тест-06',
-  'Тест-07',
-  'Тест-08',
-  'Тест-09',
-  'Тест-10',
-  'Тест-11',
-  'Тест-12',
-  'Тест-13',
-  'Тест-14',
-  'Тест-15',
-  'Тест-16',
-  'Тест-17'
+  'Дима', 'Яромир', 'Павел',
+  'LoadTest-01', 'LoadTest-02', 'LoadTest-03', 'LoadTest-04', 'LoadTest-05',
+  'LoadTest-06', 'LoadTest-07', 'LoadTest-08', 'LoadTest-09', 'LoadTest-10',
+  'LoadTest-11', 'LoadTest-12', 'LoadTest-13', 'LoadTest-14', 'LoadTest-15',
+  'LoadTest-16', 'LoadTest-17', 'LoadTest-18'
 ];
 
-export function employeeForVu(vuId) {
-  return EMPLOYEES[(vuId - 1) % EMPLOYEES.length];
+export function employeeForVu(vu) {
+  return EMPLOYEES[(vu - 1) % EMPLOYEES.length];
 }

@@ -33,23 +33,26 @@ export function loginEmployee(jar, fullName) {
   return res;
 }
 
+function get(jar, url, name) {
+  return http.get(url, { jar, tags: { name } });
+}
+
 export function employeeAppCycle(jar, employee) {
   const monday = mondayIsoUtc();
   const enc = encodeURIComponent(employee);
+  const params = { jar };
 
-  const responses = http.batch([
-    ['GET', `${BASE_URL}/api/auth/me`, null, { jar, tags: { name: 'auth_me' } }],
-    ['GET', `${BASE_URL}/api/tasks/active?employee=${enc}`, null, { jar, tags: { name: 'tasks_active' } }],
-    ['GET', `${BASE_URL}/api/calendar/week?employee=${enc}&startDate=${monday}`, null, { jar, tags: { name: 'calendar_week' } }],
-    ['GET', `${BASE_URL}/api/tasks/completed?employee=${enc}&page=1&pageSize=25`, null, { jar, tags: { name: 'tasks_completed' } }],
-    ['GET', `${BASE_URL}/api/tasks/deadline-risks?employee=${enc}`, null, { jar, tags: { name: 'tasks_deadline_risks' } }],
-    ['GET', `${BASE_URL}/api/tasks/table?page=1&pageSize=50`, null, { jar, tags: { name: 'tasks_table' } }],
-    ['GET', `${BASE_URL}/api/notifications/pending`, null, { jar, tags: { name: 'notifications_pending' } }]
-  ]);
+  const me = get(jar, `${BASE_URL}/api/auth/me`, 'auth_me');
+  const active = get(jar, `${BASE_URL}/api/tasks/active?employee=${enc}`, 'tasks_active');
+  const calendar = get(jar, `${BASE_URL}/api/calendar/week?employee=${enc}&startDate=${monday}`, 'calendar_week');
+  const completed = get(jar, `${BASE_URL}/api/tasks/completed?employee=${enc}&page=1&pageSize=25`, 'tasks_completed');
+  const risks = get(jar, `${BASE_URL}/api/tasks/deadline-risks?employee=${enc}`, 'tasks_deadline_risks');
+  const table = get(jar, `${BASE_URL}/api/tasks/table?page=1&pageSize=50`, 'tasks_table');
+  const notifications = get(jar, `${BASE_URL}/api/notifications/pending`, 'notifications_pending');
 
-  check(responses[1], { 'active tasks 200': (r) => r.status === 200 });
-  check(responses[2], { 'calendar 200': (r) => r.status === 200 });
-  check(responses[5], { 'table 200': (r) => r.status === 200 });
+  check(active, { 'active tasks 200': (r) => r.status === 200 });
+  check(calendar, { 'calendar 200': (r) => r.status === 200 });
+  check(table, { 'table 200': (r) => r.status === 200 });
 
-  return responses;
+  return { me, active, calendar, completed, risks, table, notifications };
 }
