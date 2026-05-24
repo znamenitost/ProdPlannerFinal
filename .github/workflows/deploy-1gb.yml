@@ -58,6 +58,8 @@ jobs:
           mkdir -p publish/wwwroot
           rm -rf publish/wwwroot/assets publish/wwwroot/index.html
           cp -r frontend/dist/* publish/wwwroot/
+          mkdir -p publish/wwwroot/sprites
+          cp sprites/fon1.svg sprites/fon2.svg sprites/fon3.svg sprites/fon5.svg sprites/sun.svg publish/wwwroot/sprites/
           test -f publish/wwwroot/index.html
           grep -q "Действия с задачей" publish/wwwroot/assets/*.js
           JS=$(basename "$(ls publish/wwwroot/assets/index-*.js)")

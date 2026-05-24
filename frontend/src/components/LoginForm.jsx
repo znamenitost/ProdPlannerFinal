@@ -154,11 +154,11 @@ export default function LoginForm({ onLogin }) {
         '--sun-image': `url(${sunUrl})`
       }}
     >
-      <div className="login-parallax-layer login-layer-fon1" aria-hidden="true" />
-      <div className="login-sun-layer" aria-hidden="true" />
-      <div className="login-parallax-layer login-layer-fon2" aria-hidden="true" />
-      <div className="login-parallax-layer login-layer-fon3" aria-hidden="true" />
-      <div className="login-parallax-layer login-layer-fon5" aria-hidden="true" />
+      <img className="login-parallax-layer login-layer-fon1" src={fon1Url} alt="" aria-hidden="true" />
+      <img className="login-sun-layer" src={sunUrl} alt="" aria-hidden="true" />
+      <img className="login-parallax-layer login-layer-fon2" src={fon2Url} alt="" aria-hidden="true" />
+      <img className="login-parallax-layer login-layer-fon3" src={fon3Url} alt="" aria-hidden="true" />
+      <img className="login-parallax-layer login-layer-fon5" src={fon5Url} alt="" aria-hidden="true" />
 
       <Container
         maxWidth="sm"
