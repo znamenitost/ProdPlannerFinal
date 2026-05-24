@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Загрузка ./publish на 1gb.ru: по одному файлу через lftp put + retry.
-# SamKirkland/mirror падают на passive data-port timeout; одиночный put в CI работает.
+# wwwroot: содержимое ./publish/wwwroot/ -> /http/wwwroot/ (без publish/wwwroot на сервере).
 set -euo pipefail
 
 FTP_HOST="${1:?FTP host}"
@@ -37,22 +37,23 @@ EOF
 }
 
 retry_put() {
-  local rel="$1"
+  local local_file="$1"
+  local remote_path="$2"
   local remote_dir
-  remote_dir=$(dirname "$rel")
+  remote_dir=$(dirname "$remote_path")
   [ "$remote_dir" = "." ] && remote_dir=""
   local mkdir_cmd=""
   [ -n "$remote_dir" ] && mkdir_cmd="mkdir -p ${remote_dir};"
 
   local attempt
   for attempt in 1 2 3 4 5; do
-    if run_lftp "${mkdir_cmd} put ./publish/${rel} -o ${rel}"; then
+    if run_lftp "${mkdir_cmd} put ${local_file} -o ${remote_path}"; then
       return 0
     fi
-    echo "  retry ${rel} (${attempt}/5)" >&2
+    echo "  retry ${remote_path} (${attempt}/5)" >&2
     sleep "$((attempt * 10))"
   done
-  echo "  FAILED: ${rel}" >&2
+  echo "  FAILED: ${remote_path}" >&2
   return 1
 }
 
@@ -62,17 +63,15 @@ upload_files() {
   local total=0
   local ok=0
   local failed=0
-  local rel
 
-  while IFS= read -r rel; do
-    [ -z "$rel" ] && continue
+  while IFS=$'\t' read -r local_file remote_path; do
+    [ -z "$local_file" ] && continue
     total=$((total + 1))
-    if retry_put "$rel"; then
+    if retry_put "$local_file" "$remote_path"; then
       ok=$((ok + 1))
     else
       failed=$((failed + 1))
     fi
-    # Прогресс каждые 25 файлов
     if [ $((total % 25)) -eq 0 ]; then
       echo "[$label] ${ok}/${total} uploaded (${failed} failed)"
     fi
@@ -82,23 +81,47 @@ upload_files() {
   [ "$failed" -eq 0 ]
 }
 
-echo "=== Phase 1: wwwroot ==="
-upload_files "wwwroot" find ./publish/wwwroot -type f | sed 's|^\./publish/||'
+wwwroot_file_list() {
+  find ./publish/wwwroot -type f -print | while IFS= read -r file; do
+  rel="${file#./publish/wwwroot/}"
+  rel="${rel#publish/wwwroot/}"
+  printf '%s\twwwroot/%s\n' "$file" "$rel"
+  done
+}
+
+root_file_list() {
+  find ./publish -maxdepth 1 -type f -print | while IFS= read -r file; do
+  rel="${file#./publish/}"
+  rel="${rel#publish/}"
+  printf '%s\t%s\n' "$file" "$rel"
+  done
+}
+
+runtime_file_list() {
+  find ./publish -mindepth 2 -type f \
+    ! -path './publish/wwwroot/*' \
+    ! -path './publish/logs/*' \
+    ! -path './publish/App_Data/*' \
+    ! -name '*.db' \
+    ! -name '*.db-shm' \
+    ! -name '*.db-wal' \
+    ! -name '*.pdb' \
+    ! -name 'app_offline.htm' \
+    -print | while IFS= read -r file; do
+  rel="${file#./publish/}"
+  rel="${rel#publish/}"
+  printf '%s\t%s\n' "$file" "$rel"
+  done
+}
+
+echo "=== Phase 1: wwwroot (publish/wwwroot/* -> wwwroot/*) ==="
+upload_files "wwwroot" wwwroot_file_list
 
 echo "=== Phase 2: root binaries and config ==="
-upload_files "root" find ./publish -maxdepth 1 -type f | sed 's|^\./publish/||'
+upload_files "root" root_file_list
 
 echo "=== Phase 3: nested runtime folders (ru/, runtimes/, …) ==="
-if ! upload_files "rest" find ./publish -mindepth 2 -type f \
-  ! -path './publish/wwwroot/*' \
-  ! -path './publish/logs/*' \
-  ! -path './publish/App_Data/*' \
-  ! -name '*.db' \
-  ! -name '*.db-shm' \
-  ! -name '*.db-wal' \
-  ! -name '*.pdb' \
-  ! -name 'app_offline.htm' \
-  | sed 's|^\./publish/||'; then
+if ! upload_files "rest" runtime_file_list; then
   echo "::warning::Phase 3 had failures — core app and wwwroot should still be updated"
 fi
 
