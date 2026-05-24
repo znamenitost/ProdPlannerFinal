@@ -12,3 +12,4 @@ appsettings.*.local.json
 node_modules/
 frontend/dist/
 .DS_Store
+logs/

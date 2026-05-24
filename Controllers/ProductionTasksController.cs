@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
-using ProductionPlanner.Services.TaskTable;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Controllers;
 
@@ -90,7 +90,25 @@ public class ProductionTasksController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Сотруднику через PUT /table/row разрешено менять только инфо-статусы (Согласование/Нет изделий)
+    /// и их резолв (Согласовано/В наличии). Жизненный цикл (Начал/Пауза/Продолжить/Готово)
+    /// идёт через выделенные эндпоинты <c>/api/tasks/{id}/start|pause|resume|complete</c>.
+    /// </summary>
+    private static bool IsEmployeeAllowedStatusUpdate(UpdateTaskRequest request)
+    {
+        if (string.IsNullOrEmpty(request.StatusText))
+            return false;
+
+        return TaskStatusMapper.FromText(request.StatusText) is
+            JobStatus.PendingApproval
+            or JobStatus.NoItems
+            or JobStatus.Approved
+            or JobStatus.InStock;
+    }
+
     [HttpPost("table/row")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateTableRow(
         [FromBody] CreateTaskRequest request,
         CancellationToken cancellationToken = default)
@@ -109,6 +127,11 @@ public class ProductionTasksController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Редактирует строку. Админ может менять любые поля; сотрудник — только статус
+    /// и только своей задачи (включая инфо-статусы); чужие данные не попадают в
+    /// PUT, потому что обновление полей принимается только когда зовущий — админ.
+    /// </summary>
     [HttpPut("table/row/{id}")]
     public async Task<IActionResult> UpdateTableRow(
         int id,
@@ -117,6 +140,39 @@ public class ProductionTasksController : ControllerBase
     {
         try
         {
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null) return Unauthorized();
+            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+
+            if (!isAdmin)
+            {
+                var task = await _tableService.GetRowDtoAsync(id, currentUser.FullName, cancellationToken);
+                if (task == null) return NotFound();
+
+                var isOwnTask = string.Equals(task.EmployeeName, currentUser.FullName, StringComparison.Ordinal)
+                    || task.HasCurrentUserSubtask;
+                if (!isOwnTask)
+                    return Forbid();
+
+                if (!IsEmployeeAllowedStatusUpdate(request))
+                    return Forbid();
+
+                // Сотруднику разрешено менять только статус; остальное берём из текущей записи,
+                // чтобы он не мог переписать дедлайн, часы, тип, сотрудника и пр.
+                request = new UpdateTaskRequest
+                {
+                    FolderPath = task.FolderPath,
+                    FileName = task.FileName,
+                    Comment = task.Comment,
+                    Deadline = task.Deadline,
+                    EstimateHours = task.EstimateHours,
+                    Type = task.Type,
+                    EmployeeName = task.EmployeeName,
+                    ParentRowNumber = task.ParentRowNumber,
+                    StatusText = request.StatusText
+                };
+            }
+
             var result = await _tableService.UpdateRowAsync(id, request, cancellationToken);
             if (result.NotFound)
                 return NotFound();
@@ -130,6 +186,7 @@ public class ProductionTasksController : ControllerBase
     }
 
     [HttpDelete("table/row/{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteTableRow(int id, CancellationToken cancellationToken = default)
     {
         try
@@ -147,6 +204,7 @@ public class ProductionTasksController : ControllerBase
     }
 
     [HttpPost("table/reorder")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> ReorderRows(
         [FromBody] List<int> orderedIds,
         CancellationToken cancellationToken = default)

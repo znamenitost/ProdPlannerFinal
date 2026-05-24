@@ -72,6 +72,9 @@ export default function TaskAdminActionStacks({
 
   const canStart = !isStarted && !isPaused;
   const canPause = isStarted;
+  // «Готово» доступно только после нажатия «Начал» (или из паузы). В инфостатусах сначала
+  // нужно их снять через «Начал» (workflow сам подтвердит) — это совпадает со спецификацией.
+  const canComplete = isStarted || isPaused;
   const startAction = isPaused ? onResume : onStart;
 
   const runWorkflow = (lifecycleAction, actionLabel) => async (event) => {
@@ -170,12 +173,14 @@ export default function TaskAdminActionStacks({
                 <ListItemText>{STATUS_PAUSED}</ListItemText>
               </MenuItem>
             )}
-            <MenuItem sx={workflowItemSx} onClick={runWorkflow(onComplete, STATUS_COMPLETED)}>
-              <ListItemIcon>
-                <CheckCircle fontSize="small" color="primary" />
-              </ListItemIcon>
-              <ListItemText>{STATUS_COMPLETED}</ListItemText>
-            </MenuItem>
+            {canComplete && (
+              <MenuItem sx={workflowItemSx} onClick={runWorkflow(onComplete, STATUS_COMPLETED)}>
+                <ListItemIcon>
+                  <CheckCircle fontSize="small" color="primary" />
+                </ListItemIcon>
+                <ListItemText>{STATUS_COMPLETED}</ListItemText>
+              </MenuItem>
+            )}
           </>
         )}
 

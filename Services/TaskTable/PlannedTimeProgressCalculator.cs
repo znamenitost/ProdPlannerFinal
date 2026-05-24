@@ -1,3 +1,4 @@
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 
@@ -43,13 +44,17 @@ public static class PlannedTimeProgressCalculator
 
     private static double GetElapsedWorkHours(IReadOnlyList<WorkInterval> intervals, DateTime now)
     {
+        var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
         double totalHours = 0;
         foreach (var interval in intervals)
         {
-            var end = interval.EndTime ?? now;
-            if (end <= interval.StartTime)
+            var start = AppDateTime.ToMoscowWallClockFromDb(interval.StartTime);
+            var end = interval.EndTime.HasValue
+                ? AppDateTime.ToMoscowWallClockFromDb(interval.EndTime.Value)
+                : nowMoscow;
+            if (end <= start)
                 continue;
-            totalHours += WorkHours.GetWorkHoursBetween(interval.StartTime, end);
+            totalHours += WorkHours.GetWorkHoursBetween(start, end);
         }
 
         return totalHours;

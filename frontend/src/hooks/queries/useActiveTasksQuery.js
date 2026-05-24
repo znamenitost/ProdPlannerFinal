@@ -2,10 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 import { getActiveTasks } from '../../services/api';
 import { queryKeys } from '../../lib/queryKeys';
 
+// Прогресс активных задач и продолжительность открытых интервалов считаются на бэке,
+// поэтому периодически дообновляем список — фронт сам отрисует свежий процент/время.
+const ONE_MINUTE_MS = 60_000;
+
 export default function useActiveTasksQuery(employee, enabled = true) {
   return useQuery({
     queryKey: queryKeys.activeTasks(employee),
     queryFn: ({ signal }) => getActiveTasks(employee, { signal }),
-    enabled: Boolean(enabled && employee)
+    enabled: Boolean(enabled && employee),
+    refetchInterval: ONE_MINUTE_MS,
+    refetchOnWindowFocus: true
   });
 }

@@ -60,4 +60,17 @@ public class FilePathNormalizerTests
         var unc = FilePathNormalizer.BuildWindowsUncPath("192.168.1.119", Share, "С/Спортмебель/15,05,26 спортт.cdr");
         Assert.Equal(@"\\192.168.1.119\Клиенты\С\Спортмебель\15,05,26 спортт.cdr", unc);
     }
+
+    [Fact]
+    public void Rejects_path_with_parent_directory_segments()
+    {
+        var ok = FilePathNormalizer.TryNormalizeRelativePath(
+            "Клиенты/Ф/../secret/file.cdr",
+            Share,
+            out _,
+            out var error);
+
+        Assert.False(ok);
+        Assert.Equal("Недопустимый путь", error);
+    }
 }

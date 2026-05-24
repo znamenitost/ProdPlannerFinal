@@ -83,25 +83,27 @@ function AppContent() {
     [activeTab]
   );
 
-  const handleHubSideRefresh = useCallback((event) => {
+  const handleHubTableFallbackRefresh = useCallback(() => {
     if (activeTab === 1) {
-      // Задача не на экране — полная перезагрузка таблицы не нужна
-      if (!event?.taskId) {
-        refreshTable();
-      }
-    } else {
+      refreshTable();
+    }
+  }, [activeTab, refreshTable]);
+
+  const handleHubCalendarRefresh = useCallback(() => {
+    if (activeTab !== 1) {
       refreshCalendar();
     }
-  }, [activeTab, refreshTable, refreshCalendar]);
+  }, [activeTab, refreshCalendar]);
 
   const notificationHandlers = useMemo(
     () => ({
       onTaskEvent: handleHubTaskEvent,
       onActiveTasksRefresh: refreshActiveTasks,
-      onCalendarRefresh: handleHubSideRefresh,
+      onTableFallbackRefresh: handleHubTableFallbackRefresh,
+      onCalendarRefresh: handleHubCalendarRefresh,
       onFullRefresh: refreshAll
     }),
-    [handleHubTaskEvent, refreshActiveTasks, handleHubSideRefresh, refreshAll]
+    [handleHubTaskEvent, refreshActiveTasks, handleHubTableFallbackRefresh, handleHubCalendarRefresh, refreshAll]
   );
 
   const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers);

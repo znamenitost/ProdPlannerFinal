@@ -19,7 +19,7 @@ public sealed class NotificationConnectionRegistry
         var toClose = new List<string>();
         while (connections.Count > MaxConnectionsPerUser)
         {
-            var victim = connections.Keys.FirstOrDefault(id => id != connectionId);
+            var victim = connections.Keys.ToList().FirstOrDefault(id => id != connectionId);
             if (victim == null)
                 break;
             if (connections.TryRemove(victim, out _))

@@ -2302,8 +2302,6 @@ public class NotificationDto
     public DateTime CreatedAt { get; set; }
 }
 === ./Models/Dtos/WorkIntervalDto.cs ===
-using ProductionPlanner.Models;
-
 namespace ProductionPlanner.Models.Dtos;
 
 public class WorkIntervalDto
@@ -2331,6 +2329,7 @@ public class TaskTableRowDto
     public string FileName { get; set; } = "";
     public string Comment { get; set; } = "";
     public string StatusText { get; set; } = "";
+    public JobStatus Status { get; set; }
     public DateTime Deadline { get; set; }
     public double EstimateHours { get; set; }
     public string Type { get; set; } = "";
@@ -2381,6 +2380,7 @@ public class TaskTableRowDto
             FileName = parent.FileName,
             Comment = parent.Comment,
             StatusText = statusText,
+            Status = parent.Status,
             Deadline = parent.Deadline,
             EstimateHours = parent.EstimateHours,
             Type = parent.Type,
@@ -2395,7 +2395,8 @@ public class TaskTableRowDto
             WorkIntervals = intervals.Select(WorkIntervalDto.FromEntity).ToList(),
             PlannedTimeProgress = PlannedTimeProgressCalculator.GetPercent(parent, intervals, at),
             ShowPlannedTimeProgress = !hidePlannedBar
-                && PlannedTimeProgressCalculator.ShouldShow(parent, intervals)
+                && (PlannedTimeProgressCalculator.ShouldShow(parent, intervals)
+                    || statusText is "Начал" or "Пауза" or "Готово")
         };
     }
 }
@@ -2411,22 +2412,36 @@ namespace ProductionPlanner.Models
         public DateTime LastResetDate { get; set; }
     }
 }=== ./Models/SplitTaskRequest.cs ===
-namespace ProductionPlanner.Models
-{
-    public class SplitTaskRequest
-    {
-        public int ParentTaskId { get; set; }
-        public List<SplitPart> Parts { get; set; } = new();
-    }
+using System.ComponentModel.DataAnnotations;
 
-    public class SplitPart
-    {
-        public int? ChildTaskId { get; set; }
-        public string EmployeeName { get; set; } = string.Empty;
-        public string TaskType { get; set; } = string.Empty;
-        public double AllocatedHours { get; set; }
-    }
-}=== ./Models/TaskSplit.cs ===
+namespace ProductionPlanner.Models;
+
+public class SplitTaskRequest
+{
+    [Range(1, int.MaxValue)]
+    public int ParentTaskId { get; set; }
+
+    [Required]
+    [MinLength(1)]
+    public List<SplitPart> Parts { get; set; } = new();
+}
+
+public class SplitPart
+{
+    public int? ChildTaskId { get; set; }
+
+    [Required]
+    [MinLength(1)]
+    public string EmployeeName { get; set; } = string.Empty;
+
+    [Required]
+    [MinLength(1)]
+    public string TaskType { get; set; } = string.Empty;
+
+    [Range(0.01, 1000)]
+    public double AllocatedHours { get; set; }
+}
+=== ./Models/TaskSplit.cs ===
 using System.ComponentModel.DataAnnotations;
 
 namespace ProductionPlanner.Models
@@ -2455,20 +2470,54 @@ namespace ProductionPlanner.Models
         public ProductionTask ChildTask { get; set; } = null!;
     }
 }=== ./Models/TaskTableRequests.cs ===
+using System.ComponentModel.DataAnnotations;
+
 namespace ProductionPlanner.Models;
 
-public class CreateTaskRequest
+public class CreateTaskRequest : IValidatableObject
 {
     public string? FolderPath { get; set; }
     public string? FileName { get; set; }
     public string? Comment { get; set; }
+
+    [Required]
     public DateTime Deadline { get; set; }
+
+    [Range(0.01, 1000)]
     public double EstimateHours { get; set; }
+
     public string? Type { get; set; }
+
+    /// <summary>
+    /// Исполнитель для одиночной задачи. Может быть пустым, когда задача создаётся
+    /// общей через <see cref="Parts"/>: тогда исполнители берутся из частей,
+    /// а у родительской записи поле остаётся пустым.
+    /// </summary>
     public string? EmployeeName { get; set; }
+
     public int? ParentRowNumber { get; set; }
+
     /// <summary>Назначения для общей задачи (2+ сотрудника — создаётся родитель и дочерние).</summary>
     public List<SplitPart>? Parts { get; set; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        var validParts = Parts?
+            .Where(p => p != null
+                && !string.IsNullOrWhiteSpace(p.EmployeeName)
+                && p.AllocatedHours > 0)
+            .ToList();
+
+        var hasMultipleParts = validParts is { Count: >= 2 };
+        var hasEmployee = !string.IsNullOrWhiteSpace(EmployeeName);
+
+        if (!hasMultipleParts && !hasEmployee)
+        {
+            yield return new ValidationResult(
+                "Укажите сотрудника или задайте 2+ части для общей задачи.",
+                new[] { nameof(EmployeeName) });
+        }
+    }
 }
 
 public class UpdateTaskRequest
@@ -2476,12 +2525,70 @@ public class UpdateTaskRequest
     public string? FolderPath { get; set; }
     public string? FileName { get; set; }
     public string? Comment { get; set; }
+
+    [Required]
     public DateTime Deadline { get; set; }
+
+    [Range(0.01, 1000)]
     public double EstimateHours { get; set; }
+
     public string? Type { get; set; }
+
+    /// <summary>
+    /// Исполнитель одиночной задачи. У общей задачи (родителя со сплитом) поле может
+    /// быть пустым — назначения хранятся в дочерних задачах. Финальная проверка
+    /// делается в <see cref="ProductionPlanner.Services.TaskTable.TaskTableService"/>,
+    /// где известно состояние существующей записи.
+    /// </summary>
     public string? EmployeeName { get; set; }
+
     public int? ParentRowNumber { get; set; }
     public string? StatusText { get; set; }
+}
+=== ./Hubs/NotificationConnectionRegistry.cs ===
+using System.Collections.Concurrent;
+
+namespace ProductionPlanner.Hubs;
+
+/// <summary>
+/// Учёт активных SignalR-подключений по пользователю; лишние закрываются при новом входе.
+/// </summary>
+public sealed class NotificationConnectionRegistry
+{
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _byUser = new();
+
+    public int MaxConnectionsPerUser { get; init; } = 3;
+
+    public IReadOnlyList<string> Register(string userId, string connectionId)
+    {
+        var connections = _byUser.GetOrAdd(userId, _ => new ConcurrentDictionary<string, byte>());
+        connections[connectionId] = 0;
+
+        var toClose = new List<string>();
+        while (connections.Count > MaxConnectionsPerUser)
+        {
+            var victim = connections.Keys.ToList().FirstOrDefault(id => id != connectionId);
+            if (victim == null)
+                break;
+            if (connections.TryRemove(victim, out _))
+                toClose.Add(victim);
+        }
+
+        return toClose;
+    }
+
+    public void Unregister(string userId, string connectionId)
+    {
+        if (!_byUser.TryGetValue(userId, out var connections))
+            return;
+
+        connections.TryRemove(connectionId, out _);
+        if (connections.IsEmpty)
+            _byUser.TryRemove(userId, out _);
+    }
+
+    public int CountForUser(string userId) =>
+        _byUser.TryGetValue(userId, out var connections) ? connections.Count : 0;
 }
 === ./Hubs/NotificationGroups.cs ===
 namespace ProductionPlanner.Hubs;
@@ -2497,47 +2604,139 @@ using Microsoft.AspNetCore.SignalR;
 using ProductionPlanner.Models;
 using System.Security.Claims;
 
-namespace ProductionPlanner.Hubs
+namespace ProductionPlanner.Hubs;
+
+[Authorize]
+public class NotificationHub : Hub
 {
-    [Authorize]
-    public class NotificationHub : Hub
+    public const string ForceDisconnectMethod = "ForceDisconnect";
+
+    private readonly UserManager<User> _userManager;
+    private readonly NotificationConnectionRegistry _connections;
+    private readonly ILogger<NotificationHub> _logger;
+
+    public NotificationHub(
+        UserManager<User> userManager,
+        NotificationConnectionRegistry connections,
+        ILogger<NotificationHub> logger)
     {
-        private readonly UserManager<User> _userManager;
+        _userManager = userManager;
+        _connections = connections;
+        _logger = logger;
+    }
 
-        public NotificationHub(UserManager<User> userManager)
+    public override async Task OnConnectedAsync()
+    {
+        var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrEmpty(userId))
         {
-            _userManager = userManager;
-        }
-
-        public override async Task OnConnectedAsync()
-        {
-            var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!string.IsNullOrEmpty(userId))
-                await Groups.AddToGroupAsync(Context.ConnectionId, userId);
-
-            var user = await _userManager.GetUserAsync(Context.User!);
-            if (user?.Role == "Admin")
-                await Groups.AddToGroupAsync(Context.ConnectionId, NotificationGroups.Admins);
-
-            await base.OnConnectedAsync();
-        }
-
-        public async Task JoinUserGroup(string userId)
-        {
-            var currentUserId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (currentUserId != userId)
-                throw new HubException("Cannot join another user's notification group.");
+            var stale = _connections.Register(userId, Context.ConnectionId);
+            foreach (var staleId in stale)
+            {
+                await Groups.RemoveFromGroupAsync(staleId, userId);
+                await Clients.Client(staleId).SendAsync(ForceDisconnectMethod);
+            }
 
             await Groups.AddToGroupAsync(Context.ConnectionId, userId);
         }
 
-        public async Task LeaveUserGroup(string userId)
-        {
-            var currentUserId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (currentUserId != userId)
-                throw new HubException("Cannot leave another user's notification group.");
+        var user = await _userManager.GetUserAsync(Context.User!);
+        if (user != null && await _userManager.IsInRoleAsync(user, "Admin"))
+            await Groups.AddToGroupAsync(Context.ConnectionId, NotificationGroups.Admins);
 
+        _logger.LogDebug(
+            "SignalR connected {ConnectionId} user {UserId} (active: {Count})",
+            Context.ConnectionId,
+            userId ?? "?",
+            string.IsNullOrEmpty(userId) ? 0 : _connections.CountForUser(userId));
+
+        await base.OnConnectedAsync();
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrEmpty(userId))
+        {
+            _connections.Unregister(userId, Context.ConnectionId);
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, userId);
+        }
+
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, NotificationGroups.Admins);
+
+        if (exception != null)
+            _logger.LogDebug(exception, "SignalR disconnected {ConnectionId}", Context.ConnectionId);
+        else
+            _logger.LogDebug("SignalR disconnected {ConnectionId}", Context.ConnectionId);
+
+        await base.OnDisconnectedAsync(exception);
+    }
+
+    public async Task JoinUserGroup(string userId)
+    {
+        var currentUserId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (currentUserId != userId)
+            throw new HubException("Cannot join another user's notification group.");
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, userId);
+    }
+
+    public async Task LeaveUserGroup(string userId)
+    {
+        var currentUserId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (currentUserId != userId)
+            throw new HubException("Cannot leave another user's notification group.");
+
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, userId);
+    }
+}
+=== ./Infrastructure/ExceptionHandlingMiddleware.cs ===
+using System.Net;
+using System.Text.Json;
+
+namespace ProductionPlanner.Infrastructure;
+
+public sealed class ExceptionHandlingMiddleware
+{
+    private readonly RequestDelegate _next;
+    private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+    private readonly IHostEnvironment _environment;
+
+    public ExceptionHandlingMiddleware(
+        RequestDelegate next,
+        ILogger<ExceptionHandlingMiddleware> logger,
+        IHostEnvironment environment)
+    {
+        _next = next;
+        _logger = logger;
+        _environment = environment;
+    }
+
+    public async Task InvokeAsync(HttpContext context)
+    {
+        try
+        {
+            await _next(context);
+        }
+        catch (Exception ex)
+        {
+            if (context.Response.HasStarted)
+                throw;
+
+            _logger.LogError(ex, "Необработанное исключение {Method} {Path}",
+                context.Request.Method, context.Request.Path);
+
+            context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+            context.Response.ContentType = "application/json";
+
+            var payload = new Dictionary<string, string?>
+            {
+                ["error"] = _environment.IsDevelopment()
+                    ? ex.Message
+                    : "Внутренняя ошибка сервера"
+            };
+
+            await context.Response.WriteAsync(JsonSerializer.Serialize(payload));
         }
     }
 }
@@ -2817,6 +3016,7 @@ public static class WebApplicationExtensions
             }
         });
         app.UseCors("AllowReact");
+        app.UseMiddleware<ExceptionHandlingMiddleware>();
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseWebSockets();
@@ -2834,9 +3034,12 @@ namespace ProductionPlanner.Infrastructure;
 /// </summary>
 public static class PostgresDateTime
 {
-    private static readonly TimeZoneInfo Moscow = GetMoscowTimeZone();
+    private static readonly TimeZoneInfo Moscow = CreateMoscowTimeZone();
 
-    private static TimeZoneInfo GetMoscowTimeZone()
+    internal static TimeZoneInfo GetMoscowTimeZone() =>
+        Moscow;
+
+    private static TimeZoneInfo CreateMoscowTimeZone()
     {
         try
         {
@@ -3091,6 +3294,39 @@ public static class DatabaseInitializer
         logger.LogInformation("Таблица UserNotifications проверена/создана.");
     }
 }
+=== ./Infrastructure/AppDateTime.cs ===
+namespace ProductionPlanner.Infrastructure;
+
+/// <summary>
+/// Согласование времени: AppTimeService.Now — московская стенка (Unspecified);
+/// timestamptz из БД: Unspecified трактуем как московскую стенку (симметрично PostgresDateTime.ToUtc при записи).
+/// Сравнения дедлайнов — в UTC; рабочие часы 10–19 — в московской стенке.
+/// </summary>
+public static class AppDateTime
+{
+    private static readonly TimeZoneInfo Moscow = PostgresDateTime.GetMoscowTimeZone();
+
+    /// <summary>Московское «сейчас» из AppTimeService → UTC.</summary>
+    public static DateTime AppNowToUtc(DateTime appNow) => PostgresDateTime.ToUtc(appNow);
+
+    /// <summary>Значение timestamptz из EF (legacy) → UTC.</summary>
+    public static DateTime DbToUtc(DateTime dbValue) =>
+        dbValue.Kind switch
+        {
+            DateTimeKind.Utc => dbValue,
+            DateTimeKind.Local => dbValue.ToUniversalTime(),
+            _ => PostgresDateTime.ToUtc(dbValue)
+        };
+
+    public static DateTime ToMoscowWallClockFromApp(DateTime appNow) =>
+        TimeZoneInfo.ConvertTimeFromUtc(AppNowToUtc(appNow), Moscow);
+
+    public static DateTime ToMoscowWallClockFromDb(DateTime dbValue) =>
+        TimeZoneInfo.ConvertTimeFromUtc(DbToUtc(dbValue), Moscow);
+
+    public static int CompareDeadlineToAppNow(DateTime deadlineFromDb, DateTime appNow) =>
+        DbToUtc(deadlineFromDb).CompareTo(AppNowToUtc(appNow));
+}
 === ./Controllers/TaskSplitController.cs ===
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
@@ -3207,7 +3443,7 @@ namespace ProductionPlanner.Controllers
                     c.FileName,
                     c.Comment,
                     StatusText = TaskStatusMapper.ToText(c.Status),
-                    Status = c.Status.ToString(),
+                    status = (int)c.Status,
                     c.Deadline,
                     c.EstimateHours,
                     c.ActualHours,
@@ -3240,6 +3476,7 @@ namespace ProductionPlanner.Controllers
 }=== ./Controllers/DebugController.cs ===
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
@@ -3362,24 +3599,29 @@ public class DebugController : ControllerBase
     }
 
     [HttpPost("reset-db")]
-    public async Task<IActionResult> ResetDatabase()
+    public async Task<IActionResult> ResetDatabase(CancellationToken cancellationToken)
     {
-        await _repo.DeleteAllWorkIntervalsAsync();
-        await _repo.DeleteAllTasksAsync();
-        
-        var allSplits = _context.TaskSplits.ToList();
-        _context.TaskSplits.RemoveRange(allSplits);
-        
-        var stats = await _repo.GetEmployeeStatAsync("Дима");
-        if (stats != null)
+        await _repo.DeleteAllWorkIntervalsAsync(cancellationToken);
+        await _repo.DeleteAllTasksAsync(cancellationToken);
+
+        var allSplits = await _context.TaskSplits.ToListAsync(cancellationToken);
+        if (allSplits.Count > 0)
+            _context.TaskSplits.RemoveRange(allSplits);
+
+        var allStats = await _context.EmployeeStats.ToListAsync(cancellationToken);
+        foreach (var stat in allStats)
         {
-            stats.TotalSavedHours = 0;
-            stats.TodaySavedHours = 0;
-            await _repo.UpdateEmployeeStatAsync(stats);
+            stat.TotalSavedHours = 0;
+            stat.TodaySavedHours = 0;
+            stat.LastResetDate = _timeService.Now.Date;
         }
-        
-        await _context.SaveChangesAsync();
-        
+
+        var allNotifications = await _context.UserNotifications.ToListAsync(cancellationToken);
+        if (allNotifications.Count > 0)
+            _context.UserNotifications.RemoveRange(allNotifications);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
         return Ok(new { message = "База данных полностью очищена" });
     }
 
@@ -3467,8 +3709,8 @@ public class UserAvatarController : ControllerBase
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
-using ProductionPlanner.Services.TaskTable;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Controllers;
 
@@ -3556,7 +3798,25 @@ public class ProductionTasksController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Сотруднику через PUT /table/row разрешено менять только инфо-статусы (Согласование/Нет изделий)
+    /// и их резолв (Согласовано/В наличии). Жизненный цикл (Начал/Пауза/Продолжить/Готово)
+    /// идёт через выделенные эндпоинты <c>/api/tasks/{id}/start|pause|resume|complete</c>.
+    /// </summary>
+    private static bool IsEmployeeAllowedStatusUpdate(UpdateTaskRequest request)
+    {
+        if (string.IsNullOrEmpty(request.StatusText))
+            return false;
+
+        return TaskStatusMapper.FromText(request.StatusText) is
+            JobStatus.PendingApproval
+            or JobStatus.NoItems
+            or JobStatus.Approved
+            or JobStatus.InStock;
+    }
+
     [HttpPost("table/row")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateTableRow(
         [FromBody] CreateTaskRequest request,
         CancellationToken cancellationToken = default)
@@ -3575,6 +3835,11 @@ public class ProductionTasksController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Редактирует строку. Админ может менять любые поля; сотрудник — только статус
+    /// и только своей задачи (включая инфо-статусы); чужие данные не попадают в
+    /// PUT, потому что обновление полей принимается только когда зовущий — админ.
+    /// </summary>
     [HttpPut("table/row/{id}")]
     public async Task<IActionResult> UpdateTableRow(
         int id,
@@ -3583,6 +3848,39 @@ public class ProductionTasksController : ControllerBase
     {
         try
         {
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null) return Unauthorized();
+            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+
+            if (!isAdmin)
+            {
+                var task = await _tableService.GetRowDtoAsync(id, currentUser.FullName, cancellationToken);
+                if (task == null) return NotFound();
+
+                var isOwnTask = string.Equals(task.EmployeeName, currentUser.FullName, StringComparison.Ordinal)
+                    || task.HasCurrentUserSubtask;
+                if (!isOwnTask)
+                    return Forbid();
+
+                if (!IsEmployeeAllowedStatusUpdate(request))
+                    return Forbid();
+
+                // Сотруднику разрешено менять только статус; остальное берём из текущей записи,
+                // чтобы он не мог переписать дедлайн, часы, тип, сотрудника и пр.
+                request = new UpdateTaskRequest
+                {
+                    FolderPath = task.FolderPath,
+                    FileName = task.FileName,
+                    Comment = task.Comment,
+                    Deadline = task.Deadline,
+                    EstimateHours = task.EstimateHours,
+                    Type = task.Type,
+                    EmployeeName = task.EmployeeName,
+                    ParentRowNumber = task.ParentRowNumber,
+                    StatusText = request.StatusText
+                };
+            }
+
             var result = await _tableService.UpdateRowAsync(id, request, cancellationToken);
             if (result.NotFound)
                 return NotFound();
@@ -3596,6 +3894,7 @@ public class ProductionTasksController : ControllerBase
     }
 
     [HttpDelete("table/row/{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteTableRow(int id, CancellationToken cancellationToken = default)
     {
         try
@@ -3613,6 +3912,7 @@ public class ProductionTasksController : ControllerBase
     }
 
     [HttpPost("table/reorder")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> ReorderRows(
         [FromBody] List<int> orderedIds,
         CancellationToken cancellationToken = default)
@@ -3632,6 +3932,8 @@ public class ProductionTasksController : ControllerBase
 === ./Controllers/CalendarController.cs ===
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Services.Calendar;
 
@@ -3644,16 +3946,16 @@ public class CalendarController : ControllerBase
 {
     private readonly IWeekCalendarService _weekCalendar;
     private readonly IAppTimeService _timeService;
-    private readonly ILogger<CalendarController> _logger;
+    private readonly UserManager<User> _userManager;
 
     public CalendarController(
         IWeekCalendarService weekCalendar,
         IAppTimeService timeService,
-        ILogger<CalendarController> logger)
+        UserManager<User> userManager)
     {
         _weekCalendar = weekCalendar;
         _timeService = timeService;
-        _logger = logger;
+        _userManager = userManager;
     }
 
     [HttpGet("week")]
@@ -3662,23 +3964,22 @@ public class CalendarController : ControllerBase
         [FromQuery] string? startDate,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            if (string.IsNullOrEmpty(employee))
-                return BadRequest(new { error = "Employee name is required" });
+        if (string.IsNullOrEmpty(employee))
+            return BadRequest(new { error = "Employee name is required" });
 
-            var result = await _weekCalendar.GetWeekAsync(
-                employee,
-                startDate,
-                _timeService.Now,
-                cancellationToken);
-            return Ok(new { start = result.Start, days = result.Days });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка в GetWeek для сотрудника {Employee}", employee);
-            return StatusCode(500, new { error = ex.Message });
-        }
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser == null) return Unauthorized();
+
+        var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+        if (!isAdmin && !string.Equals(employee, currentUser.FullName, StringComparison.Ordinal))
+            return Forbid();
+
+        var result = await _weekCalendar.GetWeekAsync(
+            employee,
+            startDate,
+            _timeService.Now,
+            cancellationToken);
+        return Ok(new { start = result.Start, days = result.Days });
     }
 }
 === ./Controllers/AuthController.cs ===
@@ -3836,7 +4137,9 @@ public class DeployInfoController : ControllerBase
 }
 === ./Controllers/TaskListsController.cs ===
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Services.TaskLists;
 
@@ -3849,16 +4152,32 @@ public class TaskListsController : ControllerBase
 {
     private readonly ITaskListQueryService _taskLists;
     private readonly IAppTimeService _timeService;
-    private readonly ILogger<TaskListsController> _logger;
+    private readonly UserManager<User> _userManager;
 
     public TaskListsController(
         ITaskListQueryService taskLists,
         IAppTimeService timeService,
-        ILogger<TaskListsController> logger)
+        UserManager<User> userManager)
     {
         _taskLists = taskLists;
         _timeService = timeService;
-        _logger = logger;
+        _userManager = userManager;
+    }
+
+    /// <summary>
+    /// Сотрудник может запрашивать только свои данные; админ — кого угодно.
+    /// Возвращает <c>null</c>, если доступ есть; иначе — готовый Forbid/Unauthorized.
+    /// </summary>
+    private async Task<IActionResult?> EnsureCanQueryEmployeeAsync(string employee)
+    {
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser == null) return Unauthorized();
+
+        var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+        if (!isAdmin && !string.Equals(employee, currentUser.FullName, StringComparison.Ordinal))
+            return Forbid();
+
+        return null;
     }
 
     [HttpGet("active")]
@@ -3866,19 +4185,13 @@ public class TaskListsController : ControllerBase
         [FromQuery] string employee,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            if (string.IsNullOrEmpty(employee))
-                return BadRequest(new { error = "Employee name is required" });
+        if (string.IsNullOrEmpty(employee))
+            return BadRequest(new { error = "Employee name is required" });
 
-            var result = await _taskLists.GetActiveTasksAsync(employee, _timeService.Now, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка в GetActiveTasks для сотрудника {Employee}", employee);
-            return StatusCode(500, new { error = ex.Message });
-        }
+        if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
+
+        var result = await _taskLists.GetActiveTasksAsync(employee, _timeService.Now, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("completed")]
@@ -3888,19 +4201,13 @@ public class TaskListsController : ControllerBase
         [FromQuery] int pageSize = 25,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            if (string.IsNullOrEmpty(employee))
-                return BadRequest(new { error = "Employee name is required" });
+        if (string.IsNullOrEmpty(employee))
+            return BadRequest(new { error = "Employee name is required" });
 
-            var result = await _taskLists.GetCompletedTasksAsync(employee, page, pageSize, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка в GetCompletedTasks для сотрудника {Employee}", employee);
-            return StatusCode(500, new { error = ex.Message });
-        }
+        if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
+
+        var result = await _taskLists.GetCompletedTasksAsync(employee, page, pageSize, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("deadline-risks")]
@@ -3908,19 +4215,13 @@ public class TaskListsController : ControllerBase
         [FromQuery] string employee,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            if (string.IsNullOrEmpty(employee))
-                return BadRequest(new { error = "Employee name is required" });
+        if (string.IsNullOrEmpty(employee))
+            return BadRequest(new { error = "Employee name is required" });
 
-            var risks = await _taskLists.GetDeadlineRisksAsync(employee, _timeService.Now, cancellationToken);
-            return Ok(risks);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка в GetDeadlineRisks для сотрудника {Employee}", employee);
-            return StatusCode(500, new { error = ex.Message });
-        }
+        if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
+
+        var risks = await _taskLists.GetDeadlineRisksAsync(employee, _timeService.Now, cancellationToken);
+        return Ok(risks);
     }
 }
 === ./Controllers/NotificationsController.cs ===
@@ -4038,10 +4339,9 @@ namespace ProductionPlanner.Controllers
             var windowsShareName = _configuration["FileOpen:WindowsShareName"] ?? shareName;
             var windowsOpenMode = _configuration["FileOpen:WindowsOpenMode"] ?? "netopen";
 
-            var correctedPath = FilePathNormalizer.NormalizeRelativePath(filePath, shareName);
-            if (string.IsNullOrWhiteSpace(correctedPath))
+            if (!FilePathNormalizer.TryNormalizeRelativePath(filePath, shareName, out var correctedPath, out var pathError))
             {
-                error = "Не удалось определить путь к файлу";
+                error = pathError ?? "Не удалось определить путь к файлу";
                 return false;
             }
 
@@ -4271,6 +4571,7 @@ namespace ProductionPlanner.Data
     }
 }
 === ./Data/ProductionTaskRepository.cs ===
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
@@ -4379,10 +4680,17 @@ namespace ProductionPlanner.Data
             var rangeStart = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(weekStart) : weekStart;
             var rangeEnd = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(weekEnd) : weekEnd;
 
+            var taskIdsWithIntervals = await _context.WorkIntervals
+                .AsNoTracking()
+                .Where(i => i.StartTime >= rangeStart && i.StartTime < rangeEnd)
+                .Select(i => i.ProductionTaskId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
             return await _context.ProductionTasks
                 .AsNoTracking()
                 .Where(t => t.EmployeeName == employeeName && (
-                    t.WorkIntervals.Any(i => i.StartTime >= rangeStart && i.StartTime < rangeEnd)
+                    taskIdsWithIntervals.Contains(t.Id)
                     || (t.Status != JobStatus.Completed && !(t.IsSplitTask && t.ParentRowNumber == null))
                     || (t.Deadline >= rangeStart && t.Deadline < rangeEnd)
                     || (t.Status == JobStatus.Completed
@@ -4446,53 +4754,59 @@ namespace ProductionPlanner.Data
         public async Task UpdateTaskAsync(ProductionTask task, CancellationToken cancellationToken = default)
         {
             task.UpdatedAt = _timeService.Now;
-            var tracked = _context.ProductionTasks.Local.FirstOrDefault(e => e.Id == task.Id);
-            if (tracked != null && !ReferenceEquals(tracked, task))
+
+            var tracked = await GetTrackedTaskAsync(task.Id, cancellationToken);
+            if (tracked == null)
+                throw new InvalidOperationException($"Задача {task.Id} не найдена");
+
+            if (!ReferenceEquals(tracked, task))
                 _context.Entry(tracked).CurrentValues.SetValues(task);
-            else if (_context.Entry(task).State == EntityState.Detached)
-                _context.ProductionTasks.Update(task);
 
             await _context.SaveChangesAsync(cancellationToken);
         }
 
         public async Task DeleteTaskAsync(int id, CancellationToken cancellationToken = default)
         {
-            var task = await GetTaskByIdAsync(id, cancellationToken);
-            if (task == null)
-                return;
-
-            var closedAt = _timeService.Now;
-            var taskIdsToClose = new List<int> { id };
-
-            if (task.IsSplitTask)
+            await ExecuteInTransactionAsync(async ct =>
             {
-                var childIds = await _context.ProductionTasks
-                    .Where(t => t.ParentRowNumber == task.Id)
-                    .Select(t => t.Id)
-                    .ToListAsync(cancellationToken);
-                taskIdsToClose.AddRange(childIds);
-            }
+                var task = await _context.ProductionTasks
+                    .FirstOrDefaultAsync(t => t.Id == id, ct);
+                if (task == null)
+                    return;
 
-            foreach (var taskId in taskIdsToClose.Distinct())
-                await CloseOpenIntervalsAsync(taskId, closedAt, cancellationToken);
+                var closedAt = _timeService.Now;
+                var taskIdsToClose = new List<int> { id };
 
-            if (task.IsSplitTask)
-            {
-                var children = await _context.ProductionTasks
-                    .Where(t => t.ParentRowNumber == task.Id)
-                    .ToListAsync(cancellationToken);
-                if (children.Count > 0)
-                    _context.ProductionTasks.RemoveRange(children);
-            }
+                if (task.IsSplitTask)
+                {
+                    var childIds = await _context.ProductionTasks
+                        .Where(t => t.ParentRowNumber == task.Id)
+                        .Select(t => t.Id)
+                        .ToListAsync(ct);
+                    taskIdsToClose.AddRange(childIds);
+                }
 
-            var splits = await _context.TaskSplits
-                .Where(ts => ts.ParentRowNumber == task.Id)
-                .ToListAsync(cancellationToken);
-            if (splits.Count > 0)
-                _context.TaskSplits.RemoveRange(splits);
+                foreach (var taskId in taskIdsToClose.Distinct())
+                    await CloseOpenIntervalsAsync(taskId, closedAt, ct);
 
-            _context.ProductionTasks.Remove(task);
-            await _context.SaveChangesAsync(cancellationToken);
+                if (task.IsSplitTask)
+                {
+                    var children = await _context.ProductionTasks
+                        .Where(t => t.ParentRowNumber == task.Id)
+                        .ToListAsync(ct);
+                    if (children.Count > 0)
+                        _context.ProductionTasks.RemoveRange(children);
+                }
+
+                var splits = await _context.TaskSplits
+                    .Where(ts => ts.ParentRowNumber == task.Id)
+                    .ToListAsync(ct);
+                if (splits.Count > 0)
+                    _context.TaskSplits.RemoveRange(splits);
+
+                _context.ProductionTasks.Remove(task);
+                await _context.SaveChangesAsync(ct);
+            }, cancellationToken);
         }
 
         public async Task DeleteAllTasksAsync(CancellationToken cancellationToken = default)
@@ -4544,23 +4858,33 @@ namespace ProductionPlanner.Data
             }
             else
             {
-                var tracked = _context.ChangeTracker.Entries<EmployeeStat>()
-                    .FirstOrDefault(e => e.Entity.Id == stat.Id)?.Entity;
+                var tracked = _context.EmployeeStats.Local.FirstOrDefault(e => e.Id == stat.Id);
+                if (tracked == null)
+                {
+                    tracked = await _context.EmployeeStats
+                        .FirstOrDefaultAsync(e => e.Id == stat.Id, cancellationToken);
+                }
 
-                if (tracked != null)
-                {
-                    tracked.EmployeeName = stat.EmployeeName;
-                    tracked.TotalSavedHours = stat.TotalSavedHours;
-                    tracked.TodaySavedHours = stat.TodaySavedHours;
-                    tracked.LastResetDate = stat.LastResetDate;
-                }
-                else
-                {
-                    _context.EmployeeStats.Update(stat);
-                }
+                if (tracked == null)
+                    throw new InvalidOperationException($"Статистика сотрудника {stat.Id} не найдена");
+
+                tracked.EmployeeName = stat.EmployeeName;
+                tracked.TotalSavedHours = stat.TotalSavedHours;
+                tracked.TodaySavedHours = stat.TodaySavedHours;
+                tracked.LastResetDate = stat.LastResetDate;
             }
 
             await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        private async Task<ProductionTask?> GetTrackedTaskAsync(int id, CancellationToken cancellationToken)
+        {
+            var tracked = _context.ProductionTasks.Local.FirstOrDefault(e => e.Id == id);
+            if (tracked != null)
+                return tracked;
+
+            return await _context.ProductionTasks
+                .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
         }
 
         public async Task<List<ProductionTask>> GetChildTasksAsync(int parentId, CancellationToken cancellationToken = default)
@@ -4647,13 +4971,9 @@ namespace ProductionPlanner.Data
                             ct);
                 }
 
-                for (var i = 0; i < orderedIds.Count; i++)
+                if (orderedIds.Count > 0)
                 {
-                    await _context.ProductionTasks
-                        .Where(t => t.Id == orderedIds[i])
-                        .ExecuteUpdateAsync(
-                            setter => setter.SetProperty(t => t.DisplayOrder, i),
-                            ct);
+                    await ApplyDisplayOrderBulkUpdateAsync(orderedIds, ct);
                 }
             }, cancellationToken);
         }
@@ -4702,6 +5022,32 @@ namespace ProductionPlanner.Data
             });
         }
 
+        private async Task ApplyDisplayOrderBulkUpdateAsync(
+            IReadOnlyList<int> orderedIds,
+            CancellationToken cancellationToken)
+        {
+            var sql = new StringBuilder();
+            sql.Append("UPDATE \"ProductionTasks\" SET \"DisplayOrder\" = CASE ");
+            var args = new List<object>(orderedIds.Count * 2);
+
+            for (var i = 0; i < orderedIds.Count; i++)
+            {
+                sql.Append($"WHEN \"Id\" = {{{i}}} THEN {i} ");
+                args.Add(orderedIds[i]);
+            }
+
+            sql.Append("END WHERE \"Id\" IN (");
+            for (var i = 0; i < orderedIds.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                sql.Append($"{{{args.Count}}}");
+                args.Add(orderedIds[i]);
+            }
+
+            sql.Append(')');
+            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), args, cancellationToken);
+        }
+
         public async Task<int> CloseOpenIntervalsAsync(
             int taskId,
             DateTime closedAt,
@@ -4729,46 +5075,52 @@ namespace ProductionPlanner.Data
             else if (newStatus == JobStatus.Completed)
                 query = query.Where(t => t.Status != JobStatus.Completed);
 
-            var rows = await query.ExecuteUpdateAsync(s =>
-                s.SetProperty(t => t.Status, newStatus)
+            if (patch == null)
+            {
+                return await query.ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.Status, newStatus)
+                        .SetProperty(t => t.UpdatedAt, updated),
+                    cancellationToken);
+            }
+
+            if (patch is { Progress: 1, CompletedAt: not null, ActualHours: not null })
+            {
+                var completedAt = ToDbDateTime(patch.CompletedAt.Value);
+                var actualHours = patch.ActualHours.Value;
+                return await query.ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.Status, newStatus)
+                        .SetProperty(t => t.UpdatedAt, updated)
+                        .SetProperty(t => t.Progress, 1.0)
+                        .SetProperty(t => t.CompletedAt, completedAt)
+                        .SetProperty(t => t.ActualHours, actualHours),
+                    cancellationToken);
+            }
+
+            if (patch is { Progress: 1, CompletedAt: not null, ClearCompletedAt: false })
+            {
+                var completedAt = ToDbDateTime(patch.CompletedAt.Value);
+                return await query.ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.Status, newStatus)
+                        .SetProperty(t => t.UpdatedAt, updated)
+                        .SetProperty(t => t.Progress, 1.0)
+                        .SetProperty(t => t.CompletedAt, completedAt),
+                    cancellationToken);
+            }
+
+            if (patch is { Progress: 0, ClearCompletedAt: true })
+            {
+                return await query.ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.Status, newStatus)
+                        .SetProperty(t => t.UpdatedAt, updated)
+                        .SetProperty(t => t.Progress, 0.0)
+                        .SetProperty(t => t.CompletedAt, (DateTime?)null),
+                    cancellationToken);
+            }
+
+            return await query.ExecuteUpdateAsync(
+                s => s.SetProperty(t => t.Status, newStatus)
                     .SetProperty(t => t.UpdatedAt, updated),
                 cancellationToken);
-
-            if (rows == 0 || patch == null)
-                return rows;
-
-            var patchQuery = _context.ProductionTasks.Where(t => t.Id == taskId);
-
-            if (patch.Progress is double progress)
-            {
-                await patchQuery.ExecuteUpdateAsync(
-                    s => s.SetProperty(t => t.Progress, progress),
-                    cancellationToken);
-            }
-
-            if (patch.CompletedAt is DateTime completedAt)
-            {
-                var completed = ToDbDateTime(completedAt);
-                await patchQuery.ExecuteUpdateAsync(
-                    s => s.SetProperty(t => t.CompletedAt, completed),
-                    cancellationToken);
-            }
-
-            if (patch.ClearCompletedAt)
-            {
-                await patchQuery.ExecuteUpdateAsync(
-                    s => s.SetProperty(t => t.CompletedAt, (DateTime?)null),
-                    cancellationToken);
-            }
-
-            if (patch.ActualHours is double actualHours)
-            {
-                await patchQuery.ExecuteUpdateAsync(
-                    s => s.SetProperty(t => t.ActualHours, actualHours),
-                    cancellationToken);
-            }
-
-            return rows;
         }
 
         private DateTime ToDbDateTime(DateTime value) =>
@@ -5062,7 +5414,7 @@ public class PlannedTimeProgressCalculatorTests
     public void GetPercent_BeforeStart_ReturnsZero()
     {
         var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.Assigned };
-        var percent = PlannedTimeProgressCalculator.GetPercent(task, [], new DateTime(2026, 5, 23, 12, 0, 0));
+        var percent = PlannedTimeProgressCalculator.GetPercent(task, [], new DateTime(2026, 5, 22, 12, 0, 0));
         Assert.Equal(0, percent);
     }
 
@@ -5070,8 +5422,8 @@ public class PlannedTimeProgressCalculatorTests
     public void GetPercent_OneHourOfTwo_ReturnsFifty()
     {
         var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.InProgress };
-        var start = new DateTime(2026, 5, 23, 11, 0, 0);
-        var now = new DateTime(2026, 5, 23, 12, 0, 0);
+        var start = new DateTime(2026, 5, 22, 11, 0, 0);
+        var now = new DateTime(2026, 5, 22, 12, 0, 0);
         var intervals = new List<WorkInterval>
         {
             new() { StartTime = start, EndTime = null }
@@ -5088,12 +5440,12 @@ public class PlannedTimeProgressCalculatorTests
         {
             new()
             {
-                StartTime = new DateTime(2026, 5, 23, 11, 0, 0),
-                EndTime = new DateTime(2026, 5, 23, 11, 30, 0)
+                StartTime = new DateTime(2026, 5, 22, 11, 0, 0),
+                EndTime = new DateTime(2026, 5, 22, 11, 30, 0)
             }
         };
         var percent = PlannedTimeProgressCalculator.GetPercent(
-            task, intervals, new DateTime(2026, 5, 23, 14, 0, 0));
+            task, intervals, new DateTime(2026, 5, 22, 14, 0, 0));
         Assert.Equal(25, percent, 1);
     }
 
@@ -5102,7 +5454,7 @@ public class PlannedTimeProgressCalculatorTests
     {
         var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.Completed };
         var percent = PlannedTimeProgressCalculator.GetPercent(
-            task, [], new DateTime(2026, 5, 23, 12, 0, 0));
+            task, [], new DateTime(2026, 5, 22, 12, 0, 0));
         Assert.Equal(100, percent);
     }
 }
@@ -5168,6 +5520,74 @@ public class FilePathNormalizerTests
     {
         var unc = FilePathNormalizer.BuildWindowsUncPath("192.168.1.119", Share, "С/Спортмебель/15,05,26 спортт.cdr");
         Assert.Equal(@"\\192.168.1.119\Клиенты\С\Спортмебель\15,05,26 спортт.cdr", unc);
+    }
+
+    [Fact]
+    public void Rejects_path_with_parent_directory_segments()
+    {
+        var ok = FilePathNormalizer.TryNormalizeRelativePath(
+            "Клиенты/Ф/../secret/file.cdr",
+            Share,
+            out _,
+            out var error);
+
+        Assert.False(ok);
+        Assert.Equal("Недопустимый путь", error);
+    }
+}
+=== ./ProductionPlanner.Tests/AppDateTimeTests.cs ===
+using ProductionPlanner.Infrastructure;
+using Xunit;
+
+namespace ProductionPlanner.Tests;
+
+public class AppDateTimeTests
+{
+    [Fact]
+    public void AppNowToUtc_matches_PostgresDateTime_ToUtc()
+    {
+        var appNow = new DateTime(2026, 5, 23, 12, 0, 0, DateTimeKind.Unspecified);
+        Assert.Equal(PostgresDateTime.ToUtc(appNow), AppDateTime.AppNowToUtc(appNow));
+    }
+
+    [Fact]
+    public void DbToUtc_treats_unspecified_as_moscow_wall_clock()
+    {
+        var dbValue = new DateTime(2026, 5, 23, 15, 0, 0, DateTimeKind.Unspecified);
+        Assert.Equal(PostgresDateTime.ToUtc(dbValue), AppDateTime.DbToUtc(dbValue));
+    }
+
+    [Fact]
+    public void ToMoscowWallClockFromApp_preserves_moscow_hours()
+    {
+        var appNow = new DateTime(2026, 5, 23, 15, 30, 0, DateTimeKind.Unspecified);
+        var moscow = AppDateTime.ToMoscowWallClockFromApp(appNow);
+
+        Assert.Equal(15, moscow.Hour);
+        Assert.Equal(30, moscow.Minute);
+        Assert.Equal(DateTimeKind.Unspecified, moscow.Kind);
+    }
+
+    [Fact]
+    public void CompareDeadlineToAppNow_uses_utc_instant()
+    {
+        var appNow = new DateTime(2026, 5, 23, 12, 0, 0, DateTimeKind.Unspecified);
+        var deadlineDb = new DateTime(2026, 5, 23, 11, 0, 0, DateTimeKind.Unspecified);
+
+        Assert.True(AppDateTime.CompareDeadlineToAppNow(deadlineDb, appNow) < 0);
+    }
+
+    [Fact]
+    public void ToMoscowWallClockFromDb_round_trips_moscow_wall_clock()
+    {
+        var moscowWall = new DateTime(2026, 5, 23, 14, 45, 0, DateTimeKind.Unspecified);
+        var utc = PostgresDateTime.ToUtc(moscowWall);
+        var roundTrip = AppDateTime.ToMoscowWallClockFromDb(
+            DateTime.SpecifyKind(utc, DateTimeKind.Utc));
+
+        Assert.Equal(moscowWall.Hour, roundTrip.Hour);
+        Assert.Equal(moscowWall.Minute, roundTrip.Minute);
+        Assert.Equal(moscowWall.Date, roundTrip.Date);
     }
 }
 === ./ProductionPlanner.Tests/TaskNotificationServiceTests.cs ===
@@ -5246,10 +5666,33 @@ public static class FilePathNormalizer
     /// </summary>
     public static string NormalizeRelativePath(string filePath, string shareName)
     {
+        return TryNormalizeRelativePath(filePath, shareName, out var relativePath, out _)
+            ? relativePath ?? string.Empty
+            : string.Empty;
+    }
+
+    public static bool TryNormalizeRelativePath(
+        string filePath,
+        string shareName,
+        out string? relativePath,
+        out string? error)
+    {
+        relativePath = null;
+        error = null;
+
         if (string.IsNullOrWhiteSpace(filePath))
-            return string.Empty;
+        {
+            error = "Путь к файлу не указан";
+            return false;
+        }
 
         var rawPath = filePath.Replace('\\', '/').Trim();
+        if (rawPath.StartsWith('/') || rawPath.StartsWith('\\'))
+        {
+            error = "Недопустимый путь";
+            return false;
+        }
+
         while (rawPath.Contains("//", StringComparison.Ordinal))
             rawPath = rawPath.Replace("//", "/", StringComparison.Ordinal);
 
@@ -5266,21 +5709,37 @@ public static class FilePathNormalizer
 
         rawPath = rawPath.Trim('/');
         if (string.IsNullOrEmpty(rawPath))
-            return string.Empty;
+        {
+            error = "Не удалось определить путь к файлу";
+            return false;
+        }
 
         var parts = rawPath
             .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToArray();
 
         if (parts.Length == 0)
-            return string.Empty;
+        {
+            error = "Не удалось определить путь к файлу";
+            return false;
+        }
+
+        foreach (var part in parts)
+        {
+            if (part is "." or "..")
+            {
+                error = "Недопустимый путь";
+                return false;
+            }
+        }
 
         var cleanFileName = parts[^1].Split('[')[0].Trim();
         if (!HasSupportedExtension(cleanFileName))
             cleanFileName += ".cdr";
 
         parts[^1] = cleanFileName;
-        return string.Join("/", parts);
+        relativePath = string.Join("/", parts);
+        return true;
     }
 
     /// <summary>
@@ -5371,6 +5830,7 @@ public static class FilePathNormalizer
 }
 === ./Services/TaskTable/TaskTableService.cs ===
 using ProductionPlanner.Data;
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Models.Dtos;
 
@@ -5397,6 +5857,15 @@ public class TaskTableService : ITaskTableService
         _notificationService = notificationService;
         _splitService = splitService;
     }
+
+    /// <summary>
+    /// Признак, что у задачи есть «история работы» — закрытые/открытые интервалы или активный статус.
+    /// Используется при удалении и смене сотрудника, чтобы решить, можно ли физически удалить запись
+    /// или нужно сохранить её как Completed для статистики.
+    /// </summary>
+    private static bool HasWorkHistory(ProductionTask task) =>
+        (task.WorkIntervals?.Count ?? 0) > 0
+        || task.Status is JobStatus.InProgress or JobStatus.Paused;
 
     public async Task<PaginatedResult<TaskTableRowDto>> GetRowsAsync(
         int page,
@@ -5520,9 +5989,15 @@ public class TaskTableService : ITaskTableService
                 UpdatedAt = _timeService.Now
             };
 
-            await _repo.AddTaskAsync(newTask, cancellationToken);
-            var parent = await _splitService.SplitTaskAsync(newTask.Id, parts, cancellationToken);
-            await _repo.AppendRootDisplayOrderAsync(parent.Id, cancellationToken);
+            ProductionTask? parent = null;
+            await _repo.ExecuteInTransactionAsync(async ct =>
+            {
+                await _repo.AddTaskAsync(newTask, ct);
+                parent = await _splitService.SplitTaskAsync(newTask.Id, parts, ct);
+                await _repo.AppendRootDisplayOrderAsync(parent.Id, ct);
+            }, cancellationToken);
+
+            parent = await _repo.GetTaskByIdAsync(newTask.Id, cancellationToken) ?? parent ?? newTask;
 
             return TaskTableServiceResult<ProductionTask>.Ok(parent);
         }
@@ -5564,9 +6039,51 @@ public class TaskTableService : ITaskTableService
         UpdateTaskRequest request,
         CancellationToken cancellationToken = default)
     {
-        var task = await _repo.GetTaskByIdAsync(id, cancellationToken);
+        var task = await _repo.GetTaskByIdAsync(id, cancellationToken, includeIntervals: true);
         if (task == null)
             return TaskTableServiceResult<ProductionTask>.Missing();
+
+        var isSplitParent = task.IsSplitTask && task.ParentRowNumber == null;
+        if (!isSplitParent
+            && request.EmployeeName != null
+            && string.IsNullOrWhiteSpace(request.EmployeeName))
+        {
+            return TaskTableServiceResult<ProductionTask>.Fail(
+                "Поле «Сотрудник» не может быть пустым для одиночной задачи.");
+        }
+
+        var employeeChanged = !isSplitParent
+            && !string.IsNullOrEmpty(request.EmployeeName)
+            && !string.Equals(request.EmployeeName, task.EmployeeName, StringComparison.Ordinal);
+
+        if (employeeChanged)
+        {
+            var isSplitChild = task.ParentRowNumber.HasValue && task.IsSplitTask;
+            if (isSplitChild)
+            {
+                return TaskTableServiceResult<ProductionTask>.Fail(
+                    "Сменить сотрудника у части общей задачи можно только через модалку разделения " +
+                    "— там корректно пересчитываются часы между сотрудниками.");
+            }
+
+            // Завершённая задача: интервалы и «сэкономленные» часы переезжают к новому
+            // исполнителю — задача в его стеке готовых, на его таймлайне; у прежнего
+            // её больше нет, а в окнах без других работ образуется простой.
+            if (task.Status == JobStatus.Completed)
+            {
+                return await ReattributeCompletedTaskAsync(task, request, cancellationToken);
+            }
+
+            // Активная задача с историей: завершаем у старого (его статистика остаётся),
+            // создаём новую задачу с пустой историей у нового исполнителя.
+            if (HasWorkHistory(task))
+            {
+                return await ReassignByCloningAsync(task, request, cancellationToken);
+            }
+
+            // Без интервалов и без активного статуса — обычное переименование исполнителя
+            // в стандартной ветке ниже.
+        }
 
         var oldEmployeeName = task.EmployeeName;
 
@@ -5576,7 +6093,7 @@ public class TaskTableService : ITaskTableService
         task.Deadline = request.Deadline;
         task.EstimateHours = request.EstimateHours;
         task.Type = request.Type ?? task.Type;
-        if (!(task.IsSplitTask && task.ParentRowNumber == null))
+        if (!isSplitParent)
             task.EmployeeName = request.EmployeeName ?? task.EmployeeName;
         else
             task.EmployeeName = "";
@@ -5595,6 +6112,7 @@ public class TaskTableService : ITaskTableService
         }
 
         string? statusChangedTo = null;
+        var completedViaLifecycle = false;
         if (!string.IsNullOrEmpty(request.StatusText))
         {
             var newStatus = TaskStatusMapper.FromText(request.StatusText);
@@ -5613,17 +6131,38 @@ public class TaskTableService : ITaskTableService
                         await _repo.UpdateTaskAsync(task, cancellationToken);
                     }
                     await _lifecycle.CompleteTaskAsync(task.Id, _timeService.Now, cancellationToken);
+                    completedViaLifecycle = true;
+                    statusChangedTo = newStatus.ToString();
+                }
+                else if (TaskStatusMapper.IsEmployeeInfoStatus(newStatus))
+                {
+                    var now = _timeService.Now;
+                    await _repo.CloseOpenIntervalsAsync(task.Id, now, cancellationToken);
+                    task.Status = newStatus;
+                    statusChangedTo = newStatus.ToString();
                 }
                 else
                 {
                     task.Status = newStatus;
+                    statusChangedTo = newStatus.ToString();
                 }
-
-                statusChangedTo = newStatus.ToString();
             }
         }
 
+        if (completedViaLifecycle)
+        {
+            task = await _repo.GetTaskByIdAsync(id, cancellationToken) ?? task;
+            ApplyRowMetadata(task, request);
+        }
+
         await _repo.UpdateTaskAsync(task, cancellationToken);
+        if (TaskStatusMapper.IsEmployeeInfoStatus(task.Status)
+            && task.ParentRowNumber.HasValue
+            && task.IsSplitTask)
+        {
+            await _lifecycle.SyncSplitParentStatusAsync(task.Id, cancellationToken);
+        }
+
         await _notificationService.NotifyTaskUpdatedAsync(task, oldEmployeeName);
         if (statusChangedTo != null)
             await _notificationService.NotifyStatusChangedAsync(task, statusChangedTo);
@@ -5631,36 +6170,261 @@ public class TaskTableService : ITaskTableService
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }
 
+    /// <summary>
+    /// Удаление с сохранением статистики: если у задачи (или у любой её дочерней) есть
+    /// история работы — интервалы закрываются, статус становится Completed, и запись
+    /// остаётся в стеке выполненных. Без истории — физическое удаление как раньше.
+    /// </summary>
     public async Task<TaskTableServiceResult<bool>> DeleteRowAsync(
         int id,
         CancellationToken cancellationToken = default)
     {
-        var task = await _repo.GetTaskByIdAsync(id, cancellationToken);
+        var task = await _repo.GetTaskByIdAsync(id, cancellationToken, includeIntervals: true);
         if (task == null)
             return TaskTableServiceResult<bool>.Missing();
 
-        var employeeNames = new HashSet<string>();
+        var employeeNames = new HashSet<string>(StringComparer.Ordinal);
         if (!string.IsNullOrEmpty(task.EmployeeName))
             employeeNames.Add(task.EmployeeName);
 
-        if (task.IsSplitTask)
+        var isSplitParent = task.IsSplitTask && task.ParentRowNumber == null;
+        if (isSplitParent)
         {
-            var children = await _repo.GetChildTasksAsync(task.Id, cancellationToken);
-            foreach (var child in children)
-            {
-                if (!string.IsNullOrEmpty(child.EmployeeName))
-                    employeeNames.Add(child.EmployeeName);
-            }
+            return await DeleteSplitParentAsync(task, employeeNames, cancellationToken);
+        }
+
+        if (HasWorkHistory(task))
+        {
+            if (task.Status != JobStatus.Completed)
+                await _lifecycle.CompleteTaskAsync(task.Id, _timeService.Now, cancellationToken);
+
+            // CompleteTaskAsync уже отправил TaskStatusChanged; отдельное TaskDeleted не шлём,
+            // потому что задача всё ещё существует — просто переехала в выполненные.
+            return TaskTableServiceResult<bool>.Ok(true);
         }
 
         await _repo.DeleteTaskAsync(id, cancellationToken);
         await _notificationService.NotifyTaskDeletedAsync(id, employeeNames);
+        return TaskTableServiceResult<bool>.Ok(true);
+    }
+
+    private async Task<TaskTableServiceResult<bool>> DeleteSplitParentAsync(
+        ProductionTask parent,
+        HashSet<string> employeeNames,
+        CancellationToken cancellationToken)
+    {
+        var children = await _repo.GetChildTasksAsync(parent.Id, cancellationToken);
+        foreach (var child in children)
+        {
+            if (!string.IsNullOrEmpty(child.EmployeeName))
+                employeeNames.Add(child.EmployeeName);
+        }
+
+        var childrenWithHistory = new List<ProductionTask>();
+        var childrenWithoutHistory = new List<ProductionTask>();
+        foreach (var child in children)
+        {
+            var full = await _repo.GetTaskByIdAsync(child.Id, cancellationToken, includeIntervals: true);
+            if (full == null) continue;
+            (HasWorkHistory(full) ? childrenWithHistory : childrenWithoutHistory).Add(full);
+        }
+
+        if (childrenWithHistory.Count == 0)
+        {
+            // Никто из исполнителей не работал — можно физически снести всё дерево.
+            await _repo.DeleteTaskAsync(parent.Id, cancellationToken);
+            await _notificationService.NotifyTaskDeletedAsync(parent.Id, employeeNames);
+            return TaskTableServiceResult<bool>.Ok(true);
+        }
+
+        // Дети без работы можно удалить — их история не нужна для статистики.
+        foreach (var child in childrenWithoutHistory)
+        {
+            await _repo.DeleteTaskAsync(child.Id, cancellationToken);
+        }
+
+        // Дети с работой переводим в Completed (там корректно посчитаются ActualHours
+        // и саженные часы попадут в EmployeeStats каждому сотруднику).
+        foreach (var child in childrenWithHistory.Where(c => c.Status != JobStatus.Completed))
+        {
+            await _lifecycle.CompleteTaskAsync(child.Id, _timeService.Now, cancellationToken);
+        }
+
+        // Родитель должен оказаться Completed (последний CompleteTaskAsync вызывает UpdateParentStatusAsync).
+        var finalParent = await _repo.GetTaskByIdAsync(parent.Id, cancellationToken);
+        if (finalParent != null && finalParent.Status != JobStatus.Completed)
+        {
+            await _lifecycle.CompleteTaskAsync(parent.Id, _timeService.Now, cancellationToken);
+        }
 
         return TaskTableServiceResult<bool>.Ok(true);
     }
 
+    /// <summary>
+    /// Смена сотрудника у уже выполненной задачи: запись остаётся та же, интервалы остаются
+    /// привязанными к ней, но <see cref="ProductionTask.EmployeeName"/> переписывается на нового
+    /// исполнителя. В результате задача исчезает из стека готовых и таймлайна прежнего сотрудника
+    /// (там, где она не перекрывала других интервалов, окно отрисуется как простой), а у нового —
+    /// появляется в истории. Параллельно переносим «сэкономленные» часы между EmployeeStats.
+    /// </summary>
+    private async Task<TaskTableServiceResult<ProductionTask>> ReattributeCompletedTaskAsync(
+        ProductionTask original,
+        UpdateTaskRequest request,
+        CancellationToken cancellationToken)
+    {
+        var oldEmployeeName = original.EmployeeName;
+        var newEmployeeName = request.EmployeeName!;
+        var now = _timeService.Now;
+
+        var oldSaved = original.EstimateHours - original.ActualHours;
+        var newSaved = request.EstimateHours - original.ActualHours;
+
+        await TransferSavedHoursAsync(
+            oldEmployeeName,
+            newEmployeeName,
+            oldSaved,
+            newSaved,
+            original.CompletedAt,
+            now,
+            cancellationToken);
+
+        original.FolderPath = request.FolderPath ?? original.FolderPath;
+        original.FileName = request.FileName ?? original.FileName;
+        original.Comment = request.Comment ?? original.Comment;
+        original.Deadline = request.Deadline;
+        original.EstimateHours = request.EstimateHours;
+        original.Type = request.Type ?? original.Type;
+        original.EmployeeName = newEmployeeName;
+        original.UpdatedAt = now;
+
+        await _repo.UpdateTaskAsync(original, cancellationToken);
+
+        // Уведомим прежнего исполнителя (задача исчезла) и нового (появилась).
+        await _notificationService.NotifyTaskUpdatedAsync(original, oldEmployeeName);
+
+        return TaskTableServiceResult<ProductionTask>.Ok(original);
+    }
+
+    /// <summary>
+    /// Переносит «сэкономленные» часы между двумя <see cref="EmployeeStat"/>:
+    /// у прежнего сотрудника списывает <paramref name="oldSaved"/>, новому начисляет
+    /// <paramref name="newSaved"/>. <c>TodaySavedHours</c> трогаем, только если задача
+    /// была завершена сегодня — иначе сегодняшние итоги исказятся.
+    /// </summary>
+    private async Task TransferSavedHoursAsync(
+        string fromEmployee,
+        string toEmployee,
+        double oldSaved,
+        double newSaved,
+        DateTime? completedAt,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var completedToday = completedAt.HasValue
+            && AppDateTime.ToMoscowWallClockFromDb(completedAt.Value).Date == now.Date;
+
+        if (!string.IsNullOrEmpty(fromEmployee))
+        {
+            var fromStat = await _repo.GetEmployeeStatAsync(fromEmployee, cancellationToken);
+            if (fromStat != null)
+            {
+                fromStat.TotalSavedHours = Math.Max(0, fromStat.TotalSavedHours - oldSaved);
+                if (completedToday && fromStat.LastResetDate.Date == now.Date)
+                    fromStat.TodaySavedHours = Math.Max(0, fromStat.TodaySavedHours - oldSaved);
+                await _repo.UpdateEmployeeStatAsync(fromStat, cancellationToken);
+            }
+        }
+
+        if (!string.IsNullOrEmpty(toEmployee))
+        {
+            var toStat = await _repo.GetEmployeeStatAsync(toEmployee, cancellationToken)
+                ?? new EmployeeStat
+                {
+                    EmployeeName = toEmployee,
+                    LastResetDate = now.Date
+                };
+
+            // Если новый сотрудник не «открывал» сегодняшний день — открываем мы.
+            if (toStat.LastResetDate.Date != now.Date)
+            {
+                toStat.TodaySavedHours = 0;
+                toStat.LastResetDate = now.Date;
+            }
+
+            toStat.TotalSavedHours += newSaved;
+            if (completedToday)
+                toStat.TodaySavedHours += newSaved;
+
+            await _repo.UpdateEmployeeStatAsync(toStat, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Смена сотрудника у задачи с историей работы: исходную задачу аккуратно завершаем
+    /// (закрываем интервалы, считаем ActualHours, обновляем EmployeeStats прежнего сотрудника),
+    /// и создаём новую задачу под нового исполнителя с заданными параметрами и пустой историей.
+    /// </summary>
+    private async Task<TaskTableServiceResult<ProductionTask>> ReassignByCloningAsync(
+        ProductionTask original,
+        UpdateTaskRequest request,
+        CancellationToken cancellationToken)
+    {
+        var oldEmployeeName = original.EmployeeName;
+        var now = _timeService.Now;
+
+        if (original.Status != JobStatus.Completed)
+            await _lifecycle.CompleteTaskAsync(original.Id, now, cancellationToken);
+
+        var clone = new ProductionTask
+        {
+            DisplayOrder = -1,
+            FolderPath = request.FolderPath ?? original.FolderPath,
+            FileName = request.FileName ?? original.FileName,
+            Comment = request.Comment ?? original.Comment,
+            Deadline = request.Deadline,
+            EstimateHours = request.EstimateHours,
+            Type = request.Type ?? original.Type,
+            EmployeeName = request.EmployeeName!,
+            Status = JobStatus.Assigned,
+            Progress = 0,
+            ActualHours = 0,
+            ParentRowNumber = null,
+            IsSplitTask = false,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        await _repo.AddTaskAsync(clone, cancellationToken);
+        await _repo.AppendRootDisplayOrderAsync(clone.Id, cancellationToken);
+
+        await _notificationService.NotifyNewTaskAsync(clone);
+
+        // Старая запись поменяла исполнителя на «исторического» (бывшего); уведомим обе стороны.
+        var finalOriginal = await _repo.GetTaskByIdAsync(original.Id, cancellationToken) ?? original;
+        await _notificationService.NotifyTaskUpdatedAsync(finalOriginal, oldEmployeeName);
+
+        return TaskTableServiceResult<ProductionTask>.Ok(clone);
+    }
+
     public Task ReorderRowsAsync(List<int> orderedIds, CancellationToken cancellationToken = default) =>
         _repo.ReorderTasksAsync(orderedIds, cancellationToken);
+
+    private static void ApplyRowMetadata(ProductionTask task, UpdateTaskRequest request)
+    {
+        var isSplitParent = task.IsSplitTask && task.ParentRowNumber == null;
+
+        task.FolderPath = request.FolderPath ?? task.FolderPath;
+        task.FileName = request.FileName ?? task.FileName;
+        task.Comment = request.Comment ?? task.Comment;
+        task.Deadline = request.Deadline;
+        task.EstimateHours = request.EstimateHours;
+        task.Type = request.Type ?? task.Type;
+        if (!isSplitParent)
+            task.EmployeeName = request.EmployeeName ?? task.EmployeeName;
+        else
+            task.EmployeeName = "";
+        task.ParentRowNumber = request.ParentRowNumber;
+    }
 }
 === ./Services/TaskTable/SplitTaskStatusAggregator.cs ===
 using ProductionPlanner.Models;
@@ -5730,15 +6494,19 @@ public interface ITaskTableService
     Task ReorderRowsAsync(List<int> orderedIds, CancellationToken cancellationToken = default);
 }
 === ./Services/TaskTable/PlannedTimeProgressCalculator.cs ===
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services;
 
 namespace ProductionPlanner.Services.TaskTable;
 
 /// <summary>
-/// Плановый % выполнения по времени: отработанные часы / выделенные часы после старта задачи.
+/// Плановый % выполнения по времени: отработанные рабочие часы / выделенные часы после старта.
 /// </summary>
 public static class PlannedTimeProgressCalculator
 {
+    private static readonly WorkHoursCalculator WorkHours = new();
+
     public static double GetPercent(
         ProductionTask task,
         IReadOnlyList<WorkInterval> intervals,
@@ -5755,7 +6523,7 @@ public static class PlannedTimeProgressCalculator
 
         var elapsedHours = GetElapsedWorkHours(intervals, now);
         var percent = elapsedHours / task.EstimateHours * 100;
-        return Math.Clamp(percent, 0, 100);
+        return Math.Clamp(Math.Round(percent), 0, 100);
     }
 
     public static bool ShouldShow(ProductionTask task, IReadOnlyList<WorkInterval> intervals) =>
@@ -5772,16 +6540,20 @@ public static class PlannedTimeProgressCalculator
 
     private static double GetElapsedWorkHours(IReadOnlyList<WorkInterval> intervals, DateTime now)
     {
-        double totalMs = 0;
+        var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
+        double totalHours = 0;
         foreach (var interval in intervals)
         {
-            var end = interval.EndTime ?? now;
-            if (end <= interval.StartTime)
+            var start = AppDateTime.ToMoscowWallClockFromDb(interval.StartTime);
+            var end = interval.EndTime.HasValue
+                ? AppDateTime.ToMoscowWallClockFromDb(interval.EndTime.Value)
+                : nowMoscow;
+            if (end <= start)
                 continue;
-            totalMs += (end - interval.StartTime).TotalMilliseconds;
+            totalHours += WorkHours.GetWorkHoursBetween(start, end);
         }
 
-        return totalMs / (1000 * 60 * 60);
+        return totalHours;
     }
 }
 === ./Services/TaskTable/TaskTableServiceResult.cs ===
@@ -5844,6 +6616,7 @@ public static class TaskStatusMapper
 }
 === ./Services/Calendar/WeekCalendarService.cs ===
 using ProductionPlanner.Data;
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Models.Dtos.Calendar;
 using ProductionPlanner.Services;
@@ -5903,6 +6676,14 @@ public class WeekCalendarService : IWeekCalendarService
             .Where(t => t.Status == JobStatus.Completed)
             .ToList();
 
+        // Глобальные (по всей неделе) высота полосы и слой для каждой задачи —
+        // чтобы при переходе между днями полоса не меняла высоту/позицию, если задача
+        // продолжается. Совпадает со спекой: «так же эта логика работает и с переносом
+        // на следующий рабочий день».
+        var weekIntervals = CollectIntervalsForWeek(
+            allEmployeeTasks, weekStart, weekEnd, currentTime);
+        var (layerByTask, maxDepthByTask) = ComputeWeeklyLayoutForTasks(weekIntervals);
+
         var days = new List<WeekCalendarDayDto>();
         for (var day = weekStart; day < weekEnd; day = day.AddDays(1))
         {
@@ -5911,7 +6692,9 @@ public class WeekCalendarService : IWeekCalendarService
                 currentTime,
                 slots,
                 allEmployeeTasks,
-                completedTasks));
+                completedTasks,
+                layerByTask,
+                maxDepthByTask));
         }
 
         return new WeekCalendarResponseDto
@@ -5926,7 +6709,9 @@ public class WeekCalendarService : IWeekCalendarService
         DateTime currentTime,
         List<ScheduledSlot> slots,
         List<ProductionTask> employeeTasks,
-        List<ProductionTask> completedTasks)
+        List<ProductionTask> completedTasks,
+        IReadOnlyDictionary<int, int> layerByTask,
+        IReadOnlyDictionary<int, int> maxDepthByTask)
     {
         var dayStartTime = day.Date.AddHours(10);
         var dayEndTime = day.Date.AddHours(19);
@@ -5938,13 +6723,16 @@ public class WeekCalendarService : IWeekCalendarService
             day, slots, dayStartTime, dayEndTime, lunchStart, lunchEnd, totalWorkHours);
 
         var timeline = BuildTimeline(
-            day, currentTime, employeeTasks, dayStartTime, dayEndTime, lunchStart, lunchEnd);
+            day, currentTime, employeeTasks, dayStartTime, dayEndTime, lunchStart, lunchEnd,
+            layerByTask, maxDepthByTask);
 
-        var completedThisDay = completedTasks.Where(t => t.CompletedAt?.Date == day);
+        var completedThisDay = completedTasks.Where(t =>
+            t.CompletedAt.HasValue
+            && AppDateTime.ToMoscowWallClockFromDb(t.CompletedAt.Value).Date == day.Date);
         var netSaved = completedThisDay.Sum(t => t.EstimateHours - t.ActualHours);
 
         var deadlines = employeeTasks
-            .Where(t => t.Deadline.Date == day)
+            .Where(t => AppDateTime.ToMoscowWallClockFromDb(t.Deadline).Date == day.Date)
             .Select(t => new CalendarDeadlineDto
             {
                 Deadline = t.Deadline,
@@ -6027,7 +6815,9 @@ public class WeekCalendarService : IWeekCalendarService
         DateTime dayStartTime,
         DateTime dayEndTime,
         DateTime lunchStart,
-        DateTime lunchEnd)
+        DateTime lunchEnd,
+        IReadOnlyDictionary<int, int> layerByTask,
+        IReadOnlyDictionary<int, int> maxDepthByTask)
     {
         var timeline = new List<CalendarTimelineSegmentDto>();
         var dayDate = day.Date;
@@ -6044,7 +6834,7 @@ public class WeekCalendarService : IWeekCalendarService
             employeeTasks, dayDate, currentDate, dayStartTime, dayEndTime, timelineEnd);
 
         if (intervalsForDay.Count > 0)
-            timeline.AddRange(BuildWorkTimelineSegments(intervalsForDay));
+            timeline.AddRange(BuildWorkTimelineSegments(intervalsForDay, layerByTask, maxDepthByTask));
 
         // Простой с 10:00 даже если за день ещё не было интервалов работы
         timeline.AddRange(BuildIdleSegments(day, intervalsForDay, timelineEnd));
@@ -6074,8 +6864,10 @@ public class WeekCalendarService : IWeekCalendarService
                 if (task.Status == JobStatus.Completed && interval.EndTime == null)
                     continue;
 
-                var intervalStart = interval.StartTime;
-                var intervalEnd = interval.EndTime ?? timelineEnd;
+                var intervalStart = AppDateTime.ToMoscowWallClockFromDb(interval.StartTime);
+                var intervalEnd = interval.EndTime.HasValue
+                    ? AppDateTime.ToMoscowWallClockFromDb(interval.EndTime.Value)
+                    : timelineEnd;
 
                 if (interval.EndTime == null && dayDate < currentDate)
                     intervalEnd = dayEndTime;
@@ -6118,7 +6910,9 @@ public class WeekCalendarService : IWeekCalendarService
     }
 
     private static List<CalendarTimelineSegmentDto> BuildWorkTimelineSegments(
-        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervalsForDay)
+        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervalsForDay,
+        IReadOnlyDictionary<int, int> layerByTask,
+        IReadOnlyDictionary<int, int> maxDepthByTask)
     {
         var segments = new List<CalendarTimelineSegmentDto>();
         if (intervalsForDay.Count == 0)
@@ -6126,29 +6920,11 @@ public class WeekCalendarService : IWeekCalendarService
 
         intervalsForDay = intervalsForDay.OrderBy(i => i.start).ToList();
 
-        // Один слой (ряд) на задачу: утренний и послеобеденный кусок одной задачи — одна полоса
-        var taskIdToLayer = new Dictionary<int, int>();
-        var nextLayer = 0;
-        foreach (var iv in intervalsForDay.OrderBy(i => i.start))
-        {
-            if (!taskIdToLayer.ContainsKey(iv.taskId))
-                taskIdToLayer[iv.taskId] = nextLayer++;
-        }
-
-        var maxDepthPerTaskId = ComputeMaxDepthPerTaskId(intervalsForDay);
-
-        var layerForIndex = new int[intervalsForDay.Count];
-        var maxDepthForIndex = new int[intervalsForDay.Count];
         for (var i = 0; i < intervalsForDay.Count; i++)
         {
             var iv = intervalsForDay[i];
-            layerForIndex[i] = taskIdToLayer[iv.taskId];
-            maxDepthForIndex[i] = maxDepthPerTaskId[iv.taskId];
-        }
-
-        for (var i = 0; i < intervalsForDay.Count; i++)
-        {
-            var iv = intervalsForDay[i];
+            var layer = layerByTask.TryGetValue(iv.taskId, out var l) ? l : 0;
+            var depth = maxDepthByTask.TryGetValue(iv.taskId, out var d) ? d : 1;
             segments.Add(new CalendarTimelineSegmentDto
             {
                 Start = iv.start,
@@ -6160,8 +6936,8 @@ public class WeekCalendarService : IWeekCalendarService
                 FileName = iv.fileName,
                 Completed = iv.completed,
                 StatusText = iv.statusText,
-                Layer = layerForIndex[i],
-                MaxDepth = maxDepthForIndex[i]
+                Layer = layer,
+                MaxDepth = depth
             });
         }
 
@@ -6169,57 +6945,140 @@ public class WeekCalendarService : IWeekCalendarService
     }
 
     /// <summary>
-    /// Максимум одновременных <b>задач</b> (не интервалов) в моменты, когда задача активна.
-    /// Одна задача до и после обеда получает одну и ту же высоту, если днём была параллель с другой.
+    /// Собирает интервалы работы за всю неделю (с разбиением вокруг обеда) — одна и та же
+    /// задача, ползущая через несколько дней, будет видна как набор кусков. Используется для
+    /// глобального расчёта слоя/глубины, чтобы высота полосы не «прыгала» между днями.
     /// </summary>
-    private static Dictionary<int, int> ComputeMaxDepthPerTaskId(
-        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervals)
+    private static List<(DateTime start, DateTime end, int taskId)> CollectIntervalsForWeek(
+        List<ProductionTask> employeeTasks,
+        DateTime weekStart,
+        DateTime weekEnd,
+        DateTime currentTime)
     {
-        var maxDepthPerTask = new Dictionary<int, int>();
-        foreach (var iv in intervals)
-            maxDepthPerTask.TryAdd(iv.taskId, 1);
+        var weekIntervals = new List<(DateTime start, DateTime end, int taskId)>();
+        var currentDate = currentTime.Date;
 
-        var refCountByTask = new Dictionary<int, int>();
-        var events = new List<(DateTime time, int type, int index)>();
-        for (var i = 0; i < intervals.Count; i++)
+        for (var day = weekStart; day < weekEnd; day = day.AddDays(1))
         {
-            events.Add((intervals[i].start, 1, i));
-            events.Add((intervals[i].end, -1, i));
+            var dayDate = day.Date;
+            if (dayDate > currentDate) break;
+
+            var dayStartTime = dayDate.AddHours(10);
+            var dayEndTime = dayDate.AddHours(19);
+            var timelineEnd = dayDate == currentDate
+                ? (currentTime > dayEndTime ? dayEndTime : currentTime)
+                : dayEndTime;
+
+            var dayIntervals = CollectIntervalsForDay(
+                employeeTasks, dayDate, currentDate, dayStartTime, dayEndTime, timelineEnd);
+            foreach (var iv in dayIntervals)
+                weekIntervals.Add((iv.start, iv.end, iv.taskId));
         }
 
+        return weekIntervals;
+    }
+
+    /// <summary>
+    /// Сразу два глобальных расчёта по неделе:
+    /// 1) <c>layerByTask</c> — стабильная позиция полосы (ряд) для задачи на всё время её
+    ///    появлений в неделе. Жадно даём минимальный свободный слой, чтобы пересекающиеся
+    ///    задачи раздвигались, а не «менялись местами» между днями.
+    /// 2) <c>maxDepthByTask</c> — максимальная глубина (количество одновременных задач)
+    ///    в моменты, когда конкретная задача активна. По спеке высота полосы фиксирована
+    ///    на всё время жизни задачи и считается от глобального пика её параллельностей.
+    /// </summary>
+    private static (Dictionary<int, int> LayerByTask, Dictionary<int, int> MaxDepthByTask)
+        ComputeWeeklyLayoutForTasks(
+            List<(DateTime start, DateTime end, int taskId)> intervals)
+    {
+        var layerByTask = new Dictionary<int, int>();
+        var maxDepthByTask = new Dictionary<int, int>();
+
+        if (intervals.Count == 0)
+            return (layerByTask, maxDepthByTask);
+
+        var tasksByFirstAppearance = intervals
+            .GroupBy(i => i.taskId)
+            .OrderBy(g => g.Min(i => i.start))
+            .ToList();
+
+        var intervalsByLayer = new Dictionary<int, List<(DateTime start, DateTime end)>>();
+        foreach (var group in tasksByFirstAppearance)
+        {
+            var taskId = group.Key;
+            var taskIntervals = group.Select(i => (i.start, i.end)).ToList();
+
+            var layer = 0;
+            while (true)
+            {
+                if (!intervalsByLayer.TryGetValue(layer, out var existing))
+                {
+                    intervalsByLayer[layer] = new List<(DateTime, DateTime)>(taskIntervals);
+                    break;
+                }
+                var conflicts = taskIntervals.Any(ti =>
+                    existing.Any(ei => ti.start < ei.end && ti.end > ei.start));
+                if (!conflicts)
+                {
+                    existing.AddRange(taskIntervals);
+                    break;
+                }
+                layer++;
+            }
+            layerByTask[taskId] = layer;
+            maxDepthByTask[taskId] = 1;
+        }
+
+        // Глобальная sweep-line: максимум одновременных задач за время жизни каждой.
+        var events = new List<(DateTime time, int type, int taskId)>(intervals.Count * 2);
+        foreach (var iv in intervals)
+        {
+            events.Add((iv.start, 1, iv.taskId));
+            events.Add((iv.end, -1, iv.taskId));
+        }
         events = events
             .OrderBy(e => e.time)
             .ThenBy(e => e.type == 1 ? 0 : 1)
             .ToList();
 
+        var refCountByTask = new Dictionary<int, int>();
         foreach (var ev in events)
         {
-            var taskId = intervals[ev.index].taskId;
             if (ev.type == 1)
             {
-                refCountByTask.TryGetValue(taskId, out var count);
-                refCountByTask[taskId] = count + 1;
+                refCountByTask.TryGetValue(ev.taskId, out var count);
+                refCountByTask[ev.taskId] = count + 1;
             }
             else
             {
-                refCountByTask[taskId] = refCountByTask[taskId] - 1;
-                if (refCountByTask[taskId] <= 0)
-                    refCountByTask.Remove(taskId);
+                refCountByTask[ev.taskId] = refCountByTask[ev.taskId] - 1;
+                if (refCountByTask[ev.taskId] <= 0)
+                    refCountByTask.Remove(ev.taskId);
             }
 
             var distinctTasks = refCountByTask.Count;
-            if (distinctTasks == 0)
-                continue;
+            if (distinctTasks == 0) continue;
 
             foreach (var activeTaskId in refCountByTask.Keys)
             {
-                if (!maxDepthPerTask.TryGetValue(activeTaskId, out var current))
+                if (!maxDepthByTask.TryGetValue(activeTaskId, out var current))
                     current = 1;
-                maxDepthPerTask[activeTaskId] = Math.Max(current, distinctTasks);
+                maxDepthByTask[activeTaskId] = Math.Max(current, distinctTasks);
             }
         }
 
-        return maxDepthPerTask;
+        // Слой обязан помещаться в полосы depth: на всякий случай поднимаем depth,
+        // если жадная раскладка дала layer >= depth (это возможно только для редких
+        // случаев с разрозненными интервалами).
+        foreach (var kvp in layerByTask)
+        {
+            var taskId = kvp.Key;
+            var layer = kvp.Value;
+            if (!maxDepthByTask.TryGetValue(taskId, out var depth) || layer >= depth)
+                maxDepthByTask[taskId] = Math.Max(depth, layer + 1);
+        }
+
+        return (layerByTask, maxDepthByTask);
     }
 
     private static List<CalendarTimelineSegmentDto> BuildIdleSegments(
@@ -6774,6 +7633,7 @@ namespace ProductionPlanner.Services
 }=== ./Services/TaskLifecycleService.cs ===
 using Microsoft.Extensions.Logging;
 using ProductionPlanner.Data;
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 
 namespace ProductionPlanner.Services;
@@ -6860,12 +7720,34 @@ public class TaskLifecycleService : ITaskLifecycleService
         else
             newStatus = JobStatus.Assigned;
 
-        if (parent.Status != newStatus)
+        var now = _timeService.Now;
+        var patch = newStatus == JobStatus.Completed
+            ? new TaskStatusPatch { Progress = 1, CompletedAt = now }
+            : new TaskStatusPatch { Progress = 0, ClearCompletedAt = true };
+
+        if (parent.Status == newStatus)
         {
-            parent.Status = newStatus;
-            parent.UpdatedAt = _timeService.Now;
-            await _repo.UpdateTaskAsync(parent, cancellationToken);
+            if (newStatus == JobStatus.Completed && parent.Progress < 0.99)
+            {
+                await _repo.TryTransitionStatusAsync(
+                    parent.Id,
+                    JobStatus.Completed,
+                    now,
+                    expectedStatuses: null,
+                    patch,
+                    cancellationToken);
+            }
+
+            return;
         }
+
+        await _repo.TryTransitionStatusAsync(
+            parent.Id,
+            newStatus,
+            now,
+            expectedStatuses: null,
+            patch,
+            cancellationToken);
     }
 
     public async Task StartTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
@@ -6878,7 +7760,7 @@ public class TaskLifecycleService : ITaskLifecycleService
 
             await RequireStatusTransitionAsync(
                 taskId,
-                [JobStatus.Assigned],
+                [JobStatus.Assigned, JobStatus.Approved, JobStatus.InStock],
                 JobStatus.InProgress,
                 now,
                 patch: null,
@@ -6995,13 +7877,15 @@ public class TaskLifecycleService : ITaskLifecycleService
         var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null || task.Status == JobStatus.Completed) return;
 
-        if (task.Status == JobStatus.Assigned)
+        if (task.Status is JobStatus.Assigned or JobStatus.Approved or JobStatus.InStock)
         {
             await _repo.ExecuteInTransactionAsync(async ct =>
             {
+                await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
+
                 await RequireStatusTransitionAsync(
                     taskId,
-                    [JobStatus.Assigned],
+                    [JobStatus.Assigned, JobStatus.Approved, JobStatus.InStock],
                     JobStatus.Completed,
                     now,
                     new TaskStatusPatch { Progress = 1, CompletedAt = now },
@@ -7032,7 +7916,11 @@ public class TaskLifecycleService : ITaskLifecycleService
             foreach (var interval in intervals)
             {
                 if (interval.EndTime.HasValue)
-                    actualHours += _workHours.GetWorkHoursBetween(interval.StartTime, interval.EndTime.Value);
+                {
+                    actualHours += _workHours.GetWorkHoursBetween(
+                        AppDateTime.ToMoscowWallClockFromDb(interval.StartTime),
+                        AppDateTime.ToMoscowWallClockFromDb(interval.EndTime.Value));
+                }
             }
 
             await RequireStatusTransitionAsync(
@@ -7111,6 +7999,9 @@ public class TaskLifecycleService : ITaskLifecycleService
 
         await _notificationService.NotifyStatusChangedAsync(task, "Assigned");
     }
+
+    public Task SyncSplitParentStatusAsync(int childTaskId, CancellationToken cancellationToken = default) =>
+        UpdateParentStatusAsync(childTaskId, cancellationToken);
 }
 === ./Services/TaskConcurrencyException.cs ===
 namespace ProductionPlanner.Services;
@@ -7267,6 +8158,7 @@ public class TaskNotificationService : ITaskNotificationService
 }
 === ./Services/TaskLists/TaskListQueryService.cs ===
 using ProductionPlanner.Data;
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Services.TaskTable;
@@ -7379,9 +8271,11 @@ public class TaskListQueryService : ITaskListQueryService
     private object MapTaskToResult(ProductionTask task, DateTime now)
     {
         var hoursNeeded = task.EstimateHours * (1 - task.Progress);
-        var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(now, task.Deadline);
+        var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
+        var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(task.Deadline);
+        var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(nowMoscow, deadlineMoscow);
         string riskLevel = "ok";
-        if (task.Deadline < now) riskLevel = "overdue";
+        if (AppDateTime.CompareDeadlineToAppNow(task.Deadline, now) < 0) riskLevel = "overdue";
         else if (workHoursUntilDeadline < hoursNeeded) riskLevel = "critical";
         else if (workHoursUntilDeadline < hoursNeeded + 2) riskLevel = "warning";
 
@@ -7418,6 +8312,7 @@ public interface ITaskListQueryService
     Task<List<DeadlineRisk>> GetDeadlineRisksAsync(string employee, DateTime now, CancellationToken cancellationToken = default);
 }
 === ./Services/ProductionScheduler.cs ===
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using System;
 using System.Collections.Generic;
@@ -7442,7 +8337,7 @@ namespace ProductionPlanner.Services
                 .ToList();
 
             var result = new List<ScheduledSlot>();
-            var cursor = _workHours.GetNextWorkStart(now);
+            var cursor = _workHours.GetNextWorkStart(AppDateTime.ToMoscowWallClockFromApp(now));
 
             foreach (var task in tasks)
             {
@@ -7484,12 +8379,14 @@ namespace ProductionPlanner.Services
                     continue;
                 
                 var hoursNeeded = task.EstimateHours * (1 - task.Progress);
-                var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(now, deadline);
-                
+                var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
+                var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(deadline);
+                var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(nowMoscow, deadlineMoscow);
+
                 string riskLevel = "ok";
                 string message = "";
-                
-                if (deadline < now)
+
+                if (AppDateTime.CompareDeadlineToAppNow(deadline, now) < 0)
                 {
                     riskLevel = "overdue";
                     message = $"Дедлайн сорван! Задача должна была быть выполнена {deadline:dd.MM HH:mm}";
@@ -7797,6 +8694,7 @@ namespace ProductionPlanner.Services
     }
 }
 === ./Services/TaskSplitService.cs ===
+using System.Collections.Concurrent;
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
 using Microsoft.EntityFrameworkCore;
@@ -7806,6 +8704,8 @@ namespace ProductionPlanner.Services
 {
     public class TaskSplitService : ITaskSplitService
     {
+        private static readonly ConcurrentDictionary<int, SemaphoreSlim> SplitLocks = new();
+
         private readonly IProductionTaskRepository _repo;
         private readonly ApplicationDbContext _context;
         private readonly IAppTimeService _timeService;
@@ -7831,7 +8731,22 @@ namespace ProductionPlanner.Services
             List<SplitPart> parts,
             CancellationToken cancellationToken = default)
         {
+            ProductionTask? result = null;
+            await RunWithParentSplitLockAsync(parentTaskId, async ct =>
+            {
+                result = await SplitTaskCoreAsync(parentTaskId, parts, ct);
+            }, cancellationToken);
+            return result!;
+        }
+
+        private async Task<ProductionTask> SplitTaskCoreAsync(
+            int parentTaskId,
+            List<SplitPart> parts,
+            CancellationToken cancellationToken)
+        {
             var parentTask = await LoadParentForMutationAsync(parentTaskId, cancellationToken);
+            if (parentTask.IsSplitTask)
+                throw new InvalidOperationException("Задача уже разделена между сотрудниками");
 
             var totalAllocated = parts.Sum(p => p.AllocatedHours);
             parentTask.EstimateHours = totalAllocated;
@@ -7861,8 +8776,6 @@ namespace ProductionPlanner.Services
             parentTask.UpdatedAt = _timeService.Now;
             await _repo.UpdateTaskAsync(parentTask, cancellationToken);
 
-            await _context.SaveChangesAsync(cancellationToken);
-
             return parentTask;
         }
 
@@ -7870,6 +8783,19 @@ namespace ProductionPlanner.Services
             int parentTaskId,
             List<SplitPart> parts,
             CancellationToken cancellationToken = default)
+        {
+            ProductionTask? result = null;
+            await RunWithParentSplitLockAsync(parentTaskId, async ct =>
+            {
+                result = await UpdateSplitCoreAsync(parentTaskId, parts, ct);
+            }, cancellationToken);
+            return result!;
+        }
+
+        private async Task<ProductionTask> UpdateSplitCoreAsync(
+            int parentTaskId,
+            List<SplitPart> parts,
+            CancellationToken cancellationToken)
         {
             var parentTask = await LoadParentForMutationAsync(parentTaskId, cancellationToken);
             if (parentTask.ParentRowNumber != null)
@@ -7882,7 +8808,7 @@ namespace ProductionPlanner.Services
                 return await ConvertToRegularTaskAsync(parentTask, parts[0], cancellationToken);
 
             if (!parentTask.IsSplitTask)
-                return await SplitTaskAsync(parentTaskId, parts, cancellationToken);
+                return await SplitTaskCoreAsync(parentTaskId, parts, cancellationToken);
 
             var existingChildren = await GetChildTasksAsync(parentTaskId, cancellationToken);
             var splits = await _context.TaskSplits
@@ -7956,11 +8882,45 @@ namespace ProductionPlanner.Services
             }
 
             await _repo.UpdateTaskAsync(parentTask, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
 
             await RecalculateParentStatusAsync(parentTask.Id, cancellationToken);
 
             return parentTask;
+        }
+
+        private async Task RunWithParentSplitLockAsync(
+            int parentTaskId,
+            Func<CancellationToken, Task> action,
+            CancellationToken cancellationToken)
+        {
+            if (_context.Database.IsNpgsql())
+            {
+                await _repo.ExecuteInTransactionAsync(async ct =>
+                {
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "SELECT pg_advisory_xact_lock({0})",
+                        parentTaskId,
+                        ct);
+                    await action(ct);
+                }, cancellationToken);
+                return;
+            }
+
+            var sem = SplitLocks.GetOrAdd(parentTaskId, _ => new SemaphoreSlim(1, 1));
+            await sem.WaitAsync(cancellationToken);
+            try
+            {
+                await _repo.ExecuteInTransactionAsync(action, cancellationToken);
+            }
+            finally
+            {
+                sem.Release();
+                if (sem.CurrentCount == 1
+                    && SplitLocks.TryRemove(new KeyValuePair<int, SemaphoreSlim>(parentTaskId, sem)))
+                {
+                    sem.Dispose();
+                }
+            }
         }
 
         /// <summary>
@@ -8101,7 +9061,6 @@ namespace ProductionPlanner.Services
                 _context.TaskSplits.RemoveRange(splits);
 
             await _repo.UpdateTaskAsync(parent, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
 
             return parent;
         }
@@ -8135,14 +9094,34 @@ namespace ProductionPlanner.Services
             else
                 newStatus = JobStatus.Assigned;
 
-            if (parent.Status == newStatus) return;
+            var now = _timeService.Now;
+            var patch = newStatus == JobStatus.Completed
+                ? new TaskStatusPatch { Progress = 1, CompletedAt = now }
+                : new TaskStatusPatch { Progress = 0, ClearCompletedAt = true };
 
-            parent.Status = newStatus;
-            parent.Progress = newStatus == JobStatus.Completed ? 1 : 0;
-            parent.CompletedAt = newStatus == JobStatus.Completed ? _timeService.Now : null;
-            parent.UpdatedAt = _timeService.Now;
-            await _repo.UpdateTaskAsync(parent, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
+            if (parent.Status == newStatus)
+            {
+                if (newStatus == JobStatus.Completed && parent.Progress < 0.99)
+                {
+                    await _repo.TryTransitionStatusAsync(
+                        parent.Id,
+                        JobStatus.Completed,
+                        now,
+                        expectedStatuses: null,
+                        patch,
+                        cancellationToken);
+                }
+
+                return;
+            }
+
+            await _repo.TryTransitionStatusAsync(
+                parent.Id,
+                newStatus,
+                now,
+                expectedStatuses: null,
+                patch,
+                cancellationToken);
         }
 
         public async Task<bool> AreAllSubtasksCompletedAsync(
@@ -8192,6 +9171,8 @@ namespace ProductionPlanner.Services
         Task UpdateProgressAsync(int taskId, double newProgress, DateTime now, CancellationToken cancellationToken = default);
         Task CompleteTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default);
         Task ReturnTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default);
+        /// <summary>Обновить статус родителя сплит-задачи после изменения дочерней.</summary>
+        Task SyncSplitParentStatusAsync(int childTaskId, CancellationToken cancellationToken = default);
     }
 }
 === ./Program.cs ===
@@ -8199,9 +9180,11 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using ProductionPlanner.Data;
+using ProductionPlanner.Hubs;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Infrastructure.Logging;
 using ProductionPlanner.Models;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 // Moscow wall-clock DateTime values (Unspecified) in queries against timestamptz
@@ -8231,6 +9214,7 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
         options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
     });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -8291,7 +9275,14 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 builder.Services.AddProductionPlannerServices();
-builder.Services.AddSignalR();
+builder.Services.AddSingleton<NotificationConnectionRegistry>();
+builder.Services.AddSignalR(options =>
+{
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    options.HandshakeTimeout = TimeSpan.FromSeconds(15);
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+});
 
 var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
     ?? ["http://localhost:5173"];

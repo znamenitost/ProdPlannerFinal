@@ -177,28 +177,19 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
 
               <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
                 {blocked && !isCompleted && (
-                  <>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="success"
-                      startIcon={<PlayArrow />}
-                      onClick={() => runGuardedAction(task, 'start')}
-                      sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
-                    >
-                      Начал
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="primary"
-                      startIcon={<CheckCircle />}
-                      onClick={() => runGuardedAction(task, 'complete')}
-                      sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
-                    >
-                      Готово
-                    </Button>
-                  </>
+                  // В инфостатусе сначала нужно «Начал» — workflow подтвердит снятие
+                  // инфостатуса и откроет интервал. «Готово» появится из обычной ветки
+                  // после старта, как и описано в спеке.
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="success"
+                    startIcon={<PlayArrow />}
+                    onClick={() => runGuardedAction(task, 'start')}
+                    sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
+                  >
+                    Начал
+                  </Button>
                 )}
                 {!blocked && (isAssignedLike || isInProgress || isPaused) && !isCompleted && (
                   <>

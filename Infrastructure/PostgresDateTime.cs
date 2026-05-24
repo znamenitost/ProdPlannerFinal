@@ -5,9 +5,12 @@ namespace ProductionPlanner.Infrastructure;
 /// </summary>
 public static class PostgresDateTime
 {
-    private static readonly TimeZoneInfo Moscow = GetMoscowTimeZone();
+    private static readonly TimeZoneInfo Moscow = CreateMoscowTimeZone();
 
-    private static TimeZoneInfo GetMoscowTimeZone()
+    internal static TimeZoneInfo GetMoscowTimeZone() =>
+        Moscow;
+
+    private static TimeZoneInfo CreateMoscowTimeZone()
     {
         try
         {

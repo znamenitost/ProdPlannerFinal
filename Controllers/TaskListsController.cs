@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Services.TaskLists;
 
@@ -12,16 +14,32 @@ public class TaskListsController : ControllerBase
 {
     private readonly ITaskListQueryService _taskLists;
     private readonly IAppTimeService _timeService;
-    private readonly ILogger<TaskListsController> _logger;
+    private readonly UserManager<User> _userManager;
 
     public TaskListsController(
         ITaskListQueryService taskLists,
         IAppTimeService timeService,
-        ILogger<TaskListsController> logger)
+        UserManager<User> userManager)
     {
         _taskLists = taskLists;
         _timeService = timeService;
-        _logger = logger;
+        _userManager = userManager;
+    }
+
+    /// <summary>
+    /// Сотрудник может запрашивать только свои данные; админ — кого угодно.
+    /// Возвращает <c>null</c>, если доступ есть; иначе — готовый Forbid/Unauthorized.
+    /// </summary>
+    private async Task<IActionResult?> EnsureCanQueryEmployeeAsync(string employee)
+    {
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser == null) return Unauthorized();
+
+        var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+        if (!isAdmin && !string.Equals(employee, currentUser.FullName, StringComparison.Ordinal))
+            return Forbid();
+
+        return null;
     }
 
     [HttpGet("active")]
@@ -29,19 +47,13 @@ public class TaskListsController : ControllerBase
         [FromQuery] string employee,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            if (string.IsNullOrEmpty(employee))
-                return BadRequest(new { error = "Employee name is required" });
+        if (string.IsNullOrEmpty(employee))
+            return BadRequest(new { error = "Employee name is required" });
 
-            var result = await _taskLists.GetActiveTasksAsync(employee, _timeService.Now, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка в GetActiveTasks для сотрудника {Employee}", employee);
-            return StatusCode(500, new { error = ex.Message });
-        }
+        if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
+
+        var result = await _taskLists.GetActiveTasksAsync(employee, _timeService.Now, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("completed")]
@@ -51,19 +63,13 @@ public class TaskListsController : ControllerBase
         [FromQuery] int pageSize = 25,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            if (string.IsNullOrEmpty(employee))
-                return BadRequest(new { error = "Employee name is required" });
+        if (string.IsNullOrEmpty(employee))
+            return BadRequest(new { error = "Employee name is required" });
 
-            var result = await _taskLists.GetCompletedTasksAsync(employee, page, pageSize, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка в GetCompletedTasks для сотрудника {Employee}", employee);
-            return StatusCode(500, new { error = ex.Message });
-        }
+        if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
+
+        var result = await _taskLists.GetCompletedTasksAsync(employee, page, pageSize, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("deadline-risks")]
@@ -71,18 +77,12 @@ public class TaskListsController : ControllerBase
         [FromQuery] string employee,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            if (string.IsNullOrEmpty(employee))
-                return BadRequest(new { error = "Employee name is required" });
+        if (string.IsNullOrEmpty(employee))
+            return BadRequest(new { error = "Employee name is required" });
 
-            var risks = await _taskLists.GetDeadlineRisksAsync(employee, _timeService.Now, cancellationToken);
-            return Ok(risks);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка в GetDeadlineRisks для сотрудника {Employee}", employee);
-            return StatusCode(500, new { error = ex.Message });
-        }
+        if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
+
+        var risks = await _taskLists.GetDeadlineRisksAsync(employee, _timeService.Now, cancellationToken);
+        return Ok(risks);
     }
 }

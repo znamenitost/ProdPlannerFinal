@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using ProductionPlanner.Data;
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 
 namespace ProductionPlanner.Services;
@@ -86,12 +87,34 @@ public class TaskLifecycleService : ITaskLifecycleService
         else
             newStatus = JobStatus.Assigned;
 
-        if (parent.Status != newStatus)
+        var now = _timeService.Now;
+        var patch = newStatus == JobStatus.Completed
+            ? new TaskStatusPatch { Progress = 1, CompletedAt = now }
+            : new TaskStatusPatch { Progress = 0, ClearCompletedAt = true };
+
+        if (parent.Status == newStatus)
         {
-            parent.Status = newStatus;
-            parent.UpdatedAt = _timeService.Now;
-            await _repo.UpdateTaskAsync(parent, cancellationToken);
+            if (newStatus == JobStatus.Completed && parent.Progress < 0.99)
+            {
+                await _repo.TryTransitionStatusAsync(
+                    parent.Id,
+                    JobStatus.Completed,
+                    now,
+                    expectedStatuses: null,
+                    patch,
+                    cancellationToken);
+            }
+
+            return;
         }
+
+        await _repo.TryTransitionStatusAsync(
+            parent.Id,
+            newStatus,
+            now,
+            expectedStatuses: null,
+            patch,
+            cancellationToken);
     }
 
     public async Task StartTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
@@ -260,7 +283,11 @@ public class TaskLifecycleService : ITaskLifecycleService
             foreach (var interval in intervals)
             {
                 if (interval.EndTime.HasValue)
-                    actualHours += _workHours.GetWorkHoursBetween(interval.StartTime, interval.EndTime.Value);
+                {
+                    actualHours += _workHours.GetWorkHoursBetween(
+                        AppDateTime.ToMoscowWallClockFromDb(interval.StartTime),
+                        AppDateTime.ToMoscowWallClockFromDb(interval.EndTime.Value));
+                }
             }
 
             await RequireStatusTransitionAsync(

@@ -28,7 +28,8 @@ function mapPendingDto(dto) {
 /**
  * @param {object} handlers
  * @param {(event: { type: string, taskId?: number }) => Promise<boolean>|boolean} [handlers.onTaskEvent]
- * @param {() => void} [handlers.onCalendarRefresh] — календарь / completed / активные
+ * @param {() => void} [handlers.onTableFallbackRefresh] — полная перезагрузка таблицы, если строка не на экране
+ * @param {() => void} [handlers.onCalendarRefresh] — календарь / completed
  * @param {() => void} [handlers.onFullRefresh] — reconnect и т.п.
  */
 export default function useNotificationsHub(user, handlers = {}) {
@@ -61,6 +62,7 @@ export default function useNotificationsHub(user, handlers = {}) {
       }
       h.onActiveTasksRefresh?.();
       if (!tableHandled) {
+        h.onTableFallbackRefresh?.(event);
         h.onCalendarRefresh?.(event);
       }
     }, 300);

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
@@ -122,24 +123,29 @@ public class DebugController : ControllerBase
     }
 
     [HttpPost("reset-db")]
-    public async Task<IActionResult> ResetDatabase()
+    public async Task<IActionResult> ResetDatabase(CancellationToken cancellationToken)
     {
-        await _repo.DeleteAllWorkIntervalsAsync();
-        await _repo.DeleteAllTasksAsync();
-        
-        var allSplits = _context.TaskSplits.ToList();
-        _context.TaskSplits.RemoveRange(allSplits);
-        
-        var stats = await _repo.GetEmployeeStatAsync("Дима");
-        if (stats != null)
+        await _repo.DeleteAllWorkIntervalsAsync(cancellationToken);
+        await _repo.DeleteAllTasksAsync(cancellationToken);
+
+        var allSplits = await _context.TaskSplits.ToListAsync(cancellationToken);
+        if (allSplits.Count > 0)
+            _context.TaskSplits.RemoveRange(allSplits);
+
+        var allStats = await _context.EmployeeStats.ToListAsync(cancellationToken);
+        foreach (var stat in allStats)
         {
-            stats.TotalSavedHours = 0;
-            stats.TodaySavedHours = 0;
-            await _repo.UpdateEmployeeStatAsync(stats);
+            stat.TotalSavedHours = 0;
+            stat.TodaySavedHours = 0;
+            stat.LastResetDate = _timeService.Now.Date;
         }
-        
-        await _context.SaveChangesAsync();
-        
+
+        var allNotifications = await _context.UserNotifications.ToListAsync(cancellationToken);
+        if (allNotifications.Count > 0)
+            _context.UserNotifications.RemoveRange(allNotifications);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
         return Ok(new { message = "База данных полностью очищена" });
     }
 

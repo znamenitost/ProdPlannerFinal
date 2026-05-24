@@ -41,7 +41,7 @@ public class NotificationHub : Hub
         }
 
         var user = await _userManager.GetUserAsync(Context.User!);
-        if (user?.Role == "Admin")
+        if (user != null && await _userManager.IsInRoleAsync(user, "Admin"))
             await Groups.AddToGroupAsync(Context.ConnectionId, NotificationGroups.Admins);
 
         _logger.LogDebug(

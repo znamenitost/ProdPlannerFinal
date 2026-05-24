@@ -68,6 +68,7 @@ public static class WebApplicationExtensions
             }
         });
         app.UseCors("AllowReact");
+        app.UseMiddleware<ExceptionHandlingMiddleware>();
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseWebSockets();

@@ -1,4 +1,5 @@
 using ProductionPlanner.Data;
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Services.TaskTable;
@@ -111,9 +112,11 @@ public class TaskListQueryService : ITaskListQueryService
     private object MapTaskToResult(ProductionTask task, DateTime now)
     {
         var hoursNeeded = task.EstimateHours * (1 - task.Progress);
-        var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(now, task.Deadline);
+        var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
+        var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(task.Deadline);
+        var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(nowMoscow, deadlineMoscow);
         string riskLevel = "ok";
-        if (task.Deadline < now) riskLevel = "overdue";
+        if (AppDateTime.CompareDeadlineToAppNow(task.Deadline, now) < 0) riskLevel = "overdue";
         else if (workHoursUntilDeadline < hoursNeeded) riskLevel = "critical";
         else if (workHoursUntilDeadline < hoursNeeded + 2) riskLevel = "warning";
 

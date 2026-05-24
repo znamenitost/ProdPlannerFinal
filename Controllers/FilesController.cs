@@ -67,10 +67,9 @@ namespace ProductionPlanner.Controllers
             var windowsShareName = _configuration["FileOpen:WindowsShareName"] ?? shareName;
             var windowsOpenMode = _configuration["FileOpen:WindowsOpenMode"] ?? "netopen";
 
-            var correctedPath = FilePathNormalizer.NormalizeRelativePath(filePath, shareName);
-            if (string.IsNullOrWhiteSpace(correctedPath))
+            if (!FilePathNormalizer.TryNormalizeRelativePath(filePath, shareName, out var correctedPath, out var pathError))
             {
-                error = "Не удалось определить путь к файлу";
+                error = pathError ?? "Не удалось определить путь к файлу";
                 return false;
             }
 

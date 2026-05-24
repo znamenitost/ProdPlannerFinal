@@ -58,7 +58,9 @@ export default function EmployeeStatusButtons({
   const canStart = !isDone && !isStarted && !isPaused;
   const canPause = isStarted;
   const canResume = isPaused;
-  const canComplete = !isDone;
+  // «Готово» становится доступным только после нажатия «Начал» (либо в паузе после старта).
+  // Это совпадает со спецификацией: до старта работа не считается, и завершать нечего.
+  const canComplete = !isDone && (isStarted || isPaused);
   const workflowItemSx = isInfo ? blockedMenuItemSx : undefined;
 
   const handleOpen = (event) => {

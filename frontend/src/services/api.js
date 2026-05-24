@@ -205,3 +205,26 @@ export async function getDeadlineRisks(employee, options = {}) {
   const data = await res.json();
   return Array.isArray(data) ? data.filter((r) => r.riskLevel !== 'ok') : [];
 }
+
+// Эндпоинты dev-панели. Все требуют роли Admin и в проде закрыты гвардом DevOnly()
+// (кроме reset-db, которым админ может пользоваться в любом окружении).
+async function debugFetch(url, init = {}) {
+  const res = await fetch(`${API_BASE}/debug${url}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    ...init
+  });
+  await throwIfNotOk(res, 'Ошибка debug-операции');
+  // get-intervals возвращает массив, get-time/set-time/etc — объект; reset-time/close-interval — пусто.
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+export const debugApi = {
+  setMockTime: (mockDateTime) =>
+    debugFetch('/set-time', { method: 'POST', body: JSON.stringify({ mockDateTime }) }),
+  resetMockTime: () => debugFetch('/reset-time', { method: 'POST' }),
+  closeInterval: (taskId) => debugFetch(`/close-interval/${taskId}`, { method: 'POST' }),
+  createInterval: (taskId) => debugFetch(`/create-interval/${taskId}`, { method: 'POST' }),
+  resetDatabase: () => debugFetch('/reset-db', { method: 'POST' })
+};

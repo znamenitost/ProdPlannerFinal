@@ -11,10 +11,33 @@ public static class FilePathNormalizer
     /// </summary>
     public static string NormalizeRelativePath(string filePath, string shareName)
     {
+        return TryNormalizeRelativePath(filePath, shareName, out var relativePath, out _)
+            ? relativePath ?? string.Empty
+            : string.Empty;
+    }
+
+    public static bool TryNormalizeRelativePath(
+        string filePath,
+        string shareName,
+        out string? relativePath,
+        out string? error)
+    {
+        relativePath = null;
+        error = null;
+
         if (string.IsNullOrWhiteSpace(filePath))
-            return string.Empty;
+        {
+            error = "Путь к файлу не указан";
+            return false;
+        }
 
         var rawPath = filePath.Replace('\\', '/').Trim();
+        if (rawPath.StartsWith('/') || rawPath.StartsWith('\\'))
+        {
+            error = "Недопустимый путь";
+            return false;
+        }
+
         while (rawPath.Contains("//", StringComparison.Ordinal))
             rawPath = rawPath.Replace("//", "/", StringComparison.Ordinal);
 
@@ -31,21 +54,37 @@ public static class FilePathNormalizer
 
         rawPath = rawPath.Trim('/');
         if (string.IsNullOrEmpty(rawPath))
-            return string.Empty;
+        {
+            error = "Не удалось определить путь к файлу";
+            return false;
+        }
 
         var parts = rawPath
             .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToArray();
 
         if (parts.Length == 0)
-            return string.Empty;
+        {
+            error = "Не удалось определить путь к файлу";
+            return false;
+        }
+
+        foreach (var part in parts)
+        {
+            if (part is "." or "..")
+            {
+                error = "Недопустимый путь";
+                return false;
+            }
+        }
 
         var cleanFileName = parts[^1].Split('[')[0].Trim();
         if (!HasSupportedExtension(cleanFileName))
             cleanFileName += ".cdr";
 
         parts[^1] = cleanFileName;
-        return string.Join("/", parts);
+        relativePath = string.Join("/", parts);
+        return true;
     }
 
     /// <summary>

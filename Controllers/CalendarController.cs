@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Services.Calendar;
 
@@ -12,16 +14,16 @@ public class CalendarController : ControllerBase
 {
     private readonly IWeekCalendarService _weekCalendar;
     private readonly IAppTimeService _timeService;
-    private readonly ILogger<CalendarController> _logger;
+    private readonly UserManager<User> _userManager;
 
     public CalendarController(
         IWeekCalendarService weekCalendar,
         IAppTimeService timeService,
-        ILogger<CalendarController> logger)
+        UserManager<User> userManager)
     {
         _weekCalendar = weekCalendar;
         _timeService = timeService;
-        _logger = logger;
+        _userManager = userManager;
     }
 
     [HttpGet("week")]
@@ -30,22 +32,21 @@ public class CalendarController : ControllerBase
         [FromQuery] string? startDate,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            if (string.IsNullOrEmpty(employee))
-                return BadRequest(new { error = "Employee name is required" });
+        if (string.IsNullOrEmpty(employee))
+            return BadRequest(new { error = "Employee name is required" });
 
-            var result = await _weekCalendar.GetWeekAsync(
-                employee,
-                startDate,
-                _timeService.Now,
-                cancellationToken);
-            return Ok(new { start = result.Start, days = result.Days });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка в GetWeek для сотрудника {Employee}", employee);
-            return StatusCode(500, new { error = ex.Message });
-        }
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser == null) return Unauthorized();
+
+        var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+        if (!isAdmin && !string.Equals(employee, currentUser.FullName, StringComparison.Ordinal))
+            return Forbid();
+
+        var result = await _weekCalendar.GetWeekAsync(
+            employee,
+            startDate,
+            _timeService.Now,
+            cancellationToken);
+        return Ok(new { start = result.Start, days = result.Days });
     }
 }

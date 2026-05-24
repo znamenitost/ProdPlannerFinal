@@ -107,10 +107,17 @@ namespace ProductionPlanner.Data
             var rangeStart = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(weekStart) : weekStart;
             var rangeEnd = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(weekEnd) : weekEnd;
 
+            var taskIdsWithIntervals = await _context.WorkIntervals
+                .AsNoTracking()
+                .Where(i => i.StartTime >= rangeStart && i.StartTime < rangeEnd)
+                .Select(i => i.ProductionTaskId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
             return await _context.ProductionTasks
                 .AsNoTracking()
                 .Where(t => t.EmployeeName == employeeName && (
-                    t.WorkIntervals.Any(i => i.StartTime >= rangeStart && i.StartTime < rangeEnd)
+                    taskIdsWithIntervals.Contains(t.Id)
                     || (t.Status != JobStatus.Completed && !(t.IsSplitTask && t.ParentRowNumber == null))
                     || (t.Deadline >= rangeStart && t.Deadline < rangeEnd)
                     || (t.Status == JobStatus.Completed
@@ -174,53 +181,59 @@ namespace ProductionPlanner.Data
         public async Task UpdateTaskAsync(ProductionTask task, CancellationToken cancellationToken = default)
         {
             task.UpdatedAt = _timeService.Now;
-            var tracked = _context.ProductionTasks.Local.FirstOrDefault(e => e.Id == task.Id);
-            if (tracked != null && !ReferenceEquals(tracked, task))
+
+            var tracked = await GetTrackedTaskAsync(task.Id, cancellationToken);
+            if (tracked == null)
+                throw new InvalidOperationException($"Задача {task.Id} не найдена");
+
+            if (!ReferenceEquals(tracked, task))
                 _context.Entry(tracked).CurrentValues.SetValues(task);
-            else if (_context.Entry(task).State == EntityState.Detached)
-                _context.ProductionTasks.Update(task);
 
             await _context.SaveChangesAsync(cancellationToken);
         }
 
         public async Task DeleteTaskAsync(int id, CancellationToken cancellationToken = default)
         {
-            var task = await GetTaskByIdAsync(id, cancellationToken);
-            if (task == null)
-                return;
-
-            var closedAt = _timeService.Now;
-            var taskIdsToClose = new List<int> { id };
-
-            if (task.IsSplitTask)
+            await ExecuteInTransactionAsync(async ct =>
             {
-                var childIds = await _context.ProductionTasks
-                    .Where(t => t.ParentRowNumber == task.Id)
-                    .Select(t => t.Id)
-                    .ToListAsync(cancellationToken);
-                taskIdsToClose.AddRange(childIds);
-            }
+                var task = await _context.ProductionTasks
+                    .FirstOrDefaultAsync(t => t.Id == id, ct);
+                if (task == null)
+                    return;
 
-            foreach (var taskId in taskIdsToClose.Distinct())
-                await CloseOpenIntervalsAsync(taskId, closedAt, cancellationToken);
+                var closedAt = _timeService.Now;
+                var taskIdsToClose = new List<int> { id };
 
-            if (task.IsSplitTask)
-            {
-                var children = await _context.ProductionTasks
-                    .Where(t => t.ParentRowNumber == task.Id)
-                    .ToListAsync(cancellationToken);
-                if (children.Count > 0)
-                    _context.ProductionTasks.RemoveRange(children);
-            }
+                if (task.IsSplitTask)
+                {
+                    var childIds = await _context.ProductionTasks
+                        .Where(t => t.ParentRowNumber == task.Id)
+                        .Select(t => t.Id)
+                        .ToListAsync(ct);
+                    taskIdsToClose.AddRange(childIds);
+                }
 
-            var splits = await _context.TaskSplits
-                .Where(ts => ts.ParentRowNumber == task.Id)
-                .ToListAsync(cancellationToken);
-            if (splits.Count > 0)
-                _context.TaskSplits.RemoveRange(splits);
+                foreach (var taskId in taskIdsToClose.Distinct())
+                    await CloseOpenIntervalsAsync(taskId, closedAt, ct);
 
-            _context.ProductionTasks.Remove(task);
-            await _context.SaveChangesAsync(cancellationToken);
+                if (task.IsSplitTask)
+                {
+                    var children = await _context.ProductionTasks
+                        .Where(t => t.ParentRowNumber == task.Id)
+                        .ToListAsync(ct);
+                    if (children.Count > 0)
+                        _context.ProductionTasks.RemoveRange(children);
+                }
+
+                var splits = await _context.TaskSplits
+                    .Where(ts => ts.ParentRowNumber == task.Id)
+                    .ToListAsync(ct);
+                if (splits.Count > 0)
+                    _context.TaskSplits.RemoveRange(splits);
+
+                _context.ProductionTasks.Remove(task);
+                await _context.SaveChangesAsync(ct);
+            }, cancellationToken);
         }
 
         public async Task DeleteAllTasksAsync(CancellationToken cancellationToken = default)
@@ -272,23 +285,33 @@ namespace ProductionPlanner.Data
             }
             else
             {
-                var tracked = _context.ChangeTracker.Entries<EmployeeStat>()
-                    .FirstOrDefault(e => e.Entity.Id == stat.Id)?.Entity;
+                var tracked = _context.EmployeeStats.Local.FirstOrDefault(e => e.Id == stat.Id);
+                if (tracked == null)
+                {
+                    tracked = await _context.EmployeeStats
+                        .FirstOrDefaultAsync(e => e.Id == stat.Id, cancellationToken);
+                }
 
-                if (tracked != null)
-                {
-                    tracked.EmployeeName = stat.EmployeeName;
-                    tracked.TotalSavedHours = stat.TotalSavedHours;
-                    tracked.TodaySavedHours = stat.TodaySavedHours;
-                    tracked.LastResetDate = stat.LastResetDate;
-                }
-                else
-                {
-                    _context.EmployeeStats.Update(stat);
-                }
+                if (tracked == null)
+                    throw new InvalidOperationException($"Статистика сотрудника {stat.Id} не найдена");
+
+                tracked.EmployeeName = stat.EmployeeName;
+                tracked.TotalSavedHours = stat.TotalSavedHours;
+                tracked.TodaySavedHours = stat.TodaySavedHours;
+                tracked.LastResetDate = stat.LastResetDate;
             }
 
             await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        private async Task<ProductionTask?> GetTrackedTaskAsync(int id, CancellationToken cancellationToken)
+        {
+            var tracked = _context.ProductionTasks.Local.FirstOrDefault(e => e.Id == id);
+            if (tracked != null)
+                return tracked;
+
+            return await _context.ProductionTasks
+                .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
         }
 
         public async Task<List<ProductionTask>> GetChildTasksAsync(int parentId, CancellationToken cancellationToken = default)
@@ -479,46 +502,52 @@ namespace ProductionPlanner.Data
             else if (newStatus == JobStatus.Completed)
                 query = query.Where(t => t.Status != JobStatus.Completed);
 
-            var rows = await query.ExecuteUpdateAsync(s =>
-                s.SetProperty(t => t.Status, newStatus)
+            if (patch == null)
+            {
+                return await query.ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.Status, newStatus)
+                        .SetProperty(t => t.UpdatedAt, updated),
+                    cancellationToken);
+            }
+
+            if (patch is { Progress: 1, CompletedAt: not null, ActualHours: not null })
+            {
+                var completedAt = ToDbDateTime(patch.CompletedAt.Value);
+                var actualHours = patch.ActualHours.Value;
+                return await query.ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.Status, newStatus)
+                        .SetProperty(t => t.UpdatedAt, updated)
+                        .SetProperty(t => t.Progress, 1.0)
+                        .SetProperty(t => t.CompletedAt, completedAt)
+                        .SetProperty(t => t.ActualHours, actualHours),
+                    cancellationToken);
+            }
+
+            if (patch is { Progress: 1, CompletedAt: not null, ClearCompletedAt: false })
+            {
+                var completedAt = ToDbDateTime(patch.CompletedAt.Value);
+                return await query.ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.Status, newStatus)
+                        .SetProperty(t => t.UpdatedAt, updated)
+                        .SetProperty(t => t.Progress, 1.0)
+                        .SetProperty(t => t.CompletedAt, completedAt),
+                    cancellationToken);
+            }
+
+            if (patch is { Progress: 0, ClearCompletedAt: true })
+            {
+                return await query.ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.Status, newStatus)
+                        .SetProperty(t => t.UpdatedAt, updated)
+                        .SetProperty(t => t.Progress, 0.0)
+                        .SetProperty(t => t.CompletedAt, (DateTime?)null),
+                    cancellationToken);
+            }
+
+            return await query.ExecuteUpdateAsync(
+                s => s.SetProperty(t => t.Status, newStatus)
                     .SetProperty(t => t.UpdatedAt, updated),
                 cancellationToken);
-
-            if (rows == 0 || patch == null)
-                return rows;
-
-            var patchQuery = _context.ProductionTasks.Where(t => t.Id == taskId);
-
-            if (patch.Progress is double progress)
-            {
-                await patchQuery.ExecuteUpdateAsync(
-                    s => s.SetProperty(t => t.Progress, progress),
-                    cancellationToken);
-            }
-
-            if (patch.CompletedAt is DateTime completedAt)
-            {
-                var completed = ToDbDateTime(completedAt);
-                await patchQuery.ExecuteUpdateAsync(
-                    s => s.SetProperty(t => t.CompletedAt, completed),
-                    cancellationToken);
-            }
-
-            if (patch.ClearCompletedAt)
-            {
-                await patchQuery.ExecuteUpdateAsync(
-                    s => s.SetProperty(t => t.CompletedAt, (DateTime?)null),
-                    cancellationToken);
-            }
-
-            if (patch.ActualHours is double actualHours)
-            {
-                await patchQuery.ExecuteUpdateAsync(
-                    s => s.SetProperty(t => t.ActualHours, actualHours),
-                    cancellationToken);
-            }
-
-            return rows;
         }
 
         private DateTime ToDbDateTime(DateTime value) =>

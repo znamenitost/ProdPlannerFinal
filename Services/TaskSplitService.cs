@@ -80,8 +80,6 @@ namespace ProductionPlanner.Services
             parentTask.UpdatedAt = _timeService.Now;
             await _repo.UpdateTaskAsync(parentTask, cancellationToken);
 
-            await _context.SaveChangesAsync(cancellationToken);
-
             return parentTask;
         }
 
@@ -188,7 +186,6 @@ namespace ProductionPlanner.Services
             }
 
             await _repo.UpdateTaskAsync(parentTask, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
 
             await RecalculateParentStatusAsync(parentTask.Id, cancellationToken);
 
@@ -217,11 +214,16 @@ namespace ProductionPlanner.Services
             await sem.WaitAsync(cancellationToken);
             try
             {
-                await action(cancellationToken);
+                await _repo.ExecuteInTransactionAsync(action, cancellationToken);
             }
             finally
             {
                 sem.Release();
+                if (sem.CurrentCount == 1
+                    && SplitLocks.TryRemove(new KeyValuePair<int, SemaphoreSlim>(parentTaskId, sem)))
+                {
+                    sem.Dispose();
+                }
             }
         }
 
@@ -363,7 +365,6 @@ namespace ProductionPlanner.Services
                 _context.TaskSplits.RemoveRange(splits);
 
             await _repo.UpdateTaskAsync(parent, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
 
             return parent;
         }
@@ -397,14 +398,34 @@ namespace ProductionPlanner.Services
             else
                 newStatus = JobStatus.Assigned;
 
-            if (parent.Status == newStatus) return;
+            var now = _timeService.Now;
+            var patch = newStatus == JobStatus.Completed
+                ? new TaskStatusPatch { Progress = 1, CompletedAt = now }
+                : new TaskStatusPatch { Progress = 0, ClearCompletedAt = true };
 
-            parent.Status = newStatus;
-            parent.Progress = newStatus == JobStatus.Completed ? 1 : 0;
-            parent.CompletedAt = newStatus == JobStatus.Completed ? _timeService.Now : null;
-            parent.UpdatedAt = _timeService.Now;
-            await _repo.UpdateTaskAsync(parent, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
+            if (parent.Status == newStatus)
+            {
+                if (newStatus == JobStatus.Completed && parent.Progress < 0.99)
+                {
+                    await _repo.TryTransitionStatusAsync(
+                        parent.Id,
+                        JobStatus.Completed,
+                        now,
+                        expectedStatuses: null,
+                        patch,
+                        cancellationToken);
+                }
+
+                return;
+            }
+
+            await _repo.TryTransitionStatusAsync(
+                parent.Id,
+                newStatus,
+                now,
+                expectedStatuses: null,
+                patch,
+                cancellationToken);
         }
 
         public async Task<bool> AreAllSubtasksCompletedAsync(

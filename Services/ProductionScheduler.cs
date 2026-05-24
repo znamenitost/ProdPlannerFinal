@@ -1,3 +1,4 @@
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using System;
 using System.Collections.Generic;
@@ -22,7 +23,7 @@ namespace ProductionPlanner.Services
                 .ToList();
 
             var result = new List<ScheduledSlot>();
-            var cursor = _workHours.GetNextWorkStart(now);
+            var cursor = _workHours.GetNextWorkStart(AppDateTime.ToMoscowWallClockFromApp(now));
 
             foreach (var task in tasks)
             {
@@ -64,12 +65,14 @@ namespace ProductionPlanner.Services
                     continue;
                 
                 var hoursNeeded = task.EstimateHours * (1 - task.Progress);
-                var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(now, deadline);
-                
+                var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
+                var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(deadline);
+                var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(nowMoscow, deadlineMoscow);
+
                 string riskLevel = "ok";
                 string message = "";
-                
-                if (deadline < now)
+
+                if (AppDateTime.CompareDeadlineToAppNow(deadline, now) < 0)
                 {
                     riskLevel = "overdue";
                     message = $"Дедлайн сорван! Задача должна была быть выполнена {deadline:dd.MM HH:mm}";

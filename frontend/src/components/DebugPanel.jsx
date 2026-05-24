@@ -1,24 +1,23 @@
 import { useState, useEffect } from 'react';
-import { 
-  Paper, 
-  Typography, 
-  TextField, 
-  Button, 
-  Box, 
+import {
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  Box,
   Alert,
   IconButton,
   Collapse,
   Chip
 } from '@mui/material';
-import { 
-  BugReport, 
-  Schedule, 
-  PlayArrow, 
-  Stop, 
+import {
+  BugReport,
+  Schedule,
   Refresh,
   Close,
   Warning
 } from '@mui/icons-material';
+import { debugApi, getActiveTasks } from '../services/api';
 
 export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
   const [open, setOpen] = useState(false);
@@ -27,75 +26,67 @@ export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
   const [activeTasks, setActiveTasks] = useState([]);
   const [message, setMessage] = useState(null);
 
-  // Загружаем активные задачи для отладки
+  const showMessage = (type, text, ttlMs = 3000) => {
+    setMessage({ type, text });
+    if (ttlMs > 0) setTimeout(() => setMessage(null), ttlMs);
+  };
+
   const loadTasks = async () => {
     try {
-      const res = await fetch(`/api/tasks/active?employee=${encodeURIComponent(employee)}`);
-      const data = await res.json();
+      const data = await getActiveTasks(employee);
       setActiveTasks(data);
     } catch (err) {
       console.error('Ошибка загрузки задач:', err);
+      showMessage('error', err.message || 'Не удалось загрузить активные задачи');
     }
   };
 
   useEffect(() => {
-    if (open) loadTasks();
+    if (open && employee) loadTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, employee]);
 
-  // Установить моковое время в бэкенде
-  const setMockTime = async () => {
+  const handleSetMockTime = async () => {
     try {
-      const res = await fetch('/api/debug/set-time', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mockDateTime: mockDate })
-      });
-      const data = await res.json();
-      setMessage({ type: 'success', text: `Время установлено: ${mockDate}` });
+      await debugApi.setMockTime(mockDate);
+      showMessage('success', `Время установлено: ${mockDate}`);
       setIsDebugMode(true);
-      if (onTimeChange) onTimeChange();
-      setTimeout(() => setMessage(null), 3000);
+      onTimeChange?.();
     } catch (err) {
-      setMessage({ type: 'error', text: 'Ошибка установки времени' });
+      showMessage('error', err.message || 'Ошибка установки времени');
     }
   };
 
-  // Сбросить время на реальное
-  const resetTime = async () => {
+  const handleResetTime = async () => {
     try {
-      await fetch('/api/debug/reset-time', { method: 'POST' });
-      setMessage({ type: 'success', text: 'Время сброшено на реальное' });
+      await debugApi.resetMockTime();
+      showMessage('success', 'Время сброшено на реальное');
       setIsDebugMode(false);
-      if (onTimeChange) onTimeChange();
-      setTimeout(() => setMessage(null), 3000);
+      onTimeChange?.();
     } catch (err) {
-      setMessage({ type: 'error', text: 'Ошибка сброса времени' });
+      showMessage('error', err.message || 'Ошибка сброса времени');
     }
   };
 
-  // Принудительно закрыть интервал задачи
-  const closeInterval = async (taskId) => {
+  const handleCloseInterval = async (taskId) => {
     try {
-      await fetch(`/api/debug/close-interval/${taskId}`, { method: 'POST' });
-      setMessage({ type: 'success', text: `Интервал задачи ${taskId} закрыт` });
-      loadTasks();
-      if (onRefresh) onRefresh();
-      setTimeout(() => setMessage(null), 2000);
+      await debugApi.closeInterval(taskId);
+      showMessage('success', `Интервал задачи ${taskId} закрыт`, 2000);
+      await loadTasks();
+      onRefresh?.();
     } catch (err) {
-      setMessage({ type: 'error', text: 'Ошибка закрытия интервала' });
+      showMessage('error', err.message || 'Ошибка закрытия интервала');
     }
   };
 
-  // Создать новый интервал для задачи
-  const createInterval = async (taskId) => {
+  const handleCreateInterval = async (taskId) => {
     try {
-      await fetch(`/api/debug/create-interval/${taskId}`, { method: 'POST' });
-      setMessage({ type: 'success', text: `Интервал для задачи ${taskId} создан` });
-      loadTasks();
-      if (onRefresh) onRefresh();
-      setTimeout(() => setMessage(null), 2000);
+      await debugApi.createInterval(taskId);
+      showMessage('success', `Интервал для задачи ${taskId} создан`, 2000);
+      await loadTasks();
+      onRefresh?.();
     } catch (err) {
-      setMessage({ type: 'error', text: 'Ошибка создания интервала' });
+      showMessage('error', err.message || 'Ошибка создания интервала');
     }
   };
 
@@ -171,10 +162,10 @@ export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
                 onChange={(e) => setMockDate(e.target.value)}
                 sx={{ flex: 1 }}
               />
-              <Button variant="contained" size="small" onClick={setMockTime}>
+              <Button variant="contained" size="small" onClick={handleSetMockTime}>
                 Установить
               </Button>
-              <Button variant="outlined" size="small" onClick={resetTime}>
+              <Button variant="outlined" size="small" onClick={handleResetTime}>
                 Сброс
               </Button>
             </Box>
@@ -200,18 +191,18 @@ export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
                     />
                   </Box>
                   <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1, mt: 1 }}>
-                    <Button 
-                      size="small" 
-                      variant="outlined" 
-                      onClick={() => createInterval(task.id)}
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => handleCreateInterval(task.id)}
                     >
                       Создать интервал
                     </Button>
-                    <Button 
-                      size="small" 
-                      variant="outlined" 
+                    <Button
+                      size="small"
+                      variant="outlined"
                       color="error"
-                      onClick={() => closeInterval(task.id)}
+                      onClick={() => handleCloseInterval(task.id)}
                     >
                       Закрыть интервал
                     </Button>
@@ -225,11 +216,11 @@ export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
               )}
             </Box>
 
-            <Button 
-              variant="outlined" 
-              size="small" 
+            <Button
+              variant="outlined"
+              size="small"
               startIcon={<Refresh />}
-              onClick={() => { loadTasks(); if (onRefresh) onRefresh(); }}
+              onClick={() => { loadTasks(); onRefresh?.(); }}
             >
               Обновить
             </Button>
