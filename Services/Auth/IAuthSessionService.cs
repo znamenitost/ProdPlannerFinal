@@ -9,4 +9,5 @@ public interface IAuthSessionService
     Task<AuthUserDto> LoginEmployeeAsync(string fullName);
     Task<(AuthUserDto? User, string? ErrorMessage)> LoginAdminAsync(string email, string password);
     Task<AuthUserDto> GetCurrentUserAsync(ClaimsPrincipal principal);
+    Task<IReadOnlyList<LoginEmployeeDto>> GetLoginEmployeesAsync();
 }

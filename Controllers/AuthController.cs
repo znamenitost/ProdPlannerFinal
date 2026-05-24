@@ -23,6 +23,13 @@ public class AuthController : ControllerBase
         _provisioning = provisioning;
     }
 
+    [HttpGet("login-employees")]
+    public async Task<IActionResult> GetLoginEmployees()
+    {
+        var employees = await _authSession.GetLoginEmployeesAsync();
+        return Ok(employees);
+    }
+
     [HttpPost("login-employee")]
     public async Task<IActionResult> LoginEmployee([FromBody] EmployeeLoginRequest request)
     {

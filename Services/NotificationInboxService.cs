@@ -16,12 +16,18 @@ public class NotificationInboxService : INotificationInboxService
         _timeService = timeService;
     }
 
-    public async Task<long> EnqueueNewTaskAsync(string userId, int taskId, string title, DateTime deadline)
+    public Task<long> EnqueueNewTaskAsync(string userId, int taskId, string title, DateTime deadline) =>
+        EnqueueAsync(userId, "NewTask", taskId, title, deadline);
+
+    public Task<long> EnqueueTaskReadyToStartAsync(string userId, int taskId, string title, DateTime deadline) =>
+        EnqueueAsync(userId, "TaskReadyToStart", taskId, title, deadline);
+
+    private async Task<long> EnqueueAsync(string userId, string type, int taskId, string title, DateTime deadline)
     {
         var notification = new UserNotification
         {
             UserId = userId,
-            Type = "NewTask",
+            Type = type,
             TaskId = taskId,
             Title = title,
             Deadline = deadline,

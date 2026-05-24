@@ -70,6 +70,45 @@ public class TaskNotificationService : ITaskNotificationService
     public Task NotifyProgressChangedAsync(ProductionTask task, double progress) =>
         BroadcastAsync("TaskProgressChanged", task.Id, progress);
 
+    /// <summary>
+    /// Персональный push исполнителю о том, что админ перевёл задачу в «Согласовано» или
+    /// «В наличии» — то есть блокирующее условие снято, можно начинать работу. Использует
+    /// тот же транспорт <c>NewTask</c>, что и снэкбар о новой задаче (фронт уже умеет его
+    /// показывать), а в заголовок добавляется префикс «Можно начинать», чтобы сотрудник
+    /// сразу понял суть. Запись складывается в инбокс с типом <c>TaskReadyToStart</c>,
+    /// поэтому переживёт офлайн/перезагрузку страницы и поднимется через /api/notifications/pending.
+    /// </summary>
+    public async Task NotifyTaskReadyToStartAsync(ProductionTask task)
+    {
+        if (string.IsNullOrWhiteSpace(task.EmployeeName))
+            return;
+
+        var userId = await GetUserIdByFullNameAsync(task.EmployeeName);
+        if (string.IsNullOrEmpty(userId))
+        {
+            _logger.LogDebug(
+                "User not found for ready-to-start notification: {EmployeeName}",
+                task.EmployeeName);
+            return;
+        }
+
+        var title = $"Можно начинать: {GetNotificationTitle(task)}";
+
+        var notificationId = await _inbox.EnqueueTaskReadyToStartAsync(
+            userId,
+            task.Id,
+            title,
+            task.Deadline);
+
+        await SendToGroupsAsync(
+            [userId],
+            "NewTask",
+            notificationId,
+            task.Id,
+            title,
+            task.Deadline);
+    }
+
     private Task SendToGroupsAsync(IReadOnlyList<string> groups, string method, params object?[] args)
     {
         if (groups.Count == 0)

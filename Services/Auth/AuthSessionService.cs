@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Models;
 using ProductionPlanner.Models.Dtos;
 using System.Security.Claims;
@@ -58,6 +59,21 @@ public class AuthSessionService : IAuthSessionService
             return new AuthUserDto { IsAuthenticated = false };
 
         return await MapUserAsync(user);
+    }
+
+    public async Task<IReadOnlyList<LoginEmployeeDto>> GetLoginEmployeesAsync()
+    {
+        return await _userManager.Users
+            .AsNoTracking()
+            .Where(u => u.Role == "Employee" && u.IsActive)
+            .OrderBy(u => u.FullName)
+            .Select(u => new LoginEmployeeDto
+            {
+                Id = u.Id,
+                FullName = u.FullName,
+                AvatarUrl = u.AvatarUrl
+            })
+            .ToListAsync();
     }
 
     private async Task<AuthUserDto> MapUserAsync(User user)

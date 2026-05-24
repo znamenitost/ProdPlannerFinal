@@ -282,6 +282,9 @@ public class TaskTableService : ITaskTableService
 
         string? statusChangedTo = null;
         var completedViaLifecycle = false;
+        // Признак перехода в «разблокирующий» статус (Согласовано/В наличии) — после сохранения
+        // отдельным личным пушем сообщим исполнителю, что блокировка снята и можно начинать.
+        var notifyReadyToStart = false;
         if (!string.IsNullOrEmpty(request.StatusText))
         {
             var newStatus = TaskStatusMapper.FromText(request.StatusText);
@@ -314,6 +317,7 @@ public class TaskTableService : ITaskTableService
                 {
                     task.Status = newStatus;
                     statusChangedTo = newStatus.ToString();
+                    notifyReadyToStart = newStatus is JobStatus.Approved or JobStatus.InStock;
                 }
             }
         }
@@ -335,6 +339,9 @@ public class TaskTableService : ITaskTableService
         await _notificationService.NotifyTaskUpdatedAsync(task, oldEmployeeName);
         if (statusChangedTo != null)
             await _notificationService.NotifyStatusChangedAsync(task, statusChangedTo);
+
+        if (notifyReadyToStart)
+            await _notificationService.NotifyTaskReadyToStartAsync(task);
 
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }

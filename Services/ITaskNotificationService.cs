@@ -9,4 +9,5 @@ public interface ITaskNotificationService
     Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames);
     Task NotifyStatusChangedAsync(ProductionTask task, string newStatus);
     Task NotifyProgressChangedAsync(ProductionTask task, double progress);
+    Task NotifyTaskReadyToStartAsync(ProductionTask task);
 }

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { 
   Paper, 
   TextField, 
@@ -23,16 +23,54 @@ import fon5Url from '../../../sprites/fon5.svg';
 import sunUrl from '../../../sprites/sun.svg';
 import './LoginForm.css';
 
+const FALLBACK_EMPLOYEES = [
+  { id: null, fullName: 'Дима', avatarUrl: null },
+  { id: null, fullName: 'Яромир', avatarUrl: null },
+];
+
 export default function LoginForm({ onLogin }) {
   const pageRef = useRef(null);
   const [loginType, setLoginType] = useState('employee'); // 'employee' or 'admin'
   const [selectedEmployee, setSelectedEmployee] = useState('Дима');
+  const [employees, setEmployees] = useState(FALLBACK_EMPLOYEES);
   const [adminPassword, setAdminPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const adminEmail = 'pavel@admin.com';
-  const employees = ['Дима', 'Яромир'];
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch('/api/auth/login-employees')
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((list) => {
+        if (cancelled || !Array.isArray(list) || list.length === 0) return;
+
+        const normalized = list
+          .map((emp) => ({
+            id: emp.id ?? null,
+            fullName: emp.fullName ?? '',
+            avatarUrl: emp.avatarUrl ?? null,
+          }))
+          .filter((emp) => emp.fullName);
+
+        if (normalized.length === 0) return;
+
+        setEmployees(normalized);
+        setSelectedEmployee((prev) =>
+          normalized.some((emp) => emp.fullName === prev) ? prev : normalized[0].fullName
+        );
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const handleLoginTypeChange = (type) => {
     setLoginType(type);
     setError('');
@@ -165,15 +203,7 @@ export default function LoginForm({ onLogin }) {
         className="login-content"
       >
         <Box className="login-form-shell">
-          <Avatar sx={{ m: 1, bgcolor: 'primary.main', width: 64, height: 64, boxShadow: (t) => `0 8px 24px ${alpha(t.palette.primary.main, 0.25)}` }}>
-            <LoginIcon sx={{ fontSize: 36 }} />
-          </Avatar>
-
-          <Typography variant="h1" gutterBottom sx={{ mt: 1 }}>
-            Mainstream Assistant
-          </Typography>
-
-          <Paper sx={{ ...glassPaperSx, p: 4, width: '100%', mt: 2 }}>
+          <Paper sx={{ ...glassPaperSx, p: 4, width: '100%' }}>
             <Typography variant="h2" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>
               Вход в систему
             </Typography>
@@ -208,17 +238,22 @@ export default function LoginForm({ onLogin }) {
                       Выберите сотрудника:
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2 }}>
-                      {employees.map(emp => (
+                      {employees.map((emp) => {
+                        const avatarSrc = emp.avatarUrl && emp.id
+                          ? `/api/auth/avatar/${emp.id}`
+                          : undefined;
+
+                        return (
                         <Card 
-                          key={emp}
-                          onClick={() => setSelectedEmployee(emp)}
+                          key={emp.fullName}
+                          onClick={() => setSelectedEmployee(emp.fullName)}
                           sx={(theme) => ({
                             flex: 1,
                             cursor: 'pointer',
-                            border: selectedEmployee === emp
+                            border: selectedEmployee === emp.fullName
                               ? `2px solid ${theme.palette.primary.main}`
                               : `1px solid ${alpha(theme.palette.divider, 1)}`,
-                            bgcolor: selectedEmployee === emp
+                            bgcolor: selectedEmployee === emp.fullName
                               ? alpha(theme.palette.primary.main, 0.08)
                               : alpha('#ffffff', 0.5),
                             transition: createMuiTransition(theme, [
@@ -230,15 +265,19 @@ export default function LoginForm({ onLogin }) {
                           })}
                         >
                           <CardContent sx={{ textAlign: 'center', py: 2 }}>
-                            <Avatar sx={{ width: 40, height: 40, mx: 'auto', mb: 1, bgcolor: 'primary.light' }}>
-                              {emp[0]}
+                            <Avatar
+                              src={avatarSrc}
+                              sx={{ width: 40, height: 40, mx: 'auto', mb: 1, bgcolor: 'primary.light' }}
+                            >
+                              {emp.fullName[0]}
                             </Avatar>
-                            <Typography variant="body1" sx={{ fontWeight: selectedEmployee === emp ? 600 : 400 }}>
-                              {emp}
+                            <Typography variant="body1" sx={{ fontWeight: selectedEmployee === emp.fullName ? 600 : 400 }}>
+                              {emp.fullName}
                             </Typography>
                           </CardContent>
                         </Card>
-                      ))}
+                        );
+                      })}
                     </Box>
                   </>
                 ) : (
