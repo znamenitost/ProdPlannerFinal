@@ -210,29 +210,42 @@ jobs:
           echo "Ждём остановку пула IIS (30 с)…"
           sleep 30
 
-      - name: Reset stale frontend entrypoints
+      - name: Reset FTP sync and stale frontend entrypoints
         run: |
           lftp -e "
             set ftp:passive-mode on;
             set ssl:force off;
             open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }};
             cd '${{ steps.ftp.outputs.server_dir }}';
+            rm -f .ftp-deploy-sync-state.json;
             rm -f wwwroot/index.html;
             glob -a rm -f wwwroot/assets/*;
             bye
           " || echo "::warning::Не удалось очистить wwwroot на FTP — продолжаем деплой"
 
-      # SamKirkland/FTP-Deploy-Action падает на 1gb.ru: пассивный data-порт (напр. :5986)
-      # с раннеров GitHub Actions не открывается (Timeout data connection).
-      # lftp в тех же шагах (login, app_offline, reset) работает стабильно — зеркалим через него.
-      - name: Deploy via lftp mirror
-        run: |
-          chmod +x scripts/deploy-ftp-mirror.sh
-          scripts/deploy-ftp-mirror.sh \
-            '${{ steps.ftp.outputs.server }}' \
-            '${{ secrets.FTP_USERNAME }}' \
-            '${{ secrets.FTP_PASSWORD }}' \
-            '${{ steps.ftp.outputs.server_dir }}'
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ steps.ftp.outputs.server }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ steps.ftp.outputs.server_dir }}
+          local-dir: ./publish/
+          protocol: ftp
+          port: 21
+          security: loose
+          log-level: verbose
+          timeout: 120000
+          exclude: |
+            **/.git*
+            **/.github/**
+            **/logs/**
+            **/App_Data/**
+            **/*.db
+            **/*.db-shm
+            **/*.db-wal
+            **/*.pdb
+            app_offline.htm
 
       - name: Start IIS (remove app_offline.htm)
         if: always()
