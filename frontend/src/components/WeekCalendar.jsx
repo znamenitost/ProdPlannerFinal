@@ -52,16 +52,22 @@ export default function WeekCalendar({ employee }) {
 
   const goPrev = () => {
     setAnchorDate((prev) => {
+      if (viewMode === 'day') {
+        return addWorkdays(prev, -1);
+      }
       const next = new Date(prev);
-      next.setDate(prev.getDate() - (viewMode === 'day' ? 1 : 7));
+      next.setDate(prev.getDate() - 7);
       return startOfDay(next);
     });
   };
 
   const goNext = () => {
     setAnchorDate((prev) => {
+      if (viewMode === 'day') {
+        return addWorkdays(prev, 1);
+      }
       const next = new Date(prev);
-      next.setDate(prev.getDate() + (viewMode === 'day' ? 1 : 7));
+      next.setDate(prev.getDate() + 7);
       return startOfDay(next);
     });
   };
@@ -69,13 +75,16 @@ export default function WeekCalendar({ employee }) {
   const handleViewModeChange = (_, newMode) => {
     if (!newMode || newMode === viewMode) return;
     if (newMode === 'day') {
-      setAnchorDate(startOfDay(new Date()));
+      const currentDate = weekData?.currentTime ? new Date(weekData.currentTime) : new Date();
+      setAnchorDate(getWorkdayOrPrevious(currentDate));
     }
     setViewMode(newMode);
   };
 
   if (isPending || !weekData) return <CalendarLoadingState />;
 
+  const currentDate = weekData.currentTime ? new Date(weekData.currentTime) : new Date();
+  const currentWorkday = getWorkdayOrPrevious(currentDate);
   const start = new Date(weekData.start);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
@@ -91,11 +100,11 @@ export default function WeekCalendar({ employee }) {
     : weekRange;
 
   const daysToShow = viewMode === 'day'
-    ? weekData.days.filter((day) => isSameCalendarDay(day.date, anchorDate))
+    ? weekData.days.filter((day) => !isWeekend(day.date) && isSameCalendarDay(day.date, anchorDate))
     : (showWeekend ? weekData.days : weekData.days.filter((_, index) => index < 5));
 
   const navLabel = viewMode === 'day' ? 'день' : 'неделю';
-  const isAnchorToday = isSameCalendarDay(anchorDate, new Date());
+  const isAnchorToday = isSameCalendarDay(anchorDate, currentWorkday);
 
   return (
     <Paper sx={{ ...glassPaperSx, mb: 3 }}>
@@ -146,7 +155,7 @@ export default function WeekCalendar({ employee }) {
             variant="outlined"
             color="primary"
             startIcon={<Today />}
-            onClick={() => setAnchorDate(startOfDay(new Date()))}
+            onClick={() => setAnchorDate(currentWorkday)}
             disabled={isAnchorToday}
             sx={{ flexShrink: 0 }}
           >
@@ -182,6 +191,7 @@ export default function WeekCalendar({ employee }) {
                 highlightedTaskId={highlightedTaskId}
                 onTaskHover={setHighlightedTaskId}
                 detailedTimeline={viewMode === 'day'}
+                currentTime={weekData.currentTime}
               />
             ))}
           </Box>
@@ -203,4 +213,32 @@ function getMonday(date) {
   const diff = day === 0 ? 6 : day - 1;
   d.setDate(d.getDate() - diff);
   return d;
+}
+
+function isWeekend(date) {
+  const day = new Date(date).getDay();
+  return day === 0 || day === 6;
+}
+
+function addWorkdays(date, amount) {
+  const next = startOfDay(date);
+  const direction = amount < 0 ? -1 : 1;
+  let remaining = Math.abs(amount);
+
+  while (remaining > 0) {
+    next.setDate(next.getDate() + direction);
+    if (!isWeekend(next)) {
+      remaining -= 1;
+    }
+  }
+
+  return next;
+}
+
+function getWorkdayOrPrevious(date) {
+  const next = startOfDay(date);
+  while (isWeekend(next)) {
+    next.setDate(next.getDate() - 1);
+  }
+  return next;
 }

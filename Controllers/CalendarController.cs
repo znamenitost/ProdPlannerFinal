@@ -47,6 +47,6 @@ public class CalendarController : ControllerBase
             startDate,
             _timeService.Now,
             cancellationToken);
-        return Ok(new { start = result.Start, days = result.Days });
+        return Ok(result);
     }
 }

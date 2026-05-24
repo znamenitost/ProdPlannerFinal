@@ -83,6 +83,7 @@ public class WeekCalendarService : IWeekCalendarService
         return new WeekCalendarResponseDto
         {
             Start = weekStart,
+            CurrentTime = currentTime,
             Days = days
         };
     }

@@ -34,7 +34,6 @@ import {
 } from '@mui/icons-material';
 import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
-import DeadlineWarnings from './components/DeadlineWarnings';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
 import DebugPanel from './components/DebugPanel';
@@ -275,7 +274,6 @@ function AppContent() {
             {activeTab === 0 ? (
               <>
                 <WeekCalendar employee={employee} />
-                <DeadlineWarnings employee={employee} />
                 <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
                   <ActiveTasksList onUpdate={refreshCalendar} embedded employee={employee} />
                 </SectionCard>

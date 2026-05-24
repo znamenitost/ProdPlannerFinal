@@ -40,15 +40,24 @@ public class UserProvisioningService : IUserProvisioningService
 
     public async Task InitializeDefaultUsersAsync()
     {
-        await EnsureAdminAsync("pavel@admin.com", "Павел", "Admin123!");
+        await EnsureAdminAsync("pavel@admin.com", "Павел", "2960040");
         await EnsureEmployeeAsync("dima@employee.local", "Дима");
         await EnsureEmployeeAsync("yaromer@employee.local", "Яромир");
     }
 
     private async Task EnsureAdminAsync(string email, string fullName, string password)
     {
-        if (await _userManager.FindByEmailAsync(email) != null)
+        var existingUser = await _userManager.FindByEmailAsync(email);
+        if (existingUser != null)
+        {
+            if (!await _userManager.CheckPasswordAsync(existingUser, password))
+            {
+                var resetToken = await _userManager.GeneratePasswordResetTokenAsync(existingUser);
+                await _userManager.ResetPasswordAsync(existingUser, resetToken, password);
+            }
+
             return;
+        }
 
         var user = new User
         {

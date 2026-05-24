@@ -3,6 +3,7 @@ namespace ProductionPlanner.Models.Dtos.Calendar;
 public class WeekCalendarResponseDto
 {
     public DateTime Start { get; set; }
+    public DateTime CurrentTime { get; set; }
     public List<WeekCalendarDayDto> Days { get; set; } = new();
 }
 

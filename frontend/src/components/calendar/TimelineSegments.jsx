@@ -57,17 +57,18 @@ export default function TimelineSegments({
   idleSegments,
   isWorkingDay,
   detailedTimeline = false,
-  dayDate = null
+  dayDate = null,
+  currentTime = null
 }) {
   const range = getTimelineRange(detailedTimeline);
   const trackHeight = detailedTimeline ? 48 : 36;
   const axisBlockHeight = 26;
+  const now = currentTime ? new Date(currentTime) : new Date();
 
   const isToday =
-    detailedTimeline && dayDate && isSameCalendarDay(dayDate, new Date());
+    detailedTimeline && dayDate && isSameCalendarDay(dayDate, now);
   useClockMinuteTick(isToday);
 
-  const now = new Date();
   const nowLeft = isToday ? getNowMarkerPercent(now, range) : null;
 
   const track = (
