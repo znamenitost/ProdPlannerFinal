@@ -1,5 +1,17 @@
 # Деплой на 1gb.ru и ошибка FTP 550
 
+## Timeout data connection (порт 5986 и т.п.)
+
+На шаге **Deploy via FTP** (SamKirkland) с раннеров GitHub Actions часто:
+
+`Error: Timeout when trying to open data connection to 81.177.24.44:5986`
+
+Причина: пассивный FTP data-порт хостинга 1gb не принимает соединения с IP GitHub Actions (firewall/NAT).
+
+**Решение в CI:** workflow `deploy-1gb.yml` заливает файлы через **lftp mirror** (те же настройки, что для `app_offline.htm` и теста логина). Шаги lftp до деплоя обычно зелёные — падает только Node FTP-клиент SamKirkland.
+
+Если снова timeout на `mirror`: в панели 1gb проверьте пассивный диапазон портов FTP и что он открыт для внешних клиентов; либо повторите workflow (иногда помогает смена IP раннера).
+
 ## FTP 550 Access denied
 
 Чаще всего:

@@ -210,42 +210,47 @@ jobs:
           echo "Ждём остановку пула IIS (30 с)…"
           sleep 30
 
-      - name: Reset FTP sync and stale frontend entrypoints
+      - name: Reset stale frontend entrypoints
         run: |
           lftp -e "
             set ftp:passive-mode on;
             set ssl:force off;
             open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }};
             cd '${{ steps.ftp.outputs.server_dir }}';
-            rm -f .ftp-deploy-sync-state.json;
             rm -f wwwroot/index.html;
             glob -a rm -f wwwroot/assets/*;
             bye
           " || echo "::warning::Не удалось очистить wwwroot на FTP — продолжаем деплой"
 
-      - name: Deploy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
-        with:
-          server: ${{ steps.ftp.outputs.server }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ${{ steps.ftp.outputs.server_dir }}
-          local-dir: ./publish/
-          protocol: ftp
-          port: 21
-          security: loose
-          log-level: verbose
-          timeout: 120000
-          exclude: |
-            **/.git*
-            **/.github/**
-            **/logs/**
-            **/App_Data/**
-            **/*.db
-            **/*.db-shm
-            **/*.db-wal
-            **/*.pdb
-            app_offline.htm
+      # SamKirkland/FTP-Deploy-Action падает на 1gb.ru: пассивный data-порт (напр. :5986)
+      # с раннеров GitHub Actions не открывается (Timeout data connection).
+      # lftp в тех же шагах (login, app_offline, reset) работает стабильно — зеркалим через него.
+      - name: Deploy via lftp mirror
+        run: |
+          set -euo pipefail
+          lftp -e "
+            set cmd:fail-exit yes;
+            set ftp:passive-mode on;
+            set ftp:prefer-epsv off;
+            set ssl:force off;
+            set net:timeout 120;
+            set net:max-retries 5;
+            set net:reconnect-interval-base 5;
+            open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }};
+            lcd ./publish;
+            cd '${{ steps.ftp.outputs.server_dir }}';
+            mirror -R --verbose --parallel=1 \
+              -X logs/ \
+              -X App_Data/ \
+              -X '*.db' \
+              -X '*.db-shm' \
+              -X '*.db-wal' \
+              -X '*.pdb' \
+              -X app_offline.htm \
+              -X .ftp-deploy-sync-state.json;
+            bye
+          "
+          echo "FTP mirror upload completed"
 
       - name: Start IIS (remove app_offline.htm)
         if: always()
