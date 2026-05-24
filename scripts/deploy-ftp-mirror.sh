@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Загрузка ./publish на 1gb.ru через lftp (обход timeout SamKirkland на passive data port).
-# Поэтапно: wwwroot → ключевые бинарники → остальное mirror с retry.
+# Загрузка ./publish на 1gb.ru: по одному файлу через lftp put + retry.
+# SamKirkland/mirror падают на passive data-port timeout; одиночный put в CI работает.
 set -euo pipefail
 
 FTP_HOST="${1:?FTP host}"
@@ -26,7 +26,7 @@ set ftp:ignore-pasv-ip on
 set ftp:use-feat off
 set ssl:force off
 set net:timeout 120
-set net:max-retries 5
+set net:max-retries 3
 set net:reconnect-interval-base 5
 open ${FTP_HOST}
 cd ${FTP_DIR}
@@ -36,67 +36,70 @@ EOF
   lftp -f "$LFTP_SCRIPT"
 }
 
-retry() {
-  local label="$1"
-  shift
-  local attempt
-  for attempt in 1 2 3 4 5; do
-    echo "[$label] attempt $attempt/5"
-    if "$@"; then
-      echo "[$label] OK"
-      return 0
-    fi
-    sleep "$((attempt * 15))"
-  done
-  echo "[$label] FAILED after 5 attempts" >&2
-  return 1
-}
-
-put_file() {
+retry_put() {
   local rel="$1"
   local remote_dir
   remote_dir=$(dirname "$rel")
   [ "$remote_dir" = "." ] && remote_dir=""
   local mkdir_cmd=""
   [ -n "$remote_dir" ] && mkdir_cmd="mkdir -p ${remote_dir};"
-  run_lftp "${mkdir_cmd} put ./publish/${rel} -o ${rel}"
+
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if run_lftp "${mkdir_cmd} put ./publish/${rel} -o ${rel}"; then
+      return 0
+    fi
+    echo "  retry ${rel} (${attempt}/5)" >&2
+    sleep "$((attempt * 10))"
+  done
+  echo "  FAILED: ${rel}" >&2
+  return 1
 }
 
-echo "=== Phase 1: wwwroot (frontend) ==="
-retry "wwwroot" run_lftp "mkdir -p wwwroot; lcd ./publish/wwwroot; mirror -R --verbose --parallel=1 . wwwroot"
+upload_files() {
+  local label="$1"
+  shift
+  local total=0
+  local ok=0
+  local failed=0
+  local rel
 
-echo "=== Phase 2: critical backend files ==="
-CRITICAL_FILES=(
-  ProductionPlanner.dll
-  ProductionPlanner.exe
-  ProductionPlanner.runtimeconfig.json
-  ProductionPlanner.deps.json
-  web.config
-  appsettings.json
-  appsettings.Production.json
-  deploy-version.txt
-)
-for rel in "${CRITICAL_FILES[@]}"; do
-  if [ -f "./publish/${rel}" ]; then
-    retry "put ${rel}" put_file "$rel"
-  fi
-done
+  while IFS= read -r rel; do
+    [ -z "$rel" ] && continue
+    total=$((total + 1))
+    if retry_put "$rel"; then
+      ok=$((ok + 1))
+    else
+      failed=$((failed + 1))
+    fi
+    # Прогресс каждые 25 файлов
+    if [ $((total % 25)) -eq 0 ]; then
+      echo "[$label] ${ok}/${total} uploaded (${failed} failed)"
+    fi
+  done < <("$@")
 
-echo "=== Phase 3: remaining native/runtime files (optional) ==="
-if ! retry "full-mirror" run_lftp "\
-lcd ./publish; \
-mirror -R --verbose --parallel=1 \
-  -X wwwroot/ \
-  -X logs/ \
-  -X App_Data/ \
-  -X glob:*.db \
-  -X glob:*.db-shm \
-  -X glob:*.db-wal \
-  -X glob:*.pdb \
-  -X app_offline.htm \
-  -X .ftp-deploy-sync-state.json \
-  . ."; then
-  echo "::warning::Phase 3 incomplete — wwwroot and ProductionPlanner.* should still be updated"
+  echo "[$label] done: ${ok}/${total} ok, ${failed} failed"
+  [ "$failed" -eq 0 ]
+}
+
+echo "=== Phase 1: wwwroot ==="
+upload_files "wwwroot" find ./publish/wwwroot -type f | sed 's|^\./publish/||'
+
+echo "=== Phase 2: root binaries and config ==="
+upload_files "root" find ./publish -maxdepth 1 -type f | sed 's|^\./publish/||'
+
+echo "=== Phase 3: nested runtime folders (ru/, runtimes/, …) ==="
+if ! upload_files "rest" find ./publish -mindepth 2 -type f \
+  ! -path './publish/wwwroot/*' \
+  ! -path './publish/logs/*' \
+  ! -path './publish/App_Data/*' \
+  ! -name '*.db' \
+  ! -name '*.db-shm' \
+  ! -name '*.db-wal' \
+  ! -name '*.pdb' \
+  ! -name 'app_offline.htm' \
+  | sed 's|^\./publish/||'; then
+  echo "::warning::Phase 3 had failures — core app and wwwroot should still be updated"
 fi
 
 echo "FTP deploy completed (${FTP_HOST}${FTP_DIR})"
