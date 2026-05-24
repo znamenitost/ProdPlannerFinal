@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Infrastructure;
@@ -10,6 +11,8 @@ namespace ProductionPlanner.Data
     {
         private readonly ApplicationDbContext _context;
         private readonly IAppTimeService _timeService;
+        private static readonly ConcurrentDictionary<int, SemaphoreSlim> LifecycleLocks = new();
+        private const int LifecycleAdvisoryLockNamespace = 42017;
 
         public ProductionTaskRepository(ApplicationDbContext context, IAppTimeService timeService)
         {
@@ -447,6 +450,42 @@ namespace ProductionPlanner.Data
                     throw;
                 }
             });
+        }
+
+        public async Task ExecuteWithTaskLifecycleLockAsync(
+            int taskId,
+            Func<CancellationToken, Task> action,
+            CancellationToken cancellationToken = default)
+        {
+            if (_context.Database.IsNpgsql())
+            {
+                await ExecuteInTransactionAsync(async ct =>
+                {
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "SELECT pg_advisory_xact_lock({0}, {1})",
+                        LifecycleAdvisoryLockNamespace,
+                        taskId,
+                        ct);
+                    await action(ct);
+                }, cancellationToken);
+                return;
+            }
+
+            var sem = LifecycleLocks.GetOrAdd(taskId, _ => new SemaphoreSlim(1, 1));
+            await sem.WaitAsync(cancellationToken);
+            try
+            {
+                await ExecuteInTransactionAsync(action, cancellationToken);
+            }
+            finally
+            {
+                sem.Release();
+                if (sem.CurrentCount == 1
+                    && LifecycleLocks.TryRemove(new KeyValuePair<int, SemaphoreSlim>(taskId, sem)))
+                {
+                    sem.Dispose();
+                }
+            }
         }
 
         private async Task ApplyDisplayOrderBulkUpdateAsync(

@@ -54,20 +54,19 @@ namespace ProductionPlanner.Services
         {
             var risks = new List<DeadlineRisk>();
             var slots = GetSchedule(activeTasks, now);
-            var slotByTaskId = slots
+            var firstSlotByTaskId = slots
                 .GroupBy(s => s.Task.Id)
                 .ToDictionary(g => g.Key, g => g.First());
 
             foreach (var task in activeTasks.Where(t => t.Status != JobStatus.Completed && t.Progress < 0.99))
             {
                 var deadline = task.Deadline;
-                if (!slotByTaskId.TryGetValue(task.Id, out var slot))
+                if (!firstSlotByTaskId.TryGetValue(task.Id, out var slot))
                     continue;
                 
                 var hoursNeeded = task.EstimateHours * (1 - task.Progress);
-                var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
                 var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(deadline);
-                var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(nowMoscow, deadlineMoscow);
+                var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(slot.PlannedStart, deadlineMoscow);
 
                 string riskLevel = "ok";
                 string message = "";

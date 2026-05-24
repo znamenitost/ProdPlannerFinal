@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   startTask,
   pauseTask,
@@ -52,8 +53,12 @@ const blockedButtonSx = { opacity: 0.5 };
 export default function ActiveTasksList({ onUpdate, embedded = false, employee = '' }) {
   const { showError, showWarning, confirm } = useUiFeedback();
   const { data: tasks = [] } = useActiveTasksQuery(employee, Boolean(employee));
+  const [pendingTaskId, setPendingTaskId] = useState(null);
 
   const runGuardedAction = async (task, action, progress = null) => {
+    if (pendingTaskId === task.id) return;
+    setPendingTaskId(task.id);
+
     const runApi = async () => {
       if (action === 'start') await startTask(task.id);
       else if (action === 'pause') await pauseTask(task.id);
@@ -76,6 +81,8 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
     } catch (err) {
       console.error('Ошибка действия:', err);
       showError(err.message || 'Не удалось выполнить действие');
+    } finally {
+      setPendingTaskId(null);
     }
   };
 
@@ -127,6 +134,7 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
         const isInProgress = task.status === 1;
         const isPaused = task.status === 2;
         const isCompleted = task.status === 3;
+        const isPending = pendingTaskId === task.id;
         return (
           <Card
             key={task.id}
@@ -185,6 +193,7 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
                     variant="outlined"
                     color="success"
                     startIcon={<PlayArrow />}
+                    disabled={isPending}
                     onClick={() => runGuardedAction(task, 'start')}
                     sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
                   >
@@ -199,6 +208,7 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
                         variant={isPaused ? 'contained' : 'outlined'}
                         color="success"
                         startIcon={<PlayArrow />}
+                        disabled={isPending}
                         onClick={() => runGuardedAction(task, isPaused ? 'resume' : 'start')}
                         sx={compactActionButtonSx}
                       >
@@ -211,6 +221,7 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
                         variant="outlined"
                         color="warning"
                         startIcon={<Pause />}
+                        disabled={isPending}
                         onClick={() => runGuardedAction(task, 'pause')}
                         sx={compactActionButtonSx}
                       >
@@ -223,6 +234,7 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
                         variant="outlined"
                         color="primary"
                         startIcon={<CheckCircle />}
+                        disabled={isPending}
                         onClick={() => runGuardedAction(task, 'complete')}
                         sx={compactActionButtonSx}
                       >
@@ -239,6 +251,7 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
                         size="small"
                         variant="text"
                         color="secondary"
+                        disabled={isPending}
                         onClick={() => runGuardedAction(task, 'progress', p)}
                         sx={compactActionButtonSx}
                       >

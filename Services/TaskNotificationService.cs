@@ -37,6 +37,8 @@ public class TaskNotificationService : ITaskNotificationService
                 title,
                 task.Deadline);
 
+            // Персональный push-снэкбар «Новая задача» — только исполнителю,
+            // его не должны видеть другие пользователи.
             await SendToGroupsAsync(
                 [userId],
                 "NewTask",
@@ -50,58 +52,23 @@ public class TaskNotificationService : ITaskNotificationService
             _logger.LogDebug("User not found for new task notification: {EmployeeName}", task.EmployeeName);
         }
 
-        await SendToGroupsAsync(
-            [NotificationGroups.Admins],
-            "TaskUpdated",
-            task.Id,
-            title,
-            task.Deadline);
+        // Data-sync для таблицы/календаря у всех подключённых клиентов:
+        // таблица показывает все корневые задачи, и любой сотрудник, открывший её,
+        // должен увидеть новую строку без ручного refresh.
+        await BroadcastAsync("TaskUpdated", task.Id, title, task.Deadline);
     }
 
-    public async Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null)
-    {
-        var employeeNames = new HashSet<string>(StringComparer.Ordinal);
-        if (!string.IsNullOrEmpty(task.EmployeeName))
-            employeeNames.Add(task.EmployeeName);
-        if (!string.IsNullOrEmpty(oldEmployeeName) && oldEmployeeName != task.EmployeeName)
-            employeeNames.Add(oldEmployeeName);
+    public Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null) =>
+        BroadcastAsync("TaskUpdated", task.Id, GetNotificationTitle(task), task.Deadline);
 
-        var groups = await ResolveEmployeeGroupsAsync(employeeNames);
-        await SendToGroupsAsync(groups, "TaskUpdated", task.Id, GetNotificationTitle(task), task.Deadline);
-    }
+    public Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames) =>
+        BroadcastAsync("TaskDeleted", taskId);
 
-    public async Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames)
-    {
-        var groups = await ResolveEmployeeGroupsAsync(
-            employeeNames.Where(name => !string.IsNullOrWhiteSpace(name)));
-        await SendToGroupsAsync(groups, "TaskDeleted", taskId);
-    }
+    public Task NotifyStatusChangedAsync(ProductionTask task, string newStatus) =>
+        BroadcastAsync("TaskStatusChanged", task.Id, newStatus);
 
-    public async Task NotifyStatusChangedAsync(ProductionTask task, string newStatus)
-    {
-        var groups = await ResolveEmployeeGroupsAsync(
-            string.IsNullOrEmpty(task.EmployeeName) ? [] : [task.EmployeeName]);
-        await SendToGroupsAsync(groups, "TaskStatusChanged", task.Id, newStatus);
-    }
-
-    public async Task NotifyProgressChangedAsync(ProductionTask task, double progress)
-    {
-        var groups = await ResolveEmployeeGroupsAsync(
-            string.IsNullOrEmpty(task.EmployeeName) ? [] : [task.EmployeeName]);
-        await SendToGroupsAsync(groups, "TaskProgressChanged", task.Id, progress);
-    }
-
-    private async Task<List<string>> ResolveEmployeeGroupsAsync(IEnumerable<string> employeeNames)
-    {
-        var groups = new HashSet<string>(StringComparer.Ordinal) { NotificationGroups.Admins };
-        foreach (var employeeName in employeeNames.Distinct(StringComparer.Ordinal))
-        {
-            var userId = await GetUserIdByFullNameAsync(employeeName);
-            if (!string.IsNullOrEmpty(userId))
-                groups.Add(userId);
-        }
-        return groups.ToList();
-    }
+    public Task NotifyProgressChangedAsync(ProductionTask task, double progress) =>
+        BroadcastAsync("TaskProgressChanged", task.Id, progress);
 
     private Task SendToGroupsAsync(IReadOnlyList<string> groups, string method, params object?[] args)
     {
@@ -109,6 +76,16 @@ public class TaskNotificationService : ITaskNotificationService
             return Task.CompletedTask;
         return _hubContext.Clients.Groups(groups).SendCoreAsync(method, args);
     }
+
+    /// <summary>
+    /// Broadcast события синхронизации данных всем подключённым клиентам хаба
+    /// (хаб под <c>[Authorize]</c>, так что это все авторизованные пользователи).
+    /// Используется для TaskUpdated/TaskDeleted/TaskStatusChanged/TaskProgressChanged,
+    /// чтобы таблица и календарь обновлялись у каждого, кто их сейчас открыл,
+    /// а не только у админа и исполнителя задачи.
+    /// </summary>
+    private Task BroadcastAsync(string method, params object?[] args) =>
+        _hubContext.Clients.All.SendCoreAsync(method, args);
 
     public static string GetNotificationTitle(ProductionTask task)
     {

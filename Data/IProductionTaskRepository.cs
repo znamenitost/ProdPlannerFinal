@@ -44,6 +44,7 @@ namespace ProductionPlanner.Data
         Task ReorderTasksAsync(List<int> orderedIds, CancellationToken cancellationToken = default);
         Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end, CancellationToken cancellationToken = default);
         Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);
+        Task ExecuteWithTaskLifecycleLockAsync(int taskId, Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);
         Task<int> CloseOpenIntervalsAsync(int taskId, DateTime closedAt, CancellationToken cancellationToken = default);
         Task<int> TryTransitionStatusAsync(
             int taskId,

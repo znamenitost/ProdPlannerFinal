@@ -121,7 +121,7 @@ public class TaskLifecycleService : ITaskLifecycleService
     {
         var startTime = _workHours.GetNextWorkStart(now);
 
-        await _repo.ExecuteInTransactionAsync(async ct =>
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
@@ -154,7 +154,7 @@ public class TaskLifecycleService : ITaskLifecycleService
 
     public async Task PauseTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
     {
-        await _repo.ExecuteInTransactionAsync(async ct =>
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
@@ -181,7 +181,7 @@ public class TaskLifecycleService : ITaskLifecycleService
     {
         var startTime = _workHours.GetNextWorkStart(now);
 
-        await _repo.ExecuteInTransactionAsync(async ct =>
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
@@ -222,7 +222,11 @@ public class TaskLifecycleService : ITaskLifecycleService
         if (task == null || task.Status == JobStatus.Completed) return;
         if (newProgress > 0.99) newProgress = 0.99;
 
-        if (task.Status == JobStatus.Assigned && newProgress > 0)
+        // Симметрично со StartTaskAsync: «стартовые» статусы — Assigned/Approved/InStock.
+        // Без этого % > 0 для Approved/InStock записывались бы в задачу, оставляя её
+        // без открытого WorkInterval — задача с прогрессом, но без отметки начала работы.
+        if (newProgress > 0
+            && task.Status is JobStatus.Assigned or JobStatus.Approved or JobStatus.InStock)
         {
             await StartTaskAsync(taskId, now, cancellationToken);
             task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
@@ -231,9 +235,6 @@ public class TaskLifecycleService : ITaskLifecycleService
 
         task.Progress = newProgress;
         task.UpdatedAt = now;
-
-        if (task.Status == JobStatus.Assigned && newProgress > 0)
-            task.Status = JobStatus.InProgress;
 
         await _repo.UpdateTaskAsync(task, cancellationToken);
         await _notificationService.NotifyProgressChangedAsync(task, newProgress);
@@ -246,7 +247,7 @@ public class TaskLifecycleService : ITaskLifecycleService
 
         if (task.Status is JobStatus.Assigned or JobStatus.Approved or JobStatus.InStock)
         {
-            await _repo.ExecuteInTransactionAsync(async ct =>
+            await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
             {
                 await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
@@ -275,7 +276,7 @@ public class TaskLifecycleService : ITaskLifecycleService
 
         var actualHours = 0.0;
 
-        await _repo.ExecuteInTransactionAsync(async ct =>
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
@@ -349,7 +350,7 @@ public class TaskLifecycleService : ITaskLifecycleService
 
     public async Task ReturnTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
     {
-        await _repo.ExecuteInTransactionAsync(async ct =>
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
             await RequireStatusTransitionAsync(
                 taskId,
