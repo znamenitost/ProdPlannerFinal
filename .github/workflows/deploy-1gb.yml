@@ -227,30 +227,12 @@ jobs:
       # lftp в тех же шагах (login, app_offline, reset) работает стабильно — зеркалим через него.
       - name: Deploy via lftp mirror
         run: |
-          set -euo pipefail
-          lftp -e "
-            set cmd:fail-exit yes;
-            set ftp:passive-mode on;
-            set ftp:prefer-epsv off;
-            set ssl:force off;
-            set net:timeout 120;
-            set net:max-retries 5;
-            set net:reconnect-interval-base 5;
-            open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }};
-            lcd ./publish;
-            cd '${{ steps.ftp.outputs.server_dir }}';
-            mirror -R --verbose --parallel=1 \
-              -X logs/ \
-              -X App_Data/ \
-              -X '*.db' \
-              -X '*.db-shm' \
-              -X '*.db-wal' \
-              -X '*.pdb' \
-              -X app_offline.htm \
-              -X .ftp-deploy-sync-state.json;
-            bye
-          "
-          echo "FTP mirror upload completed"
+          chmod +x scripts/deploy-ftp-mirror.sh
+          scripts/deploy-ftp-mirror.sh \
+            '${{ steps.ftp.outputs.server }}' \
+            '${{ secrets.FTP_USERNAME }}' \
+            '${{ secrets.FTP_PASSWORD }}' \
+            '${{ steps.ftp.outputs.server_dir }}'
 
       - name: Start IIS (remove app_offline.htm)
         if: always()
