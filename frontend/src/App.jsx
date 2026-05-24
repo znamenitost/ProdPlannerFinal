@@ -242,7 +242,6 @@ function AppContent() {
                     >
                       <MenuItem value="Дима">Дима</MenuItem>
                       <MenuItem value="Яромир">Яромир</MenuItem>
-                      <MenuItem value="Павел">Павел</MenuItem>
                     </Select>
                   </FormControl>
                 )}

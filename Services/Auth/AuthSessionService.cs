@@ -65,7 +65,7 @@ public class AuthSessionService : IAuthSessionService
     {
         return await _userManager.Users
             .AsNoTracking()
-            .Where(u => u.Role == "Employee" && u.IsActive)
+            .Where(u => u.Role == "Employee" && u.IsActive && AuthEmployees.AllowedFullNames.Contains(u.FullName))
             .OrderBy(u => u.FullName)
             .Select(u => new LoginEmployeeDto
             {

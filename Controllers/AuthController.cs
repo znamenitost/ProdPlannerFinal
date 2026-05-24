@@ -41,9 +41,9 @@ public class AuthController : ControllerBase
             var user = await _authSession.LoginEmployeeAsync(request.FullName);
             return Ok(ToResponse(user));
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = "Ошибка создания пользователя" });
+            return BadRequest(new { message = ex.Message });
         }
     }
 

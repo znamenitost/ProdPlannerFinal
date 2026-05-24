@@ -14,6 +14,9 @@ public class UserProvisioningService : IUserProvisioningService
 
     public async Task<User> GetOrCreateEmployeeAsync(string fullName)
     {
+        if (!AuthEmployees.IsAllowed(fullName))
+            throw new InvalidOperationException("Неизвестный сотрудник");
+
         var user = _userManager.Users.FirstOrDefault(u => u.FullName == fullName && u.Role == "Employee");
         if (user != null)
             return user;
@@ -43,6 +46,17 @@ public class UserProvisioningService : IUserProvisioningService
         await EnsureAdminAsync("pavel@admin.com", "Павел", "2960040");
         await EnsureEmployeeAsync("dima@employee.local", "Дима");
         await EnsureEmployeeAsync("yaromer@employee.local", "Яромир");
+        await RemoveUnauthorizedEmployeesAsync();
+    }
+
+    private async Task RemoveUnauthorizedEmployeesAsync()
+    {
+        var extras = _userManager.Users
+            .Where(u => u.Role == "Employee" && !AuthEmployees.AllowedFullNames.Contains(u.FullName))
+            .ToList();
+
+        foreach (var user in extras)
+            await _userManager.DeleteAsync(user);
     }
 
     private async Task EnsureAdminAsync(string email, string fullName, string password)
