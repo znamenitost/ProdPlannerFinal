@@ -202,8 +202,7 @@ namespace ProductionPlanner.Services
                 await _repo.ExecuteInTransactionAsync(async ct =>
                 {
                     await _context.Database.ExecuteSqlRawAsync(
-                        "SELECT pg_advisory_xact_lock({0})",
-                        parentTaskId,
+                        $"SELECT pg_advisory_xact_lock({parentTaskId})",
                         ct);
                     await action(ct);
                 }, cancellationToken);

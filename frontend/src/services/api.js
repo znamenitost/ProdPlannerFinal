@@ -61,13 +61,28 @@ export async function getCompletedTasks(employee, page = 1, pageSize = 25, optio
 }
 
 // Действия над задачами
+async function throwApiError(res, fallback) {
+  const text = await res.text();
+  let message = fallback;
+  try {
+    const body = JSON.parse(text);
+    if (body?.error) message = body.error;
+    if (body?.message) message = body.message;
+  } catch {
+    if (text) message = text;
+  }
+  const err = new Error(message);
+  if (res.status === 409) err.code = 'concurrency_conflict';
+  throw err;
+}
+
 export async function startTask(id) {
   const res = await fetch(`${API_BASE}/tasks/${id}/start`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' }
   });
-  if (!res.ok) throw new Error('Ошибка запуска задачи');
+  if (!res.ok) await throwApiError(res, 'Ошибка запуска задачи');
 }
 
 export async function pauseTask(id) {
@@ -76,7 +91,7 @@ export async function pauseTask(id) {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' }
   });
-  if (!res.ok) throw new Error('Ошибка паузы задачи');
+  if (!res.ok) await throwApiError(res, 'Ошибка паузы задачи');
 }
 
 export async function resumeTask(id) {
@@ -85,7 +100,7 @@ export async function resumeTask(id) {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' }
   });
-  if (!res.ok) throw new Error('Ошибка возобновления задачи');
+  if (!res.ok) await throwApiError(res, 'Ошибка возобновления задачи');
 }
 
 export async function setProgress(id, progress) {

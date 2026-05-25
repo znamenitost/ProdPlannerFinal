@@ -462,9 +462,7 @@ namespace ProductionPlanner.Data
                 await ExecuteInTransactionAsync(async ct =>
                 {
                     await _context.Database.ExecuteSqlRawAsync(
-                        "SELECT pg_advisory_xact_lock({0}, {1})",
-                        LifecycleAdvisoryLockNamespace,
-                        taskId,
+                        $"SELECT pg_advisory_xact_lock({LifecycleAdvisoryLockNamespace}, {taskId})",
                         ct);
                     await action(ct);
                 }, cancellationToken);
