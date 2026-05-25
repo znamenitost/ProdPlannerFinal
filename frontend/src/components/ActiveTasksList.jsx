@@ -18,7 +18,7 @@ import {
   PlayArrow,
   Pause,
   CheckCircle,
-
+  Groups
 } from '@mui/icons-material';
 import {
   Tooltip,
@@ -151,6 +151,11 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
                     <FolderOpen fontSize="small" />
                   </IconButton>
                 </Tooltip>
+                {task.isSplitTask && (
+                  <Tooltip title="Общая задача" arrow>
+                    <Groups fontSize="small" color="secondary" />
+                  </Tooltip>
+                )}
                 <TaskTitleTwoLines task={task} sx={{ flex: 1, minWidth: 0 }} />
                 {showInfoStatus && (
                   <TaskStatusCell statusText={statusLabel} label={statusLabel} />

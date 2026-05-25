@@ -2,10 +2,7 @@ import { TableRow, TableCell, LinearProgress } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 
 export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitParent = false }) {
-  const show =
-    task.showPlannedTimeProgress ??
-    task.ShowPlannedTimeProgress ??
-    false;
+  const show = task.showPlannedTimeProgress ?? false;
 
   if (hideForSplitParent || !show) {
     return null;
@@ -13,7 +10,7 @@ export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitP
 
   const percent = Math.min(
     100,
-    Math.max(0, task.plannedTimeProgress ?? task.PlannedTimeProgress ?? 0)
+    Math.max(0, task.plannedTimeProgress ?? 0)
   );
 
   return (
