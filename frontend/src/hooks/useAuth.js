@@ -22,6 +22,8 @@ export default function useAuth() {
         if (data.isAuthenticated) {
           setUser(data);
           if (data.role !== 'Admin') setEmployee(data.fullName);
+        } else {
+          setUser(null);
         }
       } catch (err) {
         if (err.name !== 'AbortError') {

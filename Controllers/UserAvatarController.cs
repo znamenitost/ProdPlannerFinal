@@ -43,7 +43,7 @@ public class UserAvatarController : ControllerBase
     {
         var file = await _avatarService.GetFileAsync(userId);
         if (file == null)
-            return NotFound();
+            return NoContent();
 
         return File(file.Value.Bytes, file.Value.ContentType);
     }

@@ -56,7 +56,16 @@ public class AuthSessionService : IAuthSessionService
 
         var user = await _userManager.GetUserAsync(principal);
         if (user == null)
+        {
+            await _signInManager.SignOutAsync();
             return new AuthUserDto { IsAuthenticated = false };
+        }
+
+        if (user.Role == "Employee" && !AuthEmployees.IsAllowed(user.FullName))
+        {
+            await _signInManager.SignOutAsync();
+            return new AuthUserDto { IsAuthenticated = false };
+        }
 
         return await MapUserAsync(user);
     }

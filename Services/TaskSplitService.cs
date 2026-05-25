@@ -197,18 +197,6 @@ namespace ProductionPlanner.Services
             Func<CancellationToken, Task> action,
             CancellationToken cancellationToken)
         {
-            if (_context.Database.IsNpgsql())
-            {
-                await _repo.ExecuteInTransactionAsync(async ct =>
-                {
-                    await _context.Database.ExecuteSqlRawAsync(
-                        $"SELECT pg_advisory_xact_lock({parentTaskId})",
-                        ct);
-                    await action(ct);
-                }, cancellationToken);
-                return;
-            }
-
             var sem = SplitLocks.GetOrAdd(parentTaskId, _ => new SemaphoreSlim(1, 1));
             await sem.WaitAsync(cancellationToken);
             try

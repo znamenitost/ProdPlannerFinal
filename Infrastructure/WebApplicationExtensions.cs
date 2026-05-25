@@ -57,8 +57,10 @@ public static class WebApplicationExtensions
             OnPrepareResponse = ctx =>
             {
                 var name = Path.GetFileName(ctx.File.Name);
+                var path = ctx.Context.Request.Path.Value ?? "";
                 if (name.Equals("index.html", StringComparison.OrdinalIgnoreCase)
-                    || name.Equals("deploy-version.txt", StringComparison.OrdinalIgnoreCase))
+                    || name.Equals("deploy-version.txt", StringComparison.OrdinalIgnoreCase)
+                    || path.Contains("/assets/", StringComparison.OrdinalIgnoreCase))
                 {
                     var headers = ctx.Context.Response.Headers;
                     headers[HeaderNames.CacheControl] = "no-cache, no-store, must-revalidate";

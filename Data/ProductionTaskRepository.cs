@@ -12,7 +12,6 @@ namespace ProductionPlanner.Data
         private readonly ApplicationDbContext _context;
         private readonly IAppTimeService _timeService;
         private static readonly ConcurrentDictionary<int, SemaphoreSlim> LifecycleLocks = new();
-        private const int LifecycleAdvisoryLockNamespace = 42017;
 
         public ProductionTaskRepository(ApplicationDbContext context, IAppTimeService timeService)
         {
@@ -457,18 +456,8 @@ namespace ProductionPlanner.Data
             Func<CancellationToken, Task> action,
             CancellationToken cancellationToken = default)
         {
-            if (_context.Database.IsNpgsql())
-            {
-                await ExecuteInTransactionAsync(async ct =>
-                {
-                    await _context.Database.ExecuteSqlRawAsync(
-                        $"SELECT pg_advisory_xact_lock({LifecycleAdvisoryLockNamespace}, {taskId})",
-                        ct);
-                    await action(ct);
-                }, cancellationToken);
-                return;
-            }
-
+            // На 1gb.ru один worker IIS — in-process lock достаточен; pg_advisory_xact_lock
+            // через EF давал 500 на start/pause (неверная передача CancellationToken в SQL).
             var sem = LifecycleLocks.GetOrAdd(taskId, _ => new SemaphoreSlim(1, 1));
             await sem.WaitAsync(cancellationToken);
             try
