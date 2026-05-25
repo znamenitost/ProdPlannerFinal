@@ -223,16 +223,29 @@ jobs:
             bye
           " || echo "::warning::Не удалось очистить wwwroot на FTP — продолжаем деплой"
 
-      # SamKirkland/FTP-Deploy-Action: timeout на passive data-port (напр. :9105) с IP GitHub Actions.
-      # lftp put в шагах выше работает на 1gb.ru — заливаем publish через scripts/deploy-ftp-mirror.sh.
-      - name: Deploy via lftp
-        run: |
-          chmod +x scripts/deploy-ftp-mirror.sh
-          scripts/deploy-ftp-mirror.sh \
-            '${{ steps.ftp.outputs.server }}' \
-            '${{ secrets.FTP_USERNAME }}' \
-            '${{ secrets.FTP_PASSWORD }}' \
-            '${{ steps.ftp.outputs.server_dir }}'
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ steps.ftp.outputs.server }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ steps.ftp.outputs.server_dir }}
+          local-dir: ./publish/
+          protocol: ftp
+          port: 21
+          security: loose
+          log-level: verbose
+          timeout: 120000
+          exclude: |
+            **/.git*
+            **/.github/**
+            **/logs/**
+            **/App_Data/**
+            **/*.db
+            **/*.db-shm
+            **/*.db-wal
+            **/*.pdb
+            app_offline.htm
 
       - name: Start IIS (remove app_offline.htm)
         if: always()
