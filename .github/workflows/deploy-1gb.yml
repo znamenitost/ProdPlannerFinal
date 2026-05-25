@@ -50,8 +50,8 @@ jobs:
 
       - name: Publish application
         run: |
-          # win-x86 + FDD: пул IIS 32-bit, .NET 10 x86 на сервере. web.config — inprocess + ProductionPlanner.exe.
-          dotnet publish ProductionPlanner.csproj -c Release --runtime win-x86 --self-contained false /p:ReadyToRun=true -o ./publish
+          # Стандартный FDD без RID (Any CPU): IIS запускает через dotnet.exe + DLL, на 1gb — x64 .NET 10.
+          dotnet publish ProductionPlanner.csproj -c Release --self-contained false -o ./publish
 
       - name: Copy frontend to wwwroot
         run: |

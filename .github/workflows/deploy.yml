@@ -28,7 +28,7 @@ jobs:
         dotnet-version: '10.0.x'
         
     - name: Publish Backend
-      run: dotnet publish ProductionPlanner.csproj -c Release --runtime win-x86 --self-contained false /p:ReadyToRun=true -o ./publish
+      run: dotnet publish ProductionPlanner.csproj -c Release --self-contained false -o ./publish
       
     - name: Copy Frontend to Publish
       run: |
