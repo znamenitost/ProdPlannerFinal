@@ -46,7 +46,6 @@ public class DebugController : ControllerBase
     [HttpGet("get-time")]
     public IActionResult GetTime()
     {
-        if (DevOnly() is { } denied) return denied;
         return Ok(new { 
             now = _timeService.Now,
             realNow = DateTime.Now,
@@ -57,7 +56,6 @@ public class DebugController : ControllerBase
     [HttpPost("set-time")]
     public IActionResult SetTime([FromBody] SetTimeRequest request)
     {
-        if (DevOnly() is { } denied) return denied;
         if (DateTime.TryParse(request.MockDateTime, out var mockTime))
         {
             _timeService.SetMock(mockTime);
@@ -70,7 +68,6 @@ public class DebugController : ControllerBase
     [HttpPost("reset-time")]
     public IActionResult ResetTime()
     {
-        if (DevOnly() is { } denied) return denied;
         _timeService.ResetMock();
         Console.WriteLine($"[DEBUG] Time reset to real: {_timeService.Now}");
         return Ok(new { message = "Time reset to real", currentTime = _timeService.Now });
@@ -79,7 +76,6 @@ public class DebugController : ControllerBase
     [HttpPost("close-interval/{taskId}")]
     public async Task<IActionResult> CloseInterval(int taskId)
     {
-        if (DevOnly() is { } denied) return denied;
         var task = await _repo.GetTaskByIdAsync(taskId, includeIntervals: true);
         if (task == null) return NotFound();
 
@@ -96,7 +92,6 @@ public class DebugController : ControllerBase
     [HttpPost("create-interval/{taskId}")]
     public async Task<IActionResult> CreateInterval(int taskId)
     {
-        if (DevOnly() is { } denied) return denied;
         var task = await _repo.GetTaskByIdAsync(taskId, includeIntervals: true);
         if (task == null) return NotFound();
 
@@ -152,7 +147,6 @@ public class DebugController : ControllerBase
     [HttpGet("get-intervals/{taskId}")]
     public async Task<IActionResult> GetIntervals(int taskId)
     {
-        if (DevOnly() is { } denied) return denied;
         var task = await _repo.GetTaskByIdAsync(taskId, includeIntervals: true);
         if (task == null) return NotFound();
         return Ok(task.WorkIntervals.Select(i => new { i.Id, i.StartTime, i.EndTime }));

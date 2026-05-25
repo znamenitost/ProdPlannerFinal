@@ -221,8 +221,7 @@ export async function getDeadlineRisks(employee, options = {}) {
   return Array.isArray(data) ? data.filter((r) => r.riskLevel !== 'ok') : [];
 }
 
-// Эндпоинты dev-панели. Все требуют роли Admin и в проде закрыты гвардом DevOnly()
-// (кроме reset-db, которым админ может пользоваться в любом окружении).
+// Эндпоинты dev-панели (роль Admin). Мок-время и интервалы — на проде тоже.
 async function debugFetch(url, init = {}) {
   const res = await fetch(`${API_BASE}/debug${url}`, {
     credentials: 'include',
