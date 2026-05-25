@@ -7,7 +7,7 @@ namespace ProductionPlanner.Services
     {
         private readonly TimeSpan workStart = new(10, 0, 0);
         private readonly TimeSpan lunchStart = new(14, 0, 0);
-        private readonly TimeSpan lunchEnd = new(15, 0, 0);
+        private readonly TimeSpan lunchEnd = new(16, 0, 0);
         private readonly TimeSpan workEnd = new(19, 0, 0);
 
         public bool IsWorkingHour(DateTime time)

@@ -100,7 +100,7 @@ public class WeekCalendarService : IWeekCalendarService
         var dayStartTime = day.Date.AddHours(10);
         var dayEndTime = day.Date.AddHours(19);
         var lunchStart = day.Date.AddHours(14);
-        var lunchEnd = day.Date.AddHours(15);
+        var lunchEnd = day.Date.AddHours(16);
         var totalWorkHours = (dayEndTime - dayStartTime).TotalHours;
 
         var taskBlocks = BuildPlannedTaskBlocks(
@@ -267,7 +267,7 @@ public class WeekCalendarService : IWeekCalendarService
                     continue;
 
                 var lunchStartToday = dayDate.AddHours(14);
-                var lunchEndToday = dayDate.AddHours(15);
+                var lunchEndToday = dayDate.AddHours(16);
 
                 if (startInDay < lunchStartToday && endInDay > lunchStartToday)
                 {

@@ -1,6 +1,6 @@
 const WORK_START_MIN = 10 * 60;
 const LUNCH_START_MIN = 14 * 60;
-const LUNCH_END_MIN = 15 * 60;
+const LUNCH_END_MIN = 16 * 60;
 const WORK_END_MIN = 19 * 60;
 
 function isWeekend(date) {
@@ -25,7 +25,7 @@ export function getNextWorkStart(from) {
     if (mod < WORK_START_MIN) {
       t = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 10, 0, 0, 0);
     } else if (mod >= LUNCH_START_MIN && mod < LUNCH_END_MIN) {
-      t = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 15, 0, 0, 0);
+      t = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 16, 0, 0, 0);
     } else if (mod >= WORK_END_MIN) {
       const next = new Date(t);
       next.setDate(next.getDate() + 1);
@@ -57,7 +57,7 @@ export function getWorkHoursBetween(start, end) {
         let workMinutes = (intervalEnd - intervalStart) / 60000;
 
         const lunchStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 14, 0, 0, 0);
-        const lunchEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 15, 0, 0, 0);
+        const lunchEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 16, 0, 0, 0);
 
         if (intervalStart < lunchEnd && intervalEnd > lunchStart) {
           const lunchOverlapStart = intervalStart > lunchStart ? intervalStart : lunchStart;
