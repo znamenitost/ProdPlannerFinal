@@ -14,7 +14,8 @@ export function normalizePathForOpen(folderPath, fileName, shareName = DEFAULT_S
 
 export function detectClientPlatform() {
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
-  if (/Windows/i.test(ua)) return 'windows';
+  const platform = typeof navigator !== 'undefined' ? navigator.platform || '' : '';
+  if (/Windows/i.test(ua) || /^Win/i.test(platform)) return 'Win32';
   if (/Mac|iPhone|iPad|iPod/i.test(ua)) return 'mac';
   return 'other';
 }
