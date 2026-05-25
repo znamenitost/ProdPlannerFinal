@@ -45,8 +45,8 @@ export function getWidth(start, end, range = getTimelineRange(false)) {
 
 export function getLunchBandPercent(range = getTimelineRange(false)) {
   const span = range.end - range.start;
-  const left = ((14 - range.start) / span) * 100;
-  const width = (2 / span) * 100;
+  const left = ((15 - range.start) / span) * 100;
+  const width = (1 / span) * 100;
   return { left, width };
 }
 
@@ -115,7 +115,7 @@ export function getTimelineSegments(dayDate, timeline) {
   const date = new Date(dayDate);
   const segments = [];
   const lunchStart = new Date(date);
-  lunchStart.setHours(14, 0, 0, 0);
+  lunchStart.setHours(15, 0, 0, 0);
   const lunchEnd = new Date(date);
   lunchEnd.setHours(16, 0, 0, 0);
 

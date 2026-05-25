@@ -18,7 +18,7 @@ function LunchBreak({ range }) {
     <Tooltip
       title={(
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Restaurant fontSize="small" /> Обед (14:00–16:00)
+          <Restaurant fontSize="small" /> Обед (15:00–16:00)
         </Box>
       )}
       arrow

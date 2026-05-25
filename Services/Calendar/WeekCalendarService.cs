@@ -99,7 +99,7 @@ public class WeekCalendarService : IWeekCalendarService
     {
         var dayStartTime = day.Date.AddHours(10);
         var dayEndTime = day.Date.AddHours(19);
-        var lunchStart = day.Date.AddHours(14);
+        var lunchStart = day.Date.AddHours(15);
         var lunchEnd = day.Date.AddHours(16);
         var totalWorkHours = (dayEndTime - dayStartTime).TotalHours;
 
@@ -266,7 +266,7 @@ public class WeekCalendarService : IWeekCalendarService
                 if (startInDay >= endInDay)
                     continue;
 
-                var lunchStartToday = dayDate.AddHours(14);
+                var lunchStartToday = dayDate.AddHours(15);
                 var lunchEndToday = dayDate.AddHours(16);
 
                 if (startInDay < lunchStartToday && endInDay > lunchStartToday)
@@ -471,7 +471,7 @@ public class WeekCalendarService : IWeekCalendarService
         DateTime timelineEnd)
     {
         var idleSegments = new List<CalendarTimelineSegmentDto>();
-        var workPeriods = new[] { (TimeSpan.FromHours(10), TimeSpan.FromHours(14)), (TimeSpan.FromHours(15), TimeSpan.FromHours(19)) };
+        var workPeriods = new[] { (TimeSpan.FromHours(10), TimeSpan.FromHours(15)), (TimeSpan.FromHours(16), TimeSpan.FromHours(19)) };
 
         foreach (var (workStart, workEndPeriod) in workPeriods)
         {

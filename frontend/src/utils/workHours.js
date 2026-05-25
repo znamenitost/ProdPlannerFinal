@@ -1,5 +1,5 @@
 const WORK_START_MIN = 10 * 60;
-const LUNCH_START_MIN = 14 * 60;
+const LUNCH_START_MIN = 15 * 60;
 const LUNCH_END_MIN = 16 * 60;
 const WORK_END_MIN = 19 * 60;
 
@@ -56,7 +56,7 @@ export function getWorkHoursBetween(start, end) {
       if (intervalStart < intervalEnd) {
         let workMinutes = (intervalEnd - intervalStart) / 60000;
 
-        const lunchStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 14, 0, 0, 0);
+        const lunchStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 15, 0, 0, 0);
         const lunchEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 16, 0, 0, 0);
 
         if (intervalStart < lunchEnd && intervalEnd > lunchStart) {
