@@ -52,7 +52,7 @@ export default function useTaskTableController({
     selectedEmployeeForHighlight,
     patchRow: rowsState.patchRow,
     removeRow: rowsState.removeRow,
-    invalidateChildCache: childrenState.invalidateChildCache,
+    patchChildInCache: childrenState.patchChildInCache,
     setChildrenForParent: childrenState.setChildrenForParent,
     loadChildrenForParent: childrenState.loadChildrenForParent
   };

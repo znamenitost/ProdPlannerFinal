@@ -51,8 +51,7 @@ export default function useNotificationsHub(user, handlers = {}) {
   }, []);
 
   const scheduleTaskEvent = useCallback((event) => {
-    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-    refreshTimeoutRef.current = setTimeout(async () => {
+    const run = async () => {
       const h = handlersRef.current;
       let tableHandled = false;
       try {
@@ -65,8 +64,26 @@ export default function useNotificationsHub(user, handlers = {}) {
         h.onTableFallbackRefresh?.(event);
         h.onCalendarRefresh?.(event);
       }
-    }, 300);
+    };
+
+    const immediate = event.type === 'TaskStatusChanged' || event.type === 'TaskProgressChanged';
+    if (immediate) {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+      void run();
+      return;
+    }
+
+    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    refreshTimeoutRef.current = setTimeout(run, 300);
   }, []);
+
+  const hubTaskId = (taskId) => {
+    const id = Number(taskId);
+    return Number.isFinite(id) ? id : null;
+  };
 
   const ackNotification = useCallback(async (serverId) => {
     if (serverId == null) return;
@@ -156,22 +173,26 @@ export default function useNotificationsHub(user, handlers = {}) {
 
     const handleTaskDeleted = (taskId) => {
       if (!isMounted) return;
-      scheduleTaskEvent({ type: 'TaskDeleted', taskId });
+      const id = hubTaskId(taskId);
+      if (id != null) scheduleTaskEvent({ type: 'TaskDeleted', taskId: id });
     };
 
     const handleTaskUpdated = (taskId) => {
       if (!isMounted) return;
-      scheduleTaskEvent({ type: 'TaskUpdated', taskId });
+      const id = hubTaskId(taskId);
+      if (id != null) scheduleTaskEvent({ type: 'TaskUpdated', taskId: id });
     };
 
     const handleTaskStatusChanged = (taskId) => {
       if (!isMounted) return;
-      scheduleTaskEvent({ type: 'TaskStatusChanged', taskId });
+      const id = hubTaskId(taskId);
+      if (id != null) scheduleTaskEvent({ type: 'TaskStatusChanged', taskId: id });
     };
 
     const handleTaskProgressChanged = (taskId) => {
       if (!isMounted) return;
-      scheduleTaskEvent({ type: 'TaskProgressChanged', taskId });
+      const id = hubTaskId(taskId);
+      if (id != null) scheduleTaskEvent({ type: 'TaskProgressChanged', taskId: id });
     };
 
     connection.on('NewTask', handleNewTask);

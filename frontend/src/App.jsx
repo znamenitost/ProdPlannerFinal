@@ -72,21 +72,21 @@ function AppContent() {
     tableHubHandlerRef.current = handler;
   }, []);
 
-  const handleHubTaskEvent = useCallback(
-    (event) => {
-      if (activeTab !== 1 || !tableHubHandlerRef.current) {
-        return false;
-      }
-      return tableHubHandlerRef.current(event);
-    },
-    [activeTab]
-  );
+  const handleHubTaskEvent = useCallback((event) => {
+    if (!tableHubHandlerRef.current) return false;
+    return tableHubHandlerRef.current(event);
+  }, []);
 
-  const handleHubTableFallbackRefresh = useCallback(() => {
-    if (activeTab === 1) {
-      refreshTable();
-    }
-  }, [activeTab, refreshTable]);
+  const handleHubTableFallbackRefresh = useCallback(
+    (event) => {
+      const instantTableSync =
+        event?.type === 'TaskStatusChanged' || event?.type === 'TaskProgressChanged';
+      if (instantTableSync || activeTab === 1) {
+        refreshTable();
+      }
+    },
+    [activeTab, refreshTable]
+  );
 
   const handleHubCalendarRefresh = useCallback(() => {
     if (activeTab !== 1) {

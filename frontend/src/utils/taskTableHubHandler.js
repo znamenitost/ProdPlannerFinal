@@ -3,7 +3,10 @@
  * @returns {Promise<boolean>} true if the table was patched locally
  */
 export async function handleTaskTableHubEvent(event, ctx) {
-  const { type, taskId } = event;
+  const taskId = Number(event.taskId);
+  if (!Number.isFinite(taskId)) return false;
+
+  const { type } = event;
   const {
     rows,
     childrenCache,
@@ -11,12 +14,10 @@ export async function handleTaskTableHubEvent(event, ctx) {
     selectedEmployeeForHighlight,
     patchRow,
     removeRow,
-    invalidateChildCache,
+    patchChildInCache,
     setChildrenForParent,
     loadChildrenForParent
   } = ctx;
-
-  if (taskId == null) return false;
 
   const employee = selectedEmployeeForHighlight || '';
 
@@ -28,8 +29,7 @@ export async function handleTaskTableHubEvent(event, ctx) {
 
     for (const [parentId, children] of childrenCache.entries()) {
       if (children.some((c) => c.id === taskId)) {
-        invalidateChildCache(parentId);
-        const kids = await loadChildrenForParent(parentId);
+        const kids = await loadChildrenForParent(parentId, { force: true });
         setChildrenForParent(parentId, kids);
         const parentDto = await api.fetchTableRow(parentId, employee);
         patchRow(parentId, parentDto);
@@ -41,24 +41,34 @@ export async function handleTaskTableHubEvent(event, ctx) {
   }
 
   if (type === 'TaskStatusChanged' || type === 'TaskProgressChanged' || type === 'TaskUpdated') {
-    if (rows.some((r) => r.id === taskId)) {
+    try {
       const updated = await api.fetchTableRow(taskId, employee);
-      patchRow(taskId, updated);
-      return true;
-    }
+      if (!updated) return false;
 
-    for (const [parentId, children] of childrenCache.entries()) {
-      if (children.some((c) => c.id === taskId)) {
-        invalidateChildCache(parentId);
-        const kids = await loadChildrenForParent(parentId);
-        setChildrenForParent(parentId, kids);
-        const parentDto = await api.fetchTableRow(parentId, employee);
-        patchRow(parentId, parentDto);
+      const parentId = updated.parentRowNumber;
+
+      if (parentId) {
+        if (childrenCache.has(parentId)) {
+          patchChildInCache(taskId, updated);
+        }
+        if (rows.some((r) => r.id === parentId)) {
+          const parentDto = await api.fetchTableRow(parentId, employee);
+          if (parentDto) patchRow(parentId, parentDto);
+          return true;
+        }
+        return false;
+      }
+
+      if (rows.some((r) => r.id === taskId)) {
+        patchRow(taskId, updated);
         return true;
       }
-    }
 
-    return false;
+      return false;
+    } catch (err) {
+      console.error('Hub table patch failed:', err);
+      return false;
+    }
   }
 
   return false;
