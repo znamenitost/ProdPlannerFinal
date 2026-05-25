@@ -50,8 +50,8 @@ jobs:
 
       - name: Publish application
         run: |
-          # win-x86: на shared IIS часто пул 32-bit (ошибка 500.32 при x64)
-          dotnet publish ProductionPlanner.csproj -c Release --self-contained true --runtime win-x86 -o ./publish
+          # win-x86 + framework-dependent: .NET 10 на сервере, пул IIS 32-bit. ReadyToRun — быстрее холодный старт.
+          dotnet publish ProductionPlanner.csproj -c Release --runtime win-x86 --self-contained false /p:ReadyToRun=true -o ./publish
 
       - name: Copy frontend to wwwroot
         run: |
