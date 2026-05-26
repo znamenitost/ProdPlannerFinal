@@ -8,19 +8,19 @@ function buildLaunchUrl(relativePath) {
   return `/api/files/launch?${params.toString()}`;
 }
 
-/** Скрытый iframe — не перезагружает вкладку; netopen:// на Windows. */
-function triggerLaunchViaIframe(launchUrl) {
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
-  iframe.src = launchUrl;
-  document.body.appendChild(iframe);
-  window.setTimeout(() => {
-    try {
-      document.body.removeChild(iframe);
-    } catch {
-      /* noop */
-    }
-  }, 20000);
+/**
+ * Windows: навигация из клика (user gesture) → /api/files/launch → 302 netopen://.
+ * Iframe + HTML с location.replace блокируется Chrome («user gesture is required»).
+ */
+function triggerLaunchOnWindows(launchUrl) {
+  const link = document.createElement('a');
+  link.href = launchUrl;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
   return true;
 }
 
@@ -41,7 +41,7 @@ export function openFileOnClient(relativePath) {
   const platform = detectClientPlatform();
   const ok = platform === 'mac'
     ? triggerLaunchViaWindow(launchUrl)
-    : triggerLaunchViaIframe(launchUrl);
+    : triggerLaunchOnWindows(launchUrl);
 
   return { ok, method: 'launch' };
 }
