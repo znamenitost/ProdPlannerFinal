@@ -9,18 +9,11 @@ function buildLaunchUrl(relativePath) {
 }
 
 /**
- * Windows: навигация из клика (user gesture) → /api/files/launch → 302 netopen://.
- * Iframe + HTML с location.replace блокируется Chrome («user gesture is required»).
+ * Windows: открываем лаунчер-страницу с netopen:// в новой вкладке.
+ * Новая вкладка открыта из user gesture (клика), поэтому location.replace(netopen://) разрешён.
  */
 function triggerLaunchOnWindows(launchUrl) {
-  const link = document.createElement('a');
-  link.href = launchUrl;
-  link.target = '_blank';
-  link.rel = 'noopener noreferrer';
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  window.open(launchUrl, '_blank', 'noopener,noreferrer');
   return true;
 }
 

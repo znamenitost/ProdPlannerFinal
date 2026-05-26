@@ -27,7 +27,9 @@ namespace ProductionPlanner.Controllers
             if (!TryBuildOpenUrl(path, clientPlatform, out var openUrl, out var error))
                 return BadRequest(new { message = error });
 
-            // 302 на netopen:// — иначе HTML+JS в iframe теряет user gesture (Chrome блокирует протокол).
+            if (IsCustomProtocolUrl(openUrl))
+                return Content(BuildProtocolLauncherHtml(openUrl), "text/html; charset=utf-8");
+
             return Redirect(openUrl);
         }
 
