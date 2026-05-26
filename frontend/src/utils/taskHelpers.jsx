@@ -6,7 +6,8 @@ import {
   HourglassEmpty,
   FactCheck,
   Inventory2,
-  TaskAlt
+  ThumbUp,
+  Room
 } from '@mui/icons-material';
 
 export const truncate = (str, maxLen) => {
@@ -21,16 +22,32 @@ export const getStatusColor = (status) => {
   return 'text.secondary';
 };
 
-export const getStatusIcon = (status) => {
-  if (status === 'Готово' || status === 'Согласовано' || status === 'В наличии') {
-    return <CheckCircle sx={{ fontSize: 16 }} />;
+export const getStatusIcon = (status, size = 16) => {
+  const sx = { fontSize: size };
+  switch (status) {
+    case 'Начал':
+    case 'В работе':
+      return <PlayArrow sx={sx} />;
+    case 'Пауза':
+    case 'На паузе':
+      return <Pause sx={sx} />;
+    case 'Готово':
+    case 'Завершена':
+      return <CheckCircle sx={sx} />;
+    case 'Назначена':
+      return <HourglassEmpty sx={sx} />;
+    case 'Согласование':
+    case 'На согласовании':
+      return <FactCheck sx={sx} />;
+    case 'Согласовано':
+      return <ThumbUp sx={sx} />;
+    case 'Нет изделий':
+      return <Inventory2 sx={sx} />;
+    case 'В наличии':
+      return <Room sx={sx} />;
+    default:
+      return null;
   }
-  if (status === 'Начал') return <PlayArrow sx={{ fontSize: 16 }} />;
-  if (status === 'Пауза') return <Pause sx={{ fontSize: 16 }} />;
-  if (status === 'Согласование' || status === 'На согласовании') return <FactCheck sx={{ fontSize: 16 }} />;
-  if (status === 'Нет изделий') return <Inventory2 sx={{ fontSize: 16 }} />;
-  if (status === 'Назначена') return <HourglassEmpty sx={{ fontSize: 16 }} />;
-  return null;
 };
 
 export const getParentEmployeeDisplay = (task, childrenTasks) => {

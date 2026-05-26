@@ -1,18 +1,33 @@
-import { Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { isOverdue } from '../../utils/taskHelpers';
-import { cellDisplayTextSx } from '../../utils/taskTableStyles';
 
-function formatDeadline(deadline) {
-  if (!deadline) return '—';
+function formatDeadlineParts(deadline) {
+  if (!deadline) return { date: '—', time: null };
   const d = new Date(deadline);
-  return `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+  return {
+    date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    time: d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  };
 }
 
 export default function TaskDeadlineCell({ deadline, statusText }) {
   const overdue = isOverdue(deadline, statusText);
+  const { date, time } = formatDeadlineParts(deadline);
+  const color = overdue ? 'error.dark' : 'inherit';
+
   return (
-    <Typography variant="body2" sx={{ color: overdue ? 'error.dark' : 'inherit', ...cellDisplayTextSx }}>
-      {formatDeadline(deadline)}
-    </Typography>
+    <Box sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25, gap: 0.125 }}>
+      <Typography variant="body2" sx={{ color, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+        {date}
+      </Typography>
+      {time ? (
+        <Typography
+          variant="caption"
+          sx={{ color, fontSize: '0.75rem', whiteSpace: 'nowrap', opacity: 0.9 }}
+        >
+          {time}
+        </Typography>
+      ) : null}
+    </Box>
   );
 }

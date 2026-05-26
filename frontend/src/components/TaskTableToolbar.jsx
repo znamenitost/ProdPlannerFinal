@@ -2,8 +2,19 @@
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { Add, Lightbulb, TableChart } from '@mui/icons-material';
 import { sectionHeaderSx, sectionTitleRowSx, softIconButtonSx } from '../theme/surfaces';
+import TaskTableColumnSettings from './taskTable/TaskTableColumnSettings';
 
-export default function TaskTableToolbar({ isAdmin, onAddNew, highlightMyTasks, onToggleHighlight }) {
+export default function TaskTableToolbar({
+  isAdmin,
+  onAddNew,
+  highlightMyTasks,
+  onToggleHighlight,
+  columnVisibility,
+  onColumnVisibleChange,
+  onColumnVisibilityReset,
+  textLimit,
+  onTextLimitChange
+}) {
   return (
     <Box sx={{ ...sectionHeaderSx, mb: 2 }}>
       <Box sx={sectionTitleRowSx}>
@@ -23,6 +34,13 @@ export default function TaskTableToolbar({ isAdmin, onAddNew, highlightMyTasks, 
             <Lightbulb />
           </IconButton>
         </Tooltip>
+        <TaskTableColumnSettings
+          visibility={columnVisibility}
+          onColumnVisibleChange={onColumnVisibleChange}
+          onReset={onColumnVisibilityReset}
+          textLimit={textLimit}
+          onTextLimitChange={onTextLimitChange}
+        />
         {isAdmin && (
           <Button variant="contained" color="success" startIcon={<Add />} onClick={onAddNew}>
             Новая задача

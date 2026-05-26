@@ -27,7 +27,7 @@ import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
-import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
+import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import { alpha } from '@mui/material/styles';
 import { highlightedTaskRowSx, overdueTaskRowSx } from '../theme/surfaces';
 import {
@@ -42,7 +42,9 @@ import {
   COL_EMPLOYEE,
   COL_STATUS,
   COL_ACTIONS,
-  cellDisplayTextSx
+  cellDisplayTextSx,
+  truncateText,
+  needsTooltip
 } from '../utils/taskTableStyles';
 
 function ParentTaskRow({
@@ -66,7 +68,9 @@ function ParentTaskRow({
   currentUser,
   highlightMyTasks,
   selectedEmployeeForHighlight,
-  showHoursTypeColumns = true
+  showHoursTypeColumns = true,
+  columnVisibility,
+  textLimit: limit = 23
 }) {
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
 
@@ -130,7 +134,7 @@ function ParentTaskRow({
   };
 
   const showActionButtons = canUserManage() && canChangeStatus && !hasChildren;
-  const tableColSpan = taskTableColumnCount(showHoursTypeColumns);
+  const tableColSpan = taskTableColumnCount(columnVisibility, showHoursTypeColumns);
 
   return (
     <Fragment>
@@ -148,9 +152,7 @@ function ParentTaskRow({
 
             {task.isSplitTask && (
               <Box sx={ICON_SLOT_GROUPS}>
-                <Tooltip title="Общая задача" arrow>
-                  <Groups fontSize="small" color="secondary" />
-                </Tooltip>
+                <Groups fontSize="small" color="secondary" />
               </Box>
             )}
 
@@ -164,50 +166,62 @@ function ParentTaskRow({
           </Box>
         </TableCell>
 
-        <TableCell sx={COL_TASK}>
-          <Tooltip title={task.folderPath || ''} arrow>
+        <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)}>
+          {needsTooltip(shortFolderPath || task.folderPath, limit) ? (
+            <Tooltip title={task.folderPath || ''} arrow>
+              <Typography variant="body2" sx={{ fontWeight: 600, ...cellDisplayTextSx }}>
+                {truncateText(shortFolderPath || task.folderPath, limit)}
+              </Typography>
+            </Tooltip>
+          ) : (
             <Typography variant="body2" sx={{ fontWeight: 600, ...cellDisplayTextSx }}>
               {shortFolderPath || task.folderPath || '—'}
             </Typography>
-          </Tooltip>
+          )}
         </TableCell>
 
-        <TableCell sx={COL_FILE}>
-          <Tooltip title={task.fileName || ''} arrow>
+        <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>
+          {needsTooltip(task.fileName, limit) ? (
+            <Tooltip title={task.fileName} arrow>
+              <Typography variant="body2" sx={cellDisplayTextSx}>
+                {truncateText(task.fileName, limit)}
+              </Typography>
+            </Tooltip>
+          ) : (
             <Typography variant="body2" sx={cellDisplayTextSx}>
               {task.fileName || '—'}
             </Typography>
-          </Tooltip>
+          )}
         </TableCell>
 
-        <TableCell sx={COL_COMMENT}>
+        <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>
           <TaskCommentCell task={task} onOpenComment={onOpenComment} />
         </TableCell>
 
-        <TableCell sx={COL_DEADLINE}>
+        <TableCell sx={columnCellSx('deadline', columnVisibility, showHoursTypeColumns, COL_DEADLINE)}>
           <TaskDeadlineCell deadline={task.deadline} statusText={task.statusText} />
         </TableCell>
 
-        <TableCell align="center" sx={hoursColumnSx(showHoursTypeColumns)}>
+        <TableCell align="center" sx={hoursColumnSx(columnVisibility, showHoursTypeColumns)}>
           <TaskHoursCell estimateHours={task.estimateHours} />
         </TableCell>
 
-        <TableCell sx={typeColumnSx(showHoursTypeColumns)}>
+        <TableCell sx={typeColumnSx(columnVisibility, showHoursTypeColumns)}>
           <TaskTypeCell type={task.type} />
         </TableCell>
 
-        <TableCell sx={COL_EMPLOYEE}>
+        <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, COL_EMPLOYEE)}>
           <Chip icon={<Person sx={{ fontSize: 14 }} />} label={employeeDisplay} size="small" variant="outlined" sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap', height: 'auto', '& .MuiChip-label': { whiteSpace: 'nowrap' } }} />
         </TableCell>
 
-        <TableCell sx={COL_STATUS}>
+        <TableCell sx={columnCellSx('status', columnVisibility, showHoursTypeColumns, COL_STATUS)}>
           <TaskStatusCell
             statusText={task.statusText}
             label={hasChildren ? displayStatus : undefined}
           />
         </TableCell>
 
-        <TableCell sx={COL_ACTIONS}>
+        <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start' }}>
             {canEdit && canDelete && (
               <TaskAdminActionStacks
@@ -264,6 +278,8 @@ function ParentTaskRow({
           highlightMyTasks={highlightMyTasks}
           selectedEmployeeForHighlight={selectedEmployeeForHighlight}
           showHoursTypeColumns={showHoursTypeColumns}
+          columnVisibility={columnVisibility}
+          textLimit={limit}
         />
       ))}
     </Fragment>

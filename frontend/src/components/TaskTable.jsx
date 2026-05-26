@@ -1,9 +1,11 @@
 import {
+  Box,
+  Pagination,
   Paper,
   Table,
   TableBody,
   TableContainer,
-  TablePagination,
+  Typography,
 } from '@mui/material';
 import SplitTaskModal from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
@@ -13,6 +15,8 @@ import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
 import useTaskTableController from '../hooks/taskTable/useTaskTableController';
+import useTaskTableColumnVisibility from '../hooks/taskTable/useTaskTableColumnVisibility';
+import { TextLimitProvider } from '../context/TextLimitContext';
 
 export default function TaskTable({
   onCalendarRefresh,
@@ -27,19 +31,29 @@ export default function TaskTable({
     onRegisterHubHandler,
     selectedEmployeeForHighlight
   });
+  const columnSettings = useTaskTableColumnVisibility(currentUser);
 
   return (
+    <TextLimitProvider value={columnSettings.textLimit}>
     <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
       <TaskTableToolbar
         isAdmin={isAdmin}
         onAddNew={table.handleAddNewRow}
         highlightMyTasks={table.highlightMyTasks}
         onToggleHighlight={table.toggleHighlight}
+        columnVisibility={columnSettings.visibility}
+        onColumnVisibleChange={columnSettings.setColumnVisible}
+        onColumnVisibilityReset={columnSettings.resetColumns}
+        textLimit={columnSettings.textLimit}
+        onTextLimitChange={columnSettings.setTextLimit}
       />
 
       <TableContainer sx={{ maxHeight: '70vh', overflow: 'auto' }}>
         <Table stickyHeader size="small" sx={{ tableLayout: 'auto', width: 'max-content', minWidth: '100%' }}>
-          <TaskTableHead isAdmin={isAdmin} showHoursTypeColumns={table.showHoursTypeColumns} />
+          <TaskTableHead
+            columnVisibility={columnSettings.visibility}
+            showHoursTypeColumns={table.showHoursTypeColumns}
+          />
           <TableBody>
             {table.newRow && isAdmin && (
               <NewTaskRow
@@ -49,6 +63,7 @@ export default function TaskTable({
                 onCancel={() => table.setNewRow(null)}
                 onOpenAssigneeModal={table.handleOpenNewSharedModal}
                 showHoursTypeColumns={table.showHoursTypeColumns}
+                columnVisibility={columnSettings.visibility}
               />
             )}
             {table.rows.map(parent => {
@@ -62,6 +77,7 @@ export default function TaskTable({
                   onCancel={() => table.setEditingId(null)}
                   onOpenAssigneeModal={table.handleOpenAssigneeModal}
                   showHoursTypeColumns={table.showHoursTypeColumns}
+                  columnVisibility={columnSettings.visibility}
                 />
               ) : (
                 <ParentTaskRow
@@ -87,6 +103,8 @@ export default function TaskTable({
                   highlightMyTasks={table.highlightMyTasks}
                   selectedEmployeeForHighlight={selectedEmployeeForHighlight}
                   showHoursTypeColumns={table.showHoursTypeColumns}
+                  columnVisibility={columnSettings.visibility}
+                  textLimit={columnSettings.textLimit}
                 />
               );
             })}
@@ -94,16 +112,23 @@ export default function TaskTable({
         </Table>
       </TableContainer>
 
-      <TablePagination
-        rowsPerPageOptions={isAdmin ? [25, 50, 100] : []}
-        component="div"
-        count={table.totalCount}
-        rowsPerPage={table.rowsPerPage}
-        page={table.page}
-        onPageChange={table.handleChangePage}
-        onRowsPerPageChange={isAdmin ? table.handleChangeRowsPerPage : undefined}
-        labelRowsPerPage=""
-      />
+      {table.totalCount > 0 && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, pt: 3, mt: 2, px: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            {`${table.page * table.rowsPerPage + 1}–${Math.min((table.page + 1) * table.rowsPerPage, table.totalCount)} из ${table.totalCount}`}
+          </Typography>
+          <Pagination
+            count={Math.ceil(table.totalCount / table.rowsPerPage)}
+            page={table.page + 1}
+            onChange={(_e, p) => table.handleChangePage(null, p - 1)}
+            color="primary"
+            shape="rounded"
+            size="medium"
+            showFirstButton
+            showLastButton
+          />
+        </Box>
+      )}
 
       <CommentDialog
         open={table.commentDialogOpen}
@@ -124,5 +149,6 @@ export default function TaskTable({
         onDraftApply={table.handleDraftApply}
       />
     </Paper>
+    </TextLimitProvider>
   );
 }

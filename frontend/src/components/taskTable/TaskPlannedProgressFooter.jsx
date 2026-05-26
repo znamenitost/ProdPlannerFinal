@@ -1,5 +1,6 @@
 import { TableRow, TableCell, LinearProgress } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import { COL_ACTIONS } from '../../utils/taskTableStyles';
 
 export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitParent = false }) {
   const show = task.showPlannedTimeProgress ?? false;
@@ -16,7 +17,7 @@ export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitP
   return (
     <TableRow>
       <TableCell
-        colSpan={colSpan}
+        colSpan={Math.max(1, colSpan - 1)}
         sx={{
           p: 0,
           height: 5,
@@ -40,6 +41,15 @@ export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitP
           })}
         />
       </TableCell>
+      <TableCell
+        sx={{
+          ...COL_ACTIONS,
+          p: 0,
+          height: 5,
+          lineHeight: 0,
+          borderBottom: (theme) => `1px solid ${theme.palette.divider}`
+        }}
+      />
     </TableRow>
   );
 }

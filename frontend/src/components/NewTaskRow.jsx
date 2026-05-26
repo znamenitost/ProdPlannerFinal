@@ -5,19 +5,30 @@ import {
   Box,
   Chip,
   IconButton,
-  Tooltip,
   Typography
 } from '@mui/material';
 import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
+import {
+  COL_ICON,
+  COL_TASK,
+  COL_FILE,
+  COL_COMMENT,
+  COL_EMPLOYEE,
+  COL_STATUS,
+  COL_ACTIONS
+} from '../utils/taskTableStyles';
+import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 
 export default function NewTaskRow({
   newRow,
   setNewRow,
   onSave,
   onCancel,
-  onOpenAssigneeModal
+  onOpenAssigneeModal,
+  showHoursTypeColumns = true,
+  columnVisibility
 }) {
   const isShared = newRow.isSharedTask && (newRow.assigneeParts?.length ?? 0) >= 2;
   const hasAssignees = isShared || Boolean(newRow.employeeName);
@@ -34,11 +45,11 @@ export default function NewTaskRow({
 
   return (
     <TableRow sx={draftRowSx}>
-      <TableCell>
+      <TableCell sx={COL_ICON}>
         <AutoAwesome color="warning" fontSize="small" />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)}>
         <TextField
           size="small"
           placeholder="Путь к папке"
@@ -48,7 +59,7 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>
         <TextField
           size="small"
           placeholder="Имя файла"
@@ -58,7 +69,7 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>
         <TextField
           size="small"
           placeholder="Комментарий"
@@ -68,7 +79,7 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={DEADLINE_COLUMN_SX}>
+      <TableCell sx={columnCellSx('deadline', columnVisibility, showHoursTypeColumns, DEADLINE_COLUMN_SX)}>
         <DeadlineDateTimePicker
           value={newRow.deadline}
           onChange={(deadline) => setNewRow({ ...newRow, deadline })}
@@ -76,35 +87,30 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell align="center">
+      <TableCell align="center" sx={hoursColumnSx(columnVisibility, showHoursTypeColumns)}>
         <Typography variant="body2" sx={{ fontSize: '0.8rem', color: hasAssignees ? 'text.primary' : 'text.disabled' }}>
           {hoursDisplay}
         </Typography>
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={typeColumnSx(columnVisibility, showHoursTypeColumns)}>
         <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
           {isShared ? '—' : (newRow.types?.length ? newRow.types.join(', ') : '—')}
         </Typography>
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, COL_EMPLOYEE)}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-          <Tooltip
-            title={hasAssignees ? (isShared ? 'Изменить назначения' : 'Изменить сотрудника и часы') : 'Назначить сотрудников'}
-            arrow
-          >
-            <IconButton size="small" onClick={onOpenAssigneeModal}>
-              <PeopleAlt fontSize="small" color={hasAssignees ? (isShared ? 'secondary' : 'action') : 'disabled'} />
-            </IconButton>
-          </Tooltip>
+          <IconButton size="small" onClick={onOpenAssigneeModal}>
+            <PeopleAlt fontSize="small" color={hasAssignees ? (isShared ? 'secondary' : 'action') : 'disabled'} />
+          </IconButton>
           <Typography variant="caption" sx={{ color: hasAssignees ? 'text.primary' : 'text.disabled', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {assigneeLabel()}
           </Typography>
         </Box>
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('status', columnVisibility, showHoursTypeColumns, COL_STATUS)}>
         <Chip
           label={hasAssignees ? (isShared ? 'Общая' : 'Новая') : 'Черновик'}
           size="small"
@@ -113,7 +119,7 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <IconButton size="small" color="primary" onClick={onSave}>
             <Save fontSize="small" />

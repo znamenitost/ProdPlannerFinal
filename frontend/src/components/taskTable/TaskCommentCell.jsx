@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { Comment as CommentIcon } from '@mui/icons-material';
-import { formatCommentForDisplay, commentDisplaySx } from '../../utils/commentLimits';
+import { formatCommentForDisplay, getCommentDisplaySx } from '../../utils/commentLimits';
+import { useTextLimit } from '../../context/TextLimitContext';
 
 const commentTooltipSx = {
   bgcolor: (theme) => alpha(theme.palette.grey[900], 0.92),
@@ -12,6 +14,9 @@ const commentTooltipSx = {
 };
 
 export default function TaskCommentCell({ task, onOpenComment, iconButtonColor = 'primary' }) {
+  const limit = useTextLimit();
+  const sx = useMemo(() => ({ color: 'text.secondary', ...getCommentDisplaySx(limit), cursor: 'default' }), [limit]);
+
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
       <Tooltip
@@ -20,8 +25,8 @@ export default function TaskCommentCell({ task, onOpenComment, iconButtonColor =
         placement="top"
         slotProps={{ tooltip: { sx: commentTooltipSx } }}
       >
-        <Typography variant="body2" sx={{ color: 'text.secondary', ...commentDisplaySx, cursor: 'default' }}>
-          {formatCommentForDisplay(task.comment)}
+        <Typography variant="body2" sx={sx}>
+          {formatCommentForDisplay(task.comment, limit)}
         </Typography>
       </Tooltip>
       <IconButton

@@ -1,6 +1,8 @@
+import React from 'react';
 import { alpha } from '@mui/material/styles';
 import { STATUS_PENDING_APPROVAL } from '../constants/taskStatuses';
 import { getTaskStatusLine, getTaskTitleSlashFile } from '../components/TaskTitleTwoLines';
+import { getStatusIcon } from './taskHelpers';
 import { chrome, tokens } from '../theme/paletteTokens';
 
 export const CALENDAR_TOOLTIP_SX = {
@@ -82,13 +84,26 @@ export function formatCalendarTime(dateTime) {
   return new Date(dateTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
-/** Многострочный тултип: «задача / файл», статус, доп. строка. */
+/** Многострочный тултип: «задача / файл», статус с иконкой, доп. строка. */
 export function formatCalendarTaskTooltip(task, extraLine) {
-  const lines = [getTaskTitleSlashFile(task) || 'Задача'];
+  const title = getTaskTitleSlashFile(task) || 'Задача';
   const statusLine = getTaskStatusLine(task);
-  if (statusLine) lines.push(statusLine);
-  if (extraLine) lines.push(extraLine);
-  return lines.join('\n');
+  const statusIcon = statusLine ? getStatusIcon(statusLine, 14) : null;
+
+  return (
+    <span style={{ whiteSpace: 'pre-line' }}>
+      <span>{title}</span>
+      {statusLine && (
+        <>
+          {'\n'}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            {statusIcon}{statusLine}
+          </span>
+        </>
+      )}
+      {extraLine && <>{'\n'}{extraLine}</>}
+    </span>
+  );
 }
 
 export function isWorkingWeekday(date) {

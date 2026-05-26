@@ -94,7 +94,7 @@ function DeadlineTooltipContent({ dl, taskInfoObj }) {
 export default function DeadlineMarkers({ deadlines, getTaskInfo, onTaskHover }) {
   return (
     <Box sx={{ position: 'relative', height: 20, mb: 2 }}>
-      {deadlines?.map((dl, idx) => {
+      {deadlines?.filter((dl) => dl.status !== 'Completed').map((dl, idx) => {
         const leftPos = Math.min(100, Math.max(0, getLeft(dl.deadline)));
         const taskInfoObj = getTaskInfo(dl.taskId, dl.taskTitle, dl.status);
 

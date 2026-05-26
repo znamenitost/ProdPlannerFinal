@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react';
-import { TableRow, TableCell, TextField, IconButton, Tooltip, Box, Typography } from '@mui/material';
+import { TableRow, TableCell, TextField, IconButton, Box, Typography } from '@mui/material';
 import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
+import { columnCellSx } from '../utils/taskTableColumns';
+import { COLLAPSED_COLUMN_SX } from '../utils/taskTableColumns';
 
 export default function EditTaskRow({
   task,
   onUpdate,
   onCancel,
-  onOpenAssigneeModal
+  onOpenAssigneeModal,
+  showHoursTypeColumns = true,
+  columnVisibility
 }) {
   const isShared = task.isSplitTask;
 
@@ -56,7 +60,7 @@ export default function EditTaskRow({
         <Edit color="warning" fontSize="small" />
       </TableCell>
 
-      <TableCell sx={{ width: '15%' }}>
+      <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, { width: '15%' })}>
         <TextField
           size="small"
           value={localTask.folderPath}
@@ -66,7 +70,7 @@ export default function EditTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={{ width: '10%' }}>
+      <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, { width: '10%' })}>
         <TextField
           size="small"
           value={localTask.fileName}
@@ -76,7 +80,7 @@ export default function EditTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={{ width: '20%' }}>
+      <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, { width: '12%' })}>
         <TextField
           size="small"
           value={localTask.comment}
@@ -85,7 +89,7 @@ export default function EditTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={DEADLINE_COLUMN_SX}>
+      <TableCell sx={columnCellSx('deadline', columnVisibility, showHoursTypeColumns, DEADLINE_COLUMN_SX)}>
         <DeadlineDateTimePicker
           value={localTask.deadline}
           onChange={(deadline) => handleFieldChange('deadline', deadline)}
@@ -93,51 +97,34 @@ export default function EditTaskRow({
         />
       </TableCell>
 
-      <TableCell align="center" sx={{ width: '6%' }}>
-        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-          {localTask.estimateHours?.toFixed(1) || '0.0'} ч
-        </Typography>
-      </TableCell>
+      <TableCell sx={COLLAPSED_COLUMN_SX} />
+      <TableCell sx={COLLAPSED_COLUMN_SX} />
 
-      <TableCell sx={{ width: '8%' }}>
-        <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {isShared ? '—' : (localTask.type || '—')}
-        </Typography>
-      </TableCell>
-
-      <TableCell sx={{ width: '8%' }}>
+      <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, { width: '8%' })}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-          <Tooltip title={isShared ? 'Изменить назначения' : 'Изменить сотрудника и часы'} arrow>
-            <IconButton
-              size="small"
-              onClick={() => onOpenAssigneeModal(localTask)}
-              sx={{ flexShrink: 0 }}
-            >
-              <PeopleAlt fontSize="small" color={isShared ? 'secondary' : 'action'} />
-            </IconButton>
-          </Tooltip>
+          <IconButton
+            size="small"
+            onClick={() => onOpenAssigneeModal(localTask)}
+            sx={{ flexShrink: 0 }}
+          >
+            <PeopleAlt fontSize="small" color={isShared ? 'secondary' : 'action'} />
+          </IconButton>
           <Typography variant="caption" sx={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {isShared ? 'Общая' : (localTask.employeeName || '—')}
           </Typography>
         </Box>
       </TableCell>
 
-      <TableCell sx={{ width: '8%' }}>
-        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{localTask.statusText || 'Назначена'}</span>
-      </TableCell>
+      <TableCell sx={COLLAPSED_COLUMN_SX} />
 
-      <TableCell sx={{ width: '12%' }}>
+      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, { width: '12%' })}>
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="Сохранить">
-            <IconButton size="small" color="primary" onClick={handleSave}>
-              <Save fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Отмена">
-            <IconButton size="small" color="error" onClick={onCancel}>
-              <Cancel fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          <IconButton size="small" color="primary" onClick={handleSave}>
+            <Save fontSize="small" />
+          </IconButton>
+          <IconButton size="small" color="error" onClick={onCancel}>
+            <Cancel fontSize="small" />
+          </IconButton>
         </Box>
       </TableCell>
     </TableRow>

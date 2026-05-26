@@ -2316,6 +2316,15 @@ public class WorkIntervalDto
         EndTime = interval.EndTime
     };
 }
+=== ./Models/Dtos/LoginEmployeeDto.cs ===
+namespace ProductionPlanner.Models.Dtos;
+
+public class LoginEmployeeDto
+{
+    public string Id { get; set; } = "";
+    public string FullName { get; set; } = "";
+    public string? AvatarUrl { get; set; }
+}
 === ./Models/Dtos/TaskTableRowDto.cs ===
 using ProductionPlanner.Models;
 using ProductionPlanner.Services.TaskTable;
@@ -3006,8 +3015,10 @@ public static class WebApplicationExtensions
             OnPrepareResponse = ctx =>
             {
                 var name = Path.GetFileName(ctx.File.Name);
+                var path = ctx.Context.Request.Path.Value ?? "";
                 if (name.Equals("index.html", StringComparison.OrdinalIgnoreCase)
-                    || name.Equals("deploy-version.txt", StringComparison.OrdinalIgnoreCase))
+                    || name.Equals("deploy-version.txt", StringComparison.OrdinalIgnoreCase)
+                    || path.Contains("/assets/", StringComparison.OrdinalIgnoreCase))
                 {
                     var headers = ctx.Context.Response.Headers;
                     headers[HeaderNames.CacheControl] = "no-cache, no-store, must-revalidate";
@@ -3523,7 +3534,6 @@ public class DebugController : ControllerBase
     [HttpGet("get-time")]
     public IActionResult GetTime()
     {
-        if (DevOnly() is { } denied) return denied;
         return Ok(new { 
             now = _timeService.Now,
             realNow = DateTime.Now,
@@ -3534,7 +3544,6 @@ public class DebugController : ControllerBase
     [HttpPost("set-time")]
     public IActionResult SetTime([FromBody] SetTimeRequest request)
     {
-        if (DevOnly() is { } denied) return denied;
         if (DateTime.TryParse(request.MockDateTime, out var mockTime))
         {
             _timeService.SetMock(mockTime);
@@ -3547,7 +3556,6 @@ public class DebugController : ControllerBase
     [HttpPost("reset-time")]
     public IActionResult ResetTime()
     {
-        if (DevOnly() is { } denied) return denied;
         _timeService.ResetMock();
         Console.WriteLine($"[DEBUG] Time reset to real: {_timeService.Now}");
         return Ok(new { message = "Time reset to real", currentTime = _timeService.Now });
@@ -3556,7 +3564,6 @@ public class DebugController : ControllerBase
     [HttpPost("close-interval/{taskId}")]
     public async Task<IActionResult> CloseInterval(int taskId)
     {
-        if (DevOnly() is { } denied) return denied;
         var task = await _repo.GetTaskByIdAsync(taskId, includeIntervals: true);
         if (task == null) return NotFound();
 
@@ -3573,7 +3580,6 @@ public class DebugController : ControllerBase
     [HttpPost("create-interval/{taskId}")]
     public async Task<IActionResult> CreateInterval(int taskId)
     {
-        if (DevOnly() is { } denied) return denied;
         var task = await _repo.GetTaskByIdAsync(taskId, includeIntervals: true);
         if (task == null) return NotFound();
 
@@ -3629,7 +3635,6 @@ public class DebugController : ControllerBase
     [HttpGet("get-intervals/{taskId}")]
     public async Task<IActionResult> GetIntervals(int taskId)
     {
-        if (DevOnly() is { } denied) return denied;
         var task = await _repo.GetTaskByIdAsync(taskId, includeIntervals: true);
         if (task == null) return NotFound();
         return Ok(task.WorkIntervals.Select(i => new { i.Id, i.StartTime, i.EndTime }));
@@ -3689,7 +3694,7 @@ public class UserAvatarController : ControllerBase
     {
         var file = await _avatarService.GetFileAsync(userId);
         if (file == null)
-            return NotFound();
+            return NoContent();
 
         return File(file.Value.Bytes, file.Value.ContentType);
     }
@@ -4009,6 +4014,13 @@ public class AuthController : ControllerBase
         _provisioning = provisioning;
     }
 
+    [HttpGet("login-employees")]
+    public async Task<IActionResult> GetLoginEmployees()
+    {
+        var employees = await _authSession.GetLoginEmployeesAsync();
+        return Ok(employees);
+    }
+
     [HttpPost("login-employee")]
     public async Task<IActionResult> LoginEmployee([FromBody] EmployeeLoginRequest request)
     {
@@ -4020,9 +4032,9 @@ public class AuthController : ControllerBase
             var user = await _authSession.LoginEmployeeAsync(request.FullName);
             return Ok(ToResponse(user));
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = "Ошибка создания пользователя" });
+            return BadRequest(new { message = ex.Message });
         }
     }
 
@@ -4559,6 +4571,7 @@ namespace ProductionPlanner.Data
         Task ReorderTasksAsync(List<int> orderedIds, CancellationToken cancellationToken = default);
         Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end, CancellationToken cancellationToken = default);
         Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);
+        Task ExecuteWithTaskLifecycleLockAsync(int taskId, Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);
         Task<int> CloseOpenIntervalsAsync(int taskId, DateTime closedAt, CancellationToken cancellationToken = default);
         Task<int> TryTransitionStatusAsync(
             int taskId,
@@ -4572,6 +4585,7 @@ namespace ProductionPlanner.Data
     }
 }
 === ./Data/ProductionTaskRepository.cs ===
+using System.Collections.Concurrent;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Infrastructure;
@@ -4584,6 +4598,7 @@ namespace ProductionPlanner.Data
     {
         private readonly ApplicationDbContext _context;
         private readonly IAppTimeService _timeService;
+        private static readonly ConcurrentDictionary<int, SemaphoreSlim> LifecycleLocks = new();
 
         public ProductionTaskRepository(ApplicationDbContext context, IAppTimeService timeService)
         {
@@ -5021,6 +5036,30 @@ namespace ProductionPlanner.Data
                     throw;
                 }
             });
+        }
+
+        public async Task ExecuteWithTaskLifecycleLockAsync(
+            int taskId,
+            Func<CancellationToken, Task> action,
+            CancellationToken cancellationToken = default)
+        {
+            // На 1gb.ru один worker IIS — in-process lock достаточен; pg_advisory_xact_lock
+            // через EF давал 500 на start/pause (неверная передача CancellationToken в SQL).
+            var sem = LifecycleLocks.GetOrAdd(taskId, _ => new SemaphoreSlim(1, 1));
+            await sem.WaitAsync(cancellationToken);
+            try
+            {
+                await ExecuteInTransactionAsync(action, cancellationToken);
+            }
+            finally
+            {
+                sem.Release();
+                if (sem.CurrentCount == 1
+                    && LifecycleLocks.TryRemove(new KeyValuePair<int, SemaphoreSlim>(taskId, sem)))
+                {
+                    sem.Dispose();
+                }
+            }
         }
 
         private async Task ApplyDisplayOrderBulkUpdateAsync(
@@ -5591,6 +5630,47 @@ public class AppDateTimeTests
         Assert.Equal(moscowWall.Date, roundTrip.Date);
     }
 }
+=== ./ProductionPlanner.Tests/ProductionSchedulerTests.cs ===
+using ProductionPlanner.Models;
+using ProductionPlanner.Services;
+
+namespace ProductionPlanner.Tests;
+
+public class ProductionSchedulerTests
+{
+    [Fact]
+    public void CheckDeadlineRisks_AccountsForTasksScheduledBeforeDeadline()
+    {
+        var scheduler = new ProductionScheduler(new WorkHoursCalculator());
+        var now = new DateTime(2026, 5, 21, 18, 0, 0);
+        var deadline = new DateTime(2026, 5, 22, 11, 0, 0);
+        var tasks = new List<ProductionTask>
+        {
+            new()
+            {
+                Id = 1,
+                FileName = "first.cdr",
+                Deadline = deadline,
+                EstimateHours = 1.5,
+                Status = JobStatus.Assigned
+            },
+            new()
+            {
+                Id = 2,
+                FileName = "second.cdr",
+                Deadline = deadline,
+                EstimateHours = 1,
+                Status = JobStatus.Assigned
+            }
+        };
+
+        var risks = scheduler.CheckDeadlineRisks(tasks, now);
+
+        var secondTaskRisk = Assert.Single(risks, r => r.TaskId == 2);
+        Assert.Equal("critical", secondTaskRisk.RiskLevel);
+        Assert.Equal(0.5, secondTaskRisk.AvailableHoursBeforeDeadline);
+    }
+}
 === ./ProductionPlanner.Tests/TaskNotificationServiceTests.cs ===
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
@@ -6114,6 +6194,9 @@ public class TaskTableService : ITaskTableService
 
         string? statusChangedTo = null;
         var completedViaLifecycle = false;
+        // Признак перехода в «разблокирующий» статус (Согласовано/В наличии) — после сохранения
+        // отдельным личным пушем сообщим исполнителю, что блокировка снята и можно начинать.
+        var notifyReadyToStart = false;
         if (!string.IsNullOrEmpty(request.StatusText))
         {
             var newStatus = TaskStatusMapper.FromText(request.StatusText);
@@ -6146,6 +6229,7 @@ public class TaskTableService : ITaskTableService
                 {
                     task.Status = newStatus;
                     statusChangedTo = newStatus.ToString();
+                    notifyReadyToStart = newStatus is JobStatus.Approved or JobStatus.InStock;
                 }
             }
         }
@@ -6167,6 +6251,9 @@ public class TaskTableService : ITaskTableService
         await _notificationService.NotifyTaskUpdatedAsync(task, oldEmployeeName);
         if (statusChangedTo != null)
             await _notificationService.NotifyStatusChangedAsync(task, statusChangedTo);
+
+        if (notifyReadyToStart)
+            await _notificationService.NotifyTaskReadyToStartAsync(task);
 
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }
@@ -6717,8 +6804,8 @@ public class WeekCalendarService : IWeekCalendarService
     {
         var dayStartTime = day.Date.AddHours(10);
         var dayEndTime = day.Date.AddHours(19);
-        var lunchStart = day.Date.AddHours(14);
-        var lunchEnd = day.Date.AddHours(15);
+        var lunchStart = day.Date.AddHours(15);
+        var lunchEnd = day.Date.AddHours(16);
         var totalWorkHours = (dayEndTime - dayStartTime).TotalHours;
 
         var taskBlocks = BuildPlannedTaskBlocks(
@@ -6884,8 +6971,8 @@ public class WeekCalendarService : IWeekCalendarService
                 if (startInDay >= endInDay)
                     continue;
 
-                var lunchStartToday = dayDate.AddHours(14);
-                var lunchEndToday = dayDate.AddHours(15);
+                var lunchStartToday = dayDate.AddHours(15);
+                var lunchEndToday = dayDate.AddHours(16);
 
                 if (startInDay < lunchStartToday && endInDay > lunchStartToday)
                 {
@@ -7089,7 +7176,7 @@ public class WeekCalendarService : IWeekCalendarService
         DateTime timelineEnd)
     {
         var idleSegments = new List<CalendarTimelineSegmentDto>();
-        var workPeriods = new[] { (TimeSpan.FromHours(10), TimeSpan.FromHours(14)), (TimeSpan.FromHours(15), TimeSpan.FromHours(19)) };
+        var workPeriods = new[] { (TimeSpan.FromHours(10), TimeSpan.FromHours(15)), (TimeSpan.FromHours(16), TimeSpan.FromHours(19)) };
 
         foreach (var (workStart, workEndPeriod) in workPeriods)
         {
@@ -7229,6 +7316,9 @@ public class UserProvisioningService : IUserProvisioningService
 
     public async Task<User> GetOrCreateEmployeeAsync(string fullName)
     {
+        if (!AuthEmployees.IsAllowed(fullName))
+            throw new InvalidOperationException("Неизвестный сотрудник");
+
         var user = _userManager.Users.FirstOrDefault(u => u.FullName == fullName && u.Role == "Employee");
         if (user != null)
             return user;
@@ -7258,6 +7348,17 @@ public class UserProvisioningService : IUserProvisioningService
         await EnsureAdminAsync("pavel@admin.com", "Павел", "2960040");
         await EnsureEmployeeAsync("dima@employee.local", "Дима");
         await EnsureEmployeeAsync("yaromer@employee.local", "Яромир");
+        await RemoveUnauthorizedEmployeesAsync();
+    }
+
+    private async Task RemoveUnauthorizedEmployeesAsync()
+    {
+        var extras = _userManager.Users
+            .Where(u => u.Role == "Employee" && !AuthEmployees.AllowedFullNames.Contains(u.FullName))
+            .ToList();
+
+        foreach (var user in extras)
+            await _userManager.DeleteAsync(user);
     }
 
     private async Task EnsureAdminAsync(string email, string fullName, string password)
@@ -7309,6 +7410,7 @@ public class UserProvisioningService : IUserProvisioningService
 }
 === ./Services/Auth/AuthSessionService.cs ===
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Models;
 using ProductionPlanner.Models.Dtos;
 using System.Security.Claims;
@@ -7365,9 +7467,33 @@ public class AuthSessionService : IAuthSessionService
 
         var user = await _userManager.GetUserAsync(principal);
         if (user == null)
+        {
+            await _signInManager.SignOutAsync();
             return new AuthUserDto { IsAuthenticated = false };
+        }
+
+        if (user.Role == "Employee" && !AuthEmployees.IsAllowed(user.FullName))
+        {
+            await _signInManager.SignOutAsync();
+            return new AuthUserDto { IsAuthenticated = false };
+        }
 
         return await MapUserAsync(user);
+    }
+
+    public async Task<IReadOnlyList<LoginEmployeeDto>> GetLoginEmployeesAsync()
+    {
+        return await _userManager.Users
+            .AsNoTracking()
+            .Where(u => u.Role == "Employee" && u.IsActive && AuthEmployees.AllowedFullNames.Contains(u.FullName))
+            .OrderBy(u => u.FullName)
+            .Select(u => new LoginEmployeeDto
+            {
+                Id = u.Id,
+                FullName = u.FullName,
+                AvatarUrl = u.AvatarUrl
+            })
+            .ToListAsync();
     }
 
     private async Task<AuthUserDto> MapUserAsync(User user)
@@ -7384,6 +7510,16 @@ public class AuthSessionService : IAuthSessionService
         };
     }
 }
+=== ./Services/Auth/AuthEmployees.cs ===
+namespace ProductionPlanner.Services.Auth;
+
+public static class AuthEmployees
+{
+    public static readonly string[] AllowedFullNames = ["Дима", "Яромир"];
+
+    public static bool IsAllowed(string fullName) =>
+        AllowedFullNames.Contains(fullName, StringComparer.Ordinal);
+}
 === ./Services/Auth/IAuthSessionService.cs ===
 using ProductionPlanner.Models;
 using ProductionPlanner.Models.Dtos;
@@ -7396,6 +7532,7 @@ public interface IAuthSessionService
     Task<AuthUserDto> LoginEmployeeAsync(string fullName);
     Task<(AuthUserDto? User, string? ErrorMessage)> LoginAdminAsync(string email, string password);
     Task<AuthUserDto> GetCurrentUserAsync(ClaimsPrincipal principal);
+    Task<IReadOnlyList<LoginEmployeeDto>> GetLoginEmployeesAsync();
 }
 === ./Services/Auth/IAvatarService.cs ===
 using ProductionPlanner.Models;
@@ -7534,12 +7671,18 @@ public class NotificationInboxService : INotificationInboxService
         _timeService = timeService;
     }
 
-    public async Task<long> EnqueueNewTaskAsync(string userId, int taskId, string title, DateTime deadline)
+    public Task<long> EnqueueNewTaskAsync(string userId, int taskId, string title, DateTime deadline) =>
+        EnqueueAsync(userId, "NewTask", taskId, title, deadline);
+
+    public Task<long> EnqueueTaskReadyToStartAsync(string userId, int taskId, string title, DateTime deadline) =>
+        EnqueueAsync(userId, "TaskReadyToStart", taskId, title, deadline);
+
+    private async Task<long> EnqueueAsync(string userId, string type, int taskId, string title, DateTime deadline)
     {
         var notification = new UserNotification
         {
             UserId = userId,
-            Type = "NewTask",
+            Type = type,
             TaskId = taskId,
             Title = title,
             Deadline = deadline,
@@ -7594,6 +7737,7 @@ namespace ProductionPlanner.Services;
 public interface INotificationInboxService
 {
     Task<long> EnqueueNewTaskAsync(string userId, int taskId, string title, DateTime deadline);
+    Task<long> EnqueueTaskReadyToStartAsync(string userId, int taskId, string title, DateTime deadline);
     Task<IReadOnlyList<NotificationDto>> GetPendingAsync(string userId);
     Task<bool> AcknowledgeAsync(string userId, long notificationId);
 }
@@ -7765,7 +7909,7 @@ public class TaskLifecycleService : ITaskLifecycleService
     {
         var startTime = _workHours.GetNextWorkStart(now);
 
-        await _repo.ExecuteInTransactionAsync(async ct =>
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
@@ -7798,7 +7942,7 @@ public class TaskLifecycleService : ITaskLifecycleService
 
     public async Task PauseTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
     {
-        await _repo.ExecuteInTransactionAsync(async ct =>
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
@@ -7825,7 +7969,7 @@ public class TaskLifecycleService : ITaskLifecycleService
     {
         var startTime = _workHours.GetNextWorkStart(now);
 
-        await _repo.ExecuteInTransactionAsync(async ct =>
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
@@ -7866,7 +8010,11 @@ public class TaskLifecycleService : ITaskLifecycleService
         if (task == null || task.Status == JobStatus.Completed) return;
         if (newProgress > 0.99) newProgress = 0.99;
 
-        if (task.Status == JobStatus.Assigned && newProgress > 0)
+        // Симметрично со StartTaskAsync: «стартовые» статусы — Assigned/Approved/InStock.
+        // Без этого % > 0 для Approved/InStock записывались бы в задачу, оставляя её
+        // без открытого WorkInterval — задача с прогрессом, но без отметки начала работы.
+        if (newProgress > 0
+            && task.Status is JobStatus.Assigned or JobStatus.Approved or JobStatus.InStock)
         {
             await StartTaskAsync(taskId, now, cancellationToken);
             task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
@@ -7875,9 +8023,6 @@ public class TaskLifecycleService : ITaskLifecycleService
 
         task.Progress = newProgress;
         task.UpdatedAt = now;
-
-        if (task.Status == JobStatus.Assigned && newProgress > 0)
-            task.Status = JobStatus.InProgress;
 
         await _repo.UpdateTaskAsync(task, cancellationToken);
         await _notificationService.NotifyProgressChangedAsync(task, newProgress);
@@ -7890,7 +8035,7 @@ public class TaskLifecycleService : ITaskLifecycleService
 
         if (task.Status is JobStatus.Assigned or JobStatus.Approved or JobStatus.InStock)
         {
-            await _repo.ExecuteInTransactionAsync(async ct =>
+            await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
             {
                 await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
@@ -7919,7 +8064,7 @@ public class TaskLifecycleService : ITaskLifecycleService
 
         var actualHours = 0.0;
 
-        await _repo.ExecuteInTransactionAsync(async ct =>
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
@@ -7993,7 +8138,7 @@ public class TaskLifecycleService : ITaskLifecycleService
 
     public async Task ReturnTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
     {
-        await _repo.ExecuteInTransactionAsync(async ct =>
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
             await RequireStatusTransitionAsync(
                 taskId,
@@ -8070,6 +8215,8 @@ public class TaskNotificationService : ITaskNotificationService
                 title,
                 task.Deadline);
 
+            // Персональный push-снэкбар «Новая задача» — только исполнителю,
+            // его не должны видеть другие пользователи.
             await SendToGroupsAsync(
                 [userId],
                 "NewTask",
@@ -8083,57 +8230,61 @@ public class TaskNotificationService : ITaskNotificationService
             _logger.LogDebug("User not found for new task notification: {EmployeeName}", task.EmployeeName);
         }
 
-        await SendToGroupsAsync(
-            [NotificationGroups.Admins],
-            "TaskUpdated",
+        // Data-sync для таблицы/календаря у всех подключённых клиентов:
+        // таблица показывает все корневые задачи, и любой сотрудник, открывший её,
+        // должен увидеть новую строку без ручного refresh.
+        await BroadcastAsync("TaskUpdated", task.Id, title, task.Deadline);
+    }
+
+    public Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null) =>
+        BroadcastAsync("TaskUpdated", task.Id, GetNotificationTitle(task), task.Deadline);
+
+    public Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames) =>
+        BroadcastAsync("TaskDeleted", taskId);
+
+    public Task NotifyStatusChangedAsync(ProductionTask task, string newStatus) =>
+        BroadcastAsync("TaskStatusChanged", task.Id, newStatus);
+
+    public Task NotifyProgressChangedAsync(ProductionTask task, double progress) =>
+        BroadcastAsync("TaskProgressChanged", task.Id, progress);
+
+    /// <summary>
+    /// Персональный push исполнителю о том, что админ перевёл задачу в «Согласовано» или
+    /// «В наличии» — то есть блокирующее условие снято, можно начинать работу. Использует
+    /// тот же транспорт <c>NewTask</c>, что и снэкбар о новой задаче (фронт уже умеет его
+    /// показывать), а в заголовок добавляется префикс «Можно начинать», чтобы сотрудник
+    /// сразу понял суть. Запись складывается в инбокс с типом <c>TaskReadyToStart</c>,
+    /// поэтому переживёт офлайн/перезагрузку страницы и поднимется через /api/notifications/pending.
+    /// </summary>
+    public async Task NotifyTaskReadyToStartAsync(ProductionTask task)
+    {
+        if (string.IsNullOrWhiteSpace(task.EmployeeName))
+            return;
+
+        var userId = await GetUserIdByFullNameAsync(task.EmployeeName);
+        if (string.IsNullOrEmpty(userId))
+        {
+            _logger.LogDebug(
+                "User not found for ready-to-start notification: {EmployeeName}",
+                task.EmployeeName);
+            return;
+        }
+
+        var title = $"Можно начинать: {GetNotificationTitle(task)}";
+
+        var notificationId = await _inbox.EnqueueTaskReadyToStartAsync(
+            userId,
             task.Id,
             title,
             task.Deadline);
-    }
 
-    public async Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null)
-    {
-        var employeeNames = new HashSet<string>(StringComparer.Ordinal);
-        if (!string.IsNullOrEmpty(task.EmployeeName))
-            employeeNames.Add(task.EmployeeName);
-        if (!string.IsNullOrEmpty(oldEmployeeName) && oldEmployeeName != task.EmployeeName)
-            employeeNames.Add(oldEmployeeName);
-
-        var groups = await ResolveEmployeeGroupsAsync(employeeNames);
-        await SendToGroupsAsync(groups, "TaskUpdated", task.Id, GetNotificationTitle(task), task.Deadline);
-    }
-
-    public async Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames)
-    {
-        var groups = await ResolveEmployeeGroupsAsync(
-            employeeNames.Where(name => !string.IsNullOrWhiteSpace(name)));
-        await SendToGroupsAsync(groups, "TaskDeleted", taskId);
-    }
-
-    public async Task NotifyStatusChangedAsync(ProductionTask task, string newStatus)
-    {
-        var groups = await ResolveEmployeeGroupsAsync(
-            string.IsNullOrEmpty(task.EmployeeName) ? [] : [task.EmployeeName]);
-        await SendToGroupsAsync(groups, "TaskStatusChanged", task.Id, newStatus);
-    }
-
-    public async Task NotifyProgressChangedAsync(ProductionTask task, double progress)
-    {
-        var groups = await ResolveEmployeeGroupsAsync(
-            string.IsNullOrEmpty(task.EmployeeName) ? [] : [task.EmployeeName]);
-        await SendToGroupsAsync(groups, "TaskProgressChanged", task.Id, progress);
-    }
-
-    private async Task<List<string>> ResolveEmployeeGroupsAsync(IEnumerable<string> employeeNames)
-    {
-        var groups = new HashSet<string>(StringComparer.Ordinal) { NotificationGroups.Admins };
-        foreach (var employeeName in employeeNames.Distinct(StringComparer.Ordinal))
-        {
-            var userId = await GetUserIdByFullNameAsync(employeeName);
-            if (!string.IsNullOrEmpty(userId))
-                groups.Add(userId);
-        }
-        return groups.ToList();
+        await SendToGroupsAsync(
+            [userId],
+            "NewTask",
+            notificationId,
+            task.Id,
+            title,
+            task.Deadline);
     }
 
     private Task SendToGroupsAsync(IReadOnlyList<string> groups, string method, params object?[] args)
@@ -8142,6 +8293,16 @@ public class TaskNotificationService : ITaskNotificationService
             return Task.CompletedTask;
         return _hubContext.Clients.Groups(groups).SendCoreAsync(method, args);
     }
+
+    /// <summary>
+    /// Broadcast события синхронизации данных всем подключённым клиентам хаба
+    /// (хаб под <c>[Authorize]</c>, так что это все авторизованные пользователи).
+    /// Используется для TaskUpdated/TaskDeleted/TaskStatusChanged/TaskProgressChanged,
+    /// чтобы таблица и календарь обновлялись у каждого, кто их сейчас открыл,
+    /// а не только у админа и исполнителя задачи.
+    /// </summary>
+    private Task BroadcastAsync(string method, params object?[] args) =>
+        _hubContext.Clients.All.SendCoreAsync(method, args);
 
     public static string GetNotificationTitle(ProductionTask task)
     {
@@ -8379,20 +8540,19 @@ namespace ProductionPlanner.Services
         {
             var risks = new List<DeadlineRisk>();
             var slots = GetSchedule(activeTasks, now);
-            var slotByTaskId = slots
+            var firstSlotByTaskId = slots
                 .GroupBy(s => s.Task.Id)
                 .ToDictionary(g => g.Key, g => g.First());
 
             foreach (var task in activeTasks.Where(t => t.Status != JobStatus.Completed && t.Progress < 0.99))
             {
                 var deadline = task.Deadline;
-                if (!slotByTaskId.TryGetValue(task.Id, out var slot))
+                if (!firstSlotByTaskId.TryGetValue(task.Id, out var slot))
                     continue;
                 
                 var hoursNeeded = task.EstimateHours * (1 - task.Progress);
-                var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
                 var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(deadline);
-                var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(nowMoscow, deadlineMoscow);
+                var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(slot.PlannedStart, deadlineMoscow);
 
                 string riskLevel = "ok";
                 string message = "";
@@ -8448,8 +8608,8 @@ namespace ProductionPlanner.Services
     public class WorkHoursCalculator : IWorkHoursCalculator
     {
         private readonly TimeSpan workStart = new(10, 0, 0);
-        private readonly TimeSpan lunchStart = new(14, 0, 0);
-        private readonly TimeSpan lunchEnd = new(15, 0, 0);
+        private readonly TimeSpan lunchStart = new(15, 0, 0);
+        private readonly TimeSpan lunchEnd = new(16, 0, 0);
         private readonly TimeSpan workEnd = new(19, 0, 0);
 
         public bool IsWorkingHour(DateTime time)
@@ -8689,6 +8849,7 @@ public interface ITaskNotificationService
     Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames);
     Task NotifyStatusChangedAsync(ProductionTask task, string newStatus);
     Task NotifyProgressChangedAsync(ProductionTask task, double progress);
+    Task NotifyTaskReadyToStartAsync(ProductionTask task);
 }
 === ./Services/ITaskSplitService.cs ===
 using ProductionPlanner.Models;
@@ -8904,19 +9065,6 @@ namespace ProductionPlanner.Services
             Func<CancellationToken, Task> action,
             CancellationToken cancellationToken)
         {
-            if (_context.Database.IsNpgsql())
-            {
-                await _repo.ExecuteInTransactionAsync(async ct =>
-                {
-                    await _context.Database.ExecuteSqlRawAsync(
-                        "SELECT pg_advisory_xact_lock({0})",
-                        parentTaskId,
-                        ct);
-                    await action(ct);
-                }, cancellationToken);
-                return;
-            }
-
             var sem = SplitLocks.GetOrAdd(parentTaskId, _ => new SemaphoreSlim(1, 1));
             await sem.WaitAsync(cancellationToken);
             try

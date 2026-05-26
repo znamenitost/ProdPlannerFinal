@@ -3,7 +3,7 @@ import { TableRow, TableCell, Box, Typography, Chip } from '@mui/material';
 import { areChildRowPropsEqual } from '../utils/taskTableRowMemo';
 import { alpha } from '@mui/material/styles';
 import { Person } from '@mui/icons-material';
-import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
+import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import {
   COL_ICON,
   ICON_SLOT_EXPAND,
@@ -44,7 +44,9 @@ function ChildTaskRow({
   currentUser,
   highlightMyTasks,
   selectedEmployeeForHighlight,
-  showHoursTypeColumns = true
+  showHoursTypeColumns = true,
+  columnVisibility,
+  textLimit
 }) {
   const overdue = task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
 
@@ -85,7 +87,7 @@ function ChildTaskRow({
   };
 
   const showActionButtons = canUserManage() && canChangeStatus;
-  const tableColSpan = taskTableColumnCount(showHoursTypeColumns);
+  const tableColSpan = taskTableColumnCount(columnVisibility, showHoursTypeColumns);
 
   return (
     <>
@@ -111,26 +113,26 @@ function ChildTaskRow({
         </Box>
       </TableCell>
 
-      <TableCell sx={COL_TASK} />
-      <TableCell sx={COL_FILE} />
+      <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)} />
+      <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)} />
 
-      <TableCell sx={COL_COMMENT}>
+      <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>
         <TaskCommentCell task={task} onOpenComment={onOpenComment} iconButtonColor="primary" />
       </TableCell>
 
-      <TableCell sx={COL_DEADLINE}>
+      <TableCell sx={columnCellSx('deadline', columnVisibility, showHoursTypeColumns, COL_DEADLINE)}>
         <TaskDeadlineCell deadline={task.deadline} statusText={task.statusText} />
       </TableCell>
 
-      <TableCell align="center" sx={hoursColumnSx(showHoursTypeColumns)}>
+      <TableCell align="center" sx={hoursColumnSx(columnVisibility, showHoursTypeColumns)}>
         <TaskHoursCell estimateHours={task.estimateHours} />
       </TableCell>
 
-      <TableCell sx={typeColumnSx(showHoursTypeColumns)}>
+      <TableCell sx={typeColumnSx(columnVisibility, showHoursTypeColumns)}>
         <TaskTypeCell type={task.type} />
       </TableCell>
 
-      <TableCell sx={COL_EMPLOYEE}>
+      <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, COL_EMPLOYEE)}>
         <Chip
           icon={<Person sx={{ fontSize: 14 }} />}
           label={task.employeeName}
@@ -145,11 +147,11 @@ function ChildTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={COL_STATUS}>
+      <TableCell sx={columnCellSx('status', columnVisibility, showHoursTypeColumns, COL_STATUS)}>
         <TaskStatusCell statusText={task.statusText} />
       </TableCell>
 
-      <TableCell sx={COL_ACTIONS}>
+      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
           {isAdmin && onEdit && onDelete && (
             <TaskAdminActionStacks
