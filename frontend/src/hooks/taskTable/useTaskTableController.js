@@ -105,6 +105,7 @@ export default function useTaskTableController({
     ...childrenState,
     ...actions,
     ...modals,
+    handleOpenFile,
     handleSaveComment: (comment) => modals.handleSaveComment(comment, api.updateRow)
   };
 }
