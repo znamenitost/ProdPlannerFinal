@@ -50,8 +50,8 @@ jobs:
 
       - name: Publish application
         run: |
-          # Рабочий publish на 1gb: FDD win-x64 + ReadyToRun; IIS — dotnet + ProductionPlanner.dll (web.config).
-          dotnet publish ProductionPlanner.csproj -c Release --self-contained false -r win-x64 /p:PublishReadyToRun=true -o ./publish
+          # Стандартный FDD без RID (Any CPU): IIS — dotnet + ProductionPlanner.dll (web.config).
+          dotnet publish ProductionPlanner.csproj -c Release --self-contained false -o ./publish
 
       - name: Copy frontend to wwwroot
         run: |
