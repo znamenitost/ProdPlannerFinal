@@ -109,16 +109,18 @@ public class TaskListQueryService : ITaskListQueryService
         return _scheduler.CheckDeadlineRisks(tasks, now);
     }
 
+    public async Task<List<QueueOverloadAlert>> GetQueueOverloadsAsync(
+        string employee,
+        DateTime now,
+        CancellationToken cancellationToken = default)
+    {
+        var tasks = await _repo.GetActiveTasksAsync(employee, cancellationToken);
+        return _scheduler.CheckQueueOverloads(tasks, now);
+    }
+
     private object MapTaskToResult(ProductionTask task, DateTime now)
     {
-        var hoursNeeded = task.EstimateHours * (1 - task.Progress);
-        var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
-        var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(task.Deadline);
-        var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(nowMoscow, deadlineMoscow);
-        string riskLevel = "ok";
-        if (AppDateTime.CompareDeadlineToAppNow(task.Deadline, now) < 0) riskLevel = "overdue";
-        else if (workHoursUntilDeadline < hoursNeeded) riskLevel = "critical";
-        else if (workHoursUntilDeadline < hoursNeeded + 2) riskLevel = "warning";
+        var (riskLevel, _, _) = DeadlineRiskEvaluator.Evaluate(task, now, _workHours);
 
         return new
         {

@@ -346,6 +346,83 @@ public class TaskTableService : ITaskTableService
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }
 
+    public async Task<TaskTableServiceResult<List<WorkIntervalEditDto>>> GetIntervalsAsync(
+        int taskId,
+        CancellationToken cancellationToken = default)
+    {
+        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
+        if (task == null)
+            return TaskTableServiceResult<List<WorkIntervalEditDto>>.Missing();
+
+        var intervals = (await _repo.GetWorkIntervalsForTaskIdsAsync([taskId], cancellationToken))
+            .OrderBy(i => i.StartTime)
+            .Select(WorkIntervalEditDto.FromEntity)
+            .ToList();
+
+        return TaskTableServiceResult<List<WorkIntervalEditDto>>.Ok(intervals);
+    }
+
+    public async Task<TaskTableServiceResult<List<WorkIntervalEditDto>>> UpdateIntervalsAsync(
+        int taskId,
+        UpdateWorkIntervalsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
+        if (task == null)
+            return TaskTableServiceResult<List<WorkIntervalEditDto>>.Missing();
+
+        var existing = (await _repo.GetWorkIntervalsForTaskIdsAsync([taskId], cancellationToken)).ToList();
+        var byId = existing.ToDictionary(i => i.Id);
+        var payload = request.Intervals ?? [];
+
+        if (payload.Count != existing.Count)
+            return TaskTableServiceResult<List<WorkIntervalEditDto>>.Fail("Состав интервалов изменён. Обновите окно и повторите.");
+
+        foreach (var row in payload)
+        {
+            if (!byId.ContainsKey(row.Id))
+                return TaskTableServiceResult<List<WorkIntervalEditDto>>.Fail("Некорректный интервал в запросе.");
+            if (row.EndTime.HasValue && row.EndTime.Value <= row.StartTime)
+                return TaskTableServiceResult<List<WorkIntervalEditDto>>.Fail("Время окончания должно быть позже времени начала.");
+        }
+
+        var ordered = payload.OrderBy(i => i.StartTime).ToList();
+        for (var i = 1; i < ordered.Count; i++)
+        {
+            var prevEnd = ordered[i - 1].EndTime;
+            if (prevEnd.HasValue && ordered[i].StartTime < prevEnd.Value)
+                return TaskTableServiceResult<List<WorkIntervalEditDto>>.Fail("Интервалы не должны пересекаться.");
+        }
+
+        if (ordered.Count > 0)
+        {
+            for (var i = 0; i < ordered.Count - 1; i++)
+            {
+                if (!ordered[i].EndTime.HasValue)
+                    return TaskTableServiceResult<List<WorkIntervalEditDto>>.Fail("Открытый интервал может быть только последним.");
+            }
+        }
+
+        foreach (var row in payload)
+        {
+            var interval = byId[row.Id];
+            interval.StartTime = NormalizeIntervalWallClock(row.StartTime);
+            interval.EndTime = row.EndTime.HasValue
+                ? NormalizeIntervalWallClock(row.EndTime.Value)
+                : null;
+            await _repo.UpdateWorkIntervalAsync(interval, cancellationToken);
+        }
+
+        task.UpdatedAt = _timeService.Now;
+        await _repo.UpdateTaskAsync(task, cancellationToken);
+
+        var updated = (await _repo.GetWorkIntervalsForTaskIdsAsync([taskId], cancellationToken))
+            .OrderBy(i => i.StartTime)
+            .Select(WorkIntervalEditDto.FromEntity)
+            .ToList();
+        return TaskTableServiceResult<List<WorkIntervalEditDto>>.Ok(updated);
+    }
+
     /// <summary>
     /// Удаление с сохранением статистики: если у задачи (или у любой её дочерней) есть
     /// история работы — интервалы закрываются, статус становится Completed, и запись
@@ -584,6 +661,12 @@ public class TaskTableService : ITaskTableService
 
     public Task ReorderRowsAsync(List<int> orderedIds, CancellationToken cancellationToken = default) =>
         _repo.ReorderTasksAsync(orderedIds, cancellationToken);
+
+    /// <summary>Московская стенка из API (как AppTimeService), без сдвига UTC.</summary>
+    private static DateTime NormalizeIntervalWallClock(DateTime value) =>
+        value.Kind == DateTimeKind.Utc
+            ? AppDateTime.ToMoscowWallClockFromDb(value)
+            : DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
 
     private static void ApplyRowMetadata(ProductionTask task, UpdateTaskRequest request)
     {

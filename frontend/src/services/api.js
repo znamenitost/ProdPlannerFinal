@@ -221,6 +221,19 @@ export async function getDeadlineRisks(employee, options = {}) {
   return Array.isArray(data) ? data.filter((r) => r.riskLevel !== 'ok') : [];
 }
 
+export async function getQueueOverloads(employee, options = {}) {
+  const res = await fetch(
+    `${API_BASE}/tasks/queue-overloads?employee=${encodeURIComponent(employee)}`,
+    {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      signal: options.signal
+    }
+  );
+  if (!res.ok) throw new Error('Ошибка загрузки перегруза очереди');
+  return res.json();
+}
+
 // Эндпоинты dev-панели (роль Admin). Мок-время и интервалы — на проде тоже.
 async function debugFetch(url, init = {}) {
   const res = await fetch(`${API_BASE}/debug${url}`, {

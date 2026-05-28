@@ -29,7 +29,6 @@ import {
   Button,
   Card,
   CardContent,
-  LinearProgress,
   Stack
 } from '@mui/material';
 import { useUiFeedback } from '../context/UiFeedbackContext';
@@ -49,6 +48,12 @@ import {
 } from '../constants/taskStatuses';
 
 const blockedButtonSx = { opacity: 0.5 };
+
+const PROGRESS_MARKS = [0.3, 0.6, 0.9];
+
+function isProgressMarkActive(progress, mark) {
+  return Math.abs((progress ?? 0) - mark) < 0.02;
+}
 
 export default function ActiveTasksList({ onUpdate, embedded = false, employee = '' }) {
   const { showError, showWarning, confirm } = useUiFeedback();
@@ -126,7 +131,6 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
     <Stack spacing={2}>
       {tasks.map((task) => {
         const risk = getRiskProps(task.riskLevel);
-        const progressValue = Math.round((task.progress || 0) * 100);
         const statusLabel = getTaskStatusLine(task);
         const showInfoStatus = isInfoStatus(statusLabel);
         const blocked = showInfoStatus;
@@ -181,14 +185,7 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
                 </Box>
               </Stack>
 
-              <LinearProgress
-                variant="determinate"
-                value={progressValue}
-                color={task.status === 1 ? 'info' : task.status === 2 ? 'warning' : 'inherit'}
-                sx={{ mb: 1.5, borderRadius: 1 }}
-              />
-
-              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
+              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center', mt: 0.5 }}>
                 {blocked && !isCompleted && (
                   // В инфостатусе сначала нужно «Начал» — workflow подтвердит снятие
                   // инфостатуса и откроет интервал. «Готово» появится из обычной ветки
@@ -250,11 +247,11 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
                 )}
                 {!blocked && !isCompleted && (
                   <>
-                    {[0.3, 0.6, 0.9].map((p) => (
+                    {PROGRESS_MARKS.map((p) => (
                       <Button
                         key={p}
                         size="small"
-                        variant="text"
+                        variant={isProgressMarkActive(task.progress, p) ? 'contained' : 'text'}
                         color="secondary"
                         disabled={isPending}
                         onClick={() => runGuardedAction(task, 'progress', p)}

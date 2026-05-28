@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using ProductionPlanner.Data;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services;
 using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Controllers;
@@ -17,15 +19,24 @@ public class ProductionTasksController : ControllerBase
     private readonly ILogger<ProductionTasksController> _logger;
     private readonly UserManager<User> _userManager;
     private readonly ITaskTableService _tableService;
+    private readonly IProductionTaskRepository _repo;
+    private readonly IPlanningWarningService _planningWarnings;
+    private readonly IAppTimeService _timeService;
 
     public ProductionTasksController(
         ILogger<ProductionTasksController> logger,
         UserManager<User> userManager,
-        ITaskTableService tableService)
+        ITaskTableService tableService,
+        IProductionTaskRepository repo,
+        IPlanningWarningService planningWarnings,
+        IAppTimeService timeService)
     {
         _logger = logger;
         _userManager = userManager;
         _tableService = tableService;
+        _repo = repo;
+        _planningWarnings = planningWarnings;
+        _timeService = timeService;
     }
 
     private async Task<(User? User, string? TargetEmployee)> ResolveViewerAsync(
@@ -118,7 +129,7 @@ public class ProductionTasksController : ControllerBase
             var result = await _tableService.CreateRowAsync(request, cancellationToken);
             if (result.Error != null)
                 return BadRequest(new { error = result.Error });
-            return Ok(result.Data);
+            return Ok(await BuildSaveResponseAsync(result.Data!, request.Parts, cancellationToken));
         }
         catch (Exception ex)
         {
@@ -176,7 +187,11 @@ public class ProductionTasksController : ControllerBase
             var result = await _tableService.UpdateRowAsync(id, request, cancellationToken);
             if (result.NotFound)
                 return NotFound();
-            return Ok(result.Data);
+
+            if (!isAdmin)
+                return Ok(result.Data);
+
+            return Ok(await BuildSaveResponseAsync(result.Data!, parts: null, cancellationToken));
         }
         catch (Exception ex)
         {
@@ -203,6 +218,47 @@ public class ProductionTasksController : ControllerBase
         }
     }
 
+    [HttpGet("table/row/{id}/intervals")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetTableRowIntervals(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await _tableService.GetIntervalsAsync(id, cancellationToken);
+            if (result.NotFound) return NotFound();
+            if (result.Error != null) return BadRequest(new { error = result.Error });
+            return Ok(result.Data);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в GetTableRowIntervals для id {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpPut("table/row/{id}/intervals")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateTableRowIntervals(
+        int id,
+        [FromBody] UpdateWorkIntervalsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await _tableService.UpdateIntervalsAsync(id, request, cancellationToken);
+            if (result.NotFound) return NotFound();
+            if (result.Error != null) return BadRequest(new { error = result.Error });
+            return Ok(result.Data);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в UpdateTableRowIntervals для id {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
     [HttpPost("table/reorder")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> ReorderRows(
@@ -219,5 +275,40 @@ public class ProductionTasksController : ControllerBase
             _logger.LogError(ex, "Ошибка в ReorderRows");
             return StatusCode(500, new { error = ex.Message });
         }
+    }
+
+    private async Task<object> BuildSaveResponseAsync(
+        ProductionTask task,
+        List<SplitPart>? parts,
+        CancellationToken cancellationToken)
+    {
+        HashSet<int> focusIds;
+        List<string> employees;
+
+        if (task.IsSplitTask && task.ParentRowNumber == null)
+        {
+            var children = await _repo.GetChildTasksAsync(task.Id, cancellationToken);
+            focusIds = children.Select(c => c.Id).ToHashSet();
+            employees = children.Select(c => c.EmployeeName).ToList();
+        }
+        else
+        {
+            focusIds = new HashSet<int> { task.Id };
+            employees = new List<string> { task.EmployeeName };
+        }
+
+        if (parts is { Count: > 0 })
+        {
+            foreach (var p in parts.Where(p => !string.IsNullOrWhiteSpace(p.EmployeeName)))
+                employees.Add(p.EmployeeName);
+        }
+
+        var warnings = await _planningWarnings.GetWarningsForEmployeesAsync(
+            employees,
+            _timeService.Now,
+            focusIds,
+            cancellationToken);
+
+        return new { task, planningWarnings = warnings };
     }
 }

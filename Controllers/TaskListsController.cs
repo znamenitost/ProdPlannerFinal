@@ -85,4 +85,20 @@ public class TaskListsController : ControllerBase
         var risks = await _taskLists.GetDeadlineRisksAsync(employee, _timeService.Now, cancellationToken);
         return Ok(risks);
     }
+
+    [HttpGet("queue-overloads")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetQueueOverloads(
+        [FromQuery] string employee,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(employee))
+            return BadRequest(new { error = "Employee name is required" });
+
+        var overloads = await _taskLists.GetQueueOverloadsAsync(
+            employee,
+            _timeService.Now,
+            cancellationToken);
+        return Ok(overloads);
+    }
 }

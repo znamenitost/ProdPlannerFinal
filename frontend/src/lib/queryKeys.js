@@ -19,7 +19,8 @@ export const queryKeys = {
     employeeFilter || ''
   ],
   taskTableAll: () => ['app', 'taskTable'],
-  deadlineRisks: (employee) => ['app', 'deadlineRisks', employee]
+  deadlineRisks: (employee) => ['app', 'deadlineRisks', employee],
+  queueOverloads: (employee) => ['app', 'queueOverloads', employee]
 };
 
 export function weekStartIso(date) {

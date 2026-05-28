@@ -18,7 +18,8 @@ export default function useTaskTableModals({
   selectedEmployeeForHighlight,
   newRow,
   setNewRow,
-  showError
+  showError,
+  applyPlanningWarnings
 }) {
   const [splitModalOpen, setSplitModalOpen] = useState(false);
   const [splitModalMode, setSplitModalMode] = useState('split');
@@ -119,6 +120,7 @@ export default function useTaskTableModals({
 
   const handleSplitSuccess = async (result) => {
     const parentId = splitModalTask?.id;
+    applyPlanningWarnings(result?.planningWarnings);
     try {
       if (parentId && result) {
       const rowPatch = {

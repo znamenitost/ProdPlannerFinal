@@ -9,7 +9,7 @@ import {
   getTimelineRange
 } from '../../utils/calendarDayUtils';
 import { tokens } from '../../theme/paletteTokens';
-import { hoverInteractiveSx } from '../../theme/motion';
+import { calendarBlockLayoutTransitionSx } from '../../theme/motion';
 import TimelineGridLines from './TimelineGridLines';
 
 function LunchBreak({ range }) {
@@ -74,9 +74,10 @@ export default function PlannedBlocks({
         const isFirst = idx === 0;
         const isLast = idx === taskBlocks.length - 1;
         const statusColor = getPlannedBlockColor(block);
+        const blockKey = `planned-${block.taskId ?? idx}`;
         return (
           <Tooltip
-            key={idx}
+            key={blockKey}
             title={formatCalendarTaskTooltip(block, `${block.hours.toFixed(1)} ч`)}
             arrow
             placement="top"
@@ -95,7 +96,7 @@ export default function PlannedBlocks({
                 },
                 opacity: highlighted ? 0.95 : 0.85,
                 cursor: 'pointer',
-                ...hoverInteractiveSx,
+                ...calendarBlockLayoutTransitionSx,
                 borderRight: idx !== taskBlocks.length - 1 ? '1px solid rgba(255,255,255,0.3)' : 'none',
                 borderTopLeftRadius: isFirst ? 2 : 0,
                 borderBottomLeftRadius: isFirst ? 2 : 0,
@@ -111,14 +112,16 @@ export default function PlannedBlocks({
       {isWorkingDay && <LunchBreak range={range} />}
       {taskBlocks?.map((block, idx) => {
         const highlighted = isHighlighted(block);
+        const blockKey = `planned-${block.taskId ?? idx}`;
         return (
           <Box
-            key={`label-${idx}`}
+            key={`label-${blockKey}`}
             sx={{
               position: 'absolute',
               left: `${block.leftPercent + block.widthPercent / 2}%`,
               top: -22,
               transform: 'translateX(-50%)',
+              ...calendarBlockLayoutTransitionSx,
               backgroundColor: (theme) => highlighted ? theme.palette.warning.main : theme.palette.grey[800],
               color: 'white',
               fontSize: '10px',

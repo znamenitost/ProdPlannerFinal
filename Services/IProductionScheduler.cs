@@ -6,6 +6,7 @@ namespace ProductionPlanner.Services
     {
         List<ScheduledSlot> GetSchedule(List<ProductionTask> activeTasks, DateTime now);
         List<DeadlineRisk> CheckDeadlineRisks(List<ProductionTask> activeTasks, DateTime now);
+        List<QueueOverloadAlert> CheckQueueOverloads(List<ProductionTask> activeTasks, DateTime now);
     }
 
     public class ScheduledSlot

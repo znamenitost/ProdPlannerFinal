@@ -19,7 +19,8 @@ export default function useAppDataRefresh(employee) {
 
   const refreshTable = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: queryKeys.taskTableAll() });
-  }, [queryClient]);
+    queryClient.invalidateQueries({ queryKey: queryKeys.deadlineRisks(employee) });
+  }, [queryClient, employee]);
 
   const refreshAll = useCallback(() => {
     refreshCalendar();

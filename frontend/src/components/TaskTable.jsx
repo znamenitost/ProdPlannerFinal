@@ -14,6 +14,8 @@ import EditTaskRow from './EditTaskRow';
 import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
+import TaskIntervalsDialog from './taskTable/TaskIntervalsDialog';
+import PlanningWarningsBanner from './PlanningWarningsBanner';
 import useTaskTableController from '../hooks/taskTable/useTaskTableController';
 import useTaskTableColumnVisibility from '../hooks/taskTable/useTaskTableColumnVisibility';
 import { TextLimitProvider } from '../context/TextLimitContext';
@@ -36,6 +38,12 @@ export default function TaskTable({
   return (
     <TextLimitProvider value={columnSettings.textLimit}>
     <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
+      {isAdmin && (
+        <PlanningWarningsBanner
+          warnings={table.planningWarnings}
+          onDismiss={table.dismissPlanningWarning}
+        />
+      )}
       <TaskTableToolbar
         isAdmin={isAdmin}
         onAddNew={table.handleAddNewRow}
@@ -96,6 +104,7 @@ export default function TaskTable({
                   onEdit={table.handleEditRow}
                   onDelete={table.handleDeleteRow}
                   onOpenComment={table.handleOpenComment}
+                  onOpenIntervals={table.handleOpenIntervals}
                   canEdit={isAdmin}
                   canDelete={isAdmin}
                   canChangeStatus={!isAdmin}
@@ -135,6 +144,14 @@ export default function TaskTable({
         comment={table.selectedCommentTask?.comment || ''}
         onSave={table.handleSaveComment}
         onClose={() => table.setCommentDialogOpen(false)}
+      />
+      <TaskIntervalsDialog
+        open={table.intervalsDialogOpen}
+        taskTitle={table.intervalsTask ? `${table.intervalsTask.folderPath || ''} / ${table.intervalsTask.fileName || ''}` : ''}
+        intervals={table.intervalsRows}
+        pending={table.intervalsPending}
+        onClose={table.handleCloseIntervals}
+        onSave={table.handleSaveIntervals}
       />
 
       <SplitTaskModal

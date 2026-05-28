@@ -4,7 +4,13 @@ namespace ProductionPlanner.Services;
 
 public static class FilePathNormalizer
 {
+    /// <summary>Имя ПК в локальной сети для Windows (UNC / netopen / file://). IP не используем — может меняться.</summary>
+    public const string WindowsServerHostName = "MINIMARKER";
+
     private static readonly Regex DrivePrefixRegex = new(@"^[A-Za-z]:[/\\]?", RegexOptions.Compiled);
+
+    /// <summary>Хост для открытия файлов с Windows — всегда имя ПК в сети, не IP из конфига.</summary>
+    public static string GetWindowsServerHost(string? _ = null) => WindowsServerHostName;
 
     /// <summary>
     /// Возвращает путь относительно SMB-шары «Клиенты»: Ф/Фрэшмемори/файл.cdr

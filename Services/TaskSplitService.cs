@@ -52,6 +52,14 @@ namespace ProductionPlanner.Services
             if (parentTask.IsSplitTask)
                 throw new InvalidOperationException("Задача уже разделена между сотрудниками");
 
+            var parentWithWork = await _context.ProductionTasks
+                .Include(t => t.WorkIntervals)
+                .FirstOrDefaultAsync(t => t.Id == parentTaskId, cancellationToken)
+                ?? parentTask;
+
+            var parentHasWorkHistory = HasWorkHistory(parentWithWork);
+            var workMigratedToChild = false;
+
             var totalAllocated = parts.Sum(p => p.AllocatedHours);
             parentTask.EstimateHours = totalAllocated;
             parentTask.Type = string.Join(", ",
@@ -59,8 +67,21 @@ namespace ProductionPlanner.Services
 
             foreach (var part in parts)
             {
+                var migrateParentWork = parentHasWorkHistory
+                    && !workMigratedToChild
+                    && ShouldMigratePartFromParent(parentWithWork, part, parts);
+
                 var childTask = CreateChildFromPart(parentTask, part);
+                if (migrateParentWork)
+                {
+                    CopyWorkStateFromParent(childTask, parentWithWork);
+                    workMigratedToChild = true;
+                }
+
                 await _repo.AddTaskAsync(childTask, cancellationToken);
+
+                if (migrateParentWork)
+                    await MigrateIntervalsToChildAsync(parentWithWork, childTask.Id, cancellationToken);
 
                 var split = new TaskSplit
                 {
@@ -75,10 +96,15 @@ namespace ProductionPlanner.Services
                 await _notificationService.NotifyNewTaskAsync(childTask);
             }
 
+            if (workMigratedToChild)
+                ClearParentWorkState(parentTask);
+
             parentTask.IsSplitTask = true;
             parentTask.EmployeeName = "";
             parentTask.UpdatedAt = _timeService.Now;
             await _repo.UpdateTaskAsync(parentTask, cancellationToken);
+
+            await RecalculateParentStatusAsync(parentTask.Id, cancellationToken);
 
             return parentTask;
         }
@@ -135,7 +161,9 @@ namespace ProductionPlanner.Services
                 if (child != null)
                 {
                     usedChildIds.Add(child.Id);
+                    var preserved = CaptureWorkState(child);
                     ApplyPartToChild(child, parentTask, part);
+                    RestoreWorkState(child, preserved);
                     await _repo.UpdateTaskAsync(child, cancellationToken);
 
                     var splitRecord = splits.FirstOrDefault(s => s.ChildTaskId == child.Id);
@@ -287,6 +315,69 @@ namespace ProductionPlanner.Services
 
         private static bool CanRemoveChild(ProductionTask child) =>
             child.Status == JobStatus.Assigned && child.ActualHours < 0.01 && child.Progress < 0.01;
+
+        private static bool HasWorkHistory(ProductionTask task) =>
+            (task.WorkIntervals?.Count ?? 0) > 0
+            || task.Status is JobStatus.InProgress or JobStatus.Paused or JobStatus.Completed;
+
+        private static bool ShouldMigratePartFromParent(
+            ProductionTask parent,
+            SplitPart part,
+            List<SplitPart> parts)
+        {
+            if (!string.IsNullOrEmpty(parent.EmployeeName)
+                && string.Equals(part.EmployeeName, parent.EmployeeName, StringComparison.Ordinal))
+                return true;
+
+            return string.IsNullOrEmpty(parent.EmployeeName) && parts.IndexOf(part) == 0;
+        }
+
+        private static void CopyWorkStateFromParent(ProductionTask child, ProductionTask parent)
+        {
+            child.Status = parent.Status;
+            child.Progress = parent.Progress;
+            child.ActualHours = parent.ActualHours;
+            child.CompletedAt = parent.CompletedAt;
+        }
+
+        private static void ClearParentWorkState(ProductionTask parent)
+        {
+            parent.Status = JobStatus.Assigned;
+            parent.Progress = 0;
+            parent.ActualHours = 0;
+            parent.CompletedAt = null;
+        }
+
+        private async Task MigrateIntervalsToChildAsync(
+            ProductionTask parent,
+            int childTaskId,
+            CancellationToken cancellationToken)
+        {
+            foreach (var interval in parent.WorkIntervals.ToList())
+            {
+                interval.ProductionTaskId = childTaskId;
+                await _repo.UpdateWorkIntervalAsync(interval, cancellationToken);
+            }
+
+            parent.WorkIntervals.Clear();
+        }
+
+        private readonly record struct ChildWorkState(
+            JobStatus Status,
+            double Progress,
+            double ActualHours,
+            DateTime? CompletedAt);
+
+        private static ChildWorkState CaptureWorkState(ProductionTask child) =>
+            new(child.Status, child.Progress, child.ActualHours, child.CompletedAt);
+
+        private static void RestoreWorkState(ProductionTask child, ChildWorkState state)
+        {
+            child.Status = state.Status;
+            child.Progress = state.Progress;
+            child.ActualHours = state.ActualHours;
+            child.CompletedAt = state.CompletedAt;
+        }
 
         private async Task<ProductionTask> ConvertToRegularTaskAsync(
             ProductionTask parent,

@@ -61,7 +61,7 @@ namespace ProductionPlanner.Controllers
 
             var shareName = _configuration["FileOpen:ShareName"] ?? "Клиенты";
             var macSmbHost = _configuration["FileOpen:MacSmbHost"] ?? "minimarker";
-            var windowsHost = _configuration["FileOpen:WindowsHost"] ?? "MINIMARKER";
+            var windowsHost = FilePathNormalizer.GetWindowsServerHost(_configuration["FileOpen:WindowsHost"]);
             var netOpenScheme = _configuration["FileOpen:NetOpenScheme"] ?? "netopen";
             var netOpenShareName = _configuration["FileOpen:NetOpenShareName"] ?? shareName;
             var windowsShareName = _configuration["FileOpen:WindowsShareName"] ?? shareName;

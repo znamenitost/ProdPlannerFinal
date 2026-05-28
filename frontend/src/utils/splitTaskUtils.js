@@ -50,6 +50,8 @@ export function taskToModalParts(task, employees, taskTypes) {
   return [{
     employeeName: task.employeeName || employees[0],
     taskTypes: types.length ? types : [taskTypes[0]],
-    hours: task.estimateHours ?? 0
+    hours: task.estimateHours ?? 0,
+    statusText: task.statusText || '',
+    started: isChildStarted(task)
   }];
 }

@@ -46,6 +46,7 @@ export function areParentRowPropsEqual(prev, next) {
     prev.onEdit === next.onEdit &&
     prev.onDelete === next.onDelete &&
     prev.onOpenComment === next.onOpenComment &&
+    prev.onOpenIntervals === next.onOpenIntervals &&
     prev.currentUser === next.currentUser
   );
 }
@@ -70,6 +71,7 @@ export function areChildRowPropsEqual(prev, next) {
     prev.onResume === next.onResume &&
     prev.onComplete === next.onComplete &&
     prev.onOpenComment === next.onOpenComment &&
+    prev.onOpenIntervals === next.onOpenIntervals &&
     prev.currentUser === next.currentUser
   );
 }

@@ -275,7 +275,7 @@ function AppContent() {
             {activeTab === 0 ? (
               <>
                 <WeekCalendar employee={employee} />
-                <DeadlineWarnings employee={employee} />
+                {!isAdmin && <DeadlineWarnings employee={employee} />}
                 <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
                   <ActiveTasksList onUpdate={refreshCalendar} embedded employee={employee} />
                 </SectionCard>

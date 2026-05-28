@@ -73,3 +73,15 @@ public class UpdateTaskRequest
     public int? ParentRowNumber { get; set; }
     public string? StatusText { get; set; }
 }
+
+public class UpdateWorkIntervalsRequest
+{
+    public List<WorkIntervalUpdateItem> Intervals { get; set; } = new();
+}
+
+public class WorkIntervalUpdateItem
+{
+    public int Id { get; set; }
+    public DateTime StartTime { get; set; }
+    public DateTime? EndTime { get; set; }
+}

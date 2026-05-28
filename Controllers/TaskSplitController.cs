@@ -17,17 +17,20 @@ namespace ProductionPlanner.Controllers
         private readonly ITaskSplitService _splitService;
         private readonly IProductionTaskRepository _repo;
         private readonly IAppTimeService _timeService;
+        private readonly IPlanningWarningService _planningWarnings;
         private readonly UserManager<User> _userManager;
 
         public TaskSplitController(
             ITaskSplitService splitService,
             IProductionTaskRepository repo,
             IAppTimeService timeService,
+            IPlanningWarningService planningWarnings,
             UserManager<User> userManager)
         {
             _splitService = splitService;
             _repo = repo;
             _timeService = timeService;
+            _planningWarnings = planningWarnings;
             _userManager = userManager;
         }
 
@@ -43,13 +46,15 @@ namespace ProductionPlanner.Controllers
                     request.ParentTaskId,
                     request.Parts,
                     cancellationToken);
+                var planningWarnings = await GetSplitPlanningWarningsAsync(parent.Id, cancellationToken);
                 return Ok(new
                 {
                     message = "Задача успешно разделена",
                     estimateHours = parent.EstimateHours,
                     isSplitTask = parent.IsSplitTask,
                     employeeName = parent.EmployeeName,
-                    type = parent.Type
+                    type = parent.Type,
+                    planningWarnings
                 });
             }
             catch (Exception ex)
@@ -71,13 +76,15 @@ namespace ProductionPlanner.Controllers
                     parentTaskId,
                     request.Parts,
                     cancellationToken);
+                var planningWarnings = await GetSplitPlanningWarningsAsync(parent.Id, cancellationToken);
                 return Ok(new
                 {
                     message = "Назначения обновлены",
                     estimateHours = parent.EstimateHours,
                     isSplitTask = parent.IsSplitTask,
                     employeeName = parent.EmployeeName,
-                    type = parent.Type
+                    type = parent.Type,
+                    planningWarnings
                 });
             }
             catch (Exception ex)
@@ -140,6 +147,20 @@ namespace ProductionPlanner.Controllers
         {
             var completed = await _splitService.AreAllSubtasksCompletedAsync(parentRowNumber);
             return Ok(new { parentRowNumber, allCompleted = completed });
+        }
+
+        private async Task<IReadOnlyList<PlanningWarningDto>> GetSplitPlanningWarningsAsync(
+            int parentId,
+            CancellationToken cancellationToken)
+        {
+            var children = await _repo.GetChildTasksAsync(parentId, cancellationToken);
+            var focusIds = children.Select(c => c.Id).ToHashSet();
+            var employees = children.Select(c => c.EmployeeName);
+            return await _planningWarnings.GetWarningsForEmployeesAsync(
+                employees,
+                _timeService.Now,
+                focusIds,
+                cancellationToken);
         }
 
     }

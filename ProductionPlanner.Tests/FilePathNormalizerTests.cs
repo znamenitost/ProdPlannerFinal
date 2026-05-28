@@ -47,18 +47,27 @@ public class FilePathNormalizerTests
     }
 
     [Fact]
+    public void GetWindowsServerHost_AlwaysUsesNetworkPcName()
+    {
+        Assert.Equal("MINIMARKER", FilePathNormalizer.GetWindowsServerHost("192.168.1.119"));
+        Assert.Equal("MINIMARKER", FilePathNormalizer.GetWindowsServerHost(null));
+    }
+
+    [Fact]
     public void BuildWindowsFileUrl_encodes_path_for_file_protocol()
     {
-        var url = FilePathNormalizer.BuildWindowsFileUrl("192.168.1.119", Share, "С/Спортмебель/15,05,26 спортт.cdr");
-        Assert.StartsWith("file://192.168.1.119/", url);
+        var host = FilePathNormalizer.GetWindowsServerHost("192.168.1.119");
+        var url = FilePathNormalizer.BuildWindowsFileUrl(host, Share, "С/Спортмебель/15,05,26 спортт.cdr");
+        Assert.StartsWith("file://MINIMARKER/", url);
         Assert.Contains("15%2C05%2C26", url);
     }
 
     [Fact]
     public void BuildWindowsUncPath_matches_server_layout()
     {
-        var unc = FilePathNormalizer.BuildWindowsUncPath("192.168.1.119", Share, "С/Спортмебель/15,05,26 спортт.cdr");
-        Assert.Equal(@"\\192.168.1.119\Клиенты\С\Спортмебель\15,05,26 спортт.cdr", unc);
+        var host = FilePathNormalizer.GetWindowsServerHost("192.168.1.119");
+        var unc = FilePathNormalizer.BuildWindowsUncPath(host, Share, "С/Спортмебель/15,05,26 спортт.cdr");
+        Assert.Equal(@"\\MINIMARKER\Клиенты\С\Спортмебель\15,05,26 спортт.cdr", unc);
     }
 
     [Fact]

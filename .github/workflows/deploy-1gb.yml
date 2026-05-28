@@ -2,7 +2,7 @@ name: Deploy to 1gb.ru
 
 on:
   push:
-    branches: [codexOPT, codexOpt3, codexOpt4, codexOpt5, codexOPT7, codexOPT8]
+    branches: [codexOPT, codexOpt3, codexOpt4, codexOpt5, codexOPT7, codexOPT8, codexOPT12]
   workflow_dispatch:
 
 jobs:

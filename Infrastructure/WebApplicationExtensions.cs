@@ -16,6 +16,7 @@ public static class WebApplicationExtensions
     {
         services.AddScoped<IWorkHoursCalculator, WorkHoursCalculator>();
         services.AddScoped<IProductionScheduler, ProductionScheduler>();
+        services.AddScoped<IPlanningWarningService, PlanningWarningService>();
         services.AddScoped<ITaskLifecycleService, TaskLifecycleService>();
         services.AddScoped<IEmployeeStatsService, EmployeeStatsService>();
         services.AddScoped<IProductionTaskRepository, ProductionTaskRepository>();

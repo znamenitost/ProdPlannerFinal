@@ -17,7 +17,8 @@ import {
   CheckCircle,
   FactCheck,
   Inventory2,
-  TaskAlt
+  TaskAlt,
+  AccessTime
 } from '@mui/icons-material';
 import { softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
@@ -45,6 +46,7 @@ export default function TaskAdminActionStacks({
   pending = false,
   onEdit,
   onDelete,
+  onIntervals,
   onStart,
   onPause,
   onResume,
@@ -147,6 +149,18 @@ export default function TaskAdminActionStacks({
             <Delete fontSize="small" color="error" />
           </ListItemIcon>
           <ListItemText>Удалить</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={(e) => {
+            e.stopPropagation();
+            handleClose();
+            onIntervals?.();
+          }}
+        >
+          <ListItemIcon>
+            <AccessTime fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Интервалы</ListItemText>
         </MenuItem>
 
         {showWorkflowBlock && (

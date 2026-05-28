@@ -1,7 +1,7 @@
 import { Box, Tooltip } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { tokens } from '../../theme/paletteTokens';
-import { hoverInteractiveSx } from '../../theme/motion';
+import { calendarBlockLayoutTransitionSx } from '../../theme/motion';
 import { Restaurant } from '@mui/icons-material';
 import {
   CALENDAR_TOOLTIP_SX,
@@ -97,10 +97,11 @@ export default function TimelineSegments({
         const layerHeight = trackHeight / maxDepth;
         const topPos = layer * layerHeight;
         const segmentHeight = layerHeight - 1;
+        const segmentKey = `work-${segment.taskId ?? idx}-${new Date(segment.start).getTime()}`;
 
         return (
           <Tooltip
-            key={`work-${idx}`}
+            key={segmentKey}
             title={formatCalendarTaskTooltip(
               segment,
               `⏱ ${formatCalendarTime(segment.start)} - ${formatCalendarTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`
@@ -119,10 +120,9 @@ export default function TimelineSegments({
                 backgroundColor: getWorkColor(segment.taskId, segment.completed),
                 opacity: 0.85,
                 cursor: 'pointer',
-                ...hoverInteractiveSx,
+                ...calendarBlockLayoutTransitionSx,
                 borderRadius: '2px',
-                zIndex: 2,
-                '&:hover': { opacity: 1, filter: 'brightness(0.95)' }
+                zIndex: 2
               }}
             />
           </Tooltip>
@@ -132,9 +132,10 @@ export default function TimelineSegments({
       {idleSegments.map((segment, idx) => {
         const idleTop = trackHeight - 4;
         const idleHeight = 4;
+        const segmentKey = `idle-${new Date(segment.start).getTime()}-${new Date(segment.end).getTime()}`;
         return (
           <Tooltip
-            key={`idle-${idx}`}
+            key={segmentKey}
             title={`Простой\n⏱ ${formatCalendarTime(segment.start)} - ${formatCalendarTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`}
             arrow
             placement="top"
@@ -150,9 +151,8 @@ export default function TimelineSegments({
                 backgroundColor: (theme) => alpha(theme.palette.secondary.light, 0.85),
                 opacity: 0.7,
                 cursor: 'pointer',
-                ...hoverInteractiveSx,
-                zIndex: 2,
-                '&:hover': { opacity: 0.9 }
+                ...calendarBlockLayoutTransitionSx,
+                zIndex: 2
               }}
             />
           </Tooltip>

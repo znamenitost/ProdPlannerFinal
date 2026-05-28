@@ -56,6 +56,29 @@ export const hoverInteractiveSx = {
   }
 };
 
+/** Плановые и фактические полосы календаря — плавный сдвиг при обновлении расписания. */
+export const calendarBlockLayoutTransitionSx = {
+  transition: (theme) =>
+    createMuiTransition(
+      theme,
+      ['left', 'width', 'top', 'height', 'opacity', 'filter', 'box-shadow', 'background-color'],
+      {
+        duration: theme.transitions.duration.standard,
+        easing: theme.transitions.easing.easeInOut
+      }
+    ),
+  '@media (prefers-reduced-motion: reduce)': {
+    transition: (theme) =>
+      createMuiTransition(theme, ['opacity', 'filter', 'box-shadow', 'background-color'], {
+        duration: theme.transitions.duration.shorter
+      })
+  },
+  '&:hover': {
+    opacity: 1,
+    filter: 'brightness(0.95)'
+  }
+};
+
 export const positionLeftTransitionSx = {
   transition: (theme) =>
     createMuiTransition(theme, 'left', {

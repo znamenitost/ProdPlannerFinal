@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { combineDateTime, DEFAULT_TIME } from '../../utils/dateTimeHelpers';
 import { buildTaskUpdatePayload } from '../../services/api';
 import { runWorkflowWithInfoGuard } from '../../utils/infoStatusWorkflow';
+import { unwrapTaskSaveResponse } from '../../utils/showPlanningWarnings';
 
 export default function useTaskTableActions({
   api,
@@ -20,7 +21,8 @@ export default function useTaskTableActions({
   onCalendarRefresh,
   showError,
   showWarning,
-  confirm
+  confirm,
+  applyPlanningWarnings
 }) {
   const [pendingLifecycleTaskId, setPendingLifecycleTaskId] = useState(null);
 
@@ -87,7 +89,9 @@ export default function useTaskTableActions({
     }
 
     try {
-      const created = await api.createRow(payload);
+      const raw = await api.createRow(payload);
+      const { task: created, planningWarnings } = unwrapTaskSaveResponse(raw);
+      applyPlanningWarnings(planningWarnings);
       setNewRow(null);
       await refresh();
       if (newRow.isSharedTask && created?.id) {
@@ -106,12 +110,13 @@ export default function useTaskTableActions({
     expandParent,
     loadChildrenForParent,
     showError,
-    showWarning
+    showWarning,
+    applyPlanningWarnings
   ]);
 
   const handleUpdateRow = useCallback(async (row) => {
     try {
-      await api.updateRow(row.id, {
+      const raw = await api.updateRow(row.id, {
         folderPath: row.folderPath,
         fileName: row.fileName,
         comment: row.comment,
@@ -122,13 +127,15 @@ export default function useTaskTableActions({
         parentRowNumber: row.parentRowNumber,
         statusText: row.statusText
       });
+      const { planningWarnings } = unwrapTaskSaveResponse(raw);
+      applyPlanningWarnings(planningWarnings);
       setEditingId(null);
       await syncRowFromServer(row);
     } catch (err) {
       console.error('Ошибка обновления:', err);
       showError('Ошибка обновления задачи');
     }
-  }, [api, syncRowFromServer, setEditingId, showError]);
+  }, [api, syncRowFromServer, setEditingId, showError, applyPlanningWarnings]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
     if (pendingLifecycleTaskId === row.id) return;

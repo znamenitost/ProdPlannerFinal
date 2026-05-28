@@ -9,11 +9,15 @@ function buildLaunchUrl(relativePath) {
 }
 
 /**
- * Windows: открываем лаунчер-страницу с netopen:// в новой вкладке.
- * Новая вкладка открыта из user gesture (клика), поэтому location.replace(netopen://) разрешён.
+ * Windows: netopen через скрытый iframe (без лишней вкладки с текстом «нажмите сюда»).
  */
 function triggerLaunchOnWindows(launchUrl) {
-  window.open(launchUrl, '_blank', 'noopener,noreferrer');
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'display:none;width:0;height:0;border:0';
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.src = launchUrl;
+  document.body.appendChild(iframe);
+  window.setTimeout(() => iframe.remove(), 10_000);
   return true;
 }
 

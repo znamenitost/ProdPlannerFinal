@@ -97,6 +97,20 @@ export default function useTaskTableApi() {
     return await handleResponse(response);
   }, [handleResponse]);
 
+  const getIntervals = useCallback(async (taskId) => {
+    const response = await fetch(`/api/tasks/table/row/${taskId}/intervals`);
+    return await handleResponse(response);
+  }, [handleResponse]);
+
+  const updateIntervals = useCallback(async (taskId, intervals) => {
+    const response = await fetch(`/api/tasks/table/row/${taskId}/intervals`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ intervals })
+    });
+    return await handleResponse(response);
+  }, [handleResponse]);
+
   const deleteRow = useCallback(async (id) => {
     const response = await fetch(`/api/tasks/table/row/${id}`, { method: 'DELETE' });
     if (!response.ok) throw new Error('Ошибка удаления');
@@ -156,6 +170,8 @@ export default function useTaskTableApi() {
     loadChildren,
     createRow,
     updateRow,
+    getIntervals,
+    updateIntervals,
     deleteRow,
     startTask,
     pauseTask,
@@ -164,7 +180,7 @@ export default function useTaskTableApi() {
     openFile,
     getTaskForSplit,
     splitTask
-  }), [fetchTableRow, loadRows, loadChildren, createRow, updateRow, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, getTaskForSplit, splitTask]);
+  }), [fetchTableRow, loadRows, loadChildren, createRow, updateRow, getIntervals, updateIntervals, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, getTaskForSplit, splitTask]);
 
   return api;
 }

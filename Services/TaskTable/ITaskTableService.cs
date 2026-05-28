@@ -21,6 +21,13 @@ public interface ITaskTableService
         int id,
         UpdateTaskRequest request,
         CancellationToken cancellationToken = default);
+    Task<TaskTableServiceResult<List<WorkIntervalEditDto>>> GetIntervalsAsync(
+        int taskId,
+        CancellationToken cancellationToken = default);
+    Task<TaskTableServiceResult<List<WorkIntervalEditDto>>> UpdateIntervalsAsync(
+        int taskId,
+        UpdateWorkIntervalsRequest request,
+        CancellationToken cancellationToken = default);
     Task<TaskTableServiceResult<bool>> DeleteRowAsync(int id, CancellationToken cancellationToken = default);
     Task ReorderRowsAsync(List<int> orderedIds, CancellationToken cancellationToken = default);
 }

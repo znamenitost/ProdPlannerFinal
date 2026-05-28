@@ -1,8 +1,5 @@
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace ProductionPlanner.Services
 {
@@ -53,63 +50,104 @@ namespace ProductionPlanner.Services
         public List<DeadlineRisk> CheckDeadlineRisks(List<ProductionTask> activeTasks, DateTime now)
         {
             var risks = new List<DeadlineRisk>();
-            var slots = GetSchedule(activeTasks, now);
-            var firstSlotByTaskId = slots
-                .GroupBy(s => s.Task.Id)
-                .ToDictionary(g => g.Key, g => g.First());
 
             foreach (var task in activeTasks.Where(t => t.Status != JobStatus.Completed && t.Progress < 0.99))
             {
-                var deadline = task.Deadline;
-                if (!firstSlotByTaskId.TryGetValue(task.Id, out var slot))
+                var (riskLevel, hoursNeeded, workHoursUntilDeadline) =
+                    DeadlineRiskEvaluator.Evaluate(task, now, _workHours);
+
+                if (!DeadlineRiskEvaluator.ShouldShowInBanner(riskLevel, task.Deadline, now))
                     continue;
-                
-                var hoursNeeded = task.EstimateHours * (1 - task.Progress);
-                var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(deadline);
-                var workHoursUntilDeadline = _workHours.GetWorkHoursBetween(slot.PlannedStart, deadlineMoscow);
 
-                string riskLevel = "ok";
-                string message = "";
+                var message = BuildRiskMessage(
+                    riskLevel,
+                    task.Deadline,
+                    hoursNeeded,
+                    workHoursUntilDeadline);
 
-                if (AppDateTime.CompareDeadlineToAppNow(deadline, now) < 0)
+                risks.Add(new DeadlineRisk
                 {
-                    riskLevel = "overdue";
-                    message = $"Дедлайн сорван! Задача должна была быть выполнена {deadline:dd.MM HH:mm}";
-                }
-                else if (workHoursUntilDeadline < hoursNeeded)
-                {
-                    riskLevel = "critical";
-                    var deficit = hoursNeeded - workHoursUntilDeadline;
-                    var deficitHours = Math.Floor(deficit);
-                    var deficitMinutes = (deficit % 1) * 60;
-                    var deficitText = deficitHours > 0 
-                        ? $"{deficitHours} ч {deficitMinutes:F0} мин" 
-                        : $"{deficitMinutes:F0} мин";
-                    message = $"Критично! Не хватает {deficitText} рабочих часов до дедлайна. Требуется {hoursNeeded:F1} ч, осталось {workHoursUntilDeadline:F1} ч.";
-                }
-                else if (workHoursUntilDeadline < hoursNeeded + 2)
-                {
-                    riskLevel = "warning";
-                    message = $"Внимание! До дедлайна осталось {workHoursUntilDeadline:F1} рабочих ч, требуется {hoursNeeded:F1} ч. Нужно торопиться!";
-                }
-                
-                if (riskLevel != "ok")
-                {
-                    risks.Add(new DeadlineRisk
-                    {
-                        TaskId = task.Id,
-                        TaskTitle = task.TaskDisplayName,
-                        FileName = task.FileName,
-                        Deadline = deadline,
-                        RequiredHours = hoursNeeded,
-                        AvailableHoursBeforeDeadline = workHoursUntilDeadline,
-                        RiskLevel = riskLevel,
-                        Message = message
-                    });
-                }
+                    TaskId = task.Id,
+                    TaskTitle = task.TaskDisplayName,
+                    FileName = task.FileName,
+                    Deadline = task.Deadline,
+                    RequiredHours = hoursNeeded,
+                    AvailableHoursBeforeDeadline = workHoursUntilDeadline,
+                    RiskLevel = riskLevel,
+                    Message = message
+                });
             }
-            
+
             return risks;
+        }
+
+        public List<QueueOverloadAlert> CheckQueueOverloads(List<ProductionTask> activeTasks, DateTime now)
+        {
+            var slots = GetSchedule(activeTasks, now);
+            var lastEndByTask = slots
+                .GroupBy(s => s.Task.Id)
+                .ToDictionary(g => g.Key, g => g.Max(s => s.PlannedEnd));
+
+            var alerts = new List<QueueOverloadAlert>();
+
+            foreach (var task in activeTasks.Where(t => t.Status != JobStatus.Completed && t.Progress < 0.99))
+            {
+                if (AppDateTime.CompareDeadlineToAppNow(task.Deadline, now) < 0)
+                    continue;
+
+                if (!lastEndByTask.TryGetValue(task.Id, out var plannedEnd))
+                    continue;
+
+                var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(task.Deadline);
+                if (plannedEnd <= deadlineMoscow)
+                    continue;
+
+                alerts.Add(new QueueOverloadAlert
+                {
+                    TaskId = task.Id,
+                    TaskTitle = task.TaskDisplayName,
+                    FileName = task.FileName,
+                    EmployeeName = task.EmployeeName,
+                    Deadline = task.Deadline,
+                    PlannedEnd = plannedEnd,
+                    Message =
+                        $"В очереди план заканчивается {plannedEnd:dd.MM HH:mm} — позже дедлайна {deadlineMoscow:dd.MM HH:mm}. " +
+                        "Пересмотрите нагрузку или сдвиньте дедлайн."
+                });
+            }
+
+            return alerts;
+        }
+
+        private static string BuildRiskMessage(
+            string riskLevel,
+            DateTime deadline,
+            double hoursNeeded,
+            double workHoursUntilDeadline)
+        {
+            return riskLevel switch
+            {
+                "overdue" =>
+                    $"Дедлайн сорван! Задача должна была быть выполнена {deadline:dd.MM HH:mm}",
+                "critical" =>
+                    BuildCriticalMessage(hoursNeeded, workHoursUntilDeadline),
+                "warning" =>
+                    $"Внимание! До дедлайна осталось {workHoursUntilDeadline:F1} рабочих ч, требуется {hoursNeeded:F1} ч. Нужно торопиться!",
+                _ => ""
+            };
+        }
+
+        private static string BuildCriticalMessage(double hoursNeeded, double workHoursUntilDeadline)
+        {
+            var deficit = hoursNeeded - workHoursUntilDeadline;
+            var deficitHours = Math.Floor(deficit);
+            var deficitMinutes = (deficit % 1) * 60;
+            var deficitText = deficitHours > 0
+                ? $"{deficitHours} ч {deficitMinutes:F0} мин"
+                : $"{deficitMinutes:F0} мин";
+            return
+                $"Критично! Не хватает {deficitText} рабочих часов до дедлайна. " +
+                $"Требуется {hoursNeeded:F1} ч, осталось {workHoursUntilDeadline:F1} ч.";
         }
     }
 }

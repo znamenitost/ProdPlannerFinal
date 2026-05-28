@@ -39,6 +39,7 @@ function ChildTaskRow({
   onEdit,
   onDelete,
   onOpenComment,
+  onOpenIntervals,
   isAdmin = false,
   canChangeStatus,
   currentUser,
@@ -159,6 +160,7 @@ function ChildTaskRow({
               pending={pendingLifecycleTaskId === task.id}
               onEdit={() => onEdit(task.id)}
               onDelete={() => onDelete(task.id)}
+              onIntervals={() => onOpenIntervals(task)}
               onStart={onStart}
               onPause={onPause}
               onResume={onResume}
