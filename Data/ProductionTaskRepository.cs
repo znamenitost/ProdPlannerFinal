@@ -27,6 +27,7 @@ namespace ProductionPlanner.Data
                 .AsNoTracking()
                 .Include(t => t.WorkIntervals)
                 .Where(t => t.EmployeeName == employeeName
+                            && !t.HiddenFromTaskTable
                             && t.Status != JobStatus.Completed
                             && !(t.IsSplitTask && t.ParentRowNumber == null))
                 .ToListAsync(cancellationToken);
@@ -396,8 +397,9 @@ namespace ProductionPlanner.Data
         {
             var query = _context.ProductionTasks
                 .AsNoTracking()
-                .Where(t => t.ParentRowNumber == null && t.Status != JobStatus.Completed)
-                .OrderByDescending(t => t.DisplayOrder)
+                .Where(t => t.ParentRowNumber == null && !t.HiddenFromTaskTable)
+                .OrderBy(t => t.Status == JobStatus.Completed)
+                .ThenByDescending(t => t.DisplayOrder)
                 .ThenByDescending(t => t.Id);
 
             var totalCount = await query.CountAsync(cancellationToken);
@@ -413,6 +415,18 @@ namespace ProductionPlanner.Data
                 Page = page,
                 PageSize = pageSize
             };
+        }
+
+        public async Task HideTaskFromTableAsync(
+            int taskId,
+            CancellationToken cancellationToken = default)
+        {
+            await _context.ProductionTasks
+                .Where(t => t.Id == taskId)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.HiddenFromTaskTable, true)
+                        .SetProperty(t => t.UpdatedAt, ToDbDateTime(_timeService.Now)),
+                    cancellationToken);
         }
 
         public async Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(

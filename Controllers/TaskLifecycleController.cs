@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
+using ProductionPlanner.Models.Dtos;
 using ProductionPlanner.Services;
+using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Controllers;
 
@@ -13,57 +16,75 @@ public class TaskLifecycleController : ControllerBase
 {
     private readonly IProductionTaskRepository _repo;
     private readonly ITaskLifecycleService _lifecycle;
+    private readonly ITaskTableService _tableService;
     private readonly IAppTimeService _timeService;
+    private readonly UserManager<User> _userManager;
     private readonly ILogger<TaskLifecycleController> _logger;
 
     public TaskLifecycleController(
         IProductionTaskRepository repo,
         ITaskLifecycleService lifecycle,
+        ITaskTableService tableService,
         IAppTimeService timeService,
+        UserManager<User> userManager,
         ILogger<TaskLifecycleController> logger)
     {
         _repo = repo;
         _lifecycle = lifecycle;
+        _tableService = tableService;
         _timeService = timeService;
+        _userManager = userManager;
         _logger = logger;
     }
 
     [HttpPost("{id}/start")]
-    public async Task<IActionResult> Start(int id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Start(
+        int id,
+        [FromQuery] string? employee = null,
+        CancellationToken cancellationToken = default)
     {
         return await RunLifecycle(id, "Start", async () =>
         {
-            if (await _repo.GetTaskByIdAsync(id, cancellationToken) == null)
+            var task = await _repo.GetTaskByIdAsync(id, cancellationToken);
+            if (task == null)
                 return NotFound(new { error = $"Задача с id {id} не найдена" });
 
             await _lifecycle.StartTaskAsync(id, _timeService.Now, cancellationToken);
-            return Ok(new { message = "Задача запущена" });
+            return await BuildLifecycleResultAsync("Задача запущена", id, task.ParentRowNumber, employee, cancellationToken);
         });
     }
 
     [HttpPost("{id}/pause")]
-    public async Task<IActionResult> Pause(int id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Pause(
+        int id,
+        [FromQuery] string? employee = null,
+        CancellationToken cancellationToken = default)
     {
         return await RunLifecycle(id, "Pause", async () =>
         {
-            if (await _repo.GetTaskByIdAsync(id, cancellationToken) == null)
+            var task = await _repo.GetTaskByIdAsync(id, cancellationToken);
+            if (task == null)
                 return NotFound(new { error = $"Задача с id {id} не найдена" });
 
             await _lifecycle.PauseTaskAsync(id, _timeService.Now, cancellationToken);
-            return Ok(new { message = "Задача приостановлена" });
+            return await BuildLifecycleResultAsync("Задача приостановлена", id, task.ParentRowNumber, employee, cancellationToken);
         });
     }
 
     [HttpPost("{id}/resume")]
-    public async Task<IActionResult> Resume(int id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Resume(
+        int id,
+        [FromQuery] string? employee = null,
+        CancellationToken cancellationToken = default)
     {
         return await RunLifecycle(id, "Resume", async () =>
         {
-            if (await _repo.GetTaskByIdAsync(id, cancellationToken) == null)
+            var task = await _repo.GetTaskByIdAsync(id, cancellationToken);
+            if (task == null)
                 return NotFound(new { error = $"Задача с id {id} не найдена" });
 
             await _lifecycle.ResumeTaskAsync(id, _timeService.Now, cancellationToken);
-            return Ok(new { message = "Задача возобновлена" });
+            return await BuildLifecycleResultAsync("Задача возобновлена", id, task.ParentRowNumber, employee, cancellationToken);
         });
     }
 
@@ -81,15 +102,19 @@ public class TaskLifecycleController : ControllerBase
     }
 
     [HttpPost("{id}/complete")]
-    public async Task<IActionResult> Complete(int id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Complete(
+        int id,
+        [FromQuery] string? employee = null,
+        CancellationToken cancellationToken = default)
     {
         return await RunLifecycle(id, "Complete", async () =>
         {
-            if (await _repo.GetTaskByIdAsync(id, cancellationToken) == null)
+            var task = await _repo.GetTaskByIdAsync(id, cancellationToken);
+            if (task == null)
                 return NotFound(new { error = $"Задача с id {id} не найдена" });
 
             await _lifecycle.CompleteTaskAsync(id, _timeService.Now, cancellationToken);
-            return Ok(new { message = "Задача завершена" });
+            return await BuildLifecycleResultAsync("Задача завершена", id, task.ParentRowNumber, employee, cancellationToken);
         });
     }
 
@@ -119,5 +144,36 @@ public class TaskLifecycleController : ControllerBase
             _logger.LogError(ex, "Ошибка в {Action} для задачи {Id}", action, id);
             return StatusCode(500, new { error = ex.Message });
         }
+    }
+
+    private async Task<IActionResult> BuildLifecycleResultAsync(
+        string message,
+        int taskId,
+        int? parentRowId,
+        string? employee,
+        CancellationToken cancellationToken)
+    {
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser == null) return Unauthorized();
+
+        var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+        var targetEmployeeName = (isAdmin && !string.IsNullOrEmpty(employee))
+            ? employee
+            : currentUser.FullName;
+        var row = await _tableService.GetRowDtoAsync(taskId, targetEmployeeName, cancellationToken);
+        TaskTableRowDto? parentRow = null;
+
+        if (parentRowId.HasValue)
+            parentRow = await _tableService.GetRowDtoAsync(parentRowId.Value, targetEmployeeName, cancellationToken);
+
+        return Ok(new TaskLifecycleResultDto
+        {
+            Message = message,
+            Row = row,
+            RemovedFromTable = row == null,
+            ParentRowId = parentRowId,
+            ParentRow = parentRow,
+            ParentRemovedFromTable = parentRowId.HasValue && parentRow == null
+        });
     }
 }

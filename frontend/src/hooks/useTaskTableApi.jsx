@@ -122,25 +122,33 @@ export default function useTaskTableApi() {
     if (!response.ok) throw new Error('Ошибка удаления');
   }, []);
 
-  const startTask = useCallback(async (rowId) => {
-    const response = await fetch(`/api/tasks/${rowId}/start`, { method: 'POST' });
-    return await handleResponse(response);
-  }, [handleResponse]);
+  const lifecycleUrl = useCallback((rowId, action, selectedEmployee = '') => {
+    let url = `/api/tasks/${rowId}/${action}`;
+    if (selectedEmployee) {
+      url += `?employee=${encodeURIComponent(selectedEmployee)}`;
+    }
+    return url;
+  }, []);
 
-  const pauseTask = useCallback(async (rowId) => {
-    const response = await fetch(`/api/tasks/${rowId}/pause`, { method: 'POST' });
+  const startTask = useCallback(async (rowId, selectedEmployee = '') => {
+    const response = await fetch(lifecycleUrl(rowId, 'start', selectedEmployee), { method: 'POST' });
     return await handleResponse(response);
-  }, [handleResponse]);
+  }, [handleResponse, lifecycleUrl]);
 
-  const resumeTask = useCallback(async (rowId) => {
-    const response = await fetch(`/api/tasks/${rowId}/resume`, { method: 'POST' });
+  const pauseTask = useCallback(async (rowId, selectedEmployee = '') => {
+    const response = await fetch(lifecycleUrl(rowId, 'pause', selectedEmployee), { method: 'POST' });
     return await handleResponse(response);
-  }, [handleResponse]);
+  }, [handleResponse, lifecycleUrl]);
 
-  const completeTask = useCallback(async (rowId) => {
-    const response = await fetch(`/api/tasks/${rowId}/complete`, { method: 'POST' });
+  const resumeTask = useCallback(async (rowId, selectedEmployee = '') => {
+    const response = await fetch(lifecycleUrl(rowId, 'resume', selectedEmployee), { method: 'POST' });
     return await handleResponse(response);
-  }, [handleResponse]);
+  }, [handleResponse, lifecycleUrl]);
+
+  const completeTask = useCallback(async (rowId, selectedEmployee = '') => {
+    const response = await fetch(lifecycleUrl(rowId, 'complete', selectedEmployee), { method: 'POST' });
+    return await handleResponse(response);
+  }, [handleResponse, lifecycleUrl]);
 
   const openFile = useCallback(async (row) => {
     const relativePath = normalizePathForOpen(row.folderPath, row.fileName);

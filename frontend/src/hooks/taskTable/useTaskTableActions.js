@@ -32,21 +32,35 @@ export default function useTaskTableActions({
 }) {
   const [pendingLifecycleTaskId, setPendingLifecycleTaskId] = useState(null);
 
+  const isNotFound = useCallback((err) => (
+    err?.status === 404 || String(err?.message || '').includes('"status":404')
+  ), []);
+
   const syncRowFromServer = useCallback(async (row) => {
     const employee = selectedEmployeeForHighlight || '';
     const parentId = row.parentRowNumber;
 
-    if (parentId) {
-      invalidateChildCache(parentId);
-      const updatedChild = await api.fetchTableRow(row.id, employee);
-      patchChildInCache(row.id, updatedChild);
-      const children = await api.loadChildren(parentId);
-      setChildrenForParent(parentId, children);
-      const parentDto = await api.fetchTableRow(parentId, employee);
-      patchRow(parentId, parentDto);
-    } else {
-      const updated = await api.fetchTableRow(row.id, employee);
-      patchRow(row.id, updated);
+    try {
+      if (parentId) {
+        invalidateChildCache(parentId);
+        const updatedChild = await api.fetchTableRow(row.id, employee);
+        patchChildInCache(row.id, updatedChild);
+        const children = await api.loadChildren(parentId);
+        setChildrenForParent(parentId, children);
+        const parentDto = await api.fetchTableRow(parentId, employee);
+        patchRow(parentId, parentDto);
+      } else {
+        const updated = await api.fetchTableRow(row.id, employee);
+        patchRow(row.id, updated);
+      }
+    } catch (err) {
+      if (!isNotFound(err)) throw err;
+
+      if (parentId) {
+        removeRow(parentId);
+      } else {
+        removeRow(row.id);
+      }
     }
 
     onCalendarRefresh?.();
@@ -57,6 +71,48 @@ export default function useTaskTableActions({
     setChildrenForParent,
     patchChildInCache,
     patchRow,
+    removeRow,
+    isNotFound,
+    onCalendarRefresh
+  ]);
+
+  const applyLifecycleResult = useCallback(async (row, result) => {
+    if (!result || typeof result !== 'object' || !('removedFromTable' in result)) {
+      await syncRowFromServer(row);
+      return;
+    }
+
+    const parentId = result.parentRowId ?? row.parentRowNumber;
+
+    if (parentId) {
+      invalidateChildCache(parentId);
+      const children = await api.loadChildren(parentId);
+      setChildrenForParent(parentId, children);
+
+      if (result.row) {
+        patchChildInCache(result.row.id, result.row);
+      }
+
+      if (result.parentRemovedFromTable) {
+        removeRow(parentId);
+      } else if (result.parentRow) {
+        patchRow(parentId, result.parentRow);
+      }
+    } else if (result.removedFromTable) {
+      removeRow(row.id);
+    } else if (result.row) {
+      patchRow(row.id, result.row);
+    }
+
+    onCalendarRefresh?.();
+  }, [
+    api,
+    syncRowFromServer,
+    invalidateChildCache,
+    setChildrenForParent,
+    patchChildInCache,
+    patchRow,
+    removeRow,
     onCalendarRefresh
   ]);
 
@@ -168,8 +224,8 @@ export default function useTaskTableActions({
           await syncRowFromServer(task);
         },
         runAction: async () => {
-          await action(row.id);
-          await syncRowFromServer(row);
+          const result = await action(row.id, selectedEmployeeForHighlight || row.employeeName);
+          await applyLifecycleResult(row, result);
         }
       });
     } catch (err) {
@@ -184,6 +240,7 @@ export default function useTaskTableActions({
   }, [
     pendingLifecycleTaskId,
     syncRowFromServer,
+    applyLifecycleResult,
     showError,
     confirm,
     api,

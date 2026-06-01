@@ -103,7 +103,7 @@ public class TaskTableService : ITaskTableService
         if (task == null)
             return null;
 
-        if (task.ParentRowNumber == null && task.Status == JobStatus.Completed)
+        if (task.HiddenFromTaskTable)
             return null;
 
         var now = _timeService.Now;
@@ -606,6 +606,7 @@ public class TaskTableService : ITaskTableService
     {
         var now = _timeService.Now;
         await _repo.CloseOpenIntervalsAsync(task.Id, now, cancellationToken);
+        await _repo.HideTaskFromTableAsync(task.Id, cancellationToken);
 
         if (task.Status == JobStatus.Completed)
             return;

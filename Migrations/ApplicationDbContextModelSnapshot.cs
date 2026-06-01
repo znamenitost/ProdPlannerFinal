@@ -226,6 +226,9 @@ namespace ProductionPlanner.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("HiddenFromTaskTable")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsSplitTask")
                         .HasColumnType("boolean");
 

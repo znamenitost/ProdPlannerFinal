@@ -45,6 +45,7 @@ namespace ProductionPlanner.Data
             IReadOnlyList<int> childTaskIds,
             CancellationToken cancellationToken = default);
         Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize, CancellationToken cancellationToken = default);
+        Task HideTaskFromTableAsync(int taskId, CancellationToken cancellationToken = default);
         Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken = default);
         Task ReorderTasksAsync(List<int> orderedIds, CancellationToken cancellationToken = default);
         Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end, CancellationToken cancellationToken = default);

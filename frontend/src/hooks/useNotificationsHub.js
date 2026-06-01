@@ -185,10 +185,10 @@ export default function useNotificationsHub(user, handlers = {}) {
       if (id != null) scheduleTaskEvent({ type: 'TaskUpdated', taskId: id });
     };
 
-    const handleTaskStatusChanged = (taskId) => {
+    const handleTaskStatusChanged = (taskId, status) => {
       if (!isMounted) return;
       const id = hubTaskId(taskId);
-      if (id != null) scheduleTaskEvent({ type: 'TaskStatusChanged', taskId: id });
+      if (id != null) scheduleTaskEvent({ type: 'TaskStatusChanged', taskId: id, status });
     };
 
     const handleTaskProgressChanged = (taskId) => {

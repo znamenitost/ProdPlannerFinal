@@ -72,6 +72,8 @@ public static class DatabaseInitializer
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN UpdatedAt TEXT NOT NULL DEFAULT '2024-01-01 00:00:00'");
             if (!columns.Contains("SupplyMode"))
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN SupplyMode INTEGER NOT NULL DEFAULT 0");
+            if (!columns.Contains("HiddenFromTaskTable"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN HiddenFromTaskTable INTEGER NOT NULL DEFAULT 0");
 
             foreach (var alterCmd in alterCommands)
             {
