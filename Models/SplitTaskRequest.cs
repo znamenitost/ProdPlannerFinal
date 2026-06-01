@@ -10,6 +10,9 @@ public class SplitTaskRequest
     [Required]
     [MinLength(1)]
     public List<SplitPart> Parts { get; set; } = new();
+
+    /// <summary>Режим общей задачи: параллельная или последовательная.</summary>
+    public SupplyMode? SupplyMode { get; set; }
 }
 
 public class SplitPart
@@ -26,4 +29,7 @@ public class SplitPart
 
     [Range(0.01, 1000)]
     public double AllocatedHours { get; set; }
+
+    /// <summary>Порядок этапа (заполняется автоматически при создании).</summary>
+    public int SequenceOrder { get; set; }
 }

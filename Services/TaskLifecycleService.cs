@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using ProductionPlanner.Data;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Services;
 
@@ -271,6 +272,7 @@ public class TaskLifecycleService : ITaskLifecycleService
                 await _notificationService.NotifyStatusChangedAsync(task, "Completed");
 
             await TryCompleteParentAfterChildrenAsync(taskId, now, cancellationToken);
+            await TryAdvanceSequentialStageAsync(taskId, cancellationToken);
             return;
         }
 
@@ -316,8 +318,21 @@ public class TaskLifecycleService : ITaskLifecycleService
             await UpdateParentStatusAsync(task.Id, cancellationToken);
 
         await TryCompleteParentAfterChildrenAsync(taskId, now, cancellationToken);
+        await TryAdvanceSequentialStageAsync(taskId, cancellationToken);
 
         await _notificationService.NotifyStatusChangedAsync(task, "Completed");
+    }
+
+    private async Task TryAdvanceSequentialStageAsync(
+        int completedChildId,
+        CancellationToken cancellationToken)
+    {
+        var task = await _repo.GetTaskByIdAsync(completedChildId, cancellationToken);
+        if (task?.ParentRowNumber is not int parentId || !task.IsSplitTask)
+            return;
+
+        await _splitService.AdvanceSequentialStageAsync(parentId, cancellationToken);
+        await UpdateParentStatusAsync(completedChildId, cancellationToken);
     }
 
     private async Task TryCompleteParentAfterChildrenAsync(

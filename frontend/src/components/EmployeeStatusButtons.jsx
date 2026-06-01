@@ -19,11 +19,12 @@ import {
 } from '@mui/icons-material';
 import { softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
-import { runWorkflowWithInfoGuard } from '../utils/infoStatusWorkflow';
+import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
   STATUS_PAUSED,
+  STATUS_WAITING,
   getInfoMenuItems,
   isInfoStatus
 } from '../constants/taskStatuses';
@@ -33,7 +34,7 @@ const blockedMenuItemSx = { opacity: 0.45 };
 function infoMenuIcon(kind) {
   if (kind === 'approved') return <TaskAlt fontSize="small" color="success" />;
   if (kind === 'inStock') return <Inventory2 fontSize="small" color="success" />;
-  if (kind === 'noItems') return <Inventory2 fontSize="small" color="secondary" />;
+  if (kind === 'noItems') return <Inventory2 fontSize="small" color="error" />;
   return <FactCheck fontSize="small" color="secondary" />;
 }
 
@@ -55,13 +56,14 @@ export default function EmployeeStatusButtons({
   const isStarted = status === STATUS_IN_PROGRESS;
   const isPaused = status === STATUS_PAUSED;
   const isInfo = isInfoStatus(status);
+  const isWaiting = status === STATUS_WAITING || task?.sequenceStartBlocked;
   const canStart = !isDone && !isStarted && !isPaused;
   const canPause = isStarted;
   const canResume = isPaused;
   // «Готово» становится доступным только после нажатия «Начал» (либо в паузе после старта).
   // Это совпадает со спецификацией: до старта работа не считается, и завершать нечего.
   const canComplete = !isDone && (isStarted || isPaused);
-  const workflowItemSx = isInfo ? blockedMenuItemSx : undefined;
+  const workflowItemSx = isInfo || isWaiting ? blockedMenuItemSx : undefined;
 
   const handleOpen = (event) => {
     event.stopPropagation();
@@ -73,12 +75,12 @@ export default function EmployeeStatusButtons({
   const runWorkflow = (lifecycleAction, actionLabel) => async () => {
     handleClose();
     if (pending) return;
-    await runWorkflowWithInfoGuard({
+    await runWorkflowWithSequenceGuard({
       task,
       statusText: status,
       confirm,
       resolveStatus: onSetStatus
-        ? (t, target) => onSetStatus(t, target)
+        ? (t, target, extra) => onSetStatus(t, target, extra)
         : null,
       runAction: async () => lifecycleAction(task),
       actionLabel

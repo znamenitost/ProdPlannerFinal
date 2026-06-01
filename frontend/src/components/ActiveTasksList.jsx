@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import {
   startTask,
   pauseTask,
@@ -8,61 +8,90 @@ import {
   updateTaskRow,
   buildTaskUpdatePayload
 } from '../services/api';
-import { runWorkflowWithInfoGuard } from '../utils/infoStatusWorkflow';
+import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
-  Warning,
-  Error,
-  FolderOpen,
-  AccessTime,
-  Event,
-  PlayArrow,
-  Pause,
-  CheckCircle,
-  Groups
+  Sort
 } from '@mui/icons-material';
 import {
   Tooltip,
-  Chip,
+  Checkbox,
   IconButton,
+  Divider,
+  ListItemText,
   Box,
   Typography,
-  Button,
-  Card,
-  CardContent,
+  Menu,
+  MenuItem,
   Stack
 } from '@mui/material';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import useActiveTasksQuery from '../hooks/queries/useActiveTasksQuery';
 import { openFileOnClient } from '../utils/openFileOnClient';
 import { normalizePathForOpen } from '../utils/filePathForOpen';
-import { glassCardSx, compactActionButtonSx } from '../theme/surfaces';
 import EmptyState from './ui/EmptyState';
 import { Assignment } from '@mui/icons-material';
-import TaskTitleTwoLines, { getTaskStatusLine } from './TaskTitleTwoLines';
-import TaskStatusCell from './taskTable/TaskStatusCell';
+import { getTaskStatusLine } from './TaskTitleTwoLines';
+import ActiveTaskCard from './ActiveTaskCard';
 import {
   isInfoStatus,
-  isPendingApprovalCalendar,
-  STATUS_NO_ITEMS,
-  STATUS_PENDING_APPROVAL
+  isSequenceBlocked
 } from '../constants/taskStatuses';
 
-const blockedButtonSx = { opacity: 0.5 };
+function getDeadlineSortValue(task) {
+  if (!task?.deadline) return Number.POSITIVE_INFINITY;
+  const value = new Date(task.deadline).getTime();
+  return Number.isNaN(value) ? Number.POSITIVE_INFINITY : value;
+}
 
-const PROGRESS_MARKS = [0.3, 0.6, 0.9];
-
-function isProgressMarkActive(progress, mark) {
-  return Math.abs((progress ?? 0) - mark) < 0.02;
+function isBlockedActiveTask(task) {
+  const statusLabel = getTaskStatusLine(task);
+  return isInfoStatus(statusLabel) || isSequenceBlocked(task, statusLabel) || task?.status === 8;
 }
 
 export default function ActiveTasksList({ onUpdate, embedded = false, employee = '' }) {
   const { showError, showWarning, confirm } = useUiFeedback();
   const { data: tasks = [] } = useActiveTasksQuery(employee, Boolean(employee));
   const [pendingTaskId, setPendingTaskId] = useState(null);
+  const pendingTaskIdRef = useRef(null);
+  const [blockedBottomSort, setBlockedBottomSort] = useState(true);
+  const [sortAnchorEl, setSortAnchorEl] = useState(null);
+  const sortMenuOpen = Boolean(sortAnchorEl);
 
-  const runGuardedAction = async (task, action, progress = null) => {
-    if (pendingTaskId === task.id) return;
-    setPendingTaskId(task.id);
+  const visibleTasks = useMemo(() => {
+    return tasks
+      .map((task, index) => ({ task, index }))
+      .sort((a, b) => {
+        if (blockedBottomSort) {
+          const blockedDiff = Number(isBlockedActiveTask(a.task)) - Number(isBlockedActiveTask(b.task));
+          if (blockedDiff) return blockedDiff;
+        }
+
+        const deadlineDiff = getDeadlineSortValue(a.task) - getDeadlineSortValue(b.task);
+        return deadlineDiff || a.index - b.index;
+      })
+      .map(({ task }) => task);
+  }, [tasks, blockedBottomSort]);
+
+  const setPendingTask = useCallback((taskId) => {
+    pendingTaskIdRef.current = taskId;
+    setPendingTaskId(taskId);
+  }, []);
+
+  const handleOpenSortMenu = useCallback((event) => {
+    setSortAnchorEl(event.currentTarget);
+  }, []);
+
+  const handleCloseSortMenu = useCallback(() => {
+    setSortAnchorEl(null);
+  }, []);
+
+  const handleToggleBlockedBottomSort = useCallback(() => {
+    setBlockedBottomSort((prev) => !prev);
+  }, []);
+
+  const runGuardedAction = useCallback(async (task, action, progress = null) => {
+    if (pendingTaskIdRef.current === task.id) return;
+    setPendingTask(task.id);
 
     const runApi = async () => {
       if (action === 'start') await startTask(task.id);
@@ -74,12 +103,12 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
     };
 
     try {
-      await runWorkflowWithInfoGuard({
+      await runWorkflowWithSequenceGuard({
         task,
         statusText: getTaskStatusLine(task),
         confirm,
-        resolveStatus: async (t, targetStatus) => {
-          await updateTaskRow(t.id, buildTaskUpdatePayload(t, employee, targetStatus));
+        resolveStatus: async (t, targetStatus, extra) => {
+          await updateTaskRow(t.id, buildTaskUpdatePayload(t, employee, targetStatus, extra));
         },
         runAction: runApi
       });
@@ -87,11 +116,11 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
       console.error('Ошибка действия:', err);
       showError(err.message || 'Не удалось выполнить действие');
     } finally {
-      setPendingTaskId(null);
+      setPendingTask(null);
     }
-  };
+  }, [confirm, employee, onUpdate, setPendingTask, showError]);
 
-  const openFile = (filePath) => {
+  const openFile = useCallback((filePath) => {
     if (!filePath) {
       showWarning('Путь к файлу не указан');
       return;
@@ -101,170 +130,59 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
     const folderPath = parts.join('/');
     const result = openFileOnClient(normalizePathForOpen(folderPath, fileName));
     if (!result.ok) showError('Не удалось открыть файл');
-  };
-
-  const getRiskProps = (riskLevel) => {
-    switch (riskLevel) {
-      case 'overdue':
-        return { icon: <Error fontSize="small" />, color: 'error', label: 'Дедлайн сорван' };
-      case 'critical':
-        return { icon: <Error fontSize="small" />, color: 'error', label: 'Не хватает времени' };
-      case 'warning':
-        return { icon: <Warning fontSize="small" />, color: 'warning', label: 'Дедлайн приближается' };
-      default:
-        return null;
-    }
-  };
-
-  const getBorderColor = (task, theme) => {
-    const text = getTaskStatusLine(task);
-    if (text === STATUS_PENDING_APPROVAL || isPendingApprovalCalendar(text)) {
-      return theme.palette.secondary.main;
-    }
-    if (text === STATUS_NO_ITEMS) return theme.palette.error.light;
-    if (task.status === 1) return theme.palette.info.main;
-    if (task.status === 2) return theme.palette.warning.main;
-    return theme.palette.divider;
-  };
+  }, [showError, showWarning]);
 
   const content = (
     <Stack spacing={2}>
-      {tasks.map((task) => {
-        const risk = getRiskProps(task.riskLevel);
-        const statusLabel = getTaskStatusLine(task);
-        const showInfoStatus = isInfoStatus(statusLabel);
-        const blocked = showInfoStatus;
-        const isAssignedLike = task.status === 0 || task.status === 6 || task.status === 7;
-        const isInProgress = task.status === 1;
-        const isPaused = task.status === 2;
-        const isCompleted = task.status === 3;
-        const isPending = pendingTaskId === task.id;
-        return (
-          <Card
-            key={task.id}
-            sx={(theme) => ({
-              ...glassCardSx,
-              borderLeft: '4px solid',
-              borderLeftColor: getBorderColor(task, theme)
-            })}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Tooltip title="Сортировка">
+          <IconButton
+            size="small"
+            onClick={handleOpenSortMenu}
+            color={blockedBottomSort ? 'primary' : 'default'}
+            sx={[
+              blockedBottomSort && { border: '1px solid', borderColor: 'primary.main' }
+            ]}
           >
-            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1 }}>
-                <Tooltip title="Открыть файл" arrow>
-                  <IconButton size="small" color="primary" onClick={() => openFile(task.file)}>
-                    <FolderOpen fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                {task.isSplitTask && (
-                  <Tooltip title="Общая задача" arrow>
-                    <Groups fontSize="small" color="secondary" />
-                  </Tooltip>
-                )}
-                <TaskTitleTwoLines task={task} showStatus={false} sx={{ flex: 1, minWidth: 0 }} />
-                {showInfoStatus && (
-                  <TaskStatusCell statusText={statusLabel} label={statusLabel} />
-                )}
-                <Chip label={task.type} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
-                {risk && (
-                  <Chip icon={risk.icon} label={risk.label} size="small" color={risk.color} sx={{ height: 22, fontSize: '0.7rem' }} />
-                )}
-              </Box>
+            <Sort fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Menu
+          anchorEl={sortAnchorEl}
+          open={sortMenuOpen}
+          onClose={handleCloseSortMenu}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <MenuItem onClick={handleToggleBlockedBottomSort}>
+            <Checkbox size="small" checked={blockedBottomSort} readOnly />
+            <ListItemText primary="Заблокированные снизу" />
+          </MenuItem>
+        </Menu>
+      </Box>
+      {visibleTasks.map((task, index) => {
+        const showBlockedDivider =
+          blockedBottomSort &&
+          index > 0 &&
+          !isBlockedActiveTask(visibleTasks[index - 1]) &&
+          isBlockedActiveTask(task);
 
-              <Stack direction="row" spacing={2} sx={{ mb: 1, color: 'text.secondary' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <AccessTime sx={{ fontSize: 14 }} />
-                  <Typography variant="caption">{task.estimateHours} ч</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Event sx={{ fontSize: 14 }} />
-                  <Typography variant="caption">
-                    {task.deadline
-                      ? `${new Date(task.deadline).toLocaleDateString()} ${new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                      : 'Нет дедлайна'}
-                  </Typography>
-                </Box>
-              </Stack>
-
-              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center', mt: 0.5 }}>
-                {blocked && !isCompleted && (
-                  // В инфостатусе сначала нужно «Начал» — workflow подтвердит снятие
-                  // инфостатуса и откроет интервал. «Готово» появится из обычной ветки
-                  // после старта, как и описано в спеке.
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="success"
-                    startIcon={<PlayArrow />}
-                    disabled={isPending}
-                    onClick={() => runGuardedAction(task, 'start')}
-                    sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
-                  >
-                    Начал
-                  </Button>
-                )}
-                {!blocked && (isAssignedLike || isInProgress || isPaused) && !isCompleted && (
-                  <>
-                    {(isAssignedLike || isPaused) && (
-                      <Button
-                        size="small"
-                        variant={isPaused ? 'contained' : 'outlined'}
-                        color="success"
-                        startIcon={<PlayArrow />}
-                        disabled={isPending}
-                        onClick={() => runGuardedAction(task, isPaused ? 'resume' : 'start')}
-                        sx={compactActionButtonSx}
-                      >
-                        {isPaused ? 'Продолжить' : 'Начал'}
-                      </Button>
-                    )}
-                    {isInProgress && (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="warning"
-                        startIcon={<Pause />}
-                        disabled={isPending}
-                        onClick={() => runGuardedAction(task, 'pause')}
-                        sx={compactActionButtonSx}
-                      >
-                        Пауза
-                      </Button>
-                    )}
-                    {(isInProgress || isPaused) && (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="primary"
-                        startIcon={<CheckCircle />}
-                        disabled={isPending}
-                        onClick={() => runGuardedAction(task, 'complete')}
-                        sx={compactActionButtonSx}
-                      >
-                        Готово
-                      </Button>
-                    )}
-                  </>
-                )}
-                {!blocked && !isCompleted && (
-                  <>
-                    {PROGRESS_MARKS.map((p) => (
-                      <Button
-                        key={p}
-                        size="small"
-                        variant={isProgressMarkActive(task.progress, p) ? 'contained' : 'text'}
-                        color="secondary"
-                        disabled={isPending}
-                        onClick={() => runGuardedAction(task, 'progress', p)}
-                        sx={compactActionButtonSx}
-                      >
-                        {Math.round(p * 100)}%
-                      </Button>
-                    ))}
-                  </>
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
+        return (
+          <Fragment key={task.id}>
+            {showBlockedDivider && (
+              <Divider sx={{ my: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Заблокированные
+                </Typography>
+              </Divider>
+            )}
+            <ActiveTaskCard
+              task={task}
+              isPending={pendingTaskId === task.id}
+              onAction={runGuardedAction}
+              onOpenFile={openFile}
+            />
+          </Fragment>
         );
       })}
       {tasks.length === 0 && <EmptyState message="Нет активных задач" icon={Assignment} />}

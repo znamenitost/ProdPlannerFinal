@@ -45,6 +45,7 @@ namespace ProductionPlanner.Controllers
                 var parent = await _splitService.SplitTaskAsync(
                     request.ParentTaskId,
                     request.Parts,
+                    request.SupplyMode,
                     cancellationToken);
                 var planningWarnings = await GetSplitPlanningWarningsAsync(parent.Id, cancellationToken);
                 return Ok(new
@@ -54,6 +55,7 @@ namespace ProductionPlanner.Controllers
                     isSplitTask = parent.IsSplitTask,
                     employeeName = parent.EmployeeName,
                     type = parent.Type,
+                    supplyMode = parent.SupplyMode,
                     planningWarnings
                 });
             }
@@ -75,6 +77,7 @@ namespace ProductionPlanner.Controllers
                 var parent = await _splitService.UpdateSplitAsync(
                     parentTaskId,
                     request.Parts,
+                    request.SupplyMode,
                     cancellationToken);
                 var planningWarnings = await GetSplitPlanningWarningsAsync(parent.Id, cancellationToken);
                 return Ok(new
@@ -84,6 +87,7 @@ namespace ProductionPlanner.Controllers
                     isSplitTask = parent.IsSplitTask,
                     employeeName = parent.EmployeeName,
                     type = parent.Type,
+                    supplyMode = parent.SupplyMode,
                     planningWarnings
                 });
             }
@@ -102,6 +106,9 @@ namespace ProductionPlanner.Controllers
             if (currentUser == null) return Unauthorized();
 
             var children = await _splitService.GetChildTasksAsync(parentRowNumber, cancellationToken);
+            var parent = await _repo.GetTaskByIdAsync(parentRowNumber, cancellationToken);
+            var splits = await _repo.GetTaskSplitsByParentIdAsync(parentRowNumber, cancellationToken);
+            var sequenceByChild = splits.ToDictionary(s => s.ChildTaskId, s => s.SequenceOrder);
             var childIds = children.Select(c => c.Id).ToList();
             var intervalsByTask = (await _repo.GetWorkIntervalsForTaskIdsAsync(childIds, cancellationToken))
                 .GroupBy(i => i.ProductionTaskId)
@@ -131,6 +138,10 @@ namespace ProductionPlanner.Controllers
                     c.ParentRowNumber,
                     c.IsSplitTask,
                     c.Progress,
+                    supplyMode = parent?.SupplyMode ?? SupplyMode.None,
+                    sequenceOrder = sequenceByChild.GetValueOrDefault(c.Id, 0),
+                    sequenceStartBlocked = parent?.SupplyMode == SupplyMode.InternalProduction
+                        && c.Status == JobStatus.Waiting,
                     workIntervals,
                     showPlannedTimeProgress = PlannedTimeProgressCalculator.ShouldShow(c, intervals),
                     plannedTimeProgress = PlannedTimeProgressCalculator.GetPercent(

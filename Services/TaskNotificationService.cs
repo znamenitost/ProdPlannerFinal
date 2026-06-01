@@ -45,7 +45,8 @@ public class TaskNotificationService : ITaskNotificationService
                 notificationId,
                 task.Id,
                 title,
-                task.Deadline);
+                task.Deadline,
+                "NewTask");
         }
         else
         {
@@ -73,12 +74,11 @@ public class TaskNotificationService : ITaskNotificationService
     /// <summary>
     /// Персональный push исполнителю о том, что админ перевёл задачу в «Согласовано» или
     /// «В наличии» — то есть блокирующее условие снято, можно начинать работу. Использует
-    /// тот же транспорт <c>NewTask</c>, что и снэкбар о новой задаче (фронт уже умеет его
-    /// показывать), а в заголовок добавляется префикс «Можно начинать», чтобы сотрудник
-    /// сразу понял суть. Запись складывается в инбокс с типом <c>TaskReadyToStart</c>,
+    /// тот же транспорт <c>NewTask</c>, что и снэкбар о новой задаче, но передаёт отдельный
+    /// тип для визуальной группировки на фронте. Запись складывается в инбокс с тем же типом,
     /// поэтому переживёт офлайн/перезагрузку страницы и поднимется через /api/notifications/pending.
     /// </summary>
-    public async Task NotifyTaskReadyToStartAsync(ProductionTask task)
+    public async Task NotifyTaskReadyToStartAsync(ProductionTask task, JobStatus readyStatus)
     {
         if (string.IsNullOrWhiteSpace(task.EmployeeName))
             return;
@@ -98,6 +98,40 @@ public class TaskNotificationService : ITaskNotificationService
             userId,
             task.Id,
             title,
+            task.Deadline,
+            readyStatus);
+
+        await SendToGroupsAsync(
+            [userId],
+            "NewTask",
+            notificationId,
+            task.Id,
+            title,
+            task.Deadline,
+            readyStatus == JobStatus.InStock ? "TaskInStockReady" : "TaskApprovedReady");
+    }
+
+    public async Task NotifySequentialStageReadyAsync(ProductionTask task, int stageNumber)
+    {
+        if (string.IsNullOrWhiteSpace(task.EmployeeName))
+            return;
+
+        var userId = await GetUserIdByFullNameAsync(task.EmployeeName);
+        if (string.IsNullOrEmpty(userId))
+        {
+            _logger.LogDebug(
+                "User not found for sequential stage notification: {EmployeeName}",
+                task.EmployeeName);
+            return;
+        }
+
+        var safeStageNumber = Math.Max(1, stageNumber);
+        var title = $"Можно начинать этап №{safeStageNumber}: {GetNotificationTitle(task)}";
+
+        var notificationId = await _inbox.EnqueueSequentialStageReadyAsync(
+            userId,
+            task.Id,
+            title,
             task.Deadline);
 
         await SendToGroupsAsync(
@@ -106,7 +140,8 @@ public class TaskNotificationService : ITaskNotificationService
             notificationId,
             task.Id,
             title,
-            task.Deadline);
+            task.Deadline,
+            "SequentialStageReady");
     }
 
     private Task SendToGroupsAsync(IReadOnlyList<string> groups, string method, params object?[] args)

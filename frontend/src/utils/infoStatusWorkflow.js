@@ -2,7 +2,7 @@ import {
   getInfoStatusConfirmOptions,
   getInfoStatusResolveTarget,
   isInfoStatus
-} from '../constants/taskStatuses';
+} from '../constants/taskStatuses.js';
 
 /**
  * Если задача в инфостатусе — спрашиваем подтверждение, снимаем блок (Согласовано / В наличии), затем действие.

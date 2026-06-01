@@ -8,18 +8,19 @@ function formatNotificationDeadline(deadline) {
   return d.toLocaleString('ru-RU');
 }
 
-function parseNewTaskHubArgs(notificationId, taskId, taskTitle, deadline) {
+function parseNewTaskHubArgs(notificationId, taskId, taskTitle, deadline, type) {
   if (Array.isArray(notificationId)) {
-    const [a, b, c, d] = notificationId;
-    return { notificationId: a, taskId: b, taskTitle: c, deadline: d };
+    const [a, b, c, d, e] = notificationId;
+    return { notificationId: a, taskId: b, taskTitle: c, deadline: d, type: e };
   }
-  return { notificationId, taskId, taskTitle, deadline };
+  return { notificationId, taskId, taskTitle, deadline, type };
 }
 
 function mapPendingDto(dto) {
   return {
     id: `n-${dto.id}`,
     serverId: dto.id,
+    type: dto.type || 'NewTask',
     title: dto.title?.trim() || 'Новая задача',
     deadline: formatNotificationDeadline(dto.deadline),
   };
@@ -157,14 +158,15 @@ export default function useNotificationsHub(user, handlers = {}) {
       .withAutomaticReconnect()
       .build();
 
-    const handleNewTask = (notificationId, taskId, taskTitle, deadline) => {
+    const handleNewTask = (notificationId, taskId, taskTitle, deadline, type) => {
       if (!isMounted) return;
-      const args = parseNewTaskHubArgs(notificationId, taskId, taskTitle, deadline);
+      const args = parseNewTaskHubArgs(notificationId, taskId, taskTitle, deadline, type);
       const title =
         typeof args.taskTitle === 'string' ? args.taskTitle.trim() : String(args.taskTitle ?? '').trim();
       offerNotification({
         id: `n-${args.notificationId}`,
         serverId: args.notificationId,
+        type: args.type || 'NewTask',
         title: title || 'Новая задача',
         deadline: formatNotificationDeadline(args.deadline),
       });
@@ -195,11 +197,16 @@ export default function useNotificationsHub(user, handlers = {}) {
       if (id != null) scheduleTaskEvent({ type: 'TaskProgressChanged', taskId: id });
     };
 
+    const handleForceDisconnect = () => {
+      connection.stop().catch((err) => console.error('SignalR forced stop error:', err));
+    };
+
     connection.on('NewTask', handleNewTask);
     connection.on('TaskDeleted', handleTaskDeleted);
     connection.on('TaskUpdated', handleTaskUpdated);
     connection.on('TaskStatusChanged', handleTaskStatusChanged);
     connection.on('TaskProgressChanged', handleTaskProgressChanged);
+    connection.on('ForceDisconnect', handleForceDisconnect);
 
     const startConnection = async () => {
       try {
@@ -247,6 +254,7 @@ export default function useNotificationsHub(user, handlers = {}) {
       connection.off('TaskUpdated', handleTaskUpdated);
       connection.off('TaskStatusChanged', handleTaskStatusChanged);
       connection.off('TaskProgressChanged', handleTaskProgressChanged);
+      connection.off('ForceDisconnect', handleForceDisconnect);
       connection.stop().catch((err) => console.error('SignalR stop error:', err));
     };
   }, [

@@ -73,7 +73,6 @@ export default function PlannedBlocks({
         const highlighted = isHighlighted(block);
         const isFirst = idx === 0;
         const isLast = idx === taskBlocks.length - 1;
-        const statusColor = getPlannedBlockColor(block);
         const blockKey = `planned-${block.taskId ?? idx}`;
         return (
           <Tooltip
@@ -91,6 +90,7 @@ export default function PlannedBlocks({
                 height: '100%',
                 top: 0,
                 backgroundColor: (theme) => {
+                  const statusColor = getPlannedBlockColor(block, theme);
                   if (statusColor) return statusColor;
                   return highlighted ? theme.palette.warning.main : theme.palette.primary.main;
                 },

@@ -5,7 +5,6 @@ import {
   TableCell,
   Box,
   IconButton,
-  Tooltip,
   Typography,
   Chip
 } from '@mui/material';
@@ -25,6 +24,7 @@ import TaskStatusCell from './taskTable/TaskStatusCell';
 import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
+import LazyTooltip from './common/LazyTooltip';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
@@ -46,6 +46,7 @@ import {
   truncateText,
   needsTooltip
 } from '../utils/taskTableStyles';
+import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
 
 function ParentTaskRow({
   task,
@@ -83,14 +84,14 @@ function ParentTaskRow({
   if (highlightMyTasks) {
     if (currentUser?.role === 'Admin' && selectedEmployeeForHighlight) {
       if (hasChildren) {
-        isMine = task.hasCurrentUserSubtask === true;
+        isMine = !isExpanded && task.hasCurrentUserSubtask === true;
       } else {
         isMine = task.employeeName === selectedEmployeeForHighlight && task.statusText !== 'Готово';
       }
     }
     else if (currentUser?.role !== 'Admin') {
       if (hasChildren) {
-        isMine = task.hasCurrentUserSubtask === true;
+        isMine = !isExpanded && task.hasCurrentUserSubtask === true;
       } else {
         isMine = task.employeeName === currentUser?.fullName && task.statusText !== 'Готово';
       }
@@ -136,6 +137,11 @@ function ParentTaskRow({
 
   const showActionButtons = canUserManage() && canChangeStatus && !hasChildren;
   const tableColSpan = taskTableColumnCount(columnVisibility, showHoursTypeColumns);
+  const sharedTaskIconSx = {
+    color: (theme) => task.supplyMode === SUPPLY_MODE_INTERNAL
+      ? theme.palette.info.main
+      : theme.palette.success.main
+  };
 
   return (
     <Fragment>
@@ -153,27 +159,27 @@ function ParentTaskRow({
 
             {task.isSplitTask && (
               <Box sx={ICON_SLOT_GROUPS}>
-                <Groups fontSize="small" color="secondary" />
+                <Groups fontSize="small" sx={sharedTaskIconSx} />
               </Box>
             )}
 
             <Box sx={ICON_SLOT_FILE}>
-              <Tooltip title={`Открыть файл: ${fullFilePath}`} arrow>
+              <LazyTooltip title={`Открыть файл: ${fullFilePath}`} arrow>
                 <IconButton size="small" color="primary" onClick={() => onOpenFile(task)} sx={{ p: 0.5 }}>
                   <FolderOpen fontSize="small" />
                 </IconButton>
-              </Tooltip>
+              </LazyTooltip>
             </Box>
           </Box>
         </TableCell>
 
         <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)}>
           {needsTooltip(shortFolderPath || task.folderPath, limit) ? (
-            <Tooltip title={task.folderPath || ''} arrow>
+            <LazyTooltip title={task.folderPath || ''} arrow>
               <Typography variant="body2" sx={{ fontWeight: 600, ...cellDisplayTextSx }}>
                 {truncateText(shortFolderPath || task.folderPath, limit)}
               </Typography>
-            </Tooltip>
+            </LazyTooltip>
           ) : (
             <Typography variant="body2" sx={{ fontWeight: 600, ...cellDisplayTextSx }}>
               {shortFolderPath || task.folderPath || '—'}
@@ -183,11 +189,11 @@ function ParentTaskRow({
 
         <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>
           {needsTooltip(task.fileName, limit) ? (
-            <Tooltip title={task.fileName} arrow>
+            <LazyTooltip title={task.fileName} arrow>
               <Typography variant="body2" sx={cellDisplayTextSx}>
                 {truncateText(task.fileName, limit)}
               </Typography>
-            </Tooltip>
+            </LazyTooltip>
           ) : (
             <Typography variant="body2" sx={cellDisplayTextSx}>
               {task.fileName || '—'}
@@ -235,7 +241,7 @@ function ParentTaskRow({
                 onPause={onPause}
                 onResume={onResume}
                 onComplete={onComplete}
-                onSetStatus={onSetStatus}
+                onSetStatus={hasChildren ? null : onSetStatus}
                 showWorkflow={!hasChildren}
               />
             )}

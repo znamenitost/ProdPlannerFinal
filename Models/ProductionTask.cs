@@ -65,6 +65,10 @@ namespace ProductionPlanner.Models
         
         public int? ParentRowNumber { get; set; }
         public bool IsSplitTask { get; set; }
+
+        /// <summary>Режим выполнения дочерних этапов (параллельный / последовательный).</summary>
+        public SupplyMode SupplyMode { get; set; }
+
         public List<TaskSplit> ChildSplits { get; set; } = new();
         
         public DateTime CreatedAt { get; set; }

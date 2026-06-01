@@ -176,7 +176,16 @@ export default function CompletedTasksList({ employee }) {
               const isPositive = diff >= 0;
               const workPeriod = formatWorkPeriod(task.workIntervals);
               return (
-                <TableRow key={task.id} hover>
+                <TableRow
+                  key={task.id}
+                  hover
+                  sx={{
+                    '& > td:first-of-type': {
+                      borderLeft: '4px solid',
+                      borderLeftColor: 'success.main'
+                    }
+                  }}
+                >
                   <TableCell>
                     <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, minWidth: 0 }}>
                       <CheckCircle sx={{ fontSize: 16, flexShrink: 0 }} color="success" />

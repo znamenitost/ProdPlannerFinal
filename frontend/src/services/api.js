@@ -122,7 +122,7 @@ export async function completeTask(id) {
   await throwIfNotOk(res, 'Ошибка завершения задачи');
 }
 
-export function buildTaskUpdatePayload(task, employeeName, statusText) {
+export function buildTaskUpdatePayload(task, employeeName, statusText, extra) {
   return {
     folderPath: task.folderPath ?? '',
     fileName: task.fileName ?? '',
@@ -132,7 +132,8 @@ export function buildTaskUpdatePayload(task, employeeName, statusText) {
     type: task.type ?? '',
     employeeName: task.employeeName ?? employeeName ?? '',
     parentRowNumber: task.parentRowNumber ?? null,
-    statusText: statusText ?? task.statusText
+    statusText: statusText ?? task.statusText,
+    sequenceOverride: extra?.sequenceOverride ?? false
   };
 }
 
@@ -151,7 +152,8 @@ export async function updateTaskRow(id, rowData) {
       type: rowData.type ?? '',
       employeeName: rowData.employeeName,
       parentRowNumber: rowData.parentRowNumber,
-      statusText: rowData.statusText
+      statusText: rowData.statusText,
+      sequenceOverride: rowData.sequenceOverride ?? false
     })
   });
   await throwIfNotOk(res, 'Не удалось обновить задачу');
@@ -238,8 +240,8 @@ export async function getQueueOverloads(employee, options = {}) {
 async function debugFetch(url, init = {}) {
   const res = await fetch(`${API_BASE}/debug${url}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    ...init
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}) }
   });
   await throwIfNotOk(res, 'Ошибка debug-операции');
   // get-intervals возвращает массив, get-time/set-time/etc — объект; reset-time/close-interval — пусто.
@@ -253,5 +255,16 @@ export const debugApi = {
   resetMockTime: () => debugFetch('/reset-time', { method: 'POST' }),
   closeInterval: (taskId) => debugFetch(`/close-interval/${taskId}`, { method: 'POST' }),
   createInterval: (taskId) => debugFetch(`/create-interval/${taskId}`, { method: 'POST' }),
-  resetDatabase: () => debugFetch('/reset-db', { method: 'POST' })
+  resetDatabase: (password) =>
+    debugFetch('/reset-db', {
+      method: 'POST',
+      headers: { 'X-Reset-Db-Password': password?.trim?.() ?? '' },
+      body: JSON.stringify({ password: password?.trim?.() ?? '' })
+    }),
+  verifyResetDatabasePassword: (password) =>
+    debugFetch('/verify-reset-db-password', {
+      method: 'POST',
+      headers: { 'X-Reset-Db-Password': password?.trim?.() ?? '' },
+      body: JSON.stringify({ password: password?.trim?.() ?? '' })
+    })
 };

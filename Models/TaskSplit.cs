@@ -21,6 +21,9 @@ namespace ProductionPlanner.Models
         
         // Выделенное время на эту часть
         public double AllocatedHours { get; set; }
+
+        /// <summary>Порядок этапа в последовательной задаче (1, 2, 3…).</summary>
+        public int SequenceOrder { get; set; }
         
         // Связь с задачей
         public ProductionTask ChildTask { get; set; } = null!;

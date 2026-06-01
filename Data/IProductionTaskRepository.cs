@@ -31,6 +31,7 @@ namespace ProductionPlanner.Data
         Task AddTaskAsync(ProductionTask task, CancellationToken cancellationToken = default);
         Task UpdateTaskAsync(ProductionTask task, CancellationToken cancellationToken = default);
         Task DeleteTaskAsync(int id, CancellationToken cancellationToken = default);
+        Task DetachTasksFromSplitAsync(IReadOnlyList<int> childTaskIds, CancellationToken cancellationToken = default);
         Task DeleteAllTasksAsync(CancellationToken cancellationToken = default);
         Task AddWorkIntervalAsync(WorkInterval interval, CancellationToken cancellationToken = default);
         Task UpdateWorkIntervalAsync(WorkInterval interval, CancellationToken cancellationToken = default);
@@ -39,6 +40,10 @@ namespace ProductionPlanner.Data
         Task<EmployeeStat?> GetEmployeeStatAsync(string employeeName, CancellationToken cancellationToken = default);
         Task UpdateEmployeeStatAsync(EmployeeStat stat, CancellationToken cancellationToken = default);
         Task<List<ProductionTask>> GetChildTasksAsync(int parentId, CancellationToken cancellationToken = default);
+        Task<List<TaskSplit>> GetTaskSplitsByParentIdAsync(int parentId, CancellationToken cancellationToken = default);
+        Task<Dictionary<int, (SupplyMode SupplyMode, int SequenceOrder)>> GetTaskSplitMetadataByChildTaskIdsAsync(
+            IReadOnlyList<int> childTaskIds,
+            CancellationToken cancellationToken = default);
         Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize, CancellationToken cancellationToken = default);
         Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken = default);
         Task ReorderTasksAsync(List<int> orderedIds, CancellationToken cancellationToken = default);

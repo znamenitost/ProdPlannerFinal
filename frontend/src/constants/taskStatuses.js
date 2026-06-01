@@ -7,6 +7,15 @@ export const STATUS_PENDING_APPROVAL = 'Согласование';
 export const STATUS_NO_ITEMS = 'Нет изделий';
 export const STATUS_APPROVED = 'Согласовано';
 export const STATUS_IN_STOCK = 'В наличии';
+export const STATUS_WAITING = 'Ожидание';
+
+/** Режимы выполнения многоэтапной задачи (совпадают с SupplyMode на бэкенде). */
+export const SUPPLY_MODE_NONE = 0;
+export const SUPPLY_MODE_INTERNAL = 1;
+export const SUPPLY_MODE_COOPERATIVE = 2;
+
+export const TASK_EXECUTION_PARALLEL = 'parallel';
+export const TASK_EXECUTION_SEQUENTIAL = 'sequential';
 
 /** Для списка выполненных (enum Completed). */
 export const STATUS_FINISHED_LABEL = 'Завершена';
@@ -49,17 +58,17 @@ export function getInfoStatusConfirmOptions(statusText) {
   const text = normalizeStatusText(statusText);
   if (text === STATUS_PENDING_APPROVAL) {
     return {
-      title: 'Подтверждение',
-      message: 'Действительно подтверждаете? Статус задачи: «Согласование».',
-      confirmLabel: 'Подтвердить',
+      title: 'Согласование',
+      message: 'Задача на согласовании. Подтвердите, что задача согласована, и действие можно выполнить.',
+      confirmLabel: 'Подтвердить и выполнить',
       confirmColor: 'primary'
     };
   }
   if (text === STATUS_NO_ITEMS) {
     return {
-      title: 'Подтверждение',
-      message: 'Действительно подтверждаете? Статус задачи: «Нет изделий».',
-      confirmLabel: 'Подтвердить',
+      title: 'Нет изделий',
+      message: 'Для задачи нет изделий. Подтвердите, что материалы в наличии, и действие можно выполнить.',
+      confirmLabel: 'Подтвердить и выполнить',
       confirmColor: 'primary'
     };
   }
@@ -90,10 +99,17 @@ export function canStartWithoutConfirm(task) {
   const text = task?.statusText;
   if (text) {
     if (isInfoStatus(text)) return false;
+    if (text === STATUS_WAITING || task?.sequenceStartBlocked) return false;
     return [STATUS_ASSIGNED, STATUS_APPROVED, STATUS_IN_STOCK].includes(text);
   }
+  if (task?.status === 8 || task?.sequenceStartBlocked) return false;
   const s = task?.status;
   return s === 0 || s === 6 || s === 7;
+}
+
+export function isSequenceBlocked(task, statusText) {
+  const text = statusText || task?.statusText || '';
+  return text === STATUS_WAITING || Boolean(task?.sequenceStartBlocked);
 }
 
 const LEGACY_PENDING_APPROVAL = 'На согласовании';

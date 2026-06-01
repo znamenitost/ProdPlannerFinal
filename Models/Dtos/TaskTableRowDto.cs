@@ -20,6 +20,7 @@ public class TaskTableRowDto
     public DateTime UpdatedAt { get; set; }
     public int? ParentRowNumber { get; set; }
     public bool IsSplitTask { get; set; }
+    public SupplyMode SupplyMode { get; set; }
     public double Progress { get; set; }
     public bool HasCurrentUserSubtask { get; set; }
     /// <summary>Имена сотрудников дочерних подзадач (через «/») для общих задач.</summary>
@@ -71,6 +72,7 @@ public class TaskTableRowDto
             UpdatedAt = parent.UpdatedAt,
             ParentRowNumber = parent.ParentRowNumber,
             IsSplitTask = parent.IsSplitTask,
+            SupplyMode = parent.SupplyMode,
             Progress = parent.Progress,
             HasCurrentUserSubtask = hasCurrentUserSubtask,
             SplitEmployeeNames = splitEmployeeNames,

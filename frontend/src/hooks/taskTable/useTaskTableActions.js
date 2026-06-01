@@ -1,7 +1,13 @@
 import { useCallback, useState } from 'react';
 import { combineDateTime, DEFAULT_TIME } from '../../utils/dateTimeHelpers';
 import { buildTaskUpdatePayload } from '../../services/api';
-import { runWorkflowWithInfoGuard } from '../../utils/infoStatusWorkflow';
+import { runWorkflowWithSequenceGuard } from '../../utils/supplyStatusWorkflow';
+import {
+  SUPPLY_MODE_COOPERATIVE,
+  SUPPLY_MODE_INTERNAL,
+  TASK_EXECUTION_PARALLEL,
+  TASK_EXECUTION_SEQUENTIAL
+} from '../../constants/taskStatuses';
 import { unwrapTaskSaveResponse } from '../../utils/showPlanningWarnings';
 
 export default function useTaskTableActions({
@@ -77,6 +83,10 @@ export default function useTaskTableActions({
         (s, p) => s + (p.allocatedHours || 0),
         0
       );
+      payload.supplyMode =
+        newRow.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL
+          ? SUPPLY_MODE_INTERNAL
+          : SUPPLY_MODE_COOPERATIVE;
     } else {
       const hours = parseFloat(newRow.estimateHours);
       if (!hours || hours < 0.5 || hours > 24) {
@@ -124,8 +134,7 @@ export default function useTaskTableActions({
         estimateHours: row.estimateHours,
         type: row.type,
         employeeName: row.employeeName,
-        parentRowNumber: row.parentRowNumber,
-        statusText: row.statusText
+        parentRowNumber: row.parentRowNumber
       });
       const { planningWarnings } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
@@ -142,17 +151,18 @@ export default function useTaskTableActions({
 
     setPendingLifecycleTaskId(row.id);
     try {
-      await runWorkflowWithInfoGuard({
+      await runWorkflowWithSequenceGuard({
         task: row,
         statusText: row.statusText,
         confirm,
-        resolveStatus: async (task, targetStatus) => {
+        resolveStatus: async (task, targetStatus, extra) => {
           await api.updateRow(
             task.id,
             buildTaskUpdatePayload(
               task,
               selectedEmployeeForHighlight || task.employeeName,
-              targetStatus
+              targetStatus,
+              extra
             )
           );
           await syncRowFromServer(task);
@@ -197,7 +207,7 @@ export default function useTaskTableActions({
     [api.completeTask, runLifecycleAction]
   );
 
-  const handleSetStatus = useCallback(async (row, statusText) => {
+  const handleSetStatus = useCallback(async (row, statusText, extra) => {
     if (pendingLifecycleTaskId === row.id) return;
 
     setPendingLifecycleTaskId(row.id);
@@ -211,7 +221,8 @@ export default function useTaskTableActions({
         type: row.type,
         employeeName: row.employeeName,
         parentRowNumber: row.parentRowNumber,
-        statusText
+        statusText,
+        sequenceOverride: extra?.sequenceOverride ?? false
       });
       await syncRowFromServer(row);
     } catch (err) {
@@ -252,6 +263,7 @@ export default function useTaskTableActions({
       employeeName: '',
       assigneeParts: null,
       isSharedTask: false,
+      taskExecutionMode: TASK_EXECUTION_PARALLEL,
       parentRowNumber: null
     });
   }, [setNewRow]);

@@ -111,7 +111,11 @@ public class ProductionTasksController : ControllerBase
         if (string.IsNullOrEmpty(request.StatusText))
             return false;
 
-        return TaskStatusMapper.FromText(request.StatusText) is
+        var target = TaskStatusMapper.FromText(request.StatusText);
+        if (target == JobStatus.Assigned && request.SequenceOverride)
+            return true;
+
+        return target is
             JobStatus.PendingApproval
             or JobStatus.NoItems
             or JobStatus.Approved
@@ -180,13 +184,16 @@ public class ProductionTasksController : ControllerBase
                     Type = task.Type,
                     EmployeeName = task.EmployeeName,
                     ParentRowNumber = task.ParentRowNumber,
-                    StatusText = request.StatusText
+                    StatusText = request.StatusText,
+                    SequenceOverride = request.SequenceOverride
                 };
             }
 
             var result = await _tableService.UpdateRowAsync(id, request, cancellationToken);
             if (result.NotFound)
                 return NotFound();
+            if (result.Error != null)
+                return BadRequest(new { error = result.Error });
 
             if (!isAdmin)
                 return Ok(result.Data);

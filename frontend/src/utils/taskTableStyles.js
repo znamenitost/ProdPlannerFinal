@@ -5,9 +5,10 @@ export const COL_ICON = { width: 104, minWidth: 104, maxWidth: 120, px: 0.5, whi
 export const ICON_SLOT_EXPAND = { width: 32, minWidth: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
 export const ICON_SLOT_GROUPS = { width: 22, minWidth: 22, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
 export const ICON_SLOT_FILE = { width: 32, minWidth: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
-export const COL_TASK = { minWidth: 140, whiteSpace: 'nowrap', verticalAlign: 'middle' };
-export const COL_FILE = { minWidth: 100, whiteSpace: 'nowrap', verticalAlign: 'middle' };
-export const COL_COMMENT = { minWidth: 64, maxWidth: '12ch', whiteSpace: 'normal', verticalAlign: 'middle' };
+export const TEXT_LIMIT_COLUMN_WIDTH = 'var(--task-table-text-limit-width, 23ch)';
+export const COL_TASK = { minWidth: 140, width: TEXT_LIMIT_COLUMN_WIDTH, maxWidth: TEXT_LIMIT_COLUMN_WIDTH, whiteSpace: 'nowrap', verticalAlign: 'middle' };
+export const COL_FILE = { minWidth: 100, width: TEXT_LIMIT_COLUMN_WIDTH, maxWidth: TEXT_LIMIT_COLUMN_WIDTH, whiteSpace: 'nowrap', verticalAlign: 'middle' };
+export const COL_COMMENT = { minWidth: 64, width: TEXT_LIMIT_COLUMN_WIDTH, maxWidth: TEXT_LIMIT_COLUMN_WIDTH, whiteSpace: 'normal', verticalAlign: 'middle' };
 export const COL_DEADLINE = { width: '1%', minWidth: 72, maxWidth: 88, whiteSpace: 'nowrap', verticalAlign: 'middle' };
 
 /** Дедлайн в строке создания/редактирования: дата DD.MM.YYYY + кнопка календаря */
@@ -87,7 +88,10 @@ export const taskTableDatePickerSx = {
 
 export const cellDisplayTextSx = {
   fontSize: '0.875rem',
-  whiteSpace: 'nowrap'
+  whiteSpace: 'nowrap',
+  maxWidth: TEXT_LIMIT_COLUMN_WIDTH,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis'
 };
 
 export const CELL_TEXT_MAX_LENGTH = 23;

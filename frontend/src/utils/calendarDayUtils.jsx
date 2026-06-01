@@ -1,6 +1,6 @@
 import React from 'react';
 import { alpha } from '@mui/material/styles';
-import { STATUS_PENDING_APPROVAL } from '../constants/taskStatuses';
+import { STATUS_NO_ITEMS, STATUS_PENDING_APPROVAL } from '../constants/taskStatuses';
 import { getTaskStatusLine, getTaskTitleSlashFile } from '../components/TaskTitleTwoLines';
 import { getStatusIcon } from './taskHelpers';
 import { chrome, tokens } from '../theme/paletteTokens';
@@ -116,11 +116,11 @@ export function getWorkColor(taskId, completed) {
   return tokens.work[taskId % tokens.work.length];
 }
 
-export function getPlannedBlockColor(block) {
+export function getPlannedBlockColor(block, theme) {
   if (block?.statusText === STATUS_PENDING_APPROVAL || block?.statusText === 'На согласовании') {
-    return tokens.pendingApproval;
+    return theme.palette.secondary.main;
   }
-  if (block?.statusText === 'Нет изделий') return tokens.noItems;
+  if (block?.statusText === STATUS_NO_ITEMS) return theme.palette.error.main;
   return null;
 }
 

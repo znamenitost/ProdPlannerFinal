@@ -28,6 +28,9 @@ public class CreateTaskRequest : IValidatableObject
     /// <summary>Назначения для общей задачи (2+ сотрудника — создаётся родитель и дочерние).</summary>
     public List<SplitPart>? Parts { get; set; }
 
+    /// <summary>Режим выполнения: 0 — обычная, 1 — последовательная, 2 — параллельная (общая).</summary>
+    public SupplyMode SupplyMode { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         var validParts = Parts?
@@ -72,6 +75,9 @@ public class UpdateTaskRequest
 
     public int? ParentRowNumber { get; set; }
     public string? StatusText { get; set; }
+
+    /// <summary>Ручной обход очереди этапов (Waiting → Assigned).</summary>
+    public bool SequenceOverride { get; set; }
 }
 
 public class UpdateWorkIntervalsRequest

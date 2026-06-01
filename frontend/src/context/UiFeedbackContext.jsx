@@ -8,6 +8,7 @@ import {
   DialogContentText,
   DialogTitle,
   Snackbar,
+  TextField,
 } from '@mui/material';
 
 const UiFeedbackContext = createContext(null);
@@ -19,6 +20,7 @@ const defaultConfirmState = {
   confirmLabel: 'Подтвердить',
   cancelLabel: 'Отмена',
   confirmColor: 'primary',
+  input: null,
 };
 
 export function UiFeedbackProvider({ children }) {
@@ -28,6 +30,7 @@ export function UiFeedbackProvider({ children }) {
     severity: 'info',
   });
   const [confirmState, setConfirmState] = useState(defaultConfirmState);
+  const [confirmInputValue, setConfirmInputValue] = useState('');
   const confirmResolverRef = useRef(null);
 
   const showSnackbar = useCallback((message, severity = 'info') => {
@@ -42,6 +45,7 @@ export function UiFeedbackProvider({ children }) {
   const confirm = useCallback((options = {}) => {
     return new Promise((resolve) => {
       confirmResolverRef.current = resolve;
+      setConfirmInputValue('');
       setConfirmState({
         open: true,
         title: options.title ?? 'Подтверждение',
@@ -49,15 +53,29 @@ export function UiFeedbackProvider({ children }) {
         confirmLabel: options.confirmLabel ?? 'Подтвердить',
         cancelLabel: options.cancelLabel ?? 'Отмена',
         confirmColor: options.confirmColor ?? 'primary',
+        input: options.input ?? null,
       });
     });
   }, []);
 
+  const promptInput = useCallback((options = {}) => {
+    return confirm({
+      ...options,
+      input: {
+        label: options.inputLabel ?? 'Значение',
+        type: options.inputType ?? 'text',
+        required: options.inputRequired ?? false,
+      },
+    });
+  }, [confirm]);
+
   const resolveConfirm = useCallback((confirmed) => {
+    if (confirmed && confirmState.input?.required && !confirmInputValue.trim()) return;
+
     setConfirmState((prev) => ({ ...prev, open: false }));
-    confirmResolverRef.current?.(confirmed);
+    confirmResolverRef.current?.(confirmed && confirmState.input ? confirmInputValue : confirmed);
     confirmResolverRef.current = null;
-  }, []);
+  }, [confirmInputValue, confirmState.input]);
 
   const handleSnackbarClose = (_event, reason) => {
     if (reason === 'clickaway') return;
@@ -71,6 +89,7 @@ export function UiFeedbackProvider({ children }) {
     showWarning,
     showInfo,
     confirm,
+    promptInput,
   };
 
   return (
@@ -100,9 +119,25 @@ export function UiFeedbackProvider({ children }) {
         fullWidth
       >
         <DialogTitle>{confirmState.title}</DialogTitle>
-        {confirmState.message && (
+        {(confirmState.message || confirmState.input) && (
           <DialogContent>
-            <DialogContentText>{confirmState.message}</DialogContentText>
+            {confirmState.message && <DialogContentText>{confirmState.message}</DialogContentText>}
+            {confirmState.input && (
+              <TextField
+                autoFocus
+                fullWidth
+                margin="dense"
+                label={confirmState.input.label}
+                type={confirmState.input.type}
+                value={confirmInputValue}
+                required={confirmState.input.required}
+                error={confirmState.input.required && !confirmInputValue.trim()}
+                onChange={(event) => setConfirmInputValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') resolveConfirm(true);
+                }}
+              />
+            )}
           </DialogContent>
         )}
         <DialogActions sx={{ px: 3, pb: 2 }}>

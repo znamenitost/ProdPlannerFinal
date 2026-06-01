@@ -111,7 +111,8 @@ namespace ProductionPlanner.Data
 
             var taskIdsWithIntervals = await _context.WorkIntervals
                 .AsNoTracking()
-                .Where(i => i.StartTime >= rangeStart && i.StartTime < rangeEnd)
+                .Where(i => i.StartTime < rangeEnd
+                    && (i.EndTime == null || i.EndTime > rangeStart))
                 .Select(i => i.ProductionTaskId)
                 .Distinct()
                 .ToListAsync(cancellationToken);
@@ -238,6 +239,32 @@ namespace ProductionPlanner.Data
             }, cancellationToken);
         }
 
+        public async Task DetachTasksFromSplitAsync(
+            IReadOnlyList<int> childTaskIds,
+            CancellationToken cancellationToken = default)
+        {
+            if (childTaskIds.Count == 0)
+                return;
+
+            var ids = childTaskIds.Distinct().ToList();
+            await ExecuteInTransactionAsync(async ct =>
+            {
+                await _context.TaskSplits
+                    .Where(ts => ids.Contains(ts.ChildTaskId))
+                    .ExecuteDeleteAsync(ct);
+
+                var updatedAt = ToDbDateTime(_timeService.Now);
+                await _context.ProductionTasks
+                    .Where(t => ids.Contains(t.Id))
+                    .ExecuteUpdateAsync(
+                        s => s.SetProperty(t => t.ParentRowNumber, (int?)null)
+                            .SetProperty(t => t.IsSplitTask, false)
+                            .SetProperty(t => t.SupplyMode, SupplyMode.None)
+                            .SetProperty(t => t.UpdatedAt, updatedAt),
+                        ct);
+            }, cancellationToken);
+        }
+
         public async Task DeleteAllTasksAsync(CancellationToken cancellationToken = default)
         {
             var allTasks = await _context.ProductionTasks.ToListAsync(cancellationToken);
@@ -325,6 +352,43 @@ namespace ProductionPlanner.Data
                 .ToListAsync(cancellationToken);
         }
 
+        public async Task<List<TaskSplit>> GetTaskSplitsByParentIdAsync(
+            int parentId,
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.TaskSplits
+                .AsNoTracking()
+                .Where(ts => ts.ParentRowNumber == parentId)
+                .OrderBy(ts => ts.SequenceOrder)
+                .ThenBy(ts => ts.Id)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<Dictionary<int, (SupplyMode SupplyMode, int SequenceOrder)>> GetTaskSplitMetadataByChildTaskIdsAsync(
+            IReadOnlyList<int> childTaskIds,
+            CancellationToken cancellationToken = default)
+        {
+            if (childTaskIds.Count == 0)
+                return new Dictionary<int, (SupplyMode SupplyMode, int SequenceOrder)>();
+
+            var rows = await (
+                from split in _context.TaskSplits.AsNoTracking()
+                join parent in _context.ProductionTasks.AsNoTracking()
+                    on split.ParentRowNumber equals parent.Id
+                where childTaskIds.Contains(split.ChildTaskId)
+                select new
+                {
+                    split.ChildTaskId,
+                    parent.SupplyMode,
+                    split.SequenceOrder
+                })
+                .ToListAsync(cancellationToken);
+
+            return rows.ToDictionary(
+                row => row.ChildTaskId,
+                row => (row.SupplyMode, row.SequenceOrder));
+        }
+
         public async Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(
             int page,
             int pageSize,
@@ -332,7 +396,7 @@ namespace ProductionPlanner.Data
         {
             var query = _context.ProductionTasks
                 .AsNoTracking()
-                .Where(t => t.ParentRowNumber == null)
+                .Where(t => t.ParentRowNumber == null && t.Status != JobStatus.Completed)
                 .OrderByDescending(t => t.DisplayOrder)
                 .ThenByDescending(t => t.Id);
 
@@ -379,7 +443,16 @@ namespace ProductionPlanner.Data
                 .GroupBy(c => parentByChildId[c.Id])
                 .ToDictionary(
                     g => g.Key,
-                    g => g.OrderByDescending(c => c.DisplayOrder).ThenByDescending(c => c.Id).ToList());
+                    g =>
+                    {
+                        var splitOrder = splits
+                            .Where(s => s.ParentRowNumber == g.Key)
+                            .ToDictionary(s => s.ChildTaskId, s => s.SequenceOrder);
+                        return g
+                            .OrderBy(c => splitOrder.GetValueOrDefault(c.Id, int.MaxValue))
+                            .ThenBy(c => c.Id)
+                            .ToList();
+                    });
         }
 
         public async Task ReorderTasksAsync(List<int> orderedIds, CancellationToken cancellationToken = default)
@@ -420,7 +493,8 @@ namespace ProductionPlanner.Data
                 .AsNoTracking()
                 .Include(i => i.Task)
                 .Where(i => i.Task.EmployeeName == employeeName &&
-                            i.StartTime >= rangeStart && i.StartTime < rangeEnd)
+                            i.StartTime < rangeEnd &&
+                            (i.EndTime == null || i.EndTime > rangeStart))
                 .ToListAsync(cancellationToken);
         }
 

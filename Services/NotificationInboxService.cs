@@ -19,8 +19,21 @@ public class NotificationInboxService : INotificationInboxService
     public Task<long> EnqueueNewTaskAsync(string userId, int taskId, string title, DateTime deadline) =>
         EnqueueAsync(userId, "NewTask", taskId, title, deadline);
 
-    public Task<long> EnqueueTaskReadyToStartAsync(string userId, int taskId, string title, DateTime deadline) =>
-        EnqueueAsync(userId, "TaskReadyToStart", taskId, title, deadline);
+    public Task<long> EnqueueTaskReadyToStartAsync(
+        string userId,
+        int taskId,
+        string title,
+        DateTime deadline,
+        JobStatus readyStatus) =>
+        EnqueueAsync(
+            userId,
+            readyStatus == JobStatus.InStock ? "TaskInStockReady" : "TaskApprovedReady",
+            taskId,
+            title,
+            deadline);
+
+    public Task<long> EnqueueSequentialStageReadyAsync(string userId, int taskId, string title, DateTime deadline) =>
+        EnqueueAsync(userId, "SequentialStageReady", taskId, title, deadline);
 
     private async Task<long> EnqueueAsync(string userId, string type, int taskId, string title, DateTime deadline)
     {

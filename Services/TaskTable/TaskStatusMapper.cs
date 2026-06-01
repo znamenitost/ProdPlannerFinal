@@ -14,6 +14,7 @@ public static class TaskStatusMapper
         JobStatus.NoItems => "Нет изделий",
         JobStatus.Approved => "Согласовано",
         JobStatus.InStock => "В наличии",
+        JobStatus.Waiting => "Ожидание",
         _ => ""
     };
 
@@ -28,6 +29,7 @@ public static class TaskStatusMapper
         "Нет изделий" => JobStatus.NoItems,
         "Согласовано" => JobStatus.Approved,
         "В наличии" => JobStatus.InStock,
+        "Ожидание" => JobStatus.Waiting,
         "" => JobStatus.Assigned,
         _ => JobStatus.Assigned
     };
@@ -40,5 +42,6 @@ public static class TaskStatusMapper
 
     public static bool UsesNormalCalendarColor(JobStatus status) =>
         status is JobStatus.Approved or JobStatus.InStock or JobStatus.Assigned
-            or JobStatus.InProgress or JobStatus.Paused or JobStatus.Completed;
+            or JobStatus.InProgress or JobStatus.Paused or JobStatus.Completed
+            or JobStatus.Waiting;
 }

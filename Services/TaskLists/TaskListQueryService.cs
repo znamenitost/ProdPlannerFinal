@@ -28,7 +28,20 @@ public class TaskListQueryService : ITaskListQueryService
         CancellationToken cancellationToken = default)
     {
         var tasks = await _repo.GetActiveTasksAsync(employee, cancellationToken);
-        return tasks.Select(task => MapTaskToResult(task, now)).Cast<object>().ToList();
+        var childTaskIds = tasks
+            .Where(task => task.IsSplitTask && task.ParentRowNumber.HasValue)
+            .Select(task => task.Id)
+            .ToList();
+        var splitMetadataByChild = await _repo.GetTaskSplitMetadataByChildTaskIdsAsync(childTaskIds, cancellationToken);
+
+        return tasks
+            .Select(task =>
+            {
+                splitMetadataByChild.TryGetValue(task.Id, out var splitMetadata);
+                return MapTaskToResult(task, now, splitMetadata);
+            })
+            .Cast<object>()
+            .ToList();
     }
 
     public async Task<object> GetCompletedTasksAsync(
@@ -118,9 +131,14 @@ public class TaskListQueryService : ITaskListQueryService
         return _scheduler.CheckQueueOverloads(tasks, now);
     }
 
-    private object MapTaskToResult(ProductionTask task, DateTime now)
+    private object MapTaskToResult(
+        ProductionTask task,
+        DateTime now,
+        (SupplyMode SupplyMode, int SequenceOrder) splitMetadata = default)
     {
         var (riskLevel, _, _) = DeadlineRiskEvaluator.Evaluate(task, now, _workHours);
+        var supplyMode = splitMetadata.SupplyMode != default ? splitMetadata.SupplyMode : task.SupplyMode;
+        var sequenceOrder = splitMetadata.SequenceOrder;
 
         return new
         {
@@ -136,6 +154,9 @@ public class TaskListQueryService : ITaskListQueryService
             task.Progress,
             task.Status,
             task.IsSplitTask,
+            SupplyMode = supplyMode,
+            SequenceOrder = sequenceOrder,
+            SequenceStartBlocked = supplyMode == SupplyMode.InternalProduction && task.Status == JobStatus.Waiting,
             StatusText = TaskStatusMapper.ToText(task.Status),
             RowNumber = task.Id,
             RiskLevel = riskLevel

@@ -24,12 +24,13 @@ public static class SplitTaskStatusAggregator
             statusText = "Нет изделий";
         else if (children.All(c => c.Status == JobStatus.Completed))
             statusText = "Готово";
+        else if (children.Any(c => c.Status == JobStatus.Paused)
+                 && children.All(c => c.Status is JobStatus.Paused or JobStatus.Assigned or JobStatus.Waiting))
+            statusText = "Пауза";
         else if (children.Any(c =>
                      c.Status == JobStatus.Completed
                      || c.Status == JobStatus.InProgress
-                     || c.Status == JobStatus.Paused
-                     || c.Status == JobStatus.Approved
-                     || c.Status == JobStatus.InStock))
+                     || c.Status == JobStatus.Paused))
             statusText = "Начал";
         else
             statusText = "Назначена";

@@ -25,7 +25,8 @@ import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
-import { childRowSx } from '../theme/surfaces';
+import { childRowSx, highlightedTaskRowSx } from '../theme/surfaces';
+import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
 
 function ChildTaskRow({
   task,
@@ -49,6 +50,7 @@ function ChildTaskRow({
   columnVisibility,
   textLimit
 }) {
+  const isSequentialChild = task.supplyMode === SUPPLY_MODE_INTERNAL;
   const overdue = task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
 
   let isMine = false;
@@ -64,7 +66,7 @@ function ChildTaskRow({
     return task.employeeName === currentUser.fullName && task.statusText !== 'Готово';
   };
 
-  const getRowStyle = () => {
+  const getRowStyle = (theme) => {
     let style = {
       ...childRowSx,
       position: 'relative',
@@ -76,9 +78,7 @@ function ChildTaskRow({
     }
     if (highlightMyTasks) {
       if (isMine) {
-        bgColor = 'info.light';
-        style.boxShadow = (t) => `inset 0 0 0 2px ${t.palette.info.main}`;
-        style.borderRadius = 1;
+        style = { ...style, ...highlightedTaskRowSx(theme) };
       } else {
         style.opacity = 0.65;
         style['&:hover'] = { opacity: 0.85 };
@@ -92,7 +92,7 @@ function ChildTaskRow({
 
   return (
     <>
-    <TableRow sx={getRowStyle()}>
+    <TableRow sx={(theme) => getRowStyle(theme)}>
       <TableCell sx={COL_ICON}>
         <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap' }}>
           <Box sx={{ ...ICON_SLOT_EXPAND, height: 34, position: 'relative' }}>
@@ -110,7 +110,17 @@ function ChildTaskRow({
               }}
             />
           </Box>
-          <Box sx={{ ...ICON_SLOT_FILE, height: 34 }} />
+          {isSequentialChild && task.sequenceOrder ? (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
+            >
+              Этап {task.sequenceOrder}
+            </Typography>
+          ) : (
+            <Box sx={{ ...ICON_SLOT_FILE, height: 34 }} />
+          )}
         </Box>
       </TableCell>
 
@@ -166,6 +176,7 @@ function ChildTaskRow({
               onResume={onResume}
               onComplete={onComplete}
               onSetStatus={onSetStatus}
+              showEdit={false}
             />
           )}
           {showActionButtons && (

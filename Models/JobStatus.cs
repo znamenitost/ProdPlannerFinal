@@ -13,6 +13,8 @@ namespace ProductionPlanner.Models
         /// <summary>Согласовано (решение администратора).</summary>
         Approved = 6,
         /// <summary>В наличии (решение администратора).</summary>
-        InStock = 7
+        InStock = 7,
+        /// <summary>Ожидание предыдущего этапа (последовательное производство).</summary>
+        Waiting = 8
     }
 }

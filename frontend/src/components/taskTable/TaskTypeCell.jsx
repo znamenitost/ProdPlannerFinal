@@ -1,5 +1,6 @@
-import { Chip, Tooltip } from '@mui/material';
+import { Chip } from '@mui/material';
 import { useTextLimit } from '../../context/TextLimitContext';
+import LazyTooltip from '../common/LazyTooltip';
 
 const chipSx = {
   fontSize: '0.75rem',
@@ -17,5 +18,5 @@ export default function TaskTypeCell({ type }) {
 
   const chip = <Chip label={truncated} size="small" variant="outlined" sx={chipSx} />;
 
-  return showTooltip ? <Tooltip title={text} arrow>{chip}</Tooltip> : chip;
+  return showTooltip ? <LazyTooltip title={text} arrow>{chip}</LazyTooltip> : chip;
 }

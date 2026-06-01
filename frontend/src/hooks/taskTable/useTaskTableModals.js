@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { childrenToModalParts, apiPartsToModalParts, taskToModalParts } from '../../utils/splitTaskUtils';
+import { SUPPLY_MODE_INTERNAL, TASK_EXECUTION_PARALLEL, TASK_EXECUTION_SEQUENTIAL } from '../../constants/taskStatuses';
 
 export default function useTaskTableModals({
   api,
@@ -39,7 +40,8 @@ export default function useTaskTableModals({
     setSplitModalTask({
       estimateHours: newRow.estimateHours,
       fileName: newRow.fileName,
-      folderPath: newRow.folderPath
+      folderPath: newRow.folderPath,
+      taskExecutionMode: newRow.taskExecutionMode
     });
     let initialParts = apiPartsToModalParts(newRow.assigneeParts, employees, taskTypes);
     if (!initialParts?.length && newRow.employeeName) {
@@ -53,9 +55,10 @@ export default function useTaskTableModals({
     setSplitModalOpen(true);
   };
 
-  const handleDraftApply = (apiParts) => {
+  const handleDraftApply = (apiParts, _parts, executionMode) => {
     const isShared = apiParts.length >= 2;
     const totalFromParts = apiParts.reduce((s, p) => s + (p.allocatedHours || 0), 0);
+    const taskExecutionMode = executionMode || TASK_EXECUTION_PARALLEL;
     if (isShared) {
       setNewRow(prev => ({
         ...prev,
@@ -63,7 +66,8 @@ export default function useTaskTableModals({
         isSharedTask: true,
         estimateHours: totalFromParts,
         employeeName: '',
-        types: []
+        types: [],
+        taskExecutionMode
       }));
     } else {
       const part = apiParts[0];
@@ -76,7 +80,8 @@ export default function useTaskTableModals({
         isSharedTask: false,
         estimateHours: totalFromParts,
         employeeName: part.employeeName,
-        types
+        types,
+        taskExecutionMode: TASK_EXECUTION_PARALLEL
       }));
     }
   };
@@ -92,7 +97,10 @@ export default function useTaskTableModals({
       id: task.id,
       estimateHours: task.estimateHours,
       fileName: task.fileName,
-      folderPath: task.folderPath
+      folderPath: task.folderPath,
+      taskExecutionMode: task.supplyMode === SUPPLY_MODE_INTERNAL
+        ? TASK_EXECUTION_SEQUENTIAL
+        : 'parallel'
     });
     setSplitModalInitialParts(childrenToModalParts(children, employees, taskTypes));
     setSplitModalOpen(true);
@@ -127,7 +135,8 @@ export default function useTaskTableModals({
         estimateHours: result.estimateHours,
         isSplitTask: result.isSplitTask,
         employeeName: result.employeeName ?? '',
-        type: result.type ?? ''
+        type: result.type ?? '',
+        supplyMode: result.supplyMode
       };
       if (!result.isSplitTask) {
         rowPatch.splitEmployeeNames = '';

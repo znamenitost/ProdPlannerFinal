@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ProductionPlanner.Controllers;
 
@@ -16,17 +18,20 @@ public class DebugController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IAppTimeService _timeService;
     private readonly IWebHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
 
     public DebugController(
         IProductionTaskRepository repo,
         ApplicationDbContext context,
         IAppTimeService timeService,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        IConfiguration configuration)
     {
         _repo = repo;
         _context = context;
         _timeService = timeService;
         _environment = environment;
+        _configuration = configuration;
     }
 
     private ActionResult? DevOnly() =>
@@ -118,8 +123,10 @@ public class DebugController : ControllerBase
     }
 
     [HttpPost("reset-db")]
-    public async Task<IActionResult> ResetDatabase(CancellationToken cancellationToken)
+    public async Task<IActionResult> ResetDatabase([FromBody] ResetDatabaseRequest? request, CancellationToken cancellationToken)
     {
+        if (ValidateResetPassword(request) is { } denied) return denied;
+
         await _repo.DeleteAllWorkIntervalsAsync(cancellationToken);
         await _repo.DeleteAllTasksAsync(cancellationToken);
 
@@ -144,6 +151,61 @@ public class DebugController : ControllerBase
         return Ok(new { message = "База данных полностью очищена" });
     }
 
+    [HttpPost("verify-reset-db-password")]
+    public IActionResult VerifyResetDatabasePassword([FromBody] ResetDatabaseRequest? request)
+    {
+        if (ValidateResetPassword(request) is { } denied) return denied;
+        return Ok(new { message = "Пароль подходит" });
+    }
+
+    private ActionResult? ValidateResetPassword(ResetDatabaseRequest? request)
+    {
+        var configuredPassword = _configuration["Debug:ResetDatabasePassword"];
+        if (string.IsNullOrWhiteSpace(configuredPassword))
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Пароль сброса базы данных не настроен" });
+
+        var providedPassword = GetProvidedResetPassword(request);
+        if (!PasswordMatches(providedPassword, configuredPassword))
+            return Unauthorized(new { message = "Неверный пароль сброса базы данных" });
+
+        return null;
+    }
+
+    private string? GetProvidedResetPassword(ResetDatabaseRequest? request)
+    {
+        if (!string.IsNullOrWhiteSpace(request?.Password)) return request.Password;
+        return Request.Headers.TryGetValue("X-Reset-Db-Password", out var headerPassword)
+            ? headerPassword.ToString()
+            : null;
+    }
+
+    private static bool PasswordMatches(string? provided, string configured)
+    {
+        var normalizedProvided = NormalizePassword(provided);
+        var normalizedConfigured = NormalizePassword(configured);
+        if (string.IsNullOrEmpty(normalizedProvided) || string.IsNullOrEmpty(normalizedConfigured)) return false;
+
+        var providedBytes = Encoding.UTF8.GetBytes(normalizedProvided);
+        var configuredBytes = Encoding.UTF8.GetBytes(normalizedConfigured);
+        return providedBytes.Length == configuredBytes.Length
+            && CryptographicOperations.FixedTimeEquals(providedBytes, configuredBytes);
+    }
+
+    private static string NormalizePassword(string? password)
+    {
+        if (string.IsNullOrWhiteSpace(password)) return "";
+
+        var normalized = password.Trim().TrimEnd(',').Trim();
+        if (normalized.Length >= 2
+            && ((normalized[0] == '"' && normalized[^1] == '"')
+                || (normalized[0] == '\'' && normalized[^1] == '\'')))
+        {
+            normalized = normalized[1..^1].Trim();
+        }
+
+        return normalized;
+    }
+
     [HttpGet("get-intervals/{taskId}")]
     public async Task<IActionResult> GetIntervals(int taskId)
     {
@@ -160,3 +222,7 @@ public class SetTimeRequest
     public string MockDateTime { get; set; } = "";
 }
 
+public class ResetDatabaseRequest
+{
+    public string Password { get; set; } = "";
+}

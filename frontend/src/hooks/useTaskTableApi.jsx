@@ -19,7 +19,9 @@ export default function useTaskTableApi() {
       } catch (parseErr) {
         if (parseErr?.status === 409) throw parseErr;
       }
-      throw new Error(message);
+      const err = new Error(message);
+      err.status = response.status;
+      throw err;
     }
     const contentType = response.headers.get('content-type');
     if (contentType?.includes('application/json')) {
@@ -70,6 +72,9 @@ export default function useTaskTableApi() {
     if (rowData.parts?.length) {
       body.parts = rowData.parts;
     }
+    if (rowData.supplyMode != null) {
+      body.supplyMode = rowData.supplyMode;
+    }
     const response = await fetch('/api/tasks/table/row', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -91,7 +96,8 @@ export default function useTaskTableApi() {
         type: rowData.type,
         employeeName: rowData.employeeName,
         parentRowNumber: rowData.parentRowNumber,
-        statusText: rowData.statusText
+        statusText: rowData.statusText,
+        sequenceOverride: rowData.sequenceOverride ?? false
       })
     });
     return await handleResponse(response);

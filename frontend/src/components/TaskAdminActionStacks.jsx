@@ -22,11 +22,12 @@ import {
 } from '@mui/icons-material';
 import { softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
-import { runWorkflowWithInfoGuard } from '../utils/infoStatusWorkflow';
+import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
   STATUS_PAUSED,
+  STATUS_WAITING,
   getInfoMenuItems,
   isInfoStatus
 } from '../constants/taskStatuses';
@@ -37,7 +38,7 @@ const menuDividerSx = { my: 0.75 };
 function infoMenuIcon(kind) {
   if (kind === 'approved') return <TaskAlt fontSize="small" color="success" />;
   if (kind === 'inStock') return <Inventory2 fontSize="small" color="success" />;
-  if (kind === 'noItems') return <Inventory2 fontSize="small" color="secondary" />;
+  if (kind === 'noItems') return <Inventory2 fontSize="small" color="error" />;
   return <FactCheck fontSize="small" color="secondary" />;
 }
 
@@ -52,6 +53,7 @@ export default function TaskAdminActionStacks({
   onResume,
   onComplete,
   onSetStatus,
+  showEdit = true,
   showWorkflow = true
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
@@ -63,7 +65,8 @@ export default function TaskAdminActionStacks({
   const isStarted = status === STATUS_IN_PROGRESS;
   const isPaused = status === STATUS_PAUSED;
   const blocked = isInfoStatus(status);
-  const workflowItemSx = blocked ? blockedMenuItemSx : undefined;
+  const isWaiting = status === STATUS_WAITING || task?.sequenceStartBlocked;
+  const workflowItemSx = blocked || isWaiting ? blockedMenuItemSx : undefined;
 
   const handleOpen = (event) => {
     event.stopPropagation();
@@ -83,12 +86,12 @@ export default function TaskAdminActionStacks({
     event.stopPropagation();
     handleClose();
     if (pending) return;
-    await runWorkflowWithInfoGuard({
+    await runWorkflowWithSequenceGuard({
       task,
       statusText: status,
       confirm,
       resolveStatus: onSetStatus
-        ? (t, target) => onSetStatus(t, target)
+        ? (t, target, extra) => onSetStatus(t, target, extra)
         : null,
       runAction: async () => lifecycleAction(task),
       actionLabel
@@ -125,18 +128,20 @@ export default function TaskAdminActionStacks({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        <MenuItem
-          onClick={(e) => {
-            e.stopPropagation();
-            handleClose();
-            onEdit();
-          }}
-        >
-          <ListItemIcon>
-            <Edit fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Редактировать</ListItemText>
-        </MenuItem>
+        {showEdit && (
+          <MenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              handleClose();
+              onEdit();
+            }}
+          >
+            <ListItemIcon>
+              <Edit fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Редактировать</ListItemText>
+          </MenuItem>
+        )}
         <MenuItem
           onClick={(e) => {
             e.stopPropagation();
@@ -167,7 +172,7 @@ export default function TaskAdminActionStacks({
           <>
             <Divider sx={menuDividerSx} />
             <MenuItem
-              disabled={!blocked && !canStart && !isPaused}
+              disabled={!canStart && !isPaused}
               sx={workflowItemSx}
               onClick={runWorkflow(startAction, STATUS_IN_PROGRESS)}
             >

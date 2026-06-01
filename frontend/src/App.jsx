@@ -56,7 +56,7 @@ import { MotionSwitch } from './components/ui/MotionSection';
 
 function AppContent() {
   const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
-  const { showSuccess, showError, showWarning, showInfo, confirm } = useUiFeedback();
+  const { showSuccess, showError, showWarning, showInfo, confirm, promptInput } = useUiFeedback();
   const [activeTab, setActiveTab] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
@@ -197,8 +197,29 @@ function AppContent() {
       confirmColor: 'error',
     });
     if (!confirmed) return;
+
+    const password = await promptInput({
+      title: 'Пароль сброса базы данных',
+      message: 'Введите пароль администратора для необратимого сброса базы.',
+      inputLabel: 'Пароль',
+      inputType: 'password',
+      inputRequired: true,
+      confirmLabel: 'Сбросить базу',
+      confirmColor: 'error',
+    });
+    if (!password) return;
+
+    const resetPassword = password.trim();
     try {
-      const response = await fetch('/api/debug/reset-db', { method: 'POST', credentials: 'include' });
+      const response = await fetch('/api/debug/reset-db', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Reset-Db-Password': resetPassword,
+        },
+        body: JSON.stringify({ password: resetPassword }),
+      });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.message || `HTTP ${response.status}`);

@@ -17,11 +17,20 @@ import {
   Paper,
   Checkbox,
   ListItemText,
-  OutlinedInput
+  OutlinedInput,
+  Box,
+  ToggleButtonGroup,
+  ToggleButton
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
 import EstimateHoursInput from './EstimateHoursInput';
 import { partsToApi } from '../utils/splitTaskUtils';
+import {
+  SUPPLY_MODE_COOPERATIVE,
+  SUPPLY_MODE_INTERNAL,
+  TASK_EXECUTION_PARALLEL,
+  TASK_EXECUTION_SEQUENTIAL
+} from '../constants/taskStatuses';
 
 export default function SplitTaskModal({
   open,
@@ -30,20 +39,26 @@ export default function SplitTaskModal({
   initialParts,
   employees,
   taskTypes,
+  taskExecutionMode = 'parallel',
   onClose,
   onSuccess,
   onDraftApply
 }) {
   const [parts, setParts] = useState([]);
+  const [executionMode, setExecutionMode] = useState(TASK_EXECUTION_PARALLEL);
   const [error, setError] = useState('');
   const [removeWarning, setRemoveWarning] = useState('');
 
   const isDraft = mode === 'draft';
   const isEdit = mode === 'edit';
   const isFreeHoursMode = isDraft || isEdit || mode === 'split';
+  const isSequential = executionMode === TASK_EXECUTION_SEQUENTIAL;
+  const showExecutionModePicker = isDraft || (isEdit && parts.length >= 2);
 
   useEffect(() => {
     if (!open) return;
+
+    setExecutionMode(taskExecutionMode || TASK_EXECUTION_PARALLEL);
 
     const defaultPart = { employeeName: employees[0], taskTypes: [taskTypes[0]], hours: 0 };
 
@@ -63,7 +78,7 @@ export default function SplitTaskModal({
     }
     setError('');
     setRemoveWarning('');
-  }, [open, task, initialParts, mode, employees, taskTypes, isDraft]);
+  }, [open, task, initialParts, mode, employees, taskTypes, isDraft, taskExecutionMode]);
 
   const revalidateHours = (newParts) => {
     const sum = newParts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
@@ -115,6 +130,10 @@ export default function SplitTaskModal({
       setError('Заполните все поля для каждой части');
       return false;
     }
+    if (isDraft && isSequential && parts.length < 2) {
+      setError('Для последовательной задачи добавьте минимум 2 этапа');
+      return false;
+    }
     if (isDraft && parts.length < 1) {
       setError('Добавьте сотрудника');
       return false;
@@ -132,14 +151,18 @@ export default function SplitTaskModal({
   const handleSubmit = async () => {
     if (!validateParts()) return;
 
+    const supplyMode = executionMode === TASK_EXECUTION_SEQUENTIAL
+      ? SUPPLY_MODE_INTERNAL
+      : SUPPLY_MODE_COOPERATIVE;
+
     if (isDraft) {
-      onDraftApply?.(partsToApi(parts), parts);
+      onDraftApply?.(partsToApi(parts), parts, executionMode);
       onClose();
       return;
     }
 
     try {
-      const body = { parentTaskId: task.id, parts: partsToApi(parts) };
+      const body = { parentTaskId: task.id, parts: partsToApi(parts), supplyMode };
       const url = isEdit ? `/api/tasks/split/${task.id}` : '/api/tasks/split';
       const response = await fetch(url, {
         method: isEdit ? 'PUT' : 'POST',
@@ -177,11 +200,15 @@ export default function SplitTaskModal({
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
           {isDraft
             ? parts.length >= 2
-              ? `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`
+              ? isSequential
+                ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
+                : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`
               : `Обычная задача · ${displayTotalHours.toFixed(1)} ч`
             : parts.length === 1
               ? `Обычная задача · ${displayTotalHours.toFixed(1)} ч (попадёт в столбец «Часы»)`
-              : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`}
+              : isSequential
+                ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
+                : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`}
         </Typography>
       </DialogTitle>
 
@@ -205,9 +232,42 @@ export default function SplitTaskModal({
           </Alert>
         )}
 
+        {showExecutionModePicker && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Тип задачи
+            </Typography>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={executionMode}
+              onChange={(_e, value) => {
+                if (value) setExecutionMode(value);
+              }}
+            >
+              <ToggleButton value={TASK_EXECUTION_PARALLEL}>
+                Параллельная
+              </ToggleButton>
+              <ToggleButton value={TASK_EXECUTION_SEQUENTIAL}>
+                Последовательная
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              {isSequential
+                ? 'Этапы выполняются по очереди: следующий начинается после «Готово» предыдущего.'
+                : 'Все этапы доступны сразу — как общая задача.'}
+            </Typography>
+          </Box>
+        )}
+
         <Stack spacing={2}>
           {parts.map((part, idx) => (
             <Paper key={idx} variant="outlined" sx={{ p: 2 }}>
+              {isSequential && parts.length > 1 && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Этап {idx + 1}
+                </Typography>
+              )}
               <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <FormControl size="small" sx={{ minWidth: 120 }}>
                   <InputLabel>Сотрудник</InputLabel>
@@ -262,7 +322,7 @@ export default function SplitTaskModal({
           ))}
 
           <Button startIcon={<Add />} onClick={addPart} variant="outlined" size="small">
-            Добавить сотрудника
+            {isSequential ? 'Добавить этап' : 'Добавить сотрудника'}
           </Button>
         </Stack>
       </DialogContent>

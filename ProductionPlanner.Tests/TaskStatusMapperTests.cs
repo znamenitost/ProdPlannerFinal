@@ -14,6 +14,7 @@ public class TaskStatusMapperTests
     [InlineData(JobStatus.NoItems, "Нет изделий")]
     [InlineData(JobStatus.Approved, "Согласовано")]
     [InlineData(JobStatus.InStock, "В наличии")]
+    [InlineData(JobStatus.Waiting, "Ожидание")]
     public void ToText_MapsKnownStatuses(JobStatus status, string expected)
     {
         Assert.Equal(expected, TaskStatusMapper.ToText(status));
@@ -30,6 +31,7 @@ public class TaskStatusMapperTests
     [InlineData("Нет изделий", JobStatus.NoItems)]
     [InlineData("Согласовано", JobStatus.Approved)]
     [InlineData("В наличии", JobStatus.InStock)]
+    [InlineData("Ожидание", JobStatus.Waiting)]
     public void FromText_MapsKnownLabels(string text, JobStatus expected)
     {
         Assert.Equal(expected, TaskStatusMapper.FromText(text));

@@ -63,12 +63,45 @@ public class SplitTaskStatusAggregatorTests
     }
 
     [Fact]
+    public void OnlyPausedAndNotStartedChildren_ShowsPauza()
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Paused),
+            Child("Яромир", JobStatus.Assigned),
+            Child("Олег", JobStatus.Waiting)
+        };
+
+        var (statusText, _) = SplitTaskStatusAggregator.Aggregate(parent, children, "Дима");
+
+        Assert.Equal("Пауза", statusText);
+    }
+
+    [Fact]
     public void NoChildrenStarted_ShowsNaznachena()
     {
         var parent = Parent();
         var children = new List<ProductionTask>
         {
             Child("Дима", JobStatus.Assigned),
+            Child("Яромир", JobStatus.Assigned)
+        };
+
+        var (statusText, _) = SplitTaskStatusAggregator.Aggregate(parent, children, "Дима");
+
+        Assert.Equal("Назначена", statusText);
+    }
+
+    [Theory]
+    [InlineData(JobStatus.Approved)]
+    [InlineData(JobStatus.InStock)]
+    public void ResolvedInfoStatusWithoutWork_DoesNotStartParent(JobStatus childStatus)
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", childStatus),
             Child("Яромир", JobStatus.Assigned)
         };
 

@@ -1,9 +1,10 @@
 export function partsToApi(parts) {
-  return parts.map((p) => ({
+  return parts.map((p, index) => ({
     childTaskId: p.childTaskId || null,
     employeeName: p.employeeName,
     taskType: p.taskTypes.join(', '),
-    allocatedHours: parseFloat(p.hours)
+    allocatedHours: parseFloat(p.hours),
+    sequenceOrder: index + 1
   }));
 }
 

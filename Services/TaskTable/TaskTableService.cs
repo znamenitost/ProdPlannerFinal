@@ -12,19 +12,25 @@ public class TaskTableService : ITaskTableService
     private readonly IAppTimeService _timeService;
     private readonly ITaskNotificationService _notificationService;
     private readonly ITaskSplitService _splitService;
+    private readonly IWorkHoursCalculator _workHours;
+    private readonly IEmployeeStatsService _statsService;
 
     public TaskTableService(
         IProductionTaskRepository repo,
         ITaskLifecycleService lifecycle,
         IAppTimeService timeService,
         ITaskNotificationService notificationService,
-        ITaskSplitService splitService)
+        ITaskSplitService splitService,
+        IWorkHoursCalculator workHours,
+        IEmployeeStatsService statsService)
     {
         _repo = repo;
         _lifecycle = lifecycle;
         _timeService = timeService;
         _notificationService = notificationService;
         _splitService = splitService;
+        _workHours = workHours;
+        _statsService = statsService;
     }
 
     /// <summary>
@@ -35,6 +41,10 @@ public class TaskTableService : ITaskTableService
     private static bool HasWorkHistory(ProductionTask task) =>
         (task.WorkIntervals?.Count ?? 0) > 0
         || task.Status is JobStatus.InProgress or JobStatus.Paused;
+
+    private static bool ShouldKeepInCompletedStackOnDelete(ProductionTask task) =>
+        (task.WorkIntervals?.Count ?? 0) > 0
+        || task.Status is not (JobStatus.Assigned or JobStatus.Waiting);
 
     public async Task<PaginatedResult<TaskTableRowDto>> GetRowsAsync(
         int page,
@@ -93,6 +103,9 @@ public class TaskTableService : ITaskTableService
         if (task == null)
             return null;
 
+        if (task.ParentRowNumber == null && task.Status == JobStatus.Completed)
+            return null;
+
         var now = _timeService.Now;
         var intervals = (IReadOnlyList<WorkInterval>)(task.WorkIntervals ?? []);
 
@@ -139,6 +152,10 @@ public class TaskTableService : ITaskTableService
             var combinedTypes = string.Join(", ",
                 parts.Select(p => p.TaskType).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct());
 
+            var supplyMode = request.SupplyMode == SupplyMode.InternalProduction
+                ? SupplyMode.InternalProduction
+                : SupplyMode.Cooperative;
+
             var newTask = new ProductionTask
             {
                 DisplayOrder = -1,
@@ -154,6 +171,7 @@ public class TaskTableService : ITaskTableService
                 ActualHours = 0,
                 ParentRowNumber = null,
                 IsSplitTask = false,
+                SupplyMode = supplyMode,
                 CreatedAt = _timeService.Now,
                 UpdatedAt = _timeService.Now
             };
@@ -162,7 +180,11 @@ public class TaskTableService : ITaskTableService
             await _repo.ExecuteInTransactionAsync(async ct =>
             {
                 await _repo.AddTaskAsync(newTask, ct);
-                parent = await _splitService.SplitTaskAsync(newTask.Id, parts, ct);
+                parent = await _splitService.SplitTaskAsync(
+                    newTask.Id,
+                    parts,
+                    supplyMode,
+                    ct);
                 await _repo.AppendRootDisplayOrderAsync(parent.Id, ct);
             }, cancellationToken);
 
@@ -285,6 +307,7 @@ public class TaskTableService : ITaskTableService
         // Признак перехода в «разблокирующий» статус (Согласовано/В наличии) — после сохранения
         // отдельным личным пушем сообщим исполнителю, что блокировка снята и можно начинать.
         var notifyReadyToStart = false;
+        JobStatus? readyToStartStatus = null;
         if (!string.IsNullOrEmpty(request.StatusText))
         {
             var newStatus = TaskStatusMapper.FromText(request.StatusText);
@@ -294,6 +317,29 @@ public class TaskTableService : ITaskTableService
                     return TaskTableServiceResult<ProductionTask>.Fail("Согласовано можно выставить только для задачи «Согласование».");
                 if (newStatus == JobStatus.InStock && task.Status != JobStatus.NoItems)
                     return TaskTableServiceResult<ProductionTask>.Fail("«В наличии» можно выставить только для задачи «Нет изделий».");
+
+                if (isSplitParent
+                    && newStatus is JobStatus.PendingApproval or JobStatus.NoItems or JobStatus.Approved or JobStatus.InStock)
+                {
+                    return TaskTableServiceResult<ProductionTask>.Fail(
+                        "Инфостатусы выставляются только на дочерних или обычных задачах.");
+                }
+
+                if (newStatus == JobStatus.Assigned
+                    && task.Status == JobStatus.Waiting
+                    && !request.SequenceOverride)
+                {
+                    return TaskTableServiceResult<ProductionTask>.Fail(
+                        "Этап ожидает завершения предыдущего. Используйте обход очереди.");
+                }
+
+                if (!SupplyWorkflow.CanTransitionWithOverride(task.Status, newStatus, request.SequenceOverride)
+                    && newStatus == JobStatus.Assigned
+                    && task.Status != JobStatus.Waiting
+                    && request.SequenceOverride)
+                {
+                    return TaskTableServiceResult<ProductionTask>.Fail("Обход очереди доступен только для статуса «Ожидание».");
+                }
 
                 if (newStatus == JobStatus.Completed && task.Status != JobStatus.Completed)
                 {
@@ -315,9 +361,18 @@ public class TaskTableService : ITaskTableService
                 }
                 else
                 {
-                    task.Status = newStatus;
-                    statusChangedTo = newStatus.ToString();
-                    notifyReadyToStart = newStatus is JobStatus.Approved or JobStatus.InStock;
+                    var resolvedStatus = newStatus;
+                    if (newStatus is JobStatus.Approved or JobStatus.InStock
+                        && !request.SequenceOverride
+                        && await IsBlockedByPreviousSequentialStagesAsync(task, cancellationToken))
+                    {
+                        resolvedStatus = JobStatus.Waiting;
+                    }
+
+                    task.Status = resolvedStatus;
+                    statusChangedTo = resolvedStatus.ToString();
+                    notifyReadyToStart = resolvedStatus is JobStatus.Approved or JobStatus.InStock;
+                    readyToStartStatus = notifyReadyToStart ? resolvedStatus : null;
                 }
             }
         }
@@ -341,7 +396,7 @@ public class TaskTableService : ITaskTableService
             await _notificationService.NotifyStatusChangedAsync(task, statusChangedTo);
 
         if (notifyReadyToStart)
-            await _notificationService.NotifyTaskReadyToStartAsync(task);
+            await _notificationService.NotifyTaskReadyToStartAsync(task, readyToStartStatus!.Value);
 
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }
@@ -413,8 +468,35 @@ public class TaskTableService : ITaskTableService
             await _repo.UpdateWorkIntervalAsync(interval, cancellationToken);
         }
 
-        task.UpdatedAt = _timeService.Now;
-        await _repo.UpdateTaskAsync(task, cancellationToken);
+        if (task.Status == JobStatus.Completed)
+        {
+            var now = _timeService.Now;
+            var oldSaved = task.EstimateHours - task.ActualHours;
+            var newActualHours = CalculateActualHours(new ProductionTask
+            {
+                ActualHours = task.ActualHours,
+                WorkIntervals = byId.Values.ToList()
+            });
+            var newSaved = task.EstimateHours - newActualHours;
+
+            await TransferSavedHoursAsync(
+                task.EmployeeName,
+                task.EmployeeName,
+                oldSaved,
+                newSaved,
+                task.CompletedAt,
+                now,
+                cancellationToken);
+
+            task.ActualHours = newActualHours;
+            task.UpdatedAt = now;
+            await _repo.UpdateTaskAsync(task, cancellationToken);
+        }
+        else
+        {
+            task.UpdatedAt = _timeService.Now;
+            await _repo.UpdateTaskAsync(task, cancellationToken);
+        }
 
         var updated = (await _repo.GetWorkIntervalsForTaskIdsAsync([taskId], cancellationToken))
             .OrderBy(i => i.StartTime)
@@ -446,17 +528,25 @@ public class TaskTableService : ITaskTableService
             return await DeleteSplitParentAsync(task, employeeNames, cancellationToken);
         }
 
-        if (HasWorkHistory(task))
+        if (ShouldKeepInCompletedStackOnDelete(task))
         {
-            if (task.Status != JobStatus.Completed)
-                await _lifecycle.CompleteTaskAsync(task.Id, _timeService.Now, cancellationToken);
+            var parentId = task.ParentRowNumber;
+            await CompleteForTableRemovalAsync(task, cancellationToken);
 
-            // CompleteTaskAsync уже отправил TaskStatusChanged; отдельное TaskDeleted не шлём,
-            // потому что задача всё ещё существует — просто переехала в выполненные.
+            if (parentId.HasValue && task.IsSplitTask)
+            {
+                await _repo.DetachTasksFromSplitAsync([task.Id], cancellationToken);
+                await RefreshParentAfterChildRemovalAsync(parentId.Value, cancellationToken);
+            }
+
+            await _notificationService.NotifyTaskDeletedAsync(id, employeeNames);
             return TaskTableServiceResult<bool>.Ok(true);
         }
 
+        var deletedChildParentId = task.ParentRowNumber;
         await _repo.DeleteTaskAsync(id, cancellationToken);
+        if (deletedChildParentId.HasValue && task.IsSplitTask)
+            await RefreshParentAfterChildRemovalAsync(deletedChildParentId.Value, cancellationToken);
         await _notificationService.NotifyTaskDeletedAsync(id, employeeNames);
         return TaskTableServiceResult<bool>.Ok(true);
     }
@@ -479,7 +569,7 @@ public class TaskTableService : ITaskTableService
         {
             var full = await _repo.GetTaskByIdAsync(child.Id, cancellationToken, includeIntervals: true);
             if (full == null) continue;
-            (HasWorkHistory(full) ? childrenWithHistory : childrenWithoutHistory).Add(full);
+            (ShouldKeepInCompletedStackOnDelete(full) ? childrenWithHistory : childrenWithoutHistory).Add(full);
         }
 
         if (childrenWithHistory.Count == 0)
@@ -496,21 +586,135 @@ public class TaskTableService : ITaskTableService
             await _repo.DeleteTaskAsync(child.Id, cancellationToken);
         }
 
-        // Дети с работой переводим в Completed (там корректно посчитаются ActualHours
-        // и саженные часы попадут в EmployeeStats каждому сотруднику).
-        foreach (var child in childrenWithHistory.Where(c => c.Status != JobStatus.Completed))
+        // Дети с историей уходят в стек выполненных, но отсоединяются от сплита,
+        // чтобы удалённая дочерняя строка больше не возвращалась в таблицу.
+        foreach (var child in childrenWithHistory)
         {
-            await _lifecycle.CompleteTaskAsync(child.Id, _timeService.Now, cancellationToken);
+            await CompleteForTableRemovalAsync(child, cancellationToken);
         }
 
-        // Родитель должен оказаться Completed (последний CompleteTaskAsync вызывает UpdateParentStatusAsync).
-        var finalParent = await _repo.GetTaskByIdAsync(parent.Id, cancellationToken);
-        if (finalParent != null && finalParent.Status != JobStatus.Completed)
-        {
-            await _lifecycle.CompleteTaskAsync(parent.Id, _timeService.Now, cancellationToken);
-        }
+        await _repo.DetachTasksFromSplitAsync(childrenWithHistory.Select(c => c.Id).ToList(), cancellationToken);
+        await _repo.DeleteTaskAsync(parent.Id, cancellationToken);
+        await _notificationService.NotifyTaskDeletedAsync(parent.Id, employeeNames);
 
         return TaskTableServiceResult<bool>.Ok(true);
+    }
+
+    private async Task CompleteForTableRemovalAsync(
+        ProductionTask task,
+        CancellationToken cancellationToken)
+    {
+        var now = _timeService.Now;
+        await _repo.CloseOpenIntervalsAsync(task.Id, now, cancellationToken);
+
+        if (task.Status == JobStatus.Completed)
+            return;
+
+        var full = await _repo.GetTaskByIdAsync(task.Id, cancellationToken, includeIntervals: true) ?? task;
+        var actualHours = CalculateActualHours(full);
+
+        await _repo.TryTransitionStatusAsync(
+            task.Id,
+            JobStatus.Completed,
+            now,
+            expectedStatuses: null,
+            new TaskStatusPatch
+            {
+                Progress = 1,
+                CompletedAt = now,
+                ActualHours = actualHours
+            },
+            cancellationToken);
+
+        if (!string.IsNullOrEmpty(full.EmployeeName))
+            await _statsService.AddSavedHoursAsync(full.EmployeeName, full.EstimateHours - actualHours, now);
+
+        var completed = await _repo.GetTaskByIdAsync(task.Id, cancellationToken);
+        if (completed != null)
+            await _notificationService.NotifyStatusChangedAsync(completed, "Completed");
+    }
+
+    private double CalculateActualHours(ProductionTask task)
+    {
+        if (task.WorkIntervals.Count == 0)
+            return task.ActualHours;
+
+        return task.WorkIntervals
+            .Where(interval => interval.EndTime.HasValue)
+            .Sum(interval => _workHours.GetWorkHoursBetween(
+                AppDateTime.ToMoscowWallClockFromDb(interval.StartTime),
+                AppDateTime.ToMoscowWallClockFromDb(interval.EndTime!.Value)));
+    }
+
+    private async Task<bool> IsBlockedByPreviousSequentialStagesAsync(
+        ProductionTask task,
+        CancellationToken cancellationToken)
+    {
+        if (!task.ParentRowNumber.HasValue || !task.IsSplitTask)
+            return false;
+
+        var parent = await _repo.GetTaskByIdAsync(task.ParentRowNumber.Value, cancellationToken);
+        if (parent == null || !SupplyWorkflow.IsSequential(parent.SupplyMode))
+            return false;
+
+        var splits = await _repo.GetTaskSplitsByParentIdAsync(parent.Id, cancellationToken);
+        var currentSplit = splits.FirstOrDefault(s => s.ChildTaskId == task.Id);
+        if (currentSplit == null)
+            return false;
+
+        var previousChildIds = splits
+            .Where(s => s.SequenceOrder < currentSplit.SequenceOrder)
+            .Select(s => s.ChildTaskId)
+            .ToHashSet();
+        if (previousChildIds.Count == 0)
+            return false;
+
+        var children = await _repo.GetChildTasksAsync(parent.Id, cancellationToken);
+        return children.Any(c => previousChildIds.Contains(c.Id) && c.Status != JobStatus.Completed);
+    }
+
+    private async Task RefreshParentAfterChildRemovalAsync(
+        int parentId,
+        CancellationToken cancellationToken)
+    {
+        await _splitService.AdvanceSequentialStageAsync(parentId, cancellationToken);
+
+        var parent = await _repo.GetTaskByIdAsync(parentId, cancellationToken);
+        if (parent == null || !parent.IsSplitTask)
+            return;
+
+        var children = await _repo.GetChildTasksAsync(parentId, cancellationToken);
+        if (children.Count == 0)
+        {
+            await _repo.DeleteTaskAsync(parentId, cancellationToken);
+            await _notificationService.NotifyTaskDeletedAsync(parentId, []);
+            return;
+        }
+
+        JobStatus newStatus;
+        if (children.All(c => c.Status == JobStatus.Completed))
+            newStatus = JobStatus.Completed;
+        else if (children.Any(c => c.Status is JobStatus.Completed or JobStatus.InProgress or JobStatus.Paused))
+            newStatus = JobStatus.InProgress;
+        else
+            newStatus = JobStatus.Assigned;
+
+        var now = _timeService.Now;
+        var patch = newStatus == JobStatus.Completed
+            ? new TaskStatusPatch { Progress = 1, CompletedAt = now }
+            : new TaskStatusPatch { Progress = 0, ClearCompletedAt = true };
+
+        await _repo.TryTransitionStatusAsync(
+            parentId,
+            newStatus,
+            now,
+            expectedStatuses: null,
+            patch,
+            cancellationToken);
+
+        parent = await _repo.GetTaskByIdAsync(parentId, cancellationToken);
+        if (parent != null)
+            await _notificationService.NotifyTaskUpdatedAsync(parent);
     }
 
     /// <summary>

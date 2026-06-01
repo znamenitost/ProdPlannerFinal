@@ -11,6 +11,9 @@ import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
 import {
+  TASK_EXECUTION_SEQUENTIAL
+} from '../constants/taskStatuses';
+import {
   COL_ICON,
   COL_TASK,
   COL_FILE,
@@ -31,6 +34,7 @@ export default function NewTaskRow({
   columnVisibility
 }) {
   const isShared = newRow.isSharedTask && (newRow.assigneeParts?.length ?? 0) >= 2;
+  const isSequential = newRow.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL;
   const hasAssignees = isShared || Boolean(newRow.employeeName);
   const hoursDisplay =
     newRow.estimateHours !== '' && newRow.estimateHours != null && !Number.isNaN(Number(newRow.estimateHours))
@@ -38,7 +42,11 @@ export default function NewTaskRow({
       : '—';
 
   const assigneeLabel = () => {
-    if (isShared) return `Общая · ${newRow.assigneeParts.length}`;
+    if (isShared) {
+      return isSequential
+        ? `Последов. · ${newRow.assigneeParts.length} эт.`
+        : `Общая · ${newRow.assigneeParts.length}`;
+    }
     if (newRow.employeeName) return newRow.employeeName;
     return 'Участники';
   };
@@ -112,9 +120,17 @@ export default function NewTaskRow({
 
       <TableCell sx={columnCellSx('status', columnVisibility, showHoursTypeColumns, COL_STATUS)}>
         <Chip
-          label={hasAssignees ? (isShared ? 'Общая' : 'Новая') : 'Черновик'}
+          label={
+            hasAssignees
+              ? isShared
+                ? isSequential
+                  ? 'Последов.'
+                  : 'Общая'
+                : 'Новая'
+              : 'Черновик'
+          }
           size="small"
-          color={isShared ? 'secondary' : hasAssignees ? 'warning' : 'default'}
+          color={isShared ? (isSequential ? 'info' : 'secondary') : hasAssignees ? 'warning' : 'default'}
           variant={isShared ? 'outlined' : 'filled'}
         />
       </TableCell>
