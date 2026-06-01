@@ -19,7 +19,34 @@ public static class PostgresSchemaMigrator
         await db.Database.MigrateAsync(cancellationToken);
         logger.LogInformation("Схема PostgreSQL применена (EF migrations).");
 
+        await ApplyProductionTasksCompatibilityPatchAsync(db, logger, cancellationToken);
         await ApplyUserNotificationsPatchAsync(db, logger, cancellationToken);
+    }
+
+    private static async Task ApplyProductionTasksCompatibilityPatchAsync(
+        ApplicationDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "SupplyMode" integer NOT NULL DEFAULT 0;
+
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "HiddenFromTaskTable" boolean NOT NULL DEFAULT false;
+
+                ALTER TABLE "TaskSplits"
+                    ADD COLUMN IF NOT EXISTS "SequenceOrder" integer NOT NULL DEFAULT 0;
+                """, cancellationToken);
+            logger.LogInformation("Колонки совместимости ProductionTasks/TaskSplits проверены/созданы (PostgreSQL).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (ProductionTasks/TaskSplits)");
+            throw;
+        }
     }
 
     private static async Task ApplyUserNotificationsPatchAsync(
