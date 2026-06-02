@@ -53,7 +53,7 @@ import useAuth from './hooks/useAuth';
 import useNotificationsHub from './hooks/useNotificationsHub';
 import { endLunch, getCurrentLunch, startLunch } from './services/api';
 import appTheme from './theme/appTheme';
-import { glassPaperSx, pageShellSx } from './theme/surfaces';
+import { pageShellSx } from './theme/surfaces';
 import SectionCard from './components/ui/SectionCard';
 import { MotionSwitch } from './components/ui/MotionSection';
 
@@ -315,7 +315,7 @@ function AppContent() {
     <>
       <Box sx={pageShellSx}>
         <Container maxWidth="xl">
-          <Paper sx={{ ...glassPaperSx, p: 2, mb: 3 }}>
+          <Paper sx={{ p: 2, mb: 3, borderRadius: 2.5 }}>
             <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                 <Today color="primary" sx={{ fontSize: 36 }} />
@@ -357,7 +357,7 @@ function AppContent() {
             </Box>
           </Paper>
 
-          <Paper sx={{ mb: 3, borderRadius: 3, overflow: 'hidden' }}>
+          <Paper sx={{ mb: 3, borderRadius: 2.5, overflow: 'hidden' }}>
             <Tabs value={activeTab} onChange={handleTabChange} centered variant="fullWidth">
               <Tab icon={<CalendarMonth />} iconPosition="start" label="Календарь" />
               <Tab icon={<TableChart />} iconPosition="start" label="Таблица задач" />

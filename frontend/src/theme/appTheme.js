@@ -1,6 +1,6 @@
 import { createTheme, alpha } from '@mui/material/styles';
 import { tokens, chrome } from './paletteTokens';
-import { createMuiTransition } from './motion';
+import { createMuiTransition, sectionPaperThemeStyles } from './motion';
 
 const { neutral, primary, secondary, success, warning, error, info } = tokens;
 
@@ -52,7 +52,7 @@ export const appTheme = createTheme({
     body2: { fontSize: '0.85rem' },
     button: { textTransform: 'none', fontWeight: 600, fontSize: '0.875rem' }
   },
-  shape: { borderRadius: 12 },
+  shape: { borderRadius: 10 },
   shadows: [
     'none',
     `0 1px 2px ${alpha(neutral[600], 0.04)}`,
@@ -76,9 +76,16 @@ export const appTheme = createTheme({
         root: {
           backgroundImage: 'none',
           border: `1px solid ${borderSubtle}`,
-          boxShadow: shadowSoft
+          boxShadow: shadowSoft,
+          borderRadius: 10
         }
-      }
+      },
+      variants: [
+        {
+          props: { variant: 'section' },
+          style: ({ theme }) => sectionPaperThemeStyles(theme)
+        }
+      ]
     },
     MuiCard: {
       defaultProps: { elevation: 0 },
@@ -122,15 +129,36 @@ export const appTheme = createTheme({
     },
     MuiIconButton: {
       styleOverrides: {
-        root: ({ theme }) => ({
+        root: ({ theme, ownerState }) => ({
           borderRadius: 10,
           transition: theme.transitions.create('background-color', {
             duration: theme.transitions.duration.short,
             easing: theme.transitions.easing.easeInOut
           }),
-          '&:hover': { backgroundColor: alpha(primary.main, 0.08) }
+          ...(ownerState.variant !== 'soft' && {
+            '&:hover': { backgroundColor: alpha(primary.main, 0.08) }
+          })
         })
-      }
+      },
+      variants: [
+        {
+          props: { variant: 'soft' },
+          style: ({ theme, ownerState }) => {
+            const paletteKey =
+              ownerState.color && ownerState.color !== 'default' && ownerState.color !== 'inherit'
+                ? ownerState.color
+                : 'primary';
+            const main =
+              theme.palette[paletteKey]?.main ?? theme.palette.primary.main;
+            return {
+              backgroundColor: alpha(main, 0.1),
+              color: main,
+              transition: createMuiTransition(theme, 'background-color'),
+              '&:hover': { backgroundColor: alpha(main, 0.16) }
+            };
+          }
+        }
+      ]
     },
     MuiChip: {
       styleOverrides: {
@@ -190,7 +218,7 @@ export const appTheme = createTheme({
         },
         indicator: {
           height: 3,
-          borderRadius: 3,
+          borderRadius: 2.5,
           backgroundColor: primary.main
         }
       }
@@ -219,7 +247,7 @@ export const appTheme = createTheme({
     MuiDialog: {
       styleOverrides: {
         paper: {
-          borderRadius: 16,
+          borderRadius: 14,
           border: `1px solid ${borderSubtle}`,
           backgroundColor: neutral[50],
           boxShadow: shadowSoft
@@ -228,7 +256,7 @@ export const appTheme = createTheme({
     },
     MuiAlert: {
       styleOverrides: {
-        root: { borderRadius: 12, border: `1px solid ${alpha(neutral[300], 0.6)}` },
+        root: { borderRadius: 10, border: `1px solid ${alpha(neutral[300], 0.6)}` },
         standardSuccess: { backgroundColor: alpha(success.light, 0.45) },
         standardWarning: { backgroundColor: alpha(warning.light, 0.5) },
         standardError: { backgroundColor: alpha(error.light, 0.45) },
@@ -259,7 +287,7 @@ export const appTheme = createTheme({
     MuiMenu: {
       styleOverrides: {
         paper: {
-          borderRadius: 12,
+          borderRadius: 10,
           marginTop: 4,
           minWidth: 200,
           border: `1px solid ${borderSubtle}`,
@@ -282,7 +310,7 @@ export const appTheme = createTheme({
     },
     MuiSnackbar: {
       styleOverrides: {
-        root: { '& .MuiPaper-root': { borderRadius: 12 } }
+        root: { '& .MuiPaper-root': { borderRadius: 10 } }
       }
     }
   }

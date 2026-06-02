@@ -1,5 +1,5 @@
 import { Paper, Box, Typography } from '@mui/material';
-import { glassPaperSx, sectionHeaderSx, sectionTitleRowSx } from '../../theme/surfaces';
+import { sectionHeaderSx, sectionTitleRowSx } from '../../theme/surfaces';
 import { MotionFade } from './MotionSection';
 
 /**
@@ -17,7 +17,7 @@ export default function SectionCard({
 }) {
   return (
     <MotionFade appear>
-    <Paper sx={[glassPaperSx, sx]} {...paperProps}>
+    <Paper variant="section" sx={sx} {...paperProps}>
       {(title || action) && (
         <Box sx={sectionHeaderSx}>
           <Box sx={sectionTitleRowSx}>

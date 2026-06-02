@@ -18,7 +18,6 @@ import {
   TASK_TABLE_TEXT_LIMIT_MIN,
   TASK_TABLE_TEXT_LIMIT_MAX
 } from '../../constants/taskTableColumnsConfig';
-import { softIconButtonSx } from '../../theme/surfaces';
 
 export default function TaskTableColumnSettings({
   visibility,
@@ -34,9 +33,10 @@ export default function TaskTableColumnSettings({
     <>
       <Tooltip title="Настройки колонок" arrow>
         <IconButton
+          variant="soft"
+          color="primary"
           onClick={(e) => setAnchorEl(e.currentTarget)}
           aria-label="Настройки колонок таблицы"
-          sx={softIconButtonSx('primary')}
         >
           <Settings />
         </IconButton>

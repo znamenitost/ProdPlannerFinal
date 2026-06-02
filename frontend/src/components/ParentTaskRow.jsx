@@ -151,7 +151,14 @@ function ParentTaskRow({
           <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', width: '100%' }}>
             <Box sx={ICON_SLOT_EXPAND}>
               {hasChildren ? (
-                <IconButton size="small" onClick={() => onToggleExpand(task.id)} sx={{ p: 0.5 }}>
+                <IconButton
+                  size="small"
+                  variant="soft"
+                  color="primary"
+                  onClick={() => onToggleExpand(task.id)}
+                  aria-label={isExpanded ? 'Свернуть подзадачи' : 'Развернуть подзадачи'}
+                  sx={{ p: 0.5 }}
+                >
                   {isExpanded ? <ExpandMore fontSize="small" /> : <ChevronRight fontSize="small" />}
                 </IconButton>
               ) : null}

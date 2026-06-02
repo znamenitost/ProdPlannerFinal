@@ -9,7 +9,6 @@ import {
   ToggleButtonGroup
 } from '@mui/material';
 import { ChevronLeft, ChevronRight, CalendarMonth, Today } from '@mui/icons-material';
-import { glassPaperSx, softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import useWeekCalendarQuery from '../hooks/queries/useWeekCalendarQuery';
 import DayColumn from './DayColumn';
@@ -107,7 +106,7 @@ export default function WeekCalendar({ employee }) {
   const isAnchorToday = isSameCalendarDay(anchorDate, currentWorkday);
 
   return (
-    <Paper sx={{ ...glassPaperSx, mb: 3 }}>
+    <Paper variant="section" sx={{ mb: 3 }}>
       <Box
         sx={{
           display: 'flex',
@@ -120,7 +119,7 @@ export default function WeekCalendar({ employee }) {
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-          <IconButton onClick={goPrev} sx={softIconButtonSx('primary')} aria-label={`Предыдущая ${navLabel}`}>
+          <IconButton variant="soft" color="primary" onClick={goPrev} aria-label={`Предыдущая ${navLabel}`}>
             <ChevronLeft />
           </IconButton>
           <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
@@ -129,7 +128,7 @@ export default function WeekCalendar({ employee }) {
               {headerTitle}
             </Typography>
           </Box>
-          <IconButton onClick={goNext} sx={softIconButtonSx('primary')} aria-label={`Следующая ${navLabel}`}>
+          <IconButton variant="soft" color="primary" onClick={goNext} aria-label={`Следующая ${navLabel}`}>
             <ChevronRight />
           </IconButton>
           <ToggleButtonGroup

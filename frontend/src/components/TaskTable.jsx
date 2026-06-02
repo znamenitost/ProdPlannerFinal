@@ -177,7 +177,7 @@ export default function TaskTable({
 
   return (
     <TextLimitProvider value={columnSettings.textLimit}>
-    <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
+    <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 2.5 }}>
       {isAdmin && (
         <PlanningWarningsBanner
           warnings={table.planningWarnings}
@@ -198,7 +198,18 @@ export default function TaskTable({
         onCompletedBottomSortChange={setCompletedBottomSort}
       />
 
-      <TableContainer ref={tableContainerRef} sx={{ maxHeight: '70vh', overflow: 'auto' }}>
+      <TableContainer
+        ref={tableContainerRef}
+        sx={{
+          maxHeight: '70vh',
+          overflow: 'auto',
+          scrollBehavior: 'smooth',
+          WebkitOverflowScrolling: 'touch',
+          '@media (prefers-reduced-motion: reduce)': {
+            scrollBehavior: 'auto'
+          }
+        }}
+      >
         <Table
           stickyHeader
           size="small"

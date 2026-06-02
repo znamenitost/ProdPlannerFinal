@@ -17,7 +17,6 @@ import {
   Inventory2,
   TaskAlt
 } from '@mui/icons-material';
-import { softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
@@ -105,10 +104,11 @@ export default function EmployeeStatusButtons({
     <>
       <IconButton
         size="small"
+        variant="soft"
+        color="primary"
         onClick={handleOpen}
         disabled={pending}
         aria-label="Действия с задачей"
-        sx={softIconButtonSx('primary')}
       >
         {pending ? <CircularProgress size={18} /> : <MoreVert fontSize="small" />}
       </IconButton>

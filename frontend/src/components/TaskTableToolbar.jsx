@@ -12,7 +12,7 @@ import {
   Typography
 } from '@mui/material';
 import { Add, Lightbulb, Sort, TableChart } from '@mui/icons-material';
-import { sectionHeaderSx, sectionTitleRowSx, softIconButtonSx } from '../theme/surfaces';
+import { sectionHeaderSx, sectionTitleRowSx } from '../theme/surfaces';
 import TaskTableColumnSettings from './taskTable/TaskTableColumnSettings';
 
 export default function TaskTableToolbar({
@@ -48,24 +48,20 @@ export default function TaskTableToolbar({
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
         <Tooltip title={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}>
           <IconButton
+            variant="soft"
+            color={highlightMyTasks ? 'warning' : 'primary'}
             onClick={onToggleHighlight}
-            color={highlightMyTasks ? 'warning' : 'default'}
-            sx={[
-              softIconButtonSx(highlightMyTasks ? 'warning' : 'primary'),
-              highlightMyTasks && { border: '1px solid', borderColor: 'warning.main' }
-            ]}
+            sx={highlightMyTasks && { border: '1px solid', borderColor: 'warning.main' }}
           >
             <Lightbulb />
           </IconButton>
         </Tooltip>
         <Tooltip title="Сортировка">
           <IconButton
+            variant="soft"
+            color="primary"
             onClick={handleOpenSortMenu}
-            color={completedBottomSort ? 'primary' : 'default'}
-            sx={[
-              softIconButtonSx('primary'),
-              completedBottomSort && { border: '1px solid', borderColor: 'primary.main' }
-            ]}
+            sx={completedBottomSort && { border: '1px solid', borderColor: 'primary.main' }}
           >
             <Sort />
           </IconButton>

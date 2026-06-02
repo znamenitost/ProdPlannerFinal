@@ -14,7 +14,6 @@ import {
 } from '@mui/material';
 import { Login as LoginIcon, Person, AdminPanelSettings } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
-import { glassPaperSx } from '../theme/surfaces';
 import { createMuiTransition } from '../theme/motion';
 import fon1Url from '../../../sprites/fon1.svg';
 import fon2Url from '../../../sprites/fon2.svg';
@@ -203,7 +202,7 @@ export default function LoginForm({ onLogin }) {
         className="login-content"
       >
         <Box className="login-form-shell">
-          <Paper sx={{ ...glassPaperSx, p: 4, width: '100%' }}>
+          <Paper variant="section" sx={{ p: 4, width: '100%' }}>
             <Typography variant="h2" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>
               Вход в систему
             </Typography>

@@ -38,7 +38,7 @@ import {
   EventNote  // добавлена для иконки периода выполнения (опционально)
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
-import { glassPaperSx, sectionTitleRowSx } from '../theme/surfaces';
+import { sectionTitleRowSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import EmptyState from './ui/EmptyState';
 import TaskTitleTwoLines from './TaskTitleTwoLines';
@@ -115,7 +115,7 @@ export default function CompletedTasksList({ employee }) {
   };
 
   return (
-    <Paper sx={glassPaperSx}>
+    <Paper variant="section">
       <Box sx={{ ...sectionTitleRowSx, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Assessment color="primary" />

@@ -523,17 +523,6 @@ public class WeekCalendarService : IWeekCalendarService
                 result.Add((startInDay, endInDay));
         }
 
-        if (result.Count == 0
-            && dayDate.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday)
-        {
-            var defaultStart = dayDate.AddHours(15);
-            var defaultEnd = dayDate.AddHours(16);
-            var startInDay = defaultStart > dayStartTime ? defaultStart : dayStartTime;
-            var endInDay = defaultEnd < dayEndTime ? defaultEnd : dayEndTime;
-            if (startInDay < endInDay)
-                result.Add((startInDay, endInDay));
-        }
-
         return result
             .OrderBy(i => i.start)
             .ToList();

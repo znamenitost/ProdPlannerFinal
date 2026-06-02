@@ -22,7 +22,6 @@ public static class PostgresSchemaMigrator
         await ApplyProductionTasksCompatibilityPatchAsync(db, logger, cancellationToken);
         await ApplyUserNotificationsPatchAsync(db, logger, cancellationToken);
         await ApplyLunchIntervalsPatchAsync(db, logger, cancellationToken);
-        await LunchWorkIntervalMigrator.ApplyAsync(db, logger, cancellationToken);
     }
 
     private static async Task ApplyProductionTasksCompatibilityPatchAsync(

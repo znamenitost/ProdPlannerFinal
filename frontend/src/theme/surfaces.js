@@ -1,6 +1,6 @@
 import { alpha } from '@mui/material/styles';
 import { tokens } from './paletteTokens';
-import { cardHoverSx, iconButtonTintTransitionSx, panelHoverSx } from './motion';
+import { cardHoverSx } from './motion';
 
 const { neutral } = tokens;
 
@@ -11,17 +11,9 @@ export const pageShellSx = {
   px: { xs: 1, sm: 0 }
 };
 
-/** Section panel — hover через theme.transitions (см. theme/motion.js). */
-export const glassPaperSx = {
-  p: { xs: 2, md: 3 },
-  borderRadius: 3,
-  bgcolor: 'background.paper',
-  ...panelHoverSx
-};
-
 /** Nested card */
 export const glassCardSx = {
-  borderRadius: 2,
+  borderRadius: 1.5,
   bgcolor: neutral[50],
   border: `1px solid ${alpha(neutral[200], 0.95)}`,
   ...cardHoverSx
@@ -41,15 +33,6 @@ export const sectionTitleRowSx = {
   alignItems: 'center',
   gap: 1
 };
-
-export const softIconButtonSx = (color = 'primary') => ({
-  bgcolor: (theme) => alpha(theme.palette[color]?.main || theme.palette.primary.main, 0.1),
-  color: `${color}.main`,
-  ...iconButtonTintTransitionSx,
-  '&:hover': {
-    bgcolor: (theme) => alpha(theme.palette[color]?.main || theme.palette.primary.main, 0.16)
-  }
-});
 
 export const compactActionButtonSx = {
   minWidth: 0,
@@ -81,7 +64,7 @@ export const metaPanelSx = {
   bgcolor: (theme) => alpha(theme.palette.primary.light, 0.35),
   px: 2,
   py: 1,
-  borderRadius: 3,
+  borderRadius: 2.5,
   border: (theme) => `1px solid ${alpha(theme.palette.primary.main, 0.15)}`
 };
 
