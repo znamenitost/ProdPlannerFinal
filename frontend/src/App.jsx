@@ -298,7 +298,13 @@ function AppContent() {
                 <WeekCalendar employee={employee} />
                 {!isAdmin && <DeadlineWarnings employee={employee} />}
                 <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
-                  <ActiveTasksList onUpdate={refreshCalendar} embedded employee={employee} />
+                  <ActiveTasksList
+                    onUpdate={refreshCalendar}
+                    onStatisticsRecalculated={refreshAll}
+                    embedded
+                    employee={employee}
+                    isAdmin={isAdmin}
+                  />
                 </SectionCard>
                 <CompletedTasksList employee={employee} />
               </>

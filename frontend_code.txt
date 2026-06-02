@@ -1,3 +1,14 @@
+=== ./frontend/src/context/TextLimitContext.jsx ===
+import { createContext, useContext } from 'react';
+import { TASK_TABLE_DEFAULT_TEXT_LIMIT } from '../constants/taskTableColumnsConfig';
+
+const TextLimitContext = createContext(TASK_TABLE_DEFAULT_TEXT_LIMIT);
+
+export const TextLimitProvider = TextLimitContext.Provider;
+
+export function useTextLimit() {
+  return useContext(TextLimitContext);
+}
 === ./frontend/src/context/UiFeedbackContext.jsx ===
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import {
@@ -9,6 +20,7 @@ import {
   DialogContentText,
   DialogTitle,
   Snackbar,
+  TextField,
 } from '@mui/material';
 
 const UiFeedbackContext = createContext(null);
@@ -20,6 +32,7 @@ const defaultConfirmState = {
   confirmLabel: 'Подтвердить',
   cancelLabel: 'Отмена',
   confirmColor: 'primary',
+  input: null,
 };
 
 export function UiFeedbackProvider({ children }) {
@@ -29,6 +42,7 @@ export function UiFeedbackProvider({ children }) {
     severity: 'info',
   });
   const [confirmState, setConfirmState] = useState(defaultConfirmState);
+  const [confirmInputValue, setConfirmInputValue] = useState('');
   const confirmResolverRef = useRef(null);
 
   const showSnackbar = useCallback((message, severity = 'info') => {
@@ -43,6 +57,7 @@ export function UiFeedbackProvider({ children }) {
   const confirm = useCallback((options = {}) => {
     return new Promise((resolve) => {
       confirmResolverRef.current = resolve;
+      setConfirmInputValue('');
       setConfirmState({
         open: true,
         title: options.title ?? 'Подтверждение',
@@ -50,15 +65,29 @@ export function UiFeedbackProvider({ children }) {
         confirmLabel: options.confirmLabel ?? 'Подтвердить',
         cancelLabel: options.cancelLabel ?? 'Отмена',
         confirmColor: options.confirmColor ?? 'primary',
+        input: options.input ?? null,
       });
     });
   }, []);
 
+  const promptInput = useCallback((options = {}) => {
+    return confirm({
+      ...options,
+      input: {
+        label: options.inputLabel ?? 'Значение',
+        type: options.inputType ?? 'text',
+        required: options.inputRequired ?? false,
+      },
+    });
+  }, [confirm]);
+
   const resolveConfirm = useCallback((confirmed) => {
+    if (confirmed && confirmState.input?.required && !confirmInputValue.trim()) return;
+
     setConfirmState((prev) => ({ ...prev, open: false }));
-    confirmResolverRef.current?.(confirmed);
+    confirmResolverRef.current?.(confirmed && confirmState.input ? confirmInputValue : confirmed);
     confirmResolverRef.current = null;
-  }, []);
+  }, [confirmInputValue, confirmState.input]);
 
   const handleSnackbarClose = (_event, reason) => {
     if (reason === 'clickaway') return;
@@ -72,6 +101,7 @@ export function UiFeedbackProvider({ children }) {
     showWarning,
     showInfo,
     confirm,
+    promptInput,
   };
 
   return (
@@ -101,9 +131,25 @@ export function UiFeedbackProvider({ children }) {
         fullWidth
       >
         <DialogTitle>{confirmState.title}</DialogTitle>
-        {confirmState.message && (
+        {(confirmState.message || confirmState.input) && (
           <DialogContent>
-            <DialogContentText>{confirmState.message}</DialogContentText>
+            {confirmState.message && <DialogContentText>{confirmState.message}</DialogContentText>}
+            {confirmState.input && (
+              <TextField
+                autoFocus
+                fullWidth
+                margin="dense"
+                label={confirmState.input.label}
+                type={confirmState.input.type}
+                value={confirmInputValue}
+                required={confirmState.input.required}
+                error={confirmState.input.required && !confirmInputValue.trim()}
+                onChange={(event) => setConfirmInputValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') resolveConfirm(true);
+                }}
+              />
+            )}
           </DialogContent>
         )}
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -202,7 +248,8 @@ import {
   HourglassEmpty,
   FactCheck,
   Inventory2,
-  TaskAlt
+  ThumbUp,
+  Room
 } from '@mui/icons-material';
 
 export const truncate = (str, maxLen) => {
@@ -217,16 +264,34 @@ export const getStatusColor = (status) => {
   return 'text.secondary';
 };
 
-export const getStatusIcon = (status) => {
-  if (status === 'Готово' || status === 'Согласовано' || status === 'В наличии') {
-    return <CheckCircle sx={{ fontSize: 16 }} />;
+export const getStatusIcon = (status, size = 16) => {
+  const sx = { fontSize: size };
+  switch (status) {
+    case 'Начал':
+    case 'В работе':
+      return <PlayArrow sx={sx} />;
+    case 'Пауза':
+    case 'На паузе':
+      return <Pause sx={sx} />;
+    case 'Готово':
+    case 'Завершена':
+      return <CheckCircle sx={sx} />;
+    case 'Назначена':
+      return <HourglassEmpty sx={sx} />;
+    case 'Ожидание':
+      return <HourglassEmpty sx={{ ...sx, opacity: 0.6 }} />;
+    case 'Согласование':
+    case 'На согласовании':
+      return <FactCheck sx={sx} />;
+    case 'Согласовано':
+      return <ThumbUp sx={sx} />;
+    case 'Нет изделий':
+      return <Inventory2 sx={sx} />;
+    case 'В наличии':
+      return <Room sx={sx} />;
+    default:
+      return null;
   }
-  if (status === 'Начал') return <PlayArrow sx={{ fontSize: 16 }} />;
-  if (status === 'Пауза') return <Pause sx={{ fontSize: 16 }} />;
-  if (status === 'Согласование' || status === 'На согласовании') return <FactCheck sx={{ fontSize: 16 }} />;
-  if (status === 'Нет изделий') return <Inventory2 sx={{ fontSize: 16 }} />;
-  if (status === 'Назначена') return <HourglassEmpty sx={{ fontSize: 16 }} />;
-  return null;
 };
 
 export const getParentEmployeeDisplay = (task, childrenTasks) => {
@@ -257,6 +322,227 @@ export const getLastPathSegment = (path) => {
   const parts = path.split(/[\/\\]/).filter(p => p !== '');
   return parts.length > 0 ? parts[parts.length - 1] : '';
 };
+=== ./frontend/src/utils/calendarDayUtils.jsx ===
+import React from 'react';
+import { alpha } from '@mui/material/styles';
+import { STATUS_NO_ITEMS, STATUS_PENDING_APPROVAL } from '../constants/taskStatuses';
+import { getTaskStatusLine, getTaskTitleSlashFile } from '../components/TaskTitleTwoLines';
+import { getStatusIcon } from './taskHelpers';
+import { chrome, tokens } from '../theme/paletteTokens';
+
+export const CALENDAR_TOOLTIP_SX = {
+  bgcolor: alpha(chrome.tooltipBg, 0.94),
+  color: chrome.tooltipText,
+  fontSize: '12px',
+  padding: '8px 15px',
+  minWidth: '350px',
+  maxWidth: 'none',
+  width: 'max-content',
+  borderRadius: 2,
+  boxShadow: '0 4px 16px rgba(74, 82, 96, 0.12)',
+  whiteSpace: 'pre-line'
+};
+
+export const WORKDAY_START_HOUR = 10;
+export const WORKDAY_END_HOUR = 19;
+export const DETAIL_AXIS_START_HOUR = 10;
+export const DETAIL_AXIS_END_HOUR = 19;
+
+export function getTimelineRange(detailed = false) {
+  if (detailed) {
+    return { start: DETAIL_AXIS_START_HOUR, end: DETAIL_AXIS_END_HOUR };
+  }
+  return { start: WORKDAY_START_HOUR, end: WORKDAY_END_HOUR };
+}
+
+export function getLeft(dateTime, range = getTimelineRange(false)) {
+  const d = new Date(dateTime);
+  const hours = d.getHours() + d.getMinutes() / 60;
+  const span = range.end - range.start;
+  return ((hours - range.start) / span) * 100;
+}
+
+export function getWidth(start, end, range = getTimelineRange(false)) {
+  const s = new Date(start);
+  const e = new Date(end);
+  const duration = (e - s) / (1000 * 60 * 60);
+  const span = range.end - range.start;
+  return (duration / span) * 100;
+}
+
+export function getLunchBandPercent(range = getTimelineRange(false)) {
+  const span = range.end - range.start;
+  const left = ((15 - range.start) / span) * 100;
+  const width = (1 / span) * 100;
+  return { left, width };
+}
+
+/** Локальный ключ даты YYYY-MM-DD (без сдвига UTC при сравнении с API). */
+export function toCalendarDayKey(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Позиция «сейчас» на шкале 10–19; до/после рабочего окна — у края. */
+export function getNowMarkerPercent(now, range = getTimelineRange(true)) {
+  const hours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+  const span = range.end - range.start;
+  if (hours <= range.start) return 0;
+  if (hours >= range.end) return 100;
+  return ((hours - range.start) / span) * 100;
+}
+
+export function isSameCalendarDay(a, b) {
+  return toCalendarDayKey(a) === toCalendarDayKey(b);
+}
+
+export function getDuration(start, end) {
+  const s = new Date(start);
+  const e = new Date(end);
+  return ((e - s) / (1000 * 60 * 60)).toFixed(1);
+}
+
+export function formatCalendarTime(dateTime) {
+  return new Date(dateTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Многострочный тултип: «задача / файл», статус с иконкой, доп. строка. */
+export function formatCalendarTaskTooltip(task, extraLine) {
+  const title = getTaskTitleSlashFile(task) || 'Задача';
+  const statusLine = getTaskStatusLine(task);
+  const statusIcon = statusLine ? getStatusIcon(statusLine, 14) : null;
+
+  return (
+    <span style={{ whiteSpace: 'pre-line' }}>
+      <span>{title}</span>
+      {statusLine && (
+        <>
+          {'\n'}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            {statusIcon}{statusLine}
+          </span>
+        </>
+      )}
+      {extraLine && <>{'\n'}{extraLine}</>}
+    </span>
+  );
+}
+
+export function isWorkingWeekday(date) {
+  const day = date.getDay();
+  return day >= 1 && day <= 5;
+}
+
+export function getWorkColor(taskId, completed) {
+  if (completed) return tokens.workDone;
+  return tokens.work[taskId % tokens.work.length];
+}
+
+export function getPlannedBlockColor(block, theme) {
+  if (block?.statusText === STATUS_PENDING_APPROVAL || block?.statusText === 'На согласовании') {
+    return theme.palette.secondary.main;
+  }
+  if (block?.statusText === STATUS_NO_ITEMS) return theme.palette.error.main;
+  return null;
+}
+
+export function getTimelineSegments(dayDate, timeline) {
+  if (!timeline?.length) return [];
+
+  const date = new Date(dayDate);
+  const segments = [];
+  const lunchStart = new Date(date);
+  lunchStart.setHours(15, 0, 0, 0);
+  const lunchEnd = new Date(date);
+  lunchEnd.setHours(16, 0, 0, 0);
+
+  timeline.forEach((segment) => {
+    const start = new Date(segment.start);
+    const end = new Date(segment.end);
+
+    if (segment.type === 'work') {
+      if (start < lunchEnd && end > lunchStart) {
+        if (start < lunchStart) {
+          const beforeLunchEnd = end < lunchStart ? end : lunchStart;
+          if (beforeLunchEnd > start) {
+            segments.push({ ...segment, start, end: beforeLunchEnd });
+          }
+        }
+        if (end > lunchEnd) {
+          const afterLunchStart = start > lunchEnd ? start : lunchEnd;
+          if (end > afterLunchStart) {
+            segments.push({ ...segment, start: afterLunchStart, end });
+          }
+        }
+      } else {
+        segments.push({ ...segment, start, end });
+      }
+    } else {
+      const isLunchTime =
+        (start >= lunchStart && start < lunchEnd)
+        || (end > lunchStart && end <= lunchEnd)
+        || (start <= lunchStart && end >= lunchEnd);
+      if (!isLunchTime) {
+        segments.push({ ...segment, start, end });
+      }
+    }
+  });
+
+  return segments.sort((a, b) => new Date(a.start) - new Date(b.start));
+}
+
+export function buildTaskBlocksMap(allDays) {
+  const taskBlocksMap = new Map();
+  allDays?.forEach((d) => {
+    d.taskBlocks?.forEach((block) => {
+      if (!block.taskId) return;
+      if (!taskBlocksMap.has(block.taskId)) taskBlocksMap.set(block.taskId, []);
+      taskBlocksMap.get(block.taskId).push({ ...block, dayDate: d.date });
+    });
+  });
+  return taskBlocksMap;
+}
+
+export function getTaskInfoForDeadline(taskBlocksMap, deadlineTaskId, deadlineTaskTitle, deadlineStatus) {
+  if (deadlineStatus === 'Completed') {
+    return {
+      title: deadlineTaskTitle,
+      totalHours: 0,
+      blocksCount: 0,
+      blocks: [],
+      hasBlocks: false,
+      isCompleted: true
+    };
+  }
+  const blocks = taskBlocksMap.get(deadlineTaskId);
+  if (blocks?.length) {
+    const firstBlock = blocks[0];
+    let totalHours = 0;
+    blocks.forEach((b) => { totalHours += b.hours; });
+    return {
+      title: firstBlock.fullTitle || firstBlock.title,
+      totalHours,
+      blocksCount: blocks.length,
+      blocks,
+      hasBlocks: true,
+      isCompleted: false
+    };
+  }
+  if (deadlineTaskTitle) {
+    return {
+      title: deadlineTaskTitle,
+      totalHours: 0,
+      blocksCount: 0,
+      blocks: [],
+      hasBlocks: false,
+      isCompleted: false
+    };
+  }
+  return null;
+}
 === ./frontend/src/components/ui/EmptyState.jsx ===
 import { Box, Typography } from '@mui/material';
 import { InboxOutlined } from '@mui/icons-material';
@@ -391,30 +677,177 @@ export default function SectionCard({
     </MotionFade>
   );
 }
-=== ./frontend/src/components/taskTable/TaskDeadlineCell.jsx ===
-import { Typography } from '@mui/material';
-import { isOverdue } from '../../utils/taskHelpers';
-import { cellDisplayTextSx } from '../../utils/taskTableStyles';
+=== ./frontend/src/components/taskTable/TaskIntervalsDialog.jsx ===
+import { useEffect, useState } from 'react';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
+  Stack,
+  Switch,
+  TextField,
+  Typography
+} from '@mui/material';
 
-function formatDeadline(deadline) {
-  if (!deadline) return '—';
+/** Wall-clock YYYY-MM-DDTHH:mm for datetime-local (no timezone shift). */
+function toInputValue(value) {
+  if (!value) return '';
+  const s = String(value);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+
+function fromInputValue(value) {
+  if (!value) return null;
+  // Send wall-clock time without timezone so backend stores exact edited time.
+  return value.length === 16 ? `${value}:00` : value;
+}
+
+export default function TaskIntervalsDialog({
+  open,
+  taskTitle,
+  intervals,
+  pending = false,
+  onClose,
+  onSave
+}) {
+  const [rows, setRows] = useState([]);
+
+  useEffect(() => {
+    if (!open) return;
+    setRows((intervals || []).map((i) => ({
+      id: i.id,
+      startTime: toInputValue(i.startTime),
+      endTime: toInputValue(i.endTime),
+      isOpen: !i.endTime
+    })));
+  }, [open, intervals]);
+
+  const handleRowChange = (id, patch) => {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  };
+
+  const handleSubmit = () => {
+    const payload = rows.map((r) => ({
+      id: r.id,
+      startTime: fromInputValue(r.startTime),
+      endTime: r.isOpen ? null : fromInputValue(r.endTime)
+    }));
+    onSave(payload);
+  };
+
+  return (
+    <Dialog open={open} onClose={pending ? undefined : onClose} maxWidth="md" fullWidth>
+      <DialogTitle>Интервалы</DialogTitle>
+      <DialogContent dividers>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          {taskTitle || 'Выбранная задача'}
+        </Typography>
+        {rows.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">У задачи нет интервалов.</Typography>
+        ) : (
+          <Stack spacing={1.5}>
+            {rows.map((r, idx) => (
+              <Box key={`${r.id}-${idx}`} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Интервал #{idx + 1}</Typography>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+                  <TextField
+                    label="Начало"
+                    type="datetime-local"
+                    value={r.startTime}
+                    onChange={(e) => handleRowChange(r.id, { startTime: e.target.value })}
+                    fullWidth
+                    size="small"
+                    InputLabelProps={{ shrink: true }}
+                  />
+                  <TextField
+                    label="Окончание"
+                    type="datetime-local"
+                    value={r.endTime}
+                    onChange={(e) => handleRowChange(r.id, { endTime: e.target.value })}
+                    fullWidth
+                    size="small"
+                    disabled={r.isOpen}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Stack>
+                <FormControlLabel
+                  sx={{ mt: 1 }}
+                  control={(
+                    <Switch
+                      checked={r.isOpen}
+                      onChange={(e) => handleRowChange(r.id, { isOpen: e.target.checked })}
+                    />
+                  )}
+                  label="Открытый интервал"
+                />
+              </Box>
+            ))}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={pending}>Отмена</Button>
+        <Button variant="contained" onClick={handleSubmit} disabled={pending || rows.length === 0}>
+          Сохранить
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+=== ./frontend/src/components/taskTable/TaskDeadlineCell.jsx ===
+import { Box, Typography } from '@mui/material';
+import { isOverdue } from '../../utils/taskHelpers';
+
+function formatDeadlineParts(deadline) {
+  if (!deadline) return { date: '—', time: null };
   const d = new Date(deadline);
-  return `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+  return {
+    date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    time: d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  };
 }
 
 export default function TaskDeadlineCell({ deadline, statusText }) {
   const overdue = isOverdue(deadline, statusText);
+  const { date, time } = formatDeadlineParts(deadline);
+  const color = overdue ? 'error.dark' : 'inherit';
+
   return (
-    <Typography variant="body2" sx={{ color: overdue ? 'error.dark' : 'inherit', ...cellDisplayTextSx }}>
-      {formatDeadline(deadline)}
-    </Typography>
+    <Box sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25, gap: 0.125 }}>
+      <Typography variant="body2" sx={{ color, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+        {date}
+      </Typography>
+      {time ? (
+        <Typography
+          variant="caption"
+          sx={{ color, fontSize: '0.75rem', whiteSpace: 'nowrap', opacity: 0.9 }}
+        >
+          {time}
+        </Typography>
+      ) : null}
+    </Box>
   );
 }
 === ./frontend/src/components/taskTable/TaskCommentCell.jsx ===
+import { useMemo } from 'react';
 import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { Comment as CommentIcon } from '@mui/icons-material';
-import { formatCommentForDisplay, commentDisplaySx } from '../../utils/commentLimits';
+import { formatCommentForDisplay, getCommentDisplaySx } from '../../utils/commentLimits';
+import { useTextLimit } from '../../context/TextLimitContext';
 
 const commentTooltipSx = {
   bgcolor: (theme) => alpha(theme.palette.grey[900], 0.92),
@@ -425,6 +858,9 @@ const commentTooltipSx = {
 };
 
 export default function TaskCommentCell({ task, onOpenComment, iconButtonColor = 'primary' }) {
+  const limit = useTextLimit();
+  const sx = useMemo(() => ({ color: 'text.secondary', ...getCommentDisplaySx(limit), cursor: 'default' }), [limit]);
+
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
       <Tooltip
@@ -433,8 +869,8 @@ export default function TaskCommentCell({ task, onOpenComment, iconButtonColor =
         placement="top"
         slotProps={{ tooltip: { sx: commentTooltipSx } }}
       >
-        <Typography variant="body2" sx={{ color: 'text.secondary', ...commentDisplaySx, cursor: 'default' }}>
-          {formatCommentForDisplay(task.comment)}
+        <Typography variant="body2" sx={sx}>
+          {formatCommentForDisplay(task.comment, limit)}
         </Typography>
       </Tooltip>
       <IconButton
@@ -462,20 +898,25 @@ export default function TaskHoursCell({ estimateHours, fallback = '0.0' }) {
 }
 === ./frontend/src/components/taskTable/TaskTypeCell.jsx ===
 import { Chip, Tooltip } from '@mui/material';
+import { useTextLimit } from '../../context/TextLimitContext';
 
 const chipSx = {
   fontSize: '0.75rem',
   whiteSpace: 'nowrap',
   height: 'auto',
-  '& .MuiChip-label': { whiteSpace: 'nowrap' }
+  maxWidth: '100%',
+  '& .MuiChip-label': { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
 };
 
 export default function TaskTypeCell({ type }) {
-  return (
-    <Tooltip title={type} arrow>
-      <Chip label={type || '—'} size="small" variant="outlined" sx={chipSx} />
-    </Tooltip>
-  );
+  const limit = useTextLimit();
+  const text = type || '—';
+  const truncated = text.length > limit ? text.slice(0, limit) + '…' : text;
+  const showTooltip = text.length > limit;
+
+  const chip = <Chip label={truncated} size="small" variant="outlined" sx={chipSx} />;
+
+  return showTooltip ? <Tooltip title={text} arrow>{chip}</Tooltip> : chip;
 }
 === ./frontend/src/components/taskTable/TaskStatusCell.jsx ===
 import { Chip } from '@mui/material';
@@ -505,9 +946,115 @@ export default function TaskStatusCell({ statusText, label }) {
     />
   );
 }
+=== ./frontend/src/components/taskTable/TaskTableColumnSettings.jsx ===
+import { useState } from 'react';
+import {
+  Box,
+  Button,
+  Checkbox,
+  Divider,
+  FormControlLabel,
+  FormGroup,
+  IconButton,
+  Popover,
+  Slider,
+  Tooltip,
+  Typography
+} from '@mui/material';
+import { Settings } from '@mui/icons-material';
+import {
+  TASK_TABLE_TOGGLEABLE_COLUMNS,
+  TASK_TABLE_TEXT_LIMIT_MIN,
+  TASK_TABLE_TEXT_LIMIT_MAX
+} from '../../constants/taskTableColumnsConfig';
+import { softIconButtonSx } from '../../theme/surfaces';
+
+export default function TaskTableColumnSettings({
+  visibility,
+  onColumnVisibleChange,
+  onReset,
+  textLimit,
+  onTextLimitChange
+}) {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+
+  return (
+    <>
+      <Tooltip title="Настройки колонок" arrow>
+        <IconButton
+          onClick={(e) => setAnchorEl(e.currentTarget)}
+          aria-label="Настройки колонок таблицы"
+          sx={softIconButtonSx('primary')}
+        >
+          <Settings />
+        </IconButton>
+      </Tooltip>
+
+      <Popover
+        open={open}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{
+          paper: {
+            sx: { mt: 1, p: 2, minWidth: 220, maxWidth: 280 }
+          }
+        }}
+      >
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+          Колонки таблицы
+        </Typography>
+        <FormGroup sx={{ gap: 0 }}>
+          {TASK_TABLE_TOGGLEABLE_COLUMNS.map(({ id, label }) => (
+            <FormControlLabel
+              key={id}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={Boolean(visibility[id])}
+                  onChange={(e) => onColumnVisibleChange(id, e.target.checked)}
+                />
+              }
+              label={<Typography variant="body2">{label}</Typography>}
+              sx={{ mx: 0, my: 0.25 }}
+            />
+          ))}
+        </FormGroup>
+        <Divider sx={{ my: 1.5 }} />
+        <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
+          Длина текста в ячейке
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 0.5 }}>
+          <Slider
+            value={textLimit}
+            onChange={(_e, v) => onTextLimitChange(v)}
+            min={TASK_TABLE_TEXT_LIMIT_MIN}
+            max={TASK_TABLE_TEXT_LIMIT_MAX}
+            step={1}
+            size="small"
+            valueLabelDisplay="auto"
+            sx={{ flex: 1 }}
+          />
+          <Typography variant="body2" sx={{ minWidth: 28, textAlign: 'right', fontWeight: 500 }}>
+            {textLimit}
+          </Typography>
+        </Box>
+        <Divider sx={{ my: 1.5 }} />
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button size="small" onClick={onReset}>
+            Сбросить
+          </Button>
+        </Box>
+      </Popover>
+    </>
+  );
+}
 === ./frontend/src/components/taskTable/TaskPlannedProgressFooter.jsx ===
 import { TableRow, TableCell, LinearProgress } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import { COL_ACTIONS } from '../../utils/taskTableStyles';
 
 export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitParent = false }) {
   const show = task.showPlannedTimeProgress ?? false;
@@ -524,7 +1071,7 @@ export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitP
   return (
     <TableRow>
       <TableCell
-        colSpan={colSpan}
+        colSpan={Math.max(1, colSpan - 1)}
         sx={{
           p: 0,
           height: 5,
@@ -548,6 +1095,15 @@ export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitP
           })}
         />
       </TableCell>
+      <TableCell
+        sx={{
+          ...COL_ACTIONS,
+          p: 0,
+          height: 5,
+          lineHeight: 0,
+          borderBottom: (theme) => `1px solid ${theme.palette.divider}`
+        }}
+      />
     </TableRow>
   );
 }
@@ -624,7 +1180,7 @@ export default function TimelineHourAxis({
 import { Box, Tooltip } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { tokens } from '../../theme/paletteTokens';
-import { hoverInteractiveSx } from '../../theme/motion';
+import { calendarBlockLayoutTransitionSx } from '../../theme/motion';
 import { Restaurant } from '@mui/icons-material';
 import {
   CALENDAR_TOOLTIP_SX,
@@ -720,10 +1276,11 @@ export default function TimelineSegments({
         const layerHeight = trackHeight / maxDepth;
         const topPos = layer * layerHeight;
         const segmentHeight = layerHeight - 1;
+        const segmentKey = `work-${segment.taskId ?? idx}-${new Date(segment.start).getTime()}`;
 
         return (
           <Tooltip
-            key={`work-${idx}`}
+            key={segmentKey}
             title={formatCalendarTaskTooltip(
               segment,
               `⏱ ${formatCalendarTime(segment.start)} - ${formatCalendarTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`
@@ -742,10 +1299,9 @@ export default function TimelineSegments({
                 backgroundColor: getWorkColor(segment.taskId, segment.completed),
                 opacity: 0.85,
                 cursor: 'pointer',
-                ...hoverInteractiveSx,
+                ...calendarBlockLayoutTransitionSx,
                 borderRadius: '2px',
-                zIndex: 2,
-                '&:hover': { opacity: 1, filter: 'brightness(0.95)' }
+                zIndex: 2
               }}
             />
           </Tooltip>
@@ -755,9 +1311,10 @@ export default function TimelineSegments({
       {idleSegments.map((segment, idx) => {
         const idleTop = trackHeight - 4;
         const idleHeight = 4;
+        const segmentKey = `idle-${new Date(segment.start).getTime()}-${new Date(segment.end).getTime()}`;
         return (
           <Tooltip
-            key={`idle-${idx}`}
+            key={segmentKey}
             title={`Простой\n⏱ ${formatCalendarTime(segment.start)} - ${formatCalendarTime(segment.end)} (${getDuration(segment.start, segment.end)} ч)`}
             arrow
             placement="top"
@@ -773,9 +1330,8 @@ export default function TimelineSegments({
                 backgroundColor: (theme) => alpha(theme.palette.secondary.light, 0.85),
                 opacity: 0.7,
                 cursor: 'pointer',
-                ...hoverInteractiveSx,
-                zIndex: 2,
-                '&:hover': { opacity: 0.9 }
+                ...calendarBlockLayoutTransitionSx,
+                zIndex: 2
               }}
             />
           </Tooltip>
@@ -914,7 +1470,7 @@ function DeadlineTooltipContent({ dl, taskInfoObj }) {
 export default function DeadlineMarkers({ deadlines, getTaskInfo, onTaskHover }) {
   return (
     <Box sx={{ position: 'relative', height: 20, mb: 2 }}>
-      {deadlines?.map((dl, idx) => {
+      {deadlines?.filter((dl) => dl.status !== 'Completed').map((dl, idx) => {
         const leftPos = Math.min(100, Math.max(0, getLeft(dl.deadline)));
         const taskInfoObj = getTaskInfo(dl.taskId, dl.taskTitle, dl.status);
 
@@ -1026,7 +1582,7 @@ import {
   getTimelineRange
 } from '../../utils/calendarDayUtils';
 import { tokens } from '../../theme/paletteTokens';
-import { hoverInteractiveSx } from '../../theme/motion';
+import { calendarBlockLayoutTransitionSx } from '../../theme/motion';
 import TimelineGridLines from './TimelineGridLines';
 
 function LunchBreak({ range }) {
@@ -1090,10 +1646,10 @@ export default function PlannedBlocks({
         const highlighted = isHighlighted(block);
         const isFirst = idx === 0;
         const isLast = idx === taskBlocks.length - 1;
-        const statusColor = getPlannedBlockColor(block);
+        const blockKey = `planned-${block.taskId ?? idx}`;
         return (
           <Tooltip
-            key={idx}
+            key={blockKey}
             title={formatCalendarTaskTooltip(block, `${block.hours.toFixed(1)} ч`)}
             arrow
             placement="top"
@@ -1107,12 +1663,13 @@ export default function PlannedBlocks({
                 height: '100%',
                 top: 0,
                 backgroundColor: (theme) => {
+                  const statusColor = getPlannedBlockColor(block, theme);
                   if (statusColor) return statusColor;
                   return highlighted ? theme.palette.warning.main : theme.palette.primary.main;
                 },
                 opacity: highlighted ? 0.95 : 0.85,
                 cursor: 'pointer',
-                ...hoverInteractiveSx,
+                ...calendarBlockLayoutTransitionSx,
                 borderRight: idx !== taskBlocks.length - 1 ? '1px solid rgba(255,255,255,0.3)' : 'none',
                 borderTopLeftRadius: isFirst ? 2 : 0,
                 borderBottomLeftRadius: isFirst ? 2 : 0,
@@ -1128,14 +1685,16 @@ export default function PlannedBlocks({
       {isWorkingDay && <LunchBreak range={range} />}
       {taskBlocks?.map((block, idx) => {
         const highlighted = isHighlighted(block);
+        const blockKey = `planned-${block.taskId ?? idx}`;
         return (
           <Box
-            key={`label-${idx}`}
+            key={`label-${blockKey}`}
             sx={{
               position: 'absolute',
               left: `${block.leftPercent + block.widthPercent / 2}%`,
               top: -22,
               transform: 'translateX(-50%)',
+              ...calendarBlockLayoutTransitionSx,
               backgroundColor: (theme) => highlighted ? theme.palette.warning.main : theme.palette.grey[800],
               color: 'white',
               fontSize: '10px',
@@ -1159,25 +1718,50 @@ export default function PlannedBlocks({
 === ./frontend/src/components/TaskTableHead.jsx ===
 import { TableHead, TableRow, TableCell } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import { COL_ACTIONS } from '../utils/taskTableStyles';
+import { columnCellSx } from '../utils/taskTableColumns';
 
-export default function TaskTableHead({ isAdmin }) {
+export default function TaskTableHead({ columnVisibility, showHoursTypeColumns }) {
+  const headCell = (columnId, label, sx = {}) => (
+    <TableCell
+      sx={{
+        ...columnCellSx(columnId, columnVisibility, showHoursTypeColumns, {
+          fontWeight: 600,
+          ...sx
+        })
+      }}
+    >
+      {label}
+    </TableCell>
+  );
+
   return (
     <TableHead>
       <TableRow sx={{ bgcolor: (theme) => alpha(theme.palette.primary.main, 0.04) }}>
-        <TableCell sx={{ fontWeight: 600, width: '3%' }}></TableCell>
-        <TableCell sx={{ fontWeight: 600, width: '15%' }}>Задача</TableCell>
-        <TableCell sx={{ fontWeight: 600, width: '10%' }}>Файл</TableCell>
-        <TableCell sx={{ fontWeight: 600, width: '20%' }}>Комментарий</TableCell>
-        <TableCell sx={{ fontWeight: 600, width: '10%' }}>Дедлайн</TableCell>
-        <TableCell sx={{ fontWeight: 600, width: '6%' }}>Часы</TableCell>
-        <TableCell sx={{ fontWeight: 600, width: '8%' }}>Тип</TableCell>
-        <TableCell sx={{ fontWeight: 600, width: '8%' }}>Сотрудник</TableCell>
-        <TableCell sx={{ fontWeight: 600, width: '8%' }}>Статус</TableCell>
-        <TableCell sx={{ fontWeight: 600, width: isAdmin ? '12%' : '10%' }}>Действия</TableCell>
+        {headCell('icons', '', { width: '3%' })}
+        {headCell('task', 'Задача', { width: '15%' })}
+        {headCell('file', 'Файл', { width: '10%' })}
+        {headCell('comment', 'Комментарий', { width: '12%' })}
+        {headCell('deadline', 'Дедлайн', { width: '8%' })}
+        {headCell('hours', 'Часы', { width: '6%' })}
+        {headCell('type', 'Тип', { width: '8%' })}
+        {headCell('employee', 'Сотрудник', { width: '8%' })}
+        {headCell('status', 'Статус', { width: '8%' })}
+        <TableCell
+          sx={{
+            ...columnCellSx('actions', columnVisibility, showHoursTypeColumns, {
+              ...COL_ACTIONS,
+              fontWeight: 600,
+              zIndex: 3
+            })
+          }}
+          aria-label="Действия"
+        />
       </TableRow>
     </TableHead>
   );
-}=== ./frontend/src/components/DebugPanel.jsx ===
+}
+=== ./frontend/src/components/DebugPanel.jsx ===
 import { useState, useEffect } from 'react';
 import {
   Paper,
@@ -1536,12 +2120,15 @@ export default function EstimateHoursInput({
 }
 === ./frontend/src/components/TaskTable.jsx ===
 import {
+  Box,
+  Pagination,
   Paper,
   Table,
   TableBody,
   TableContainer,
-  TablePagination,
+  Typography,
 } from '@mui/material';
+import { useMemo, useState } from 'react';
 import SplitTaskModal from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
 import NewTaskRow from './NewTaskRow';
@@ -1549,7 +2136,16 @@ import EditTaskRow from './EditTaskRow';
 import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
+import TaskIntervalsDialog from './taskTable/TaskIntervalsDialog';
+import PlanningWarningsBanner from './PlanningWarningsBanner';
 import useTaskTableController from '../hooks/taskTable/useTaskTableController';
+import useTaskTableColumnVisibility from '../hooks/taskTable/useTaskTableColumnVisibility';
+import { TextLimitProvider } from '../context/TextLimitContext';
+import { STATUS_COMPLETED } from '../constants/taskStatuses';
+
+function isCompletedRow(row) {
+  return row?.statusText === STATUS_COMPLETED || row?.status === 3;
+}
 
 export default function TaskTable({
   onCalendarRefresh,
@@ -1564,19 +2160,50 @@ export default function TaskTable({
     onRegisterHubHandler,
     selectedEmployeeForHighlight
   });
+  const columnSettings = useTaskTableColumnVisibility(currentUser);
+  const [completedBottomSort, setCompletedBottomSort] = useState(true);
+
+  const visibleRows = useMemo(() => {
+    if (!completedBottomSort) return table.rows;
+
+    return table.rows
+      .map((row, index) => ({ row, index }))
+      .sort((a, b) => {
+        const completedDiff = Number(isCompletedRow(a.row)) - Number(isCompletedRow(b.row));
+        return completedDiff || a.index - b.index;
+      })
+      .map(({ row }) => row);
+  }, [table.rows, completedBottomSort]);
 
   return (
+    <TextLimitProvider value={columnSettings.textLimit}>
     <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
+      {isAdmin && (
+        <PlanningWarningsBanner
+          warnings={table.planningWarnings}
+          onDismiss={table.dismissPlanningWarning}
+        />
+      )}
       <TaskTableToolbar
         isAdmin={isAdmin}
         onAddNew={table.handleAddNewRow}
         highlightMyTasks={table.highlightMyTasks}
         onToggleHighlight={table.toggleHighlight}
+        columnVisibility={columnSettings.visibility}
+        onColumnVisibleChange={columnSettings.setColumnVisible}
+        onColumnVisibilityReset={columnSettings.resetColumns}
+        textLimit={columnSettings.textLimit}
+        onTextLimitChange={columnSettings.setTextLimit}
+        completedBottomSort={completedBottomSort}
+        onCompletedBottomSortChange={setCompletedBottomSort}
       />
 
       <TableContainer sx={{ maxHeight: '70vh', overflow: 'auto' }}>
         <Table stickyHeader size="small" sx={{ tableLayout: 'auto', width: 'max-content', minWidth: '100%' }}>
-          <TaskTableHead isAdmin={isAdmin} showHoursTypeColumns={table.showHoursTypeColumns} />
+          <TaskTableHead
+            columnVisibility={columnSettings.visibility}
+            showHoursTypeColumns={table.showHoursTypeColumns}
+          />
           <TableBody>
             {table.newRow && isAdmin && (
               <NewTaskRow
@@ -1586,9 +2213,10 @@ export default function TaskTable({
                 onCancel={() => table.setNewRow(null)}
                 onOpenAssigneeModal={table.handleOpenNewSharedModal}
                 showHoursTypeColumns={table.showHoursTypeColumns}
+                columnVisibility={columnSettings.visibility}
               />
             )}
-            {table.rows.map(parent => {
+            {visibleRows.map(parent => {
               const children = table.childrenCache.get(parent.id) || [];
               const isExpanded = table.expandedRows.has(parent.id);
               return table.editingId === parent.id ? (
@@ -1599,6 +2227,7 @@ export default function TaskTable({
                   onCancel={() => table.setEditingId(null)}
                   onOpenAssigneeModal={table.handleOpenAssigneeModal}
                   showHoursTypeColumns={table.showHoursTypeColumns}
+                  columnVisibility={columnSettings.visibility}
                 />
               ) : (
                 <ParentTaskRow
@@ -1617,6 +2246,7 @@ export default function TaskTable({
                   onEdit={table.handleEditRow}
                   onDelete={table.handleDeleteRow}
                   onOpenComment={table.handleOpenComment}
+                  onOpenIntervals={table.handleOpenIntervals}
                   canEdit={isAdmin}
                   canDelete={isAdmin}
                   canChangeStatus={!isAdmin}
@@ -1624,6 +2254,8 @@ export default function TaskTable({
                   highlightMyTasks={table.highlightMyTasks}
                   selectedEmployeeForHighlight={selectedEmployeeForHighlight}
                   showHoursTypeColumns={table.showHoursTypeColumns}
+                  columnVisibility={columnSettings.visibility}
+                  textLimit={columnSettings.textLimit}
                 />
               );
             })}
@@ -1631,22 +2263,37 @@ export default function TaskTable({
         </Table>
       </TableContainer>
 
-      <TablePagination
-        rowsPerPageOptions={isAdmin ? [25, 50, 100] : []}
-        component="div"
-        count={table.totalCount}
-        rowsPerPage={table.rowsPerPage}
-        page={table.page}
-        onPageChange={table.handleChangePage}
-        onRowsPerPageChange={isAdmin ? table.handleChangeRowsPerPage : undefined}
-        labelRowsPerPage=""
-      />
+      {table.totalCount > 0 && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, pt: 3, mt: 2, px: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            {`${table.page * table.rowsPerPage + 1}–${Math.min((table.page + 1) * table.rowsPerPage, table.totalCount)} из ${table.totalCount}`}
+          </Typography>
+          <Pagination
+            count={Math.ceil(table.totalCount / table.rowsPerPage)}
+            page={table.page + 1}
+            onChange={(_e, p) => table.handleChangePage(null, p - 1)}
+            color="primary"
+            shape="rounded"
+            size="medium"
+            showFirstButton
+            showLastButton
+          />
+        </Box>
+      )}
 
       <CommentDialog
         open={table.commentDialogOpen}
         comment={table.selectedCommentTask?.comment || ''}
         onSave={table.handleSaveComment}
         onClose={() => table.setCommentDialogOpen(false)}
+      />
+      <TaskIntervalsDialog
+        open={table.intervalsDialogOpen}
+        taskTitle={table.intervalsTask ? `${table.intervalsTask.folderPath || ''} / ${table.intervalsTask.fileName || ''}` : ''}
+        intervals={table.intervalsRows}
+        pending={table.intervalsPending}
+        onClose={table.handleCloseIntervals}
+        onSave={table.handleSaveIntervals}
       />
 
       <SplitTaskModal
@@ -1656,11 +2303,15 @@ export default function TaskTable({
         initialParts={table.splitModalInitialParts}
         employees={table.employees}
         taskTypes={table.taskTypes}
+        taskExecutionMode={
+          table.splitModalTask?.taskExecutionMode || table.newRow?.taskExecutionMode
+        }
         onClose={table.closeSplitModal}
         onSuccess={table.handleSplitSuccess}
         onDraftApply={table.handleDraftApply}
       />
     </Paper>
+    </TextLimitProvider>
   );
 }
 === ./frontend/src/components/LoadingState.jsx ===
@@ -2007,7 +2658,7 @@ import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
-import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
+import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import { alpha } from '@mui/material/styles';
 import { highlightedTaskRowSx, overdueTaskRowSx } from '../theme/surfaces';
 import {
@@ -2022,7 +2673,9 @@ import {
   COL_EMPLOYEE,
   COL_STATUS,
   COL_ACTIONS,
-  cellDisplayTextSx
+  cellDisplayTextSx,
+  truncateText,
+  needsTooltip
 } from '../utils/taskTableStyles';
 
 function ParentTaskRow({
@@ -2040,13 +2693,16 @@ function ParentTaskRow({
   onEdit,
   onDelete,
   onOpenComment,
+  onOpenIntervals,
   canEdit,
   canDelete,
   canChangeStatus,
   currentUser,
   highlightMyTasks,
   selectedEmployeeForHighlight,
-  showHoursTypeColumns = true
+  showHoursTypeColumns = true,
+  columnVisibility,
+  textLimit: limit = 23
 }) {
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
 
@@ -2058,14 +2714,14 @@ function ParentTaskRow({
   if (highlightMyTasks) {
     if (currentUser?.role === 'Admin' && selectedEmployeeForHighlight) {
       if (hasChildren) {
-        isMine = task.hasCurrentUserSubtask === true;
+        isMine = !isExpanded && task.hasCurrentUserSubtask === true;
       } else {
         isMine = task.employeeName === selectedEmployeeForHighlight && task.statusText !== 'Готово';
       }
     }
     else if (currentUser?.role !== 'Admin') {
       if (hasChildren) {
-        isMine = task.hasCurrentUserSubtask === true;
+        isMine = !isExpanded && task.hasCurrentUserSubtask === true;
       } else {
         isMine = task.employeeName === currentUser?.fullName && task.statusText !== 'Готово';
       }
@@ -2110,7 +2766,7 @@ function ParentTaskRow({
   };
 
   const showActionButtons = canUserManage() && canChangeStatus && !hasChildren;
-  const tableColSpan = taskTableColumnCount(showHoursTypeColumns);
+  const tableColSpan = taskTableColumnCount(columnVisibility, showHoursTypeColumns);
 
   return (
     <Fragment>
@@ -2128,9 +2784,7 @@ function ParentTaskRow({
 
             {task.isSplitTask && (
               <Box sx={ICON_SLOT_GROUPS}>
-                <Tooltip title="Общая задача" arrow>
-                  <Groups fontSize="small" color="secondary" />
-                </Tooltip>
+                <Groups fontSize="small" color="secondary" />
               </Box>
             )}
 
@@ -2144,50 +2798,62 @@ function ParentTaskRow({
           </Box>
         </TableCell>
 
-        <TableCell sx={COL_TASK}>
-          <Tooltip title={task.folderPath || ''} arrow>
+        <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)}>
+          {needsTooltip(shortFolderPath || task.folderPath, limit) ? (
+            <Tooltip title={task.folderPath || ''} arrow>
+              <Typography variant="body2" sx={{ fontWeight: 600, ...cellDisplayTextSx }}>
+                {truncateText(shortFolderPath || task.folderPath, limit)}
+              </Typography>
+            </Tooltip>
+          ) : (
             <Typography variant="body2" sx={{ fontWeight: 600, ...cellDisplayTextSx }}>
               {shortFolderPath || task.folderPath || '—'}
             </Typography>
-          </Tooltip>
+          )}
         </TableCell>
 
-        <TableCell sx={COL_FILE}>
-          <Tooltip title={task.fileName || ''} arrow>
+        <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>
+          {needsTooltip(task.fileName, limit) ? (
+            <Tooltip title={task.fileName} arrow>
+              <Typography variant="body2" sx={cellDisplayTextSx}>
+                {truncateText(task.fileName, limit)}
+              </Typography>
+            </Tooltip>
+          ) : (
             <Typography variant="body2" sx={cellDisplayTextSx}>
               {task.fileName || '—'}
             </Typography>
-          </Tooltip>
+          )}
         </TableCell>
 
-        <TableCell sx={COL_COMMENT}>
+        <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>
           <TaskCommentCell task={task} onOpenComment={onOpenComment} />
         </TableCell>
 
-        <TableCell sx={COL_DEADLINE}>
+        <TableCell sx={columnCellSx('deadline', columnVisibility, showHoursTypeColumns, COL_DEADLINE)}>
           <TaskDeadlineCell deadline={task.deadline} statusText={task.statusText} />
         </TableCell>
 
-        <TableCell align="center" sx={hoursColumnSx(showHoursTypeColumns)}>
+        <TableCell align="center" sx={hoursColumnSx(columnVisibility, showHoursTypeColumns)}>
           <TaskHoursCell estimateHours={task.estimateHours} />
         </TableCell>
 
-        <TableCell sx={typeColumnSx(showHoursTypeColumns)}>
+        <TableCell sx={typeColumnSx(columnVisibility, showHoursTypeColumns)}>
           <TaskTypeCell type={task.type} />
         </TableCell>
 
-        <TableCell sx={COL_EMPLOYEE}>
+        <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, COL_EMPLOYEE)}>
           <Chip icon={<Person sx={{ fontSize: 14 }} />} label={employeeDisplay} size="small" variant="outlined" sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap', height: 'auto', '& .MuiChip-label': { whiteSpace: 'nowrap' } }} />
         </TableCell>
 
-        <TableCell sx={COL_STATUS}>
+        <TableCell sx={columnCellSx('status', columnVisibility, showHoursTypeColumns, COL_STATUS)}>
           <TaskStatusCell
             statusText={task.statusText}
             label={hasChildren ? displayStatus : undefined}
           />
         </TableCell>
 
-        <TableCell sx={COL_ACTIONS}>
+        <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start' }}>
             {canEdit && canDelete && (
               <TaskAdminActionStacks
@@ -2195,11 +2861,12 @@ function ParentTaskRow({
                 pending={pendingLifecycleTaskId === task.id}
                 onEdit={() => onEdit(task.id)}
                 onDelete={() => onDelete(task.id)}
+                onIntervals={() => onOpenIntervals(task)}
                 onStart={onStart}
                 onPause={onPause}
                 onResume={onResume}
                 onComplete={onComplete}
-                onSetStatus={onSetStatus}
+                onSetStatus={hasChildren ? null : onSetStatus}
                 showWorkflow={!hasChildren}
               />
             )}
@@ -2238,12 +2905,15 @@ function ParentTaskRow({
           onEdit={onEdit}
           onDelete={onDelete}
           onOpenComment={onOpenComment}
+          onOpenIntervals={onOpenIntervals}
           isAdmin={canEdit}
           canChangeStatus={canChangeStatus}
           currentUser={currentUser}
           highlightMyTasks={highlightMyTasks}
           selectedEmployeeForHighlight={selectedEmployeeForHighlight}
           showHoursTypeColumns={showHoursTypeColumns}
+          columnVisibility={columnVisibility}
+          textLimit={limit}
         />
       ))}
     </Fragment>
@@ -2256,7 +2926,7 @@ import { TableRow, TableCell, Box, Typography, Chip } from '@mui/material';
 import { areChildRowPropsEqual } from '../utils/taskTableRowMemo';
 import { alpha } from '@mui/material/styles';
 import { Person } from '@mui/icons-material';
-import { hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
+import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import {
   COL_ICON,
   ICON_SLOT_EXPAND,
@@ -2279,6 +2949,7 @@ import EmployeeStatusButtons from './EmployeeStatusButtons';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { childRowSx } from '../theme/surfaces';
+import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
 
 function ChildTaskRow({
   task,
@@ -2292,13 +2963,17 @@ function ChildTaskRow({
   onEdit,
   onDelete,
   onOpenComment,
+  onOpenIntervals,
   isAdmin = false,
   canChangeStatus,
   currentUser,
   highlightMyTasks,
   selectedEmployeeForHighlight,
-  showHoursTypeColumns = true
+  showHoursTypeColumns = true,
+  columnVisibility,
+  textLimit
 }) {
+  const isSequentialChild = task.supplyMode === SUPPLY_MODE_INTERNAL;
   const overdue = task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
 
   let isMine = false;
@@ -2338,7 +3013,7 @@ function ChildTaskRow({
   };
 
   const showActionButtons = canUserManage() && canChangeStatus;
-  const tableColSpan = taskTableColumnCount(showHoursTypeColumns);
+  const tableColSpan = taskTableColumnCount(columnVisibility, showHoursTypeColumns);
 
   return (
     <>
@@ -2360,30 +3035,40 @@ function ChildTaskRow({
               }}
             />
           </Box>
-          <Box sx={{ ...ICON_SLOT_FILE, height: 34 }} />
+          {isSequentialChild && task.sequenceOrder ? (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
+            >
+              Этап {task.sequenceOrder}
+            </Typography>
+          ) : (
+            <Box sx={{ ...ICON_SLOT_FILE, height: 34 }} />
+          )}
         </Box>
       </TableCell>
 
-      <TableCell sx={COL_TASK} />
-      <TableCell sx={COL_FILE} />
+      <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)} />
+      <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)} />
 
-      <TableCell sx={COL_COMMENT}>
+      <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>
         <TaskCommentCell task={task} onOpenComment={onOpenComment} iconButtonColor="primary" />
       </TableCell>
 
-      <TableCell sx={COL_DEADLINE}>
+      <TableCell sx={columnCellSx('deadline', columnVisibility, showHoursTypeColumns, COL_DEADLINE)}>
         <TaskDeadlineCell deadline={task.deadline} statusText={task.statusText} />
       </TableCell>
 
-      <TableCell align="center" sx={hoursColumnSx(showHoursTypeColumns)}>
+      <TableCell align="center" sx={hoursColumnSx(columnVisibility, showHoursTypeColumns)}>
         <TaskHoursCell estimateHours={task.estimateHours} />
       </TableCell>
 
-      <TableCell sx={typeColumnSx(showHoursTypeColumns)}>
+      <TableCell sx={typeColumnSx(columnVisibility, showHoursTypeColumns)}>
         <TaskTypeCell type={task.type} />
       </TableCell>
 
-      <TableCell sx={COL_EMPLOYEE}>
+      <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, COL_EMPLOYEE)}>
         <Chip
           icon={<Person sx={{ fontSize: 14 }} />}
           label={task.employeeName}
@@ -2398,11 +3083,11 @@ function ChildTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={COL_STATUS}>
+      <TableCell sx={columnCellSx('status', columnVisibility, showHoursTypeColumns, COL_STATUS)}>
         <TaskStatusCell statusText={task.statusText} />
       </TableCell>
 
-      <TableCell sx={COL_ACTIONS}>
+      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
           {isAdmin && onEdit && onDelete && (
             <TaskAdminActionStacks
@@ -2410,6 +3095,7 @@ function ChildTaskRow({
               pending={pendingLifecycleTaskId === task.id}
               onEdit={() => onEdit(task.id)}
               onDelete={() => onDelete(task.id)}
+              onIntervals={() => onOpenIntervals(task)}
               onStart={onStart}
               onPause={onPause}
               onResume={onResume}
@@ -2616,7 +3302,16 @@ export default function CompletedTasksList({ employee }) {
               const isPositive = diff >= 0;
               const workPeriod = formatWorkPeriod(task.workIntervals);
               return (
-                <TableRow key={task.id} hover>
+                <TableRow
+                  key={task.id}
+                  hover
+                  sx={{
+                    '& > td:first-of-type': {
+                      borderLeft: '4px solid',
+                      borderLeftColor: 'success.main'
+                    }
+                  }}
+                >
                   <TableCell>
                     <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, minWidth: 0 }}>
                       <CheckCircle sx={{ fontSize: 16, flexShrink: 0 }} color="success" />
@@ -2746,21 +3441,36 @@ import {
   Box,
   Chip,
   IconButton,
-  Tooltip,
   Typography
 } from '@mui/material';
 import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
+import {
+  TASK_EXECUTION_SEQUENTIAL
+} from '../constants/taskStatuses';
+import {
+  COL_ICON,
+  COL_TASK,
+  COL_FILE,
+  COL_COMMENT,
+  COL_EMPLOYEE,
+  COL_STATUS,
+  COL_ACTIONS
+} from '../utils/taskTableStyles';
+import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 
 export default function NewTaskRow({
   newRow,
   setNewRow,
   onSave,
   onCancel,
-  onOpenAssigneeModal
+  onOpenAssigneeModal,
+  showHoursTypeColumns = true,
+  columnVisibility
 }) {
   const isShared = newRow.isSharedTask && (newRow.assigneeParts?.length ?? 0) >= 2;
+  const isSequential = newRow.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL;
   const hasAssignees = isShared || Boolean(newRow.employeeName);
   const hoursDisplay =
     newRow.estimateHours !== '' && newRow.estimateHours != null && !Number.isNaN(Number(newRow.estimateHours))
@@ -2768,18 +3478,22 @@ export default function NewTaskRow({
       : '—';
 
   const assigneeLabel = () => {
-    if (isShared) return `Общая · ${newRow.assigneeParts.length}`;
+    if (isShared) {
+      return isSequential
+        ? `Последов. · ${newRow.assigneeParts.length} эт.`
+        : `Общая · ${newRow.assigneeParts.length}`;
+    }
     if (newRow.employeeName) return newRow.employeeName;
     return 'Участники';
   };
 
   return (
     <TableRow sx={draftRowSx}>
-      <TableCell>
+      <TableCell sx={COL_ICON}>
         <AutoAwesome color="warning" fontSize="small" />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)}>
         <TextField
           size="small"
           placeholder="Путь к папке"
@@ -2789,7 +3503,7 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>
         <TextField
           size="small"
           placeholder="Имя файла"
@@ -2799,7 +3513,7 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>
         <TextField
           size="small"
           placeholder="Комментарий"
@@ -2809,7 +3523,7 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={DEADLINE_COLUMN_SX}>
+      <TableCell sx={columnCellSx('deadline', columnVisibility, showHoursTypeColumns, DEADLINE_COLUMN_SX)}>
         <DeadlineDateTimePicker
           value={newRow.deadline}
           onChange={(deadline) => setNewRow({ ...newRow, deadline })}
@@ -2817,44 +3531,47 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell align="center">
+      <TableCell align="center" sx={hoursColumnSx(columnVisibility, showHoursTypeColumns)}>
         <Typography variant="body2" sx={{ fontSize: '0.8rem', color: hasAssignees ? 'text.primary' : 'text.disabled' }}>
           {hoursDisplay}
         </Typography>
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={typeColumnSx(columnVisibility, showHoursTypeColumns)}>
         <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
           {isShared ? '—' : (newRow.types?.length ? newRow.types.join(', ') : '—')}
         </Typography>
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, COL_EMPLOYEE)}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-          <Tooltip
-            title={hasAssignees ? (isShared ? 'Изменить назначения' : 'Изменить сотрудника и часы') : 'Назначить сотрудников'}
-            arrow
-          >
-            <IconButton size="small" onClick={onOpenAssigneeModal}>
-              <PeopleAlt fontSize="small" color={hasAssignees ? (isShared ? 'secondary' : 'action') : 'disabled'} />
-            </IconButton>
-          </Tooltip>
+          <IconButton size="small" onClick={onOpenAssigneeModal}>
+            <PeopleAlt fontSize="small" color={hasAssignees ? (isShared ? 'secondary' : 'action') : 'disabled'} />
+          </IconButton>
           <Typography variant="caption" sx={{ color: hasAssignees ? 'text.primary' : 'text.disabled', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {assigneeLabel()}
           </Typography>
         </Box>
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('status', columnVisibility, showHoursTypeColumns, COL_STATUS)}>
         <Chip
-          label={hasAssignees ? (isShared ? 'Общая' : 'Новая') : 'Черновик'}
+          label={
+            hasAssignees
+              ? isShared
+                ? isSequential
+                  ? 'Последов.'
+                  : 'Общая'
+                : 'Новая'
+              : 'Черновик'
+          }
           size="small"
-          color={isShared ? 'secondary' : hasAssignees ? 'warning' : 'default'}
+          color={isShared ? (isSequential ? 'info' : 'secondary') : hasAssignees ? 'warning' : 'default'}
           variant={isShared ? 'outlined' : 'filled'}
         />
       </TableCell>
 
-      <TableCell>
+      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <IconButton size="small" color="primary" onClick={onSave}>
             <Save fontSize="small" />
@@ -2867,13 +3584,148 @@ export default function NewTaskRow({
     </TableRow>
   );
 }
+=== ./frontend/src/components/QueueOverloadWarnings.jsx ===
+import { useState, useEffect } from 'react';
+import { Alert, AlertTitle, Stack, Collapse, IconButton } from '@mui/material';
+import { Close, Event, Schedule, Queue } from '@mui/icons-material';
+import TaskTitleTwoLines from './TaskTitleTwoLines';
+import { useUiFeedback } from '../context/UiFeedbackContext';
+import useQueueOverloadsQuery from '../hooks/queries/useQueueOverloadsQuery';
+
+export default function QueueOverloadWarnings({ employee }) {
+  const { showError } = useUiFeedback();
+  const [open, setOpen] = useState(true);
+  const { data: overloads = [], isPending, isError, isFetching } = useQueueOverloadsQuery(employee);
+
+  useEffect(() => {
+    if (isError) {
+      showError('Не удалось загрузить предупреждения по очереди');
+    }
+  }, [isError, showError]);
+
+  useEffect(() => {
+    if (overloads.length > 0) {
+      setOpen(true);
+    }
+  }, [overloads.length]);
+
+  if ((isPending || isFetching) && overloads.length === 0) return null;
+  if (overloads.length === 0) return null;
+
+  return (
+    <Collapse in={open}>
+      <Stack sx={{ mb: 2 }} spacing={1}>
+        {overloads.map((item) => {
+          const task = {
+            folderPath: item.taskTitle,
+            heading: item.taskTitle,
+            fileName: item.fileName
+          };
+
+          return (
+            <Alert
+              key={item.taskId}
+              severity="info"
+              icon={<Queue fontSize="inherit" />}
+              sx={{ borderRadius: 2, '& .MuiAlert-icon': { alignItems: 'center' } }}
+              action={
+                <IconButton size="small" onClick={() => setOpen(false)}>
+                  <Close fontSize="small" />
+                </IconButton>
+              }
+            >
+              <AlertTitle sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.5 }}>
+                Перегруз очереди
+                {item.employeeName ? ` · ${item.employeeName}` : ''}
+              </AlertTitle>
+
+              <TaskTitleTwoLines
+                task={task}
+                headingVariant="body2"
+                statusVariant="body2"
+                headingSx={{ fontWeight: 600 }}
+                statusSx={{ color: 'text.secondary', mt: 0.25 }}
+              />
+
+              <Stack
+                direction="row"
+                spacing={2}
+                sx={{ mt: 1, fontSize: '0.8rem', color: 'text.secondary', alignItems: 'center', flexWrap: 'wrap' }}
+              >
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                  <Schedule sx={{ fontSize: 14 }} />
+                  <span>
+                    План до{' '}
+                    {new Date(item.plannedEnd).toLocaleString('ru-RU', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </Stack>
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                  <Event sx={{ fontSize: 14 }} />
+                  <span>
+                    Дедлайн{' '}
+                    {new Date(item.deadline).toLocaleString('ru-RU', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </Stack>
+              </Stack>
+            </Alert>
+          );
+        })}
+      </Stack>
+    </Collapse>
+  );
+}
 === ./frontend/src/components/TaskTableToolbar.jsx ===
 // ./frontend/src/components/TaskTableToolbar.jsx
-import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
-import { Add, Lightbulb, TableChart } from '@mui/icons-material';
+import { useState } from 'react';
+import {
+  Box,
+  Button,
+  Checkbox,
+  IconButton,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Tooltip,
+  Typography
+} from '@mui/material';
+import { Add, Lightbulb, Sort, TableChart } from '@mui/icons-material';
 import { sectionHeaderSx, sectionTitleRowSx, softIconButtonSx } from '../theme/surfaces';
+import TaskTableColumnSettings from './taskTable/TaskTableColumnSettings';
 
-export default function TaskTableToolbar({ isAdmin, onAddNew, highlightMyTasks, onToggleHighlight }) {
+export default function TaskTableToolbar({
+  isAdmin,
+  onAddNew,
+  highlightMyTasks,
+  onToggleHighlight,
+  columnVisibility,
+  onColumnVisibleChange,
+  onColumnVisibilityReset,
+  textLimit,
+  onTextLimitChange,
+  completedBottomSort,
+  onCompletedBottomSortChange
+}) {
+  const [sortAnchorEl, setSortAnchorEl] = useState(null);
+  const sortMenuOpen = Boolean(sortAnchorEl);
+
+  const handleOpenSortMenu = (event) => {
+    setSortAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseSortMenu = () => {
+    setSortAnchorEl(null);
+  };
+
   return (
     <Box sx={{ ...sectionHeaderSx, mb: 2 }}>
       <Box sx={sectionTitleRowSx}>
@@ -2893,6 +3745,37 @@ export default function TaskTableToolbar({ isAdmin, onAddNew, highlightMyTasks, 
             <Lightbulb />
           </IconButton>
         </Tooltip>
+        <Tooltip title="Сортировка">
+          <IconButton
+            onClick={handleOpenSortMenu}
+            color={completedBottomSort ? 'primary' : 'default'}
+            sx={[
+              softIconButtonSx('primary'),
+              completedBottomSort && { border: '1px solid', borderColor: 'primary.main' }
+            ]}
+          >
+            <Sort />
+          </IconButton>
+        </Tooltip>
+        <Menu
+          anchorEl={sortAnchorEl}
+          open={sortMenuOpen}
+          onClose={handleCloseSortMenu}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <MenuItem onClick={() => onCompletedBottomSortChange(!completedBottomSort)}>
+            <Checkbox size="small" checked={completedBottomSort} readOnly />
+            <ListItemText primary="Готовые всегда снизу" />
+          </MenuItem>
+        </Menu>
+        <TaskTableColumnSettings
+          visibility={columnVisibility}
+          onColumnVisibleChange={onColumnVisibleChange}
+          onReset={onColumnVisibilityReset}
+          textLimit={textLimit}
+          onTextLimitChange={onTextLimitChange}
+        />
         {isAdmin && (
           <Button variant="contained" color="success" startIcon={<Add />} onClick={onAddNew}>
             Новая задача
@@ -2921,15 +3804,17 @@ import {
   CheckCircle,
   FactCheck,
   Inventory2,
-  TaskAlt
+  TaskAlt,
+  AccessTime
 } from '@mui/icons-material';
 import { softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
-import { runWorkflowWithInfoGuard } from '../utils/infoStatusWorkflow';
+import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
   STATUS_PAUSED,
+  STATUS_WAITING,
   getInfoMenuItems,
   isInfoStatus
 } from '../constants/taskStatuses';
@@ -2940,7 +3825,7 @@ const menuDividerSx = { my: 0.75 };
 function infoMenuIcon(kind) {
   if (kind === 'approved') return <TaskAlt fontSize="small" color="success" />;
   if (kind === 'inStock') return <Inventory2 fontSize="small" color="success" />;
-  if (kind === 'noItems') return <Inventory2 fontSize="small" color="secondary" />;
+  if (kind === 'noItems') return <Inventory2 fontSize="small" color="error" />;
   return <FactCheck fontSize="small" color="secondary" />;
 }
 
@@ -2949,6 +3834,7 @@ export default function TaskAdminActionStacks({
   pending = false,
   onEdit,
   onDelete,
+  onIntervals,
   onStart,
   onPause,
   onResume,
@@ -2965,7 +3851,8 @@ export default function TaskAdminActionStacks({
   const isStarted = status === STATUS_IN_PROGRESS;
   const isPaused = status === STATUS_PAUSED;
   const blocked = isInfoStatus(status);
-  const workflowItemSx = blocked ? blockedMenuItemSx : undefined;
+  const isWaiting = status === STATUS_WAITING || task?.sequenceStartBlocked;
+  const workflowItemSx = blocked || isWaiting ? blockedMenuItemSx : undefined;
 
   const handleOpen = (event) => {
     event.stopPropagation();
@@ -2985,12 +3872,12 @@ export default function TaskAdminActionStacks({
     event.stopPropagation();
     handleClose();
     if (pending) return;
-    await runWorkflowWithInfoGuard({
+    await runWorkflowWithSequenceGuard({
       task,
       statusText: status,
       confirm,
       resolveStatus: onSetStatus
-        ? (t, target) => onSetStatus(t, target)
+        ? (t, target, extra) => onSetStatus(t, target, extra)
         : null,
       runAction: async () => lifecycleAction(task),
       actionLabel
@@ -3052,12 +3939,24 @@ export default function TaskAdminActionStacks({
           </ListItemIcon>
           <ListItemText>Удалить</ListItemText>
         </MenuItem>
+        <MenuItem
+          onClick={(e) => {
+            e.stopPropagation();
+            handleClose();
+            onIntervals?.();
+          }}
+        >
+          <ListItemIcon>
+            <AccessTime fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Интервалы</ListItemText>
+        </MenuItem>
 
         {showWorkflowBlock && (
           <>
             <Divider sx={menuDividerSx} />
             <MenuItem
-              disabled={!blocked && !canStart && !isPaused}
+              disabled={!canStart && !isPaused}
               sx={workflowItemSx}
               onClick={runWorkflow(startAction, STATUS_IN_PROGRESS)}
             >
@@ -3779,16 +4678,20 @@ function getWorkdayOrPrevious(date) {
 }
 === ./frontend/src/components/EditTaskRow.jsx ===
 import { useState, useEffect } from 'react';
-import { TableRow, TableCell, TextField, IconButton, Tooltip, Box, Typography } from '@mui/material';
+import { TableRow, TableCell, TextField, IconButton, Box, Typography } from '@mui/material';
 import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
+import { columnCellSx } from '../utils/taskTableColumns';
+import { COLLAPSED_COLUMN_SX } from '../utils/taskTableColumns';
 
 export default function EditTaskRow({
   task,
   onUpdate,
   onCancel,
-  onOpenAssigneeModal
+  onOpenAssigneeModal,
+  showHoursTypeColumns = true,
+  columnVisibility
 }) {
   const isShared = task.isSplitTask;
 
@@ -3836,7 +4739,7 @@ export default function EditTaskRow({
         <Edit color="warning" fontSize="small" />
       </TableCell>
 
-      <TableCell sx={{ width: '15%' }}>
+      <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, { width: '15%' })}>
         <TextField
           size="small"
           value={localTask.folderPath}
@@ -3846,7 +4749,7 @@ export default function EditTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={{ width: '10%' }}>
+      <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, { width: '10%' })}>
         <TextField
           size="small"
           value={localTask.fileName}
@@ -3856,7 +4759,7 @@ export default function EditTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={{ width: '20%' }}>
+      <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, { width: '12%' })}>
         <TextField
           size="small"
           value={localTask.comment}
@@ -3865,7 +4768,7 @@ export default function EditTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={DEADLINE_COLUMN_SX}>
+      <TableCell sx={columnCellSx('deadline', columnVisibility, showHoursTypeColumns, DEADLINE_COLUMN_SX)}>
         <DeadlineDateTimePicker
           value={localTask.deadline}
           onChange={(deadline) => handleFieldChange('deadline', deadline)}
@@ -3873,51 +4776,34 @@ export default function EditTaskRow({
         />
       </TableCell>
 
-      <TableCell align="center" sx={{ width: '6%' }}>
-        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-          {localTask.estimateHours?.toFixed(1) || '0.0'} ч
-        </Typography>
-      </TableCell>
+      <TableCell sx={COLLAPSED_COLUMN_SX} />
+      <TableCell sx={COLLAPSED_COLUMN_SX} />
 
-      <TableCell sx={{ width: '8%' }}>
-        <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {isShared ? '—' : (localTask.type || '—')}
-        </Typography>
-      </TableCell>
-
-      <TableCell sx={{ width: '8%' }}>
+      <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, { width: '8%' })}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-          <Tooltip title={isShared ? 'Изменить назначения' : 'Изменить сотрудника и часы'} arrow>
-            <IconButton
-              size="small"
-              onClick={() => onOpenAssigneeModal(localTask)}
-              sx={{ flexShrink: 0 }}
-            >
-              <PeopleAlt fontSize="small" color={isShared ? 'secondary' : 'action'} />
-            </IconButton>
-          </Tooltip>
+          <IconButton
+            size="small"
+            onClick={() => onOpenAssigneeModal(localTask)}
+            sx={{ flexShrink: 0 }}
+          >
+            <PeopleAlt fontSize="small" color={isShared ? 'secondary' : 'action'} />
+          </IconButton>
           <Typography variant="caption" sx={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {isShared ? 'Общая' : (localTask.employeeName || '—')}
           </Typography>
         </Box>
       </TableCell>
 
-      <TableCell sx={{ width: '8%' }}>
-        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{localTask.statusText || 'Назначена'}</span>
-      </TableCell>
+      <TableCell sx={COLLAPSED_COLUMN_SX} />
 
-      <TableCell sx={{ width: '12%' }}>
+      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, { width: '12%' })}>
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="Сохранить">
-            <IconButton size="small" color="primary" onClick={handleSave}>
-              <Save fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Отмена">
-            <IconButton size="small" color="error" onClick={onCancel}>
-              <Cancel fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          <IconButton size="small" color="primary" onClick={handleSave}>
+            <Save fontSize="small" />
+          </IconButton>
+          <IconButton size="small" color="error" onClick={onCancel}>
+            <Cancel fontSize="small" />
+          </IconButton>
         </Box>
       </TableCell>
     </TableRow>
@@ -4091,7 +4977,122 @@ export default function EmployeeHoursSelector({ employees, totalHours, onChange,
       )}
     </Box>
   );
-}=== ./frontend/src/components/DeadlineDateTimePicker.jsx ===
+}=== ./frontend/src/components/PlanningWarningsBanner.jsx ===
+import { Alert, AlertTitle, Stack } from '@mui/material';
+import { Error, Queue, Schedule, Event, AccessTime } from '@mui/icons-material';
+import TaskTitleTwoLines from './TaskTitleTwoLines';
+
+const KIND_META = {
+  hoursShortfall: {
+    severity: 'error',
+    icon: <Error fontSize="inherit" />,
+    title: 'Не хватает часов до дедлайна'
+  },
+  queueOverflow: {
+    severity: 'warning',
+    icon: <Queue fontSize="inherit" />,
+    title: 'Не влезает в очередь'
+  }
+};
+
+function warningKey(w) {
+  return `${w.kind}-${w.taskId}`;
+}
+
+export default function PlanningWarningsBanner({ warnings, onDismiss }) {
+  if (!warnings?.length) return null;
+
+  return (
+    <Stack sx={{ mb: 2 }} spacing={1}>
+      {warnings.map((item) => {
+        const meta = KIND_META[item.kind] ?? {
+          severity: 'warning',
+          icon: <Queue fontSize="inherit" />,
+          title: 'Планирование'
+        };
+        const task = {
+          folderPath: item.taskTitle,
+          heading: item.taskTitle,
+          fileName: item.fileName
+        };
+
+        return (
+          <Alert
+            key={warningKey(item)}
+            severity={meta.severity}
+            icon={meta.icon}
+            onClose={() => onDismiss(item.taskId, item.kind)}
+            sx={{ borderRadius: 2, '& .MuiAlert-icon': { alignItems: 'center' } }}
+          >
+            <AlertTitle sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.5 }}>
+              {meta.title}
+              {item.employeeName ? ` · ${item.employeeName}` : ''}
+            </AlertTitle>
+
+            <TaskTitleTwoLines
+              task={task}
+              headingVariant="body2"
+              statusVariant="body2"
+              headingSx={{ fontWeight: 600 }}
+              statusSx={{ color: 'text.secondary', mt: 0.25 }}
+            />
+
+            <Stack
+              direction="row"
+              spacing={2}
+              sx={{
+                mt: 1,
+                fontSize: '0.8rem',
+                color: 'text.secondary',
+                alignItems: 'center',
+                flexWrap: 'wrap'
+              }}
+            >
+              {item.kind === 'hoursShortfall' && (
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                  <AccessTime sx={{ fontSize: 14 }} />
+                  <span>
+                    Нужно {Math.round(item.requiredHours * 10) / 10} ч, доступно{' '}
+                    {Math.round(item.availableHours * 10) / 10} ч
+                  </span>
+                </Stack>
+              )}
+              {item.kind === 'queueOverflow' && item.plannedEnd && (
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                  <Schedule sx={{ fontSize: 14 }} />
+                  <span>
+                    План до{' '}
+                    {new Date(item.plannedEnd).toLocaleString('ru-RU', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </Stack>
+              )}
+              {item.deadline && (
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                  <Event sx={{ fontSize: 14 }} />
+                  <span>
+                    Дедлайн{' '}
+                    {new Date(item.deadline).toLocaleString('ru-RU', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </Stack>
+              )}
+            </Stack>
+          </Alert>
+        );
+      })}
+    </Stack>
+  );
+}
+=== ./frontend/src/components/DeadlineDateTimePicker.jsx ===
 import { useMemo, useCallback } from 'react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
@@ -4417,11 +5418,12 @@ import {
 } from '@mui/icons-material';
 import { softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
-import { runWorkflowWithInfoGuard } from '../utils/infoStatusWorkflow';
+import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
   STATUS_PAUSED,
+  STATUS_WAITING,
   getInfoMenuItems,
   isInfoStatus
 } from '../constants/taskStatuses';
@@ -4431,7 +5433,7 @@ const blockedMenuItemSx = { opacity: 0.45 };
 function infoMenuIcon(kind) {
   if (kind === 'approved') return <TaskAlt fontSize="small" color="success" />;
   if (kind === 'inStock') return <Inventory2 fontSize="small" color="success" />;
-  if (kind === 'noItems') return <Inventory2 fontSize="small" color="secondary" />;
+  if (kind === 'noItems') return <Inventory2 fontSize="small" color="error" />;
   return <FactCheck fontSize="small" color="secondary" />;
 }
 
@@ -4453,13 +5455,14 @@ export default function EmployeeStatusButtons({
   const isStarted = status === STATUS_IN_PROGRESS;
   const isPaused = status === STATUS_PAUSED;
   const isInfo = isInfoStatus(status);
+  const isWaiting = status === STATUS_WAITING || task?.sequenceStartBlocked;
   const canStart = !isDone && !isStarted && !isPaused;
   const canPause = isStarted;
   const canResume = isPaused;
   // «Готово» становится доступным только после нажатия «Начал» (либо в паузе после старта).
   // Это совпадает со спецификацией: до старта работа не считается, и завершать нечего.
   const canComplete = !isDone && (isStarted || isPaused);
-  const workflowItemSx = isInfo ? blockedMenuItemSx : undefined;
+  const workflowItemSx = isInfo || isWaiting ? blockedMenuItemSx : undefined;
 
   const handleOpen = (event) => {
     event.stopPropagation();
@@ -4471,12 +5474,12 @@ export default function EmployeeStatusButtons({
   const runWorkflow = (lifecycleAction, actionLabel) => async () => {
     handleClose();
     if (pending) return;
-    await runWorkflowWithInfoGuard({
+    await runWorkflowWithSequenceGuard({
       task,
       statusText: status,
       confirm,
       resolveStatus: onSetStatus
-        ? (t, target) => onSetStatus(t, target)
+        ? (t, target, extra) => onSetStatus(t, target, extra)
         : null,
       runAction: async () => lifecycleAction(task),
       actionLabel
@@ -4632,11 +5635,20 @@ import {
   Paper,
   Checkbox,
   ListItemText,
-  OutlinedInput
+  OutlinedInput,
+  Box,
+  ToggleButtonGroup,
+  ToggleButton
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
 import EstimateHoursInput from './EstimateHoursInput';
 import { partsToApi } from '../utils/splitTaskUtils';
+import {
+  SUPPLY_MODE_COOPERATIVE,
+  SUPPLY_MODE_INTERNAL,
+  TASK_EXECUTION_PARALLEL,
+  TASK_EXECUTION_SEQUENTIAL
+} from '../constants/taskStatuses';
 
 export default function SplitTaskModal({
   open,
@@ -4645,20 +5657,26 @@ export default function SplitTaskModal({
   initialParts,
   employees,
   taskTypes,
+  taskExecutionMode = 'parallel',
   onClose,
   onSuccess,
   onDraftApply
 }) {
   const [parts, setParts] = useState([]);
+  const [executionMode, setExecutionMode] = useState(TASK_EXECUTION_PARALLEL);
   const [error, setError] = useState('');
   const [removeWarning, setRemoveWarning] = useState('');
 
   const isDraft = mode === 'draft';
   const isEdit = mode === 'edit';
   const isFreeHoursMode = isDraft || isEdit || mode === 'split';
+  const isSequential = executionMode === TASK_EXECUTION_SEQUENTIAL;
+  const showExecutionModePicker = isDraft || (isEdit && parts.length >= 2);
 
   useEffect(() => {
     if (!open) return;
+
+    setExecutionMode(taskExecutionMode || TASK_EXECUTION_PARALLEL);
 
     const defaultPart = { employeeName: employees[0], taskTypes: [taskTypes[0]], hours: 0 };
 
@@ -4678,7 +5696,7 @@ export default function SplitTaskModal({
     }
     setError('');
     setRemoveWarning('');
-  }, [open, task, initialParts, mode, employees, taskTypes, isDraft]);
+  }, [open, task, initialParts, mode, employees, taskTypes, isDraft, taskExecutionMode]);
 
   const revalidateHours = (newParts) => {
     const sum = newParts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
@@ -4730,6 +5748,10 @@ export default function SplitTaskModal({
       setError('Заполните все поля для каждой части');
       return false;
     }
+    if (isDraft && isSequential && parts.length < 2) {
+      setError('Для последовательной задачи добавьте минимум 2 этапа');
+      return false;
+    }
     if (isDraft && parts.length < 1) {
       setError('Добавьте сотрудника');
       return false;
@@ -4747,14 +5769,18 @@ export default function SplitTaskModal({
   const handleSubmit = async () => {
     if (!validateParts()) return;
 
+    const supplyMode = executionMode === TASK_EXECUTION_SEQUENTIAL
+      ? SUPPLY_MODE_INTERNAL
+      : SUPPLY_MODE_COOPERATIVE;
+
     if (isDraft) {
-      onDraftApply?.(partsToApi(parts), parts);
+      onDraftApply?.(partsToApi(parts), parts, executionMode);
       onClose();
       return;
     }
 
     try {
-      const body = { parentTaskId: task.id, parts: partsToApi(parts) };
+      const body = { parentTaskId: task.id, parts: partsToApi(parts), supplyMode };
       const url = isEdit ? `/api/tasks/split/${task.id}` : '/api/tasks/split';
       const response = await fetch(url, {
         method: isEdit ? 'PUT' : 'POST',
@@ -4792,11 +5818,15 @@ export default function SplitTaskModal({
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
           {isDraft
             ? parts.length >= 2
-              ? `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`
+              ? isSequential
+                ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
+                : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`
               : `Обычная задача · ${displayTotalHours.toFixed(1)} ч`
             : parts.length === 1
               ? `Обычная задача · ${displayTotalHours.toFixed(1)} ч (попадёт в столбец «Часы»)`
-              : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`}
+              : isSequential
+                ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
+                : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`}
         </Typography>
       </DialogTitle>
 
@@ -4820,9 +5850,42 @@ export default function SplitTaskModal({
           </Alert>
         )}
 
+        {showExecutionModePicker && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Тип задачи
+            </Typography>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={executionMode}
+              onChange={(_e, value) => {
+                if (value) setExecutionMode(value);
+              }}
+            >
+              <ToggleButton value={TASK_EXECUTION_PARALLEL}>
+                Параллельная
+              </ToggleButton>
+              <ToggleButton value={TASK_EXECUTION_SEQUENTIAL}>
+                Последовательная
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              {isSequential
+                ? 'Этапы выполняются по очереди: следующий начинается после «Готово» предыдущего.'
+                : 'Все этапы доступны сразу — как общая задача.'}
+            </Typography>
+          </Box>
+        )}
+
         <Stack spacing={2}>
           {parts.map((part, idx) => (
             <Paper key={idx} variant="outlined" sx={{ p: 2 }}>
+              {isSequential && parts.length > 1 && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Этап {idx + 1}
+                </Typography>
+              )}
               <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <FormControl size="small" sx={{ minWidth: 120 }}>
                   <InputLabel>Сотрудник</InputLabel>
@@ -4877,7 +5940,7 @@ export default function SplitTaskModal({
           ))}
 
           <Button startIcon={<Add />} onClick={addPart} variant="outlined" size="small">
-            Добавить сотрудника
+            {isSequential ? 'Добавить этап' : 'Добавить сотрудника'}
           </Button>
         </Stack>
       </DialogContent>
@@ -4892,7 +5955,7 @@ export default function SplitTaskModal({
   );
 }
 === ./frontend/src/components/ActiveTasksList.jsx ===
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   startTask,
   pauseTask,
@@ -4902,7 +5965,7 @@ import {
   updateTaskRow,
   buildTaskUpdatePayload
 } from '../services/api';
-import { runWorkflowWithInfoGuard } from '../utils/infoStatusWorkflow';
+import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
   Warning,
   Error,
@@ -4912,18 +5975,22 @@ import {
   PlayArrow,
   Pause,
   CheckCircle,
-
+  Groups,
+  Sort
 } from '@mui/icons-material';
 import {
   Tooltip,
   Chip,
+  Checkbox,
   IconButton,
+  ListItemText,
   Box,
   Typography,
   Button,
   Card,
   CardContent,
-  LinearProgress,
+  Menu,
+  MenuItem,
   Stack
 } from '@mui/material';
 import { useUiFeedback } from '../context/UiFeedbackContext';
@@ -4933,21 +6000,75 @@ import { normalizePathForOpen } from '../utils/filePathForOpen';
 import { glassCardSx, compactActionButtonSx } from '../theme/surfaces';
 import EmptyState from './ui/EmptyState';
 import { Assignment } from '@mui/icons-material';
-import TaskTitleTwoLines, { getTaskStatusLine } from './TaskTitleTwoLines';
+import { getTaskFileLabel, getTaskHeading, getTaskStatusLine } from './TaskTitleTwoLines';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 import {
   isInfoStatus,
+  isSequenceBlocked,
   isPendingApprovalCalendar,
   STATUS_NO_ITEMS,
-  STATUS_PENDING_APPROVAL
+  STATUS_PENDING_APPROVAL,
+  SUPPLY_MODE_INTERNAL
 } from '../constants/taskStatuses';
 
 const blockedButtonSx = { opacity: 0.5 };
+
+const PROGRESS_MARKS = [0.3, 0.6, 0.9];
+
+function isProgressMarkActive(progress, mark) {
+  return Math.abs((progress ?? 0) - mark) < 0.02;
+}
+
+function getDeadlineSortValue(task) {
+  if (!task?.deadline) return Number.POSITIVE_INFINITY;
+  const value = new Date(task.deadline).getTime();
+  return Number.isNaN(value) ? Number.POSITIVE_INFINITY : value;
+}
+
+function isBlockedActiveTask(task) {
+  const statusLabel = getTaskStatusLine(task);
+  return isInfoStatus(statusLabel) || isSequenceBlocked(task, statusLabel) || task?.status === 8;
+}
+
+function stripTaskTypeSuffix(fileLabel, taskType) {
+  if (!fileLabel || fileLabel === '—') return fileLabel;
+  const type = String(taskType || '').trim();
+  if (type && fileLabel.endsWith(` [${type}]`)) {
+    return fileLabel.slice(0, -(` [${type}]`.length));
+  }
+  return fileLabel.replace(/\s+\[[^\]]+\]$/, '');
+}
 
 export default function ActiveTasksList({ onUpdate, embedded = false, employee = '' }) {
   const { showError, showWarning, confirm } = useUiFeedback();
   const { data: tasks = [] } = useActiveTasksQuery(employee, Boolean(employee));
   const [pendingTaskId, setPendingTaskId] = useState(null);
+  const [blockedBottomSort, setBlockedBottomSort] = useState(true);
+  const [sortAnchorEl, setSortAnchorEl] = useState(null);
+  const sortMenuOpen = Boolean(sortAnchorEl);
+
+  const visibleTasks = useMemo(() => {
+    return tasks
+      .map((task, index) => ({ task, index }))
+      .sort((a, b) => {
+        if (blockedBottomSort) {
+          const blockedDiff = Number(isBlockedActiveTask(a.task)) - Number(isBlockedActiveTask(b.task));
+          if (blockedDiff) return blockedDiff;
+        }
+
+        const deadlineDiff = getDeadlineSortValue(a.task) - getDeadlineSortValue(b.task);
+        return deadlineDiff || a.index - b.index;
+      })
+      .map(({ task }) => task);
+  }, [tasks, blockedBottomSort]);
+
+  const handleOpenSortMenu = (event) => {
+    setSortAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseSortMenu = () => {
+    setSortAnchorEl(null);
+  };
 
   const runGuardedAction = async (task, action, progress = null) => {
     if (pendingTaskId === task.id) return;
@@ -4963,12 +6084,12 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
     };
 
     try {
-      await runWorkflowWithInfoGuard({
+      await runWorkflowWithSequenceGuard({
         task,
         statusText: getTaskStatusLine(task),
         confirm,
-        resolveStatus: async (t, targetStatus) => {
-          await updateTaskRow(t.id, buildTaskUpdatePayload(t, employee, targetStatus));
+        resolveStatus: async (t, targetStatus, extra) => {
+          await updateTaskRow(t.id, buildTaskUpdatePayload(t, employee, targetStatus, extra));
         },
         runAction: runApi
       });
@@ -5010,7 +6131,7 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
     if (text === STATUS_PENDING_APPROVAL || isPendingApprovalCalendar(text)) {
       return theme.palette.secondary.main;
     }
-    if (text === STATUS_NO_ITEMS) return theme.palette.error.light;
+    if (text === STATUS_NO_ITEMS) return theme.palette.error.main;
     if (task.status === 1) return theme.palette.info.main;
     if (task.status === 2) return theme.palette.warning.main;
     return theme.palette.divider;
@@ -5018,12 +6139,43 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
 
   const content = (
     <Stack spacing={2}>
-      {tasks.map((task) => {
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Tooltip title="Сортировка">
+          <IconButton
+            size="small"
+            onClick={handleOpenSortMenu}
+            color={blockedBottomSort ? 'primary' : 'default'}
+            sx={[
+              blockedBottomSort && { border: '1px solid', borderColor: 'primary.main' }
+            ]}
+          >
+            <Sort fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Menu
+          anchorEl={sortAnchorEl}
+          open={sortMenuOpen}
+          onClose={handleCloseSortMenu}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <MenuItem onClick={() => setBlockedBottomSort(!blockedBottomSort)}>
+            <Checkbox size="small" checked={blockedBottomSort} readOnly />
+            <ListItemText primary="Заблокированные снизу" />
+          </MenuItem>
+        </Menu>
+      </Box>
+      {visibleTasks.map((task) => {
         const risk = getRiskProps(task.riskLevel);
-        const progressValue = Math.round((task.progress || 0) * 100);
         const statusLabel = getTaskStatusLine(task);
+        const taskHeading = getTaskHeading(task);
+        const taskFileLabel = stripTaskTypeSuffix(getTaskFileLabel(task), task.type);
+        const titleLine = taskFileLabel === '—' ? taskHeading : `${taskHeading} | ${taskFileLabel}`;
         const showInfoStatus = isInfoStatus(statusLabel);
-        const blocked = showInfoStatus;
+        const isSequentialChild = task.supplyMode === SUPPLY_MODE_INTERNAL && task.sequenceOrder > 0;
+        const sequenceBlocked = isSequenceBlocked(task, statusLabel) || task.status === 8;
+        const blocked = showInfoStatus || sequenceBlocked;
+        const showBlockingStatus = showInfoStatus || sequenceBlocked;
         const isAssignedLike = task.status === 0 || task.status === 6 || task.status === 7;
         const isInProgress = task.status === 1;
         const isPaused = task.status === 2;
@@ -5039,122 +6191,201 @@ export default function ActiveTasksList({ onUpdate, embedded = false, employee =
             })}
           >
             <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1 }}>
-                <Tooltip title="Открыть файл" arrow>
-                  <IconButton size="small" color="primary" onClick={() => openFile(task.file)}>
-                    <FolderOpen fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                <TaskTitleTwoLines task={task} sx={{ flex: 1, minWidth: 0 }} />
-                {showInfoStatus && (
-                  <TaskStatusCell statusText={statusLabel} label={statusLabel} />
-                )}
-                <Chip label={task.type} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
-                {risk && (
-                  <Chip icon={risk.icon} label={risk.label} size="small" color={risk.color} sx={{ height: 22, fontSize: '0.7rem' }} />
-                )}
-              </Box>
-
-              <Stack direction="row" spacing={2} sx={{ mb: 1, color: 'text.secondary' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <AccessTime sx={{ fontSize: 14 }} />
-                  <Typography variant="caption">{task.estimateHours} ч</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Event sx={{ fontSize: 14 }} />
-                  <Typography variant="caption">
-                    {task.deadline
-                      ? `${new Date(task.deadline).toLocaleDateString()} ${new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                      : 'Нет дедлайна'}
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) max-content',
+                  gap: 1,
+                  alignItems: 'center'
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                  <Tooltip title="Открыть файл" arrow>
+                    <IconButton size="small" color="primary" onClick={() => openFile(task.file)}>
+                      <FolderOpen fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  {task.isSplitTask && (
+                    <Tooltip title="Общая задача" arrow>
+                      <Groups fontSize="small" color="secondary" />
+                    </Tooltip>
+                  )}
+                  {isSequentialChild && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
+                    >
+                      Этап {task.sequenceOrder}
+                    </Typography>
+                  )}
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      flex: 1,
+                      minWidth: 0,
+                      fontWeight: 600,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {titleLine}
                   </Typography>
                 </Box>
-              </Stack>
 
-              <LinearProgress
-                variant="determinate"
-                value={progressValue}
-                color={task.status === 1 ? 'info' : task.status === 2 ? 'warning' : 'inherit'}
-                sx={{ mb: 1.5, borderRadius: 1 }}
-              />
+                <Stack
+                  direction="row"
+                  sx={{
+                    flexWrap: 'wrap',
+                    gap: 0.75,
+                    justifyContent: 'flex-end',
+                    alignItems: 'center'
+                  }}
+                >
+                  <Chip label={task.type} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
+                  {showBlockingStatus && (
+                    <TaskStatusCell statusText={statusLabel} label={statusLabel} />
+                  )}
+                  {risk && (
+                    <Chip icon={risk.icon} label={risk.label} size="small" color={risk.color} sx={{ height: 22, fontSize: '0.7rem' }} />
+                  )}
+                </Stack>
 
-              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
-                {blocked && !isCompleted && (
-                  // В инфостатусе сначала нужно «Начал» — workflow подтвердит снятие
-                  // инфостатуса и откроет интервал. «Готово» появится из обычной ветки
-                  // после старта, как и описано в спеке.
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="success"
-                    startIcon={<PlayArrow />}
-                    disabled={isPending}
-                    onClick={() => runGuardedAction(task, 'start')}
-                    sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
-                  >
-                    Начал
-                  </Button>
-                )}
-                {!blocked && (isAssignedLike || isInProgress || isPaused) && !isCompleted && (
-                  <>
-                    {(isAssignedLike || isPaused) && (
+                <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
+                  {sequenceBlocked && !isCompleted && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="success"
+                      startIcon={<PlayArrow />}
+                      disabled
+                      sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
+                    >
+                      Начал
+                    </Button>
+                  )}
+                  {!sequenceBlocked && showInfoStatus && !isCompleted && (
+                    <>
                       <Button
                         size="small"
-                        variant={isPaused ? 'contained' : 'outlined'}
+                        variant="outlined"
                         color="success"
                         startIcon={<PlayArrow />}
                         disabled={isPending}
-                        onClick={() => runGuardedAction(task, isPaused ? 'resume' : 'start')}
-                        sx={compactActionButtonSx}
+                        onClick={() => runGuardedAction(task, 'start')}
+                        sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
                       >
-                        {isPaused ? 'Продолжить' : 'Начал'}
+                        Начал
                       </Button>
-                    )}
-                    {isInProgress && (
                       <Button
                         size="small"
                         variant="outlined"
                         color="warning"
                         startIcon={<Pause />}
-                        disabled={isPending}
-                        onClick={() => runGuardedAction(task, 'pause')}
-                        sx={compactActionButtonSx}
+                        disabled
+                        sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
                       >
                         Пауза
                       </Button>
-                    )}
-                    {(isInProgress || isPaused) && (
                       <Button
                         size="small"
                         variant="outlined"
                         color="primary"
                         startIcon={<CheckCircle />}
-                        disabled={isPending}
-                        onClick={() => runGuardedAction(task, 'complete')}
-                        sx={compactActionButtonSx}
+                        disabled
+                        sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
                       >
                         Готово
                       </Button>
-                    )}
-                  </>
-                )}
-                {!blocked && !isCompleted && (
-                  <>
-                    {[0.3, 0.6, 0.9].map((p) => (
-                      <Button
-                        key={p}
-                        size="small"
-                        variant="text"
-                        color="secondary"
-                        disabled={isPending}
-                        onClick={() => runGuardedAction(task, 'progress', p)}
-                        sx={compactActionButtonSx}
-                      >
-                        {Math.round(p * 100)}%
-                      </Button>
-                    ))}
-                  </>
-                )}
-              </Stack>
+                    </>
+                  )}
+                  {!blocked && (isAssignedLike || isInProgress || isPaused) && !isCompleted && (
+                    <>
+                      {(isAssignedLike || isPaused) && (
+                        <Button
+                          size="small"
+                          variant={isPaused ? 'contained' : 'outlined'}
+                          color="success"
+                          startIcon={<PlayArrow />}
+                          disabled={isPending}
+                          onClick={() => runGuardedAction(task, isPaused ? 'resume' : 'start')}
+                          sx={compactActionButtonSx}
+                        >
+                          {isPaused ? 'Продолжить' : 'Начал'}
+                        </Button>
+                      )}
+                      {isInProgress && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="warning"
+                          startIcon={<Pause />}
+                          disabled={isPending}
+                          onClick={() => runGuardedAction(task, 'pause')}
+                          sx={compactActionButtonSx}
+                        >
+                          Пауза
+                        </Button>
+                      )}
+                      {(isInProgress || isPaused) && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="primary"
+                          startIcon={<CheckCircle />}
+                          disabled={isPending}
+                          onClick={() => runGuardedAction(task, 'complete')}
+                          sx={compactActionButtonSx}
+                        >
+                          Готово
+                        </Button>
+                      )}
+                    </>
+                  )}
+                  {!blocked && !isCompleted && (
+                    <>
+                      {PROGRESS_MARKS.map((p) => (
+                        <Button
+                          key={p}
+                          size="small"
+                          variant={isProgressMarkActive(task.progress, p) ? 'contained' : 'text'}
+                          color="secondary"
+                          disabled={isPending}
+                          onClick={() => runGuardedAction(task, 'progress', p)}
+                          sx={compactActionButtonSx}
+                        >
+                          {Math.round(p * 100)}%
+                        </Button>
+                      ))}
+                    </>
+                  )}
+                </Stack>
+
+                <Stack
+                  direction="row"
+                  spacing={2}
+                  sx={{
+                    color: 'text.secondary',
+                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <AccessTime sx={{ fontSize: 14 }} />
+                    <Typography variant="caption">{task.estimateHours} ч</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Event sx={{ fontSize: 14 }} />
+                    <Typography variant="caption">
+                      {task.deadline
+                        ? `${new Date(task.deadline).toLocaleDateString()} ${new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        : 'Нет дедлайна'}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Box>
             </CardContent>
           </Card>
         );
@@ -5196,7 +6427,9 @@ export default function useTaskTableApi() {
       } catch (parseErr) {
         if (parseErr?.status === 409) throw parseErr;
       }
-      throw new Error(message);
+      const err = new Error(message);
+      err.status = response.status;
+      throw err;
     }
     const contentType = response.headers.get('content-type');
     if (contentType?.includes('application/json')) {
@@ -5247,6 +6480,9 @@ export default function useTaskTableApi() {
     if (rowData.parts?.length) {
       body.parts = rowData.parts;
     }
+    if (rowData.supplyMode != null) {
+      body.supplyMode = rowData.supplyMode;
+    }
     const response = await fetch('/api/tasks/table/row', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -5268,8 +6504,23 @@ export default function useTaskTableApi() {
         type: rowData.type,
         employeeName: rowData.employeeName,
         parentRowNumber: rowData.parentRowNumber,
-        statusText: rowData.statusText
+        statusText: rowData.statusText,
+        sequenceOverride: rowData.sequenceOverride ?? false
       })
+    });
+    return await handleResponse(response);
+  }, [handleResponse]);
+
+  const getIntervals = useCallback(async (taskId) => {
+    const response = await fetch(`/api/tasks/table/row/${taskId}/intervals`);
+    return await handleResponse(response);
+  }, [handleResponse]);
+
+  const updateIntervals = useCallback(async (taskId, intervals) => {
+    const response = await fetch(`/api/tasks/table/row/${taskId}/intervals`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ intervals })
     });
     return await handleResponse(response);
   }, [handleResponse]);
@@ -5333,6 +6584,8 @@ export default function useTaskTableApi() {
     loadChildren,
     createRow,
     updateRow,
+    getIntervals,
+    updateIntervals,
     deleteRow,
     startTask,
     pauseTask,
@@ -5341,7 +6594,7 @@ export default function useTaskTableApi() {
     openFile,
     getTaskForSplit,
     splitTask
-  }), [fetchTableRow, loadRows, loadChildren, createRow, updateRow, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, getTaskForSplit, splitTask]);
+  }), [fetchTableRow, loadRows, loadChildren, createRow, updateRow, getIntervals, updateIntervals, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, getTaskForSplit, splitTask]);
 
   return api;
 }=== ./frontend/src/hooks/useExpandedRows.jsx ===
@@ -5429,6 +6682,7 @@ import {
 } from '@mui/icons-material';
 import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
+import DeadlineWarnings from './components/DeadlineWarnings';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
 import DebugPanel from './components/DebugPanel';
@@ -5450,7 +6704,7 @@ import { MotionSwitch } from './components/ui/MotionSection';
 
 function AppContent() {
   const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
-  const { showSuccess, showError, showWarning, showInfo, confirm } = useUiFeedback();
+  const { showSuccess, showError, showWarning, showInfo, confirm, promptInput } = useUiFeedback();
   const [activeTab, setActiveTab] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
@@ -5591,8 +6845,29 @@ function AppContent() {
       confirmColor: 'error',
     });
     if (!confirmed) return;
+
+    const password = await promptInput({
+      title: 'Пароль сброса базы данных',
+      message: 'Введите пароль администратора для необратимого сброса базы.',
+      inputLabel: 'Пароль',
+      inputType: 'password',
+      inputRequired: true,
+      confirmLabel: 'Сбросить базу',
+      confirmColor: 'error',
+    });
+    if (!password) return;
+
+    const resetPassword = password.trim();
     try {
-      const response = await fetch('/api/debug/reset-db', { method: 'POST', credentials: 'include' });
+      const response = await fetch('/api/debug/reset-db', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Reset-Db-Password': resetPassword,
+        },
+        body: JSON.stringify({ password: resetPassword }),
+      });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.message || `HTTP ${response.status}`);
@@ -5669,6 +6944,7 @@ function AppContent() {
             {activeTab === 0 ? (
               <>
                 <WeekCalendar employee={employee} />
+                {!isAdmin && <DeadlineWarnings employee={employee} />}
                 <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
                   <ActiveTasksList onUpdate={refreshCalendar} embedded employee={employee} />
                 </SectionCard>

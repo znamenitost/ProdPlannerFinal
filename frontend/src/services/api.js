@@ -255,6 +255,7 @@ export const debugApi = {
   resetMockTime: () => debugFetch('/reset-time', { method: 'POST' }),
   closeInterval: (taskId) => debugFetch(`/close-interval/${taskId}`, { method: 'POST' }),
   createInterval: (taskId) => debugFetch(`/create-interval/${taskId}`, { method: 'POST' }),
+  recalculateStatistics: () => debugFetch('/recalculate-statistics', { method: 'POST' }),
   resetDatabase: (password) =>
     debugFetch('/reset-db', {
       method: 'POST',

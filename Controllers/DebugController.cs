@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
 using System.Security.Cryptography;
@@ -17,6 +18,7 @@ public class DebugController : ControllerBase
     private readonly IProductionTaskRepository _repo;
     private readonly ApplicationDbContext _context;
     private readonly IAppTimeService _timeService;
+    private readonly IWorkHoursCalculator _workHours;
     private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _configuration;
 
@@ -24,12 +26,14 @@ public class DebugController : ControllerBase
         IProductionTaskRepository repo,
         ApplicationDbContext context,
         IAppTimeService timeService,
+        IWorkHoursCalculator workHours,
         IWebHostEnvironment environment,
         IConfiguration configuration)
     {
         _repo = repo;
         _context = context;
         _timeService = timeService;
+        _workHours = workHours;
         _environment = environment;
         _configuration = configuration;
     }
@@ -158,6 +162,77 @@ public class DebugController : ControllerBase
         return Ok(new { message = "Пароль подходит" });
     }
 
+    [HttpPost("recalculate-statistics")]
+    public async Task<IActionResult> RecalculateStatistics(CancellationToken cancellationToken)
+    {
+        var now = _timeService.Now;
+        var completedTasks = await _context.ProductionTasks
+            .Include(t => t.WorkIntervals)
+            .Where(t => t.Status == JobStatus.Completed
+                && !(t.IsSplitTask && t.ParentRowNumber == null))
+            .ToListAsync(cancellationToken);
+
+        var changedActualHours = 0;
+        var aggregates = new Dictionary<string, (double TotalSaved, double TodaySaved)>();
+
+        foreach (var task in completedTasks)
+        {
+            var actualHours = CalculateActualHoursFromIntervals(task.WorkIntervals);
+            if (Math.Abs(task.ActualHours - actualHours) > 0.005)
+                changedActualHours++;
+
+            task.ActualHours = actualHours;
+            task.UpdatedAt = now;
+
+            if (string.IsNullOrWhiteSpace(task.EmployeeName))
+                continue;
+
+            var savedHours = task.EstimateHours - actualHours;
+            var completedToday = task.CompletedAt.HasValue
+                && AppDateTime.ToMoscowWallClockFromDb(task.CompletedAt.Value).Date == now.Date;
+
+            aggregates.TryGetValue(task.EmployeeName, out var current);
+            aggregates[task.EmployeeName] = (
+                current.TotalSaved + savedHours,
+                current.TodaySaved + (completedToday ? savedHours : 0));
+        }
+
+        var stats = await _context.EmployeeStats.ToListAsync(cancellationToken);
+        var knownEmployees = stats.Select(s => s.EmployeeName).ToHashSet(StringComparer.Ordinal);
+
+        foreach (var stat in stats)
+        {
+            aggregates.TryGetValue(stat.EmployeeName, out var aggregate);
+            stat.TotalSavedHours = aggregate.TotalSaved;
+            stat.TodaySavedHours = aggregate.TodaySaved;
+            stat.LastResetDate = now.Date;
+        }
+
+        foreach (var (employeeName, aggregate) in aggregates)
+        {
+            if (knownEmployees.Contains(employeeName))
+                continue;
+
+            _context.EmployeeStats.Add(new EmployeeStat
+            {
+                EmployeeName = employeeName,
+                TotalSavedHours = aggregate.TotalSaved,
+                TodaySavedHours = aggregate.TodaySaved,
+                LastResetDate = now.Date
+            });
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            message = "Статистика пересчитана",
+            tasksProcessed = completedTasks.Count,
+            tasksChanged = changedActualHours,
+            employeesProcessed = aggregates.Count
+        });
+    }
+
     private ActionResult? ValidateResetPassword(ResetDatabaseRequest? request)
     {
         var configuredPassword = _configuration["Debug:ResetDatabasePassword"];
@@ -214,6 +289,16 @@ public class DebugController : ControllerBase
         return Ok(task.WorkIntervals.Select(i => new { i.Id, i.StartTime, i.EndTime }));
     }
 
+    private double CalculateActualHoursFromIntervals(IEnumerable<WorkInterval> intervals)
+    {
+        var total = intervals
+            .Where(interval => interval.EndTime.HasValue)
+            .Sum(interval => _workHours.GetWorkHoursBetween(
+                AppDateTime.ToMoscowWallClockFromDb(interval.StartTime),
+                AppDateTime.ToMoscowWallClockFromDb(interval.EndTime!.Value)));
+
+        return Math.Round(total, 2);
+    }
     
 }
 

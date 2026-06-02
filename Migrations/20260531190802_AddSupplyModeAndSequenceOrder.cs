@@ -60,6 +60,7 @@ namespace ProductionPlanner.Migrations
             migrationBuilder.DropColumn(
                 name: "SupplyMode",
                 table: "ProductionTasks");
+
         }
     }
 }
