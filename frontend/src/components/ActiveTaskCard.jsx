@@ -218,12 +218,11 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                 {(isAssignedLike || isPaused) && (
                   <Button
                     size="small"
-                    variant={isPaused ? 'contained' : 'compact'}
+                    variant="compact"
                     color="success"
                     startIcon={<PlayArrow />}
                     disabled={isPending}
                     onClick={() => onAction(task, isPaused ? 'resume' : 'start')}
-                    sx={isPaused ? compactButtonThemeStyles : undefined}
                   >
                     {isPaused ? 'Продолжить' : 'Начал'}
                   </Button>
