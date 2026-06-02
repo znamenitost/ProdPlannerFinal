@@ -54,13 +54,6 @@ export function sectionPaperThemeStyles(theme) {
   };
 }
 
-export const cardHoverSx = {
-  transition: (theme) => createMuiTransition(theme, 'box-shadow'),
-  '&:hover': {
-    boxShadow: (theme) => `0 4px 16px ${alpha(theme.palette.primary.main, 0.08)}`
-  }
-};
-
 export const hoverInteractiveSx = {
   transition: (theme) =>
     createMuiTransition(theme, ['opacity', 'filter', 'box-shadow'], {

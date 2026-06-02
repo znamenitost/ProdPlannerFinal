@@ -1,5 +1,6 @@
 import { Snackbar, Alert, Box, Chip, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import { toastAlertThemeStyles } from '../theme/componentVariants';
 import { Assignment, AccessTime, CheckCircle, Inventory2, PlayArrow } from '@mui/icons-material';
 
 const SNACKBAR_HEIGHT = 108;
@@ -39,24 +40,6 @@ const notificationVariants = {
 
 const getNotificationVariant = (type) => notificationVariants[type] || notificationVariants.NewTask;
 
-const alertSx = (color) => ({
-  width: '100%',
-  minWidth: 280,
-  maxWidth: 360,
-  alignItems: 'flex-start',
-  bgcolor: (theme) => theme.palette.grey[700],
-  color: (theme) => theme.palette.common.white,
-  border: (theme) => `1px solid ${alpha(theme.palette[color]?.main || theme.palette.primary.main, 0.7)}`,
-  borderLeft: (theme) => `5px solid ${theme.palette[color]?.main || theme.palette.primary.main}`,
-  boxShadow: (theme) => `0 14px 34px ${alpha(theme.palette.grey[700], 0.34)}`,
-  '& .MuiAlert-icon': {
-    color: (theme) => theme.palette[color]?.main || theme.palette.primary.main,
-    mt: 0.25
-  },
-  '& .MuiAlert-message': { padding: 0 },
-  '& .MuiAlert-action': { color: 'inherit' }
-});
-
 export default function PushNotificationSnackbars({ notifications, onClose }) {
   return (
     <>
@@ -76,10 +59,17 @@ export default function PushNotificationSnackbars({ notifications, onClose }) {
           >
             <Alert
               severity={variant.severity}
-              variant="filled"
+              variant="toast"
               onClose={() => onClose(notification.id)}
               icon={variant.icon}
-              sx={alertSx(variant.color)}
+              sx={(theme) => ({
+                ...toastAlertThemeStyles(theme, variant.color),
+                minWidth: 280,
+                maxWidth: 360,
+                alignItems: 'flex-start',
+                '& .MuiAlert-message': { padding: 0 },
+                '& .MuiAlert-icon': { mt: 0.25 }
+              })}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
                 <Chip

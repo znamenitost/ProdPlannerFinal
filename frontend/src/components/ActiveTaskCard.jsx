@@ -21,7 +21,7 @@ import {
   Tooltip,
   Typography
 } from '@mui/material';
-import { compactActionButtonSx, glassCardSx } from '../theme/surfaces';
+import { compactButtonThemeStyles } from '../theme/componentVariants';
 import {
   isInfoStatus,
   isPendingApprovalCalendar,
@@ -96,8 +96,8 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
 
   return (
     <Card
+      variant="nested"
       sx={(theme) => ({
-        ...glassCardSx,
         borderLeft: '4px solid',
         borderLeftColor: getBorderColor(task, theme)
       })}
@@ -168,12 +168,12 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
             {sequenceBlocked && !isCompleted && (
               <Button
                 size="small"
-                variant="outlined"
+                variant="compact"
                 color="success"
                 startIcon={<PlayArrow />}
                 disabled={isPending}
                 onClick={() => onAction(task, 'start')}
-                sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
+                sx={blockedButtonSx}
               >
                 Начал
               </Button>
@@ -182,32 +182,32 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
               <>
                 <Button
                   size="small"
-                  variant="outlined"
+                  variant="compact"
                   color="success"
                   startIcon={<PlayArrow />}
                   disabled={isPending}
                   onClick={() => onAction(task, 'start')}
-                  sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
+                  sx={blockedButtonSx}
                 >
                   Начал
                 </Button>
                 <Button
                   size="small"
-                  variant="outlined"
+                  variant="compact"
                   color="warning"
                   startIcon={<Pause />}
                   disabled
-                  sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
+                  sx={blockedButtonSx}
                 >
                   Пауза
                 </Button>
                 <Button
                   size="small"
-                  variant="outlined"
+                  variant="compact"
                   color="primary"
                   startIcon={<CheckCircle />}
                   disabled
-                  sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
+                  sx={blockedButtonSx}
                 >
                   Готово
                 </Button>
@@ -218,12 +218,12 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                 {(isAssignedLike || isPaused) && (
                   <Button
                     size="small"
-                    variant={isPaused ? 'contained' : 'outlined'}
+                    variant={isPaused ? 'contained' : 'compact'}
                     color="success"
                     startIcon={<PlayArrow />}
                     disabled={isPending}
                     onClick={() => onAction(task, isPaused ? 'resume' : 'start')}
-                    sx={compactActionButtonSx}
+                    sx={isPaused ? compactButtonThemeStyles : undefined}
                   >
                     {isPaused ? 'Продолжить' : 'Начал'}
                   </Button>
@@ -231,12 +231,11 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                 {isInProgress && (
                   <Button
                     size="small"
-                    variant="outlined"
+                    variant="compact"
                     color="warning"
                     startIcon={<Pause />}
                     disabled={isPending}
                     onClick={() => onAction(task, 'pause')}
-                    sx={compactActionButtonSx}
                   >
                     Пауза
                   </Button>
@@ -244,12 +243,11 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                 {(isInProgress || isPaused) && (
                   <Button
                     size="small"
-                    variant="outlined"
+                    variant="compact"
                     color="primary"
                     startIcon={<CheckCircle />}
                     disabled={isPending}
                     onClick={() => onAction(task, 'complete')}
-                    sx={compactActionButtonSx}
                   >
                     Готово
                   </Button>
@@ -266,7 +264,7 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                     color="secondary"
                     disabled={isPending}
                     onClick={() => onAction(task, 'progress', p)}
-                    sx={compactActionButtonSx}
+                    sx={compactButtonThemeStyles}
                   >
                     {Math.round(p * 100)}%
                   </Button>

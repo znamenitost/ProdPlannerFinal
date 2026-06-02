@@ -4,10 +4,8 @@ import {
   Container,
   Box,
   Paper,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
+  Autocomplete,
+  TextField,
   Button,
   ThemeProvider,
   CssBaseline,
@@ -16,6 +14,7 @@ import {
   Tabs,
   Avatar,
   Menu,
+  MenuItem,
   IconButton,
   Divider,
   ListItemIcon,
@@ -326,19 +325,17 @@ function AppContent() {
 
               <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                 {isAdmin && (
-                  <FormControl size="small" sx={{ minWidth: 130 }}>
-                    <InputLabel id="admin-employee-label">Сотрудник</InputLabel>
-                    <Select
-                      labelId="admin-employee-label"
-                      value={employee}
-                      label="Сотрудник"
-                      onChange={(e) => setEmployee(e.target.value)}
-                    >
-                      <MenuItem value="Дима">Дима</MenuItem>
-                      <MenuItem value="Яромир">Яромир</MenuItem>
-                      <MenuItem value="Павел">Павел</MenuItem>
-                    </Select>
-                  </FormControl>
+                  <Autocomplete
+                    size="small"
+                    disableClearable
+                    options={['Дима', 'Яромир', 'Павел']}
+                    value={employee}
+                    onChange={(_e, value) => {
+                      if (value) setEmployee(value);
+                    }}
+                    sx={{ minWidth: 160 }}
+                    renderInput={(params) => <TextField {...params} label="Сотрудник" />}
+                  />
                 )}
                 {isAdmin && <Divider orientation="vertical" flexItem sx={{ height: 30 }} />}
                 {isAdmin && (

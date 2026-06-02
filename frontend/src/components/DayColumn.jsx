@@ -1,5 +1,4 @@
-import { Paper } from '@mui/material';
-import { glassCardSx } from '../theme/surfaces';
+import { Card } from '@mui/material';
 import DayHeader from './calendar/DayHeader';
 import PlannedBlocks from './calendar/PlannedBlocks';
 import DeadlineMarkers from './calendar/DeadlineMarkers';
@@ -34,7 +33,7 @@ export default function DayColumn({
     getTaskInfoForDeadline(taskBlocksMap, taskId, taskTitle, status);
 
   return (
-    <Paper elevation={0} sx={{ ...glassCardSx, p: 2, borderRadius: 1.5 }}>
+    <Card variant="nested" sx={{ p: 2 }}>
       <DayHeader date={day.date} />
       <PlannedBlocks
         taskBlocks={day.taskBlocks}
@@ -57,6 +56,6 @@ export default function DayColumn({
         dayDate={day.date}
         currentTime={currentTime}
       />
-    </Paper>
+    </Card>
   );
 }

@@ -42,48 +42,8 @@ export const COL_ACTIONS = {
 
 export const TASK_TABLE_TEXT_FIELD_PROPS = {
   size: 'small',
-  variant: 'outlined',
+  variant: 'table',
   fullWidth: true
-};
-
-export const taskTableTextFieldSx = {
-  minWidth: 72,
-  '& .MuiOutlinedInput-root': {
-    borderRadius: 1,
-    fontSize: '0.875rem',
-    backgroundColor: 'background.paper'
-  },
-  '& .MuiOutlinedInput-input': {
-    py: 0.875,
-    px: 1.25
-  }
-};
-
-/** Match DesktopDatePicker field to outlined TextField in table rows. */
-export const taskTableDatePickerSx = {
-  width: '100%',
-  minWidth: 152,
-  '& .MuiPickersInputBase-root': {
-    borderRadius: 1,
-    fontSize: '0.875rem',
-    minHeight: 40,
-    minWidth: 152,
-    width: '100%',
-    backgroundColor: 'background.paper',
-    cursor: 'pointer',
-    pr: 0.5
-  },
-  '& .MuiPickersSectionList-root': {
-    py: 0.875,
-    px: 0.75,
-    fontSize: '0.875rem',
-    flex: 1,
-    minWidth: 0
-  },
-  '& .MuiIconButton-root': {
-    p: 0.75,
-    flexShrink: 0
-  }
 };
 
 export const cellDisplayTextSx = {

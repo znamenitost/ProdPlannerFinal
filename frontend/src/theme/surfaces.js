@@ -1,7 +1,5 @@
 import { alpha } from '@mui/material/styles';
 import { tokens } from './paletteTokens';
-import { cardHoverSx } from './motion';
-
 const { neutral } = tokens;
 
 /** Full-page background wrapper */
@@ -9,14 +7,6 @@ export const pageShellSx = {
   minHeight: '100vh',
   py: { xs: 2, md: 3 },
   px: { xs: 1, sm: 0 }
-};
-
-/** Nested card */
-export const glassCardSx = {
-  borderRadius: 1.5,
-  bgcolor: neutral[50],
-  border: `1px solid ${alpha(neutral[200], 0.95)}`,
-  ...cardHoverSx
 };
 
 export const sectionHeaderSx = {
@@ -32,15 +22,6 @@ export const sectionTitleRowSx = {
   display: 'flex',
   alignItems: 'center',
   gap: 1
-};
-
-export const compactActionButtonSx = {
-  minWidth: 0,
-  px: 1.25,
-  py: 0.35,
-  fontSize: '0.75rem',
-  lineHeight: 1.3,
-  borderRadius: 1.5
 };
 
 export const childRowSx = {

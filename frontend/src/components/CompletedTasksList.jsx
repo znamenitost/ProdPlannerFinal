@@ -37,7 +37,6 @@ import {
   Sort,
   EventNote  // добавлена для иконки периода выполнения (опционально)
 } from '@mui/icons-material';
-import { alpha } from '@mui/material/styles';
 import { sectionTitleRowSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import EmptyState from './ui/EmptyState';
@@ -154,7 +153,7 @@ export default function CompletedTasksList({ employee }) {
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: (t) => alpha(t.palette.success.main, 0.08), border: (t) => `1px solid ${alpha(t.palette.success.main, 0.2)}` }}>
+          <Card variant="statSuccess">
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Всего задач</Typography>
@@ -168,7 +167,7 @@ export default function CompletedTasksList({ employee }) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: (t) => alpha(t.palette.info.main, 0.08), border: (t) => `1px solid ${alpha(t.palette.info.main, 0.2)}` }}>
+          <Card variant="statInfo">
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Выделено часов</Typography>
@@ -182,7 +181,7 @@ export default function CompletedTasksList({ employee }) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: (t) => alpha(t.palette.warning.main, 0.1), border: (t) => `1px solid ${alpha(t.palette.warning.main, 0.25)}` }}>
+          <Card variant="statWarning">
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Реально часов</Typography>
@@ -196,10 +195,7 @@ export default function CompletedTasksList({ employee }) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={(t) => ({
-            bgcolor: alpha(totalDifference >= 0 ? t.palette.success.main : t.palette.error.main, 0.08),
-            border: `1px solid ${alpha(totalDifference >= 0 ? t.palette.success.main : t.palette.error.main, 0.22)}`
-          })}>
+          <Card variant={totalDifference >= 0 ? 'statSuccess' : 'statError'}>
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Экономия</Typography>

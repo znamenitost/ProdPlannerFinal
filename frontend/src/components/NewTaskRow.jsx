@@ -20,7 +20,8 @@ import {
   COL_COMMENT,
   COL_EMPLOYEE,
   COL_STATUS,
-  COL_ACTIONS
+  COL_ACTIONS,
+  TASK_TABLE_TEXT_FIELD_PROPS
 } from '../utils/taskTableStyles';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 
@@ -59,31 +60,28 @@ export default function NewTaskRow({
 
       <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           placeholder="Путь к папке"
           value={newRow.folderPath || ''}
           onChange={(e) => setNewRow({ ...newRow, folderPath: e.target.value })}
-          fullWidth
         />
       </TableCell>
 
       <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           placeholder="Имя файла"
           value={newRow.fileName || ''}
           onChange={(e) => setNewRow({ ...newRow, fileName: e.target.value })}
-          fullWidth
         />
       </TableCell>
 
       <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           placeholder="Комментарий"
           value={newRow.comment}
           onChange={(e) => setNewRow({ ...newRow, comment: e.target.value })}
-          fullWidth
         />
       </TableCell>
 

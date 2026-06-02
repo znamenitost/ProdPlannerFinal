@@ -1,6 +1,15 @@
 import { createTheme, alpha } from '@mui/material/styles';
 import { tokens, chrome } from './paletteTokens';
 import { createMuiTransition, sectionPaperThemeStyles } from './motion';
+import {
+  compactButtonThemeStyles,
+  compactOutlinedButtonThemeStyles,
+  nestedCardThemeStyles,
+  statCardThemeStyles,
+  tableDatePickerSlotSx,
+  tableTextFieldThemeStyles,
+  toastAlertThemeStyles
+} from './componentVariants';
 
 const { neutral, primary, secondary, success, warning, error, info } = tokens;
 
@@ -96,7 +105,14 @@ export const appTheme = createTheme({
           boxShadow: `0 2px 12px ${alpha(neutral[600], 0.04)}`,
           transition: createMuiTransition(theme, 'box-shadow')
         })
-      }
+      },
+      variants: [
+        { props: { variant: 'nested' }, style: ({ theme }) => nestedCardThemeStyles(theme) },
+        { props: { variant: 'statSuccess' }, style: ({ theme }) => statCardThemeStyles(theme, 'success') },
+        { props: { variant: 'statInfo' }, style: ({ theme }) => statCardThemeStyles(theme, 'info') },
+        { props: { variant: 'statWarning' }, style: ({ theme }) => statCardThemeStyles(theme, 'warning') },
+        { props: { variant: 'statError' }, style: ({ theme }) => statCardThemeStyles(theme, 'error') }
+      ]
     },
     MuiButton: {
       defaultProps: { disableElevation: true },
@@ -125,7 +141,14 @@ export const appTheme = createTheme({
         text: {
           '&:hover': { backgroundColor: alpha(primary.main, 0.05) }
         }
-      }
+      },
+      variants: [
+        {
+          props: { variant: 'compact' },
+          style: ({ theme, ownerState }) =>
+            compactOutlinedButtonThemeStyles(theme, ownerState.color || 'primary')
+        }
+      ]
     },
     MuiIconButton: {
       styleOverrides: {
@@ -183,7 +206,10 @@ export const appTheme = createTheme({
             '&.Mui-focused fieldset': { borderColor: primary.main }
           }
         }
-      }
+      },
+      variants: [
+        { props: { variant: 'table' }, style: tableTextFieldThemeStyles }
+      ]
     },
     MuiTableCell: {
       styleOverrides: {
@@ -261,6 +287,28 @@ export const appTheme = createTheme({
         standardWarning: { backgroundColor: alpha(warning.light, 0.5) },
         standardError: { backgroundColor: alpha(error.light, 0.45) },
         standardInfo: { backgroundColor: alpha(info.light, 0.45) }
+      },
+      variants: [
+        {
+          props: { variant: 'toast' },
+          style: ({ theme, ownerState }) =>
+            toastAlertThemeStyles(theme, ownerState.severity || 'info')
+        }
+      ]
+    },
+    MuiPopover: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 10,
+          marginTop: 4,
+          border: `1px solid ${borderSubtle}`,
+          boxShadow: shadowSoft
+        }
+      }
+    },
+    MuiPickersTextField: {
+      styleOverrides: {
+        root: tableDatePickerSlotSx
       }
     },
     MuiTooltip: {

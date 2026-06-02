@@ -3,6 +3,7 @@ import { TableRow, TableCell, TextField, IconButton, Box, Typography } from '@mu
 import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
+import { TASK_TABLE_TEXT_FIELD_PROPS } from '../utils/taskTableStyles';
 import { columnCellSx } from '../utils/taskTableColumns';
 import { COLLAPSED_COLUMN_SX } from '../utils/taskTableColumns';
 
@@ -62,30 +63,27 @@ export default function EditTaskRow({
 
       <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, { width: '15%' })}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           value={localTask.folderPath}
           onChange={(e) => handleFieldChange('folderPath', e.target.value)}
-          fullWidth
           placeholder="Путь к папке"
         />
       </TableCell>
 
       <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, { width: '10%' })}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           value={localTask.fileName}
           onChange={(e) => handleFieldChange('fileName', e.target.value)}
-          fullWidth
           placeholder="Имя файла"
         />
       </TableCell>
 
       <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, { width: '12%' })}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           value={localTask.comment}
           onChange={(e) => handleFieldChange('comment', e.target.value)}
-          fullWidth
         />
       </TableCell>
 
