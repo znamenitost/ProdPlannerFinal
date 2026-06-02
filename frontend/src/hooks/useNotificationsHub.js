@@ -26,16 +26,25 @@ function mapPendingDto(dto) {
   };
 }
 
+function normalizeAffectedEmployees(value) {
+  if (Array.isArray(value)) {
+    return value.map((name) => String(name || '').trim()).filter(Boolean);
+  }
+  const name = String(value || '').trim();
+  return name ? [name] : [];
+}
+
 /**
  * @param {object} handlers
- * @param {(event: { type: string, taskId?: number }) => Promise<boolean>|boolean} [handlers.onTaskEvent]
+ * @param {(event: { type: string, taskId?: number, affectedEmployees?: string[] }) => Promise<boolean>|boolean} [handlers.onTaskEvent]
  * @param {() => void} [handlers.onTableFallbackRefresh] — полная перезагрузка таблицы, если строка не на экране
- * @param {() => void} [handlers.onCalendarRefresh] — календарь / completed
+ * @param {(event?: { type: string, taskId?: number, affectedEmployees?: string[] }) => void} [handlers.onCalendarRefresh] — календарь / completed
  * @param {() => void} [handlers.onFullRefresh] — reconnect и т.п.
  */
 export default function useNotificationsHub(user, handlers = {}) {
   const [notifications, setNotifications] = useState([]);
   const refreshTimeoutRef = useRef(null);
+  const taskEventChainRef = useRef(Promise.resolve());
   const handlersRef = useRef(handlers);
   const displayedServerIdsRef = useRef(new Set());
   const hiddenQueueRef = useRef([]);
@@ -60,11 +69,17 @@ export default function useNotificationsHub(user, handlers = {}) {
       } catch (err) {
         console.error('Hub task event handler error:', err);
       }
-      h.onActiveTasksRefresh?.();
+      h.onActiveTasksRefresh?.(event);
+      h.onCalendarRefresh?.(event);
       if (!tableHandled) {
         h.onTableFallbackRefresh?.(event);
-        h.onCalendarRefresh?.(event);
       }
+    };
+
+    const enqueueRun = () => {
+      taskEventChainRef.current = taskEventChainRef.current
+        .catch(() => {})
+        .then(run);
     };
 
     const immediate = event.type === 'TaskStatusChanged' || event.type === 'TaskProgressChanged';
@@ -73,12 +88,12 @@ export default function useNotificationsHub(user, handlers = {}) {
         clearTimeout(refreshTimeoutRef.current);
         refreshTimeoutRef.current = null;
       }
-      void run();
+      enqueueRun();
       return;
     }
 
     if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-    refreshTimeoutRef.current = setTimeout(run, 300);
+    refreshTimeoutRef.current = setTimeout(enqueueRun, 300);
   }, []);
 
   const hubTaskId = (taskId) => {
@@ -173,28 +188,53 @@ export default function useNotificationsHub(user, handlers = {}) {
       scheduleCalendarRefresh();
     };
 
-    const handleTaskDeleted = (taskId) => {
+    const handleTaskDeleted = (taskId, affectedEmployees) => {
       if (!isMounted) return;
       const id = hubTaskId(taskId);
-      if (id != null) scheduleTaskEvent({ type: 'TaskDeleted', taskId: id });
+      if (id != null) {
+        scheduleTaskEvent({
+          type: 'TaskDeleted',
+          taskId: id,
+          affectedEmployees: normalizeAffectedEmployees(affectedEmployees),
+        });
+      }
     };
 
-    const handleTaskUpdated = (taskId) => {
+    const handleTaskUpdated = (taskId, _taskTitle, _deadline, affectedEmployees) => {
       if (!isMounted) return;
       const id = hubTaskId(taskId);
-      if (id != null) scheduleTaskEvent({ type: 'TaskUpdated', taskId: id });
+      if (id != null) {
+        scheduleTaskEvent({
+          type: 'TaskUpdated',
+          taskId: id,
+          affectedEmployees: normalizeAffectedEmployees(affectedEmployees),
+        });
+      }
     };
 
-    const handleTaskStatusChanged = (taskId, status) => {
+    const handleTaskStatusChanged = (taskId, status, affectedEmployees) => {
       if (!isMounted) return;
       const id = hubTaskId(taskId);
-      if (id != null) scheduleTaskEvent({ type: 'TaskStatusChanged', taskId: id, status });
+      if (id != null) {
+        scheduleTaskEvent({
+          type: 'TaskStatusChanged',
+          taskId: id,
+          status,
+          affectedEmployees: normalizeAffectedEmployees(affectedEmployees),
+        });
+      }
     };
 
-    const handleTaskProgressChanged = (taskId) => {
+    const handleTaskProgressChanged = (taskId, _progress, affectedEmployees) => {
       if (!isMounted) return;
       const id = hubTaskId(taskId);
-      if (id != null) scheduleTaskEvent({ type: 'TaskProgressChanged', taskId: id });
+      if (id != null) {
+        scheduleTaskEvent({
+          type: 'TaskProgressChanged',
+          taskId: id,
+          affectedEmployees: normalizeAffectedEmployees(affectedEmployees),
+        });
+      }
     };
 
     const handleForceDisconnect = () => {

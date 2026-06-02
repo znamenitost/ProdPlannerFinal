@@ -89,21 +89,34 @@ function AppContent() {
     [activeTab, refreshTable]
   );
 
-  const handleHubCalendarRefresh = useCallback(() => {
-    if (activeTab !== 1) {
+  const shouldRefreshSelectedEmployee = useCallback((event) => {
+    const affectedEmployees = event?.affectedEmployees;
+    if (!Array.isArray(affectedEmployees)) return true;
+    if (!employee) return false;
+    return affectedEmployees.includes(employee);
+  }, [employee]);
+
+  const handleHubActiveTasksRefresh = useCallback((event) => {
+    if (shouldRefreshSelectedEmployee(event)) {
+      refreshActiveTasks();
+    }
+  }, [refreshActiveTasks, shouldRefreshSelectedEmployee]);
+
+  const handleHubCalendarRefresh = useCallback((event) => {
+    if (shouldRefreshSelectedEmployee(event)) {
       refreshCalendar();
     }
-  }, [activeTab, refreshCalendar]);
+  }, [refreshCalendar, shouldRefreshSelectedEmployee]);
 
   const notificationHandlers = useMemo(
     () => ({
       onTaskEvent: handleHubTaskEvent,
-      onActiveTasksRefresh: refreshActiveTasks,
+      onActiveTasksRefresh: handleHubActiveTasksRefresh,
       onTableFallbackRefresh: handleHubTableFallbackRefresh,
       onCalendarRefresh: handleHubCalendarRefresh,
       onFullRefresh: refreshAll
     }),
-    [handleHubTaskEvent, refreshActiveTasks, handleHubTableFallbackRefresh, handleHubCalendarRefresh, refreshAll]
+    [handleHubTaskEvent, handleHubActiveTasksRefresh, handleHubTableFallbackRefresh, handleHubCalendarRefresh, refreshAll]
   );
 
   const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers);

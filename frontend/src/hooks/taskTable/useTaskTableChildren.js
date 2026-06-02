@@ -15,7 +15,7 @@ export default function useTaskTableChildren(api, tableDataUpdatedAt) {
     if (!force && childrenCacheRef.current.has(parentId)) {
       return childrenCacheRef.current.get(parentId);
     }
-    if (loadingChildrenRef.current.has(parentId)) return;
+    if (!force && loadingChildrenRef.current.has(parentId)) return;
 
     setLoadingChildren((prev) => new Set(prev).add(parentId));
     try {

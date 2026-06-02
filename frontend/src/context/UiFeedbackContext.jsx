@@ -10,8 +10,24 @@ import {
   Snackbar,
   TextField,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 
 const UiFeedbackContext = createContext(null);
+
+const snackbarAlertSx = (severity) => ({
+  width: '100%',
+  color: (theme) => theme.palette.common.white,
+  bgcolor: (theme) => theme.palette.grey[700],
+  border: (theme) => `1px solid ${alpha(theme.palette[severity]?.main || theme.palette.info.main, 0.7)}`,
+  borderLeft: (theme) => `5px solid ${theme.palette[severity]?.main || theme.palette.info.main}`,
+  boxShadow: (theme) => `0 12px 32px ${alpha(theme.palette.grey[700], 0.32)}`,
+  '& .MuiAlert-icon': {
+    color: (theme) => theme.palette[severity]?.main || theme.palette.info.main,
+  },
+  '& .MuiAlert-action': {
+    color: 'inherit',
+  },
+});
 
 const defaultConfirmState = {
   open: false,
@@ -32,6 +48,7 @@ export function UiFeedbackProvider({ children }) {
   const [confirmState, setConfirmState] = useState(defaultConfirmState);
   const [confirmInputValue, setConfirmInputValue] = useState('');
   const confirmResolverRef = useRef(null);
+  const confirmOpenRef = useRef(false);
 
   const showSnackbar = useCallback((message, severity = 'info') => {
     setSnackbar({ open: true, message, severity });
@@ -43,7 +60,12 @@ export function UiFeedbackProvider({ children }) {
   const showInfo = useCallback((message) => showSnackbar(message, 'info'), [showSnackbar]);
 
   const confirm = useCallback((options = {}) => {
+    if (confirmOpenRef.current) {
+      return Promise.resolve(false);
+    }
+
     return new Promise((resolve) => {
+      confirmOpenRef.current = true;
       confirmResolverRef.current = resolve;
       setConfirmInputValue('');
       setConfirmState({
@@ -75,6 +97,7 @@ export function UiFeedbackProvider({ children }) {
     setConfirmState((prev) => ({ ...prev, open: false }));
     confirmResolverRef.current?.(confirmed && confirmState.input ? confirmInputValue : confirmed);
     confirmResolverRef.current = null;
+    confirmOpenRef.current = false;
   }, [confirmInputValue, confirmState.input]);
 
   const handleSnackbarClose = (_event, reason) => {
@@ -106,7 +129,7 @@ export function UiFeedbackProvider({ children }) {
           onClose={handleSnackbarClose}
           severity={snackbar.severity}
           variant="filled"
-          sx={{ width: '100%' }}
+          sx={snackbarAlertSx(snackbar.severity)}
         >
           {snackbar.message}
         </Alert>

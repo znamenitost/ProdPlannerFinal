@@ -15,7 +15,12 @@ import {
   CardContent,
   Grid,
   Tooltip,
-  TablePagination
+  TablePagination,
+  IconButton,
+  Menu,
+  MenuItem,
+  ListItemText,
+  Checkbox
 } from '@mui/material';
 import { 
   CheckCircle, 
@@ -27,6 +32,7 @@ import {
   HourglassEmpty,
   PlayArrow,
   Stop,
+  Sort,
   EventNote  // добавлена для иконки периода выполнения (опционально)
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
@@ -35,12 +41,20 @@ import { useUiFeedback } from '../context/UiFeedbackContext';
 import EmptyState from './ui/EmptyState';
 import TaskTitleTwoLines from './TaskTitleTwoLines';
 
+const STATS_PERIOD_OPTIONS = [
+  { value: 'week', label: 'За неделю' },
+  { value: 'day', label: 'За день' },
+  { value: 'all', label: 'За все время' }
+];
+
 export default function CompletedTasksList({ employee }) {
   const { showError } = useUiFeedback();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [statsPeriod, setStatsPeriod] = useState('week');
+  const [periodAnchorEl, setPeriodAnchorEl] = useState(null);
 
-  const { data, isError } = useCompletedTasksQuery(employee, page, rowsPerPage);
+  const { data, isError } = useCompletedTasksQuery(employee, page, rowsPerPage, statsPeriod);
 
   useEffect(() => {
     if (isError) {
@@ -57,6 +71,22 @@ export default function CompletedTasksList({ employee }) {
   const totalCount = data?.totalCount ?? stats.totalTasks ?? 0;
 
   const totalDifference = stats.totalEstimate - stats.totalActual;
+  const selectedPeriodLabel =
+    STATS_PERIOD_OPTIONS.find((option) => option.value === statsPeriod)?.label ?? 'За неделю';
+  const periodMenuOpen = Boolean(periodAnchorEl);
+
+  const handleOpenPeriodMenu = (event) => {
+    setPeriodAnchorEl(event.currentTarget);
+  };
+
+  const handleClosePeriodMenu = () => {
+    setPeriodAnchorEl(null);
+  };
+
+  const handleSelectStatsPeriod = (period) => {
+    setStatsPeriod(period);
+    setPeriodAnchorEl(null);
+  };
 
   const formatWorkPeriod = (intervals) => {
     if (!intervals || intervals.length === 0) return '—';
@@ -84,10 +114,39 @@ export default function CompletedTasksList({ employee }) {
   return (
     <Paper sx={glassPaperSx}>
       <Box sx={{ ...sectionTitleRowSx, mb: 3 }}>
-        <Assessment color="primary" />
-        <Typography variant="h2" component="h2">
-          Выполненные задачи
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Assessment color="primary" />
+          <Typography variant="h2" component="h2">
+            Выполненные задачи
+          </Typography>
+        </Box>
+        <Tooltip title="Период статистики">
+          <IconButton
+            size="small"
+            onClick={handleOpenPeriodMenu}
+            color={statsPeriod !== 'week' ? 'primary' : 'default'}
+            sx={[
+              { ml: 'auto' },
+              statsPeriod !== 'week' && { border: '1px solid', borderColor: 'primary.main' }
+            ]}
+          >
+            <Sort fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Menu
+          anchorEl={periodAnchorEl}
+          open={periodMenuOpen}
+          onClose={handleClosePeriodMenu}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          {STATS_PERIOD_OPTIONS.map((option) => (
+            <MenuItem key={option.value} onClick={() => handleSelectStatsPeriod(option.value)}>
+              <Checkbox size="small" checked={statsPeriod === option.value} readOnly />
+              <ListItemText primary={option.label} />
+            </MenuItem>
+          ))}
+        </Menu>
       </Box>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -140,7 +199,10 @@ export default function CompletedTasksList({ employee }) {
           })}>
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Typography variant="body2" color="text.secondary">Экономия</Typography>
+                <Box>
+                  <Typography variant="body2" color="text.secondary">Экономия</Typography>
+                  <Typography variant="caption" color="text.secondary">{selectedPeriodLabel}</Typography>
+                </Box>
                 {totalDifference >= 0 ? <TrendingUp color="success" /> : <TrendingDown color="error" />}
               </Box>
               <Typography

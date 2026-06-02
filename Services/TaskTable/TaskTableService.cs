@@ -298,7 +298,7 @@ public class TaskTableService : ITaskTableService
             {
                 child.Deadline = request.Deadline;
                 child.UpdatedAt = _timeService.Now;
-                await _repo.UpdateTaskAsync(child, cancellationToken);
+                await _repo.UpdateTaskTableFieldsAsync(child, cancellationToken: cancellationToken);
             }
         }
 
@@ -383,7 +383,10 @@ public class TaskTableService : ITaskTableService
             ApplyRowMetadata(task, request);
         }
 
-        await _repo.UpdateTaskAsync(task, cancellationToken);
+        await _repo.UpdateTaskTableFieldsAsync(
+            task,
+            includeStatusFields: statusChangedTo != null && !completedViaLifecycle,
+            cancellationToken: cancellationToken);
         if (TaskStatusMapper.IsEmployeeInfoStatus(task.Status)
             && task.ParentRowNumber.HasValue
             && task.IsSplitTask)

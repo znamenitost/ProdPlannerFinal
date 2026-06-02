@@ -5303,6 +5303,7 @@ public class TaskListsController : ControllerBase
         [FromQuery] string employee,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
+        [FromQuery] string statsPeriod = "week",
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(employee))
@@ -5310,7 +5311,7 @@ public class TaskListsController : ControllerBase
 
         if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
 
-        var result = await _taskLists.GetCompletedTasksAsync(employee, page, pageSize, cancellationToken);
+        var result = await _taskLists.GetCompletedTasksAsync(employee, page, pageSize, statsPeriod, _timeService.Now, cancellationToken);
         return Ok(result);
     }
 
@@ -5462,6 +5463,11 @@ namespace ProductionPlanner.Controllers
             if (!FilePathNormalizer.TryNormalizeRelativePath(filePath, shareName, out var correctedPath, out var pathError))
             {
                 error = pathError ?? "Не удалось определить путь к файлу";
+                return false;
+            }
+            if (string.IsNullOrEmpty(correctedPath))
+            {
+                error = "Не удалось определить путь к файлу";
                 return false;
             }
 
@@ -5695,7 +5701,11 @@ namespace ProductionPlanner.Data
     public interface IProductionTaskRepository
     {
         Task<List<ProductionTask>> GetActiveTasksAsync(string employeeName, CancellationToken cancellationToken = default);
-        Task<CompletedTasksAggregateStats> GetCompletedTasksStatsAsync(string employeeName, CancellationToken cancellationToken = default);
+        Task<CompletedTasksAggregateStats> GetCompletedTasksStatsAsync(
+            string employeeName,
+            DateTime? completedFrom = null,
+            DateTime? completedTo = null,
+            CancellationToken cancellationToken = default);
         Task<PaginatedResult<ProductionTask>> GetCompletedTasksPaginatedAsync(
             string employeeName,
             int page,
@@ -5720,6 +5730,10 @@ namespace ProductionPlanner.Data
             bool includeIntervals = false);
         Task AddTaskAsync(ProductionTask task, CancellationToken cancellationToken = default);
         Task UpdateTaskAsync(ProductionTask task, CancellationToken cancellationToken = default);
+        Task UpdateTaskTableFieldsAsync(
+            ProductionTask task,
+            bool includeStatusFields = false,
+            CancellationToken cancellationToken = default);
         Task DeleteTaskAsync(int id, CancellationToken cancellationToken = default);
         Task DetachTasksFromSplitAsync(IReadOnlyList<int> childTaskIds, CancellationToken cancellationToken = default);
         Task DeleteAllTasksAsync(CancellationToken cancellationToken = default);
@@ -5749,6 +5763,11 @@ namespace ProductionPlanner.Data
             IReadOnlyList<JobStatus>? expectedStatuses = null,
             TaskStatusPatch? patch = null,
             CancellationToken cancellationToken = default);
+        Task<int> TryUpdateProgressAsync(
+            int taskId,
+            double progress,
+            DateTime updatedAt,
+            CancellationToken cancellationToken = default);
         void StageWorkInterval(WorkInterval interval);
         Task SaveChangesAsync(CancellationToken cancellationToken = default);
     }
@@ -5768,6 +5787,8 @@ namespace ProductionPlanner.Data
         private readonly ApplicationDbContext _context;
         private readonly IAppTimeService _timeService;
         private static readonly ConcurrentDictionary<int, SemaphoreSlim> LifecycleLocks = new();
+        private static readonly SemaphoreSlim DisplayOrderLock = new(1, 1);
+        private const long DisplayOrderAdvisoryLockKey = 7_326_001L;
 
         public ProductionTaskRepository(ApplicationDbContext context, IAppTimeService timeService)
         {
@@ -5791,9 +5812,20 @@ namespace ProductionPlanner.Data
 
         public async Task<CompletedTasksAggregateStats> GetCompletedTasksStatsAsync(
             string employeeName,
+            DateTime? completedFrom = null,
+            DateTime? completedTo = null,
             CancellationToken cancellationToken = default)
         {
             var query = CompletedTasksQuery(employeeName);
+            if (completedFrom.HasValue || completedTo.HasValue)
+            {
+                var rangeStart = completedFrom.HasValue ? ToDbDateTime(completedFrom.Value) : (DateTime?)null;
+                var rangeEnd = completedTo.HasValue ? ToDbDateTime(completedTo.Value) : (DateTime?)null;
+
+                query = query.Where(t =>
+                    (!rangeStart.HasValue || (t.CompletedAt ?? t.UpdatedAt) >= rangeStart.Value)
+                    && (!rangeEnd.HasValue || (t.CompletedAt ?? t.UpdatedAt) < rangeEnd.Value));
+            }
 
             var totalTasks = await query.CountAsync(cancellationToken);
             if (totalTasks == 0)
@@ -5889,16 +5921,39 @@ namespace ProductionPlanner.Data
 
         public async Task AppendRootDisplayOrderAsync(int rootTaskId, CancellationToken cancellationToken = default)
         {
-            var maxOrder = await _context.ProductionTasks
-                .AsNoTracking()
-                .Where(t => t.ParentRowNumber == null)
-                .MaxAsync(t => (int?)t.DisplayOrder, cancellationToken) ?? -1;
+            await DisplayOrderLock.WaitAsync(cancellationToken);
+            try
+            {
+                await ExecuteInTransactionAsync(async ct =>
+                {
+                    await AcquireDisplayOrderDbLockAsync(ct);
 
-            await _context.ProductionTasks
-                .Where(t => t.Id == rootTaskId && t.ParentRowNumber == null)
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(t => t.DisplayOrder, maxOrder + 1),
-                    cancellationToken);
+                    var maxOrder = await _context.ProductionTasks
+                        .AsNoTracking()
+                        .Where(t => t.ParentRowNumber == null)
+                        .MaxAsync(t => (int?)t.DisplayOrder, ct) ?? -1;
+
+                    await _context.ProductionTasks
+                        .Where(t => t.Id == rootTaskId && t.ParentRowNumber == null)
+                        .ExecuteUpdateAsync(
+                            s => s.SetProperty(t => t.DisplayOrder, maxOrder + 1),
+                            ct);
+                }, cancellationToken);
+            }
+            finally
+            {
+                DisplayOrderLock.Release();
+            }
+        }
+
+        private async Task AcquireDisplayOrderDbLockAsync(CancellationToken cancellationToken)
+        {
+            if (!_context.Database.IsNpgsql())
+                return;
+
+            await _context.Database.ExecuteSqlRawAsync(
+                $"SELECT pg_advisory_xact_lock({DisplayOrderAdvisoryLockKey})",
+                cancellationToken);
         }
 
         private IQueryable<ProductionTask> CompletedTasksQuery(string employeeName) =>
@@ -5950,6 +6005,50 @@ namespace ProductionPlanner.Data
                 _context.Entry(tracked).CurrentValues.SetValues(task);
 
             await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        public async Task UpdateTaskTableFieldsAsync(
+            ProductionTask task,
+            bool includeStatusFields = false,
+            CancellationToken cancellationToken = default)
+        {
+            var updatedAt = ToDbDateTime(task.UpdatedAt == default ? _timeService.Now : task.UpdatedAt);
+            var deadline = ToDbDateTime(task.Deadline);
+            var completedAt = task.CompletedAt.HasValue ? ToDbDateTime(task.CompletedAt.Value) : (DateTime?)null;
+
+            var query = _context.ProductionTasks.Where(t => t.Id == task.Id);
+
+            if (includeStatusFields)
+            {
+                await query.ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.FolderPath, task.FolderPath)
+                        .SetProperty(t => t.FileName, task.FileName)
+                        .SetProperty(t => t.Comment, task.Comment)
+                        .SetProperty(t => t.Deadline, deadline)
+                        .SetProperty(t => t.EstimateHours, task.EstimateHours)
+                        .SetProperty(t => t.Type, task.Type)
+                        .SetProperty(t => t.EmployeeName, task.EmployeeName)
+                        .SetProperty(t => t.ParentRowNumber, task.ParentRowNumber)
+                        .SetProperty(t => t.Status, task.Status)
+                        .SetProperty(t => t.Progress, task.Progress)
+                        .SetProperty(t => t.ActualHours, task.ActualHours)
+                        .SetProperty(t => t.CompletedAt, completedAt)
+                        .SetProperty(t => t.UpdatedAt, updatedAt),
+                    cancellationToken);
+                return;
+            }
+
+            await query.ExecuteUpdateAsync(
+                s => s.SetProperty(t => t.FolderPath, task.FolderPath)
+                    .SetProperty(t => t.FileName, task.FileName)
+                    .SetProperty(t => t.Comment, task.Comment)
+                    .SetProperty(t => t.Deadline, deadline)
+                    .SetProperty(t => t.EstimateHours, task.EstimateHours)
+                    .SetProperty(t => t.Type, task.Type)
+                    .SetProperty(t => t.EmployeeName, task.EmployeeName)
+                    .SetProperty(t => t.ParentRowNumber, task.ParentRowNumber)
+                    .SetProperty(t => t.UpdatedAt, updatedAt),
+                cancellationToken);
         }
 
         public async Task DeleteTaskAsync(int id, CancellationToken cancellationToken = default)
@@ -6418,6 +6517,21 @@ namespace ProductionPlanner.Data
                 s => s.SetProperty(t => t.Status, newStatus)
                     .SetProperty(t => t.UpdatedAt, updated),
                 cancellationToken);
+        }
+
+        public async Task<int> TryUpdateProgressAsync(
+            int taskId,
+            double progress,
+            DateTime updatedAt,
+            CancellationToken cancellationToken = default)
+        {
+            var updated = ToDbDateTime(updatedAt);
+            return await _context.ProductionTasks
+                .Where(t => t.Id == taskId && t.Status != JobStatus.Completed)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.Progress, progress)
+                        .SetProperty(t => t.UpdatedAt, updated),
+                    cancellationToken);
         }
 
         private DateTime ToDbDateTime(DateTime value) =>
@@ -7774,7 +7888,7 @@ public class TaskTableService : ITaskTableService
             {
                 child.Deadline = request.Deadline;
                 child.UpdatedAt = _timeService.Now;
-                await _repo.UpdateTaskAsync(child, cancellationToken);
+                await _repo.UpdateTaskTableFieldsAsync(child, cancellationToken: cancellationToken);
             }
         }
 
@@ -7859,7 +7973,10 @@ public class TaskTableService : ITaskTableService
             ApplyRowMetadata(task, request);
         }
 
-        await _repo.UpdateTaskAsync(task, cancellationToken);
+        await _repo.UpdateTaskTableFieldsAsync(
+            task,
+            includeStatusFields: statusChangedTo != null && !completedViaLifecycle,
+            cancellationToken: cancellationToken);
         if (TaskStatusMapper.IsEmployeeInfoStatus(task.Status)
             && task.ParentRowNumber.HasValue
             && task.IsSplitTask)
@@ -9974,10 +10091,10 @@ public class TaskLifecycleService : ITaskLifecycleService
             if (task == null) return;
         }
 
-        task.Progress = newProgress;
-        task.UpdatedAt = now;
+        var updated = await _repo.TryUpdateProgressAsync(taskId, newProgress, now, cancellationToken);
+        if (updated == 0)
+            return;
 
-        await _repo.UpdateTaskAsync(task, cancellationToken);
         await _notificationService.NotifyProgressChangedAsync(task, newProgress);
     }
 
@@ -10214,20 +10331,25 @@ public class TaskNotificationService : ITaskNotificationService
         // Data-sync для таблицы/календаря у всех подключённых клиентов:
         // таблица показывает все корневые задачи, и любой сотрудник, открывший её,
         // должен увидеть новую строку без ручного refresh.
-        await BroadcastAsync("TaskUpdated", task.Id, title, task.Deadline);
+        await BroadcastAsync("TaskUpdated", task.Id, title, task.Deadline, AffectedEmployees(task.EmployeeName));
     }
 
     public Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null) =>
-        BroadcastAsync("TaskUpdated", task.Id, GetNotificationTitle(task), task.Deadline);
+        BroadcastAsync(
+            "TaskUpdated",
+            task.Id,
+            GetNotificationTitle(task),
+            task.Deadline,
+            AffectedEmployees(task.EmployeeName, oldEmployeeName));
 
     public Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames) =>
-        BroadcastAsync("TaskDeleted", taskId);
+        BroadcastAsync("TaskDeleted", taskId, AffectedEmployees(employeeNames));
 
     public Task NotifyStatusChangedAsync(ProductionTask task, string newStatus) =>
-        BroadcastAsync("TaskStatusChanged", task.Id, newStatus);
+        BroadcastAsync("TaskStatusChanged", task.Id, newStatus, AffectedEmployees(task.EmployeeName));
 
     public Task NotifyProgressChangedAsync(ProductionTask task, double progress) =>
-        BroadcastAsync("TaskProgressChanged", task.Id, progress);
+        BroadcastAsync("TaskProgressChanged", task.Id, progress, AffectedEmployees(task.EmployeeName));
 
     /// <summary>
     /// Персональный push исполнителю о том, что админ перевёл задачу в «Согласовано» или
@@ -10319,6 +10441,20 @@ public class TaskNotificationService : ITaskNotificationService
     private Task BroadcastAsync(string method, params object?[] args) =>
         _hubContext.Clients.All.SendCoreAsync(method, args);
 
+    private static string[] AffectedEmployees(params string?[] employeeNames) =>
+        employeeNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    private static string[] AffectedEmployees(IEnumerable<string> employeeNames) =>
+        employeeNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
     public static string GetNotificationTitle(ProductionTask task)
     {
         var name = task.TaskDisplayName;
@@ -10394,12 +10530,15 @@ public class TaskListQueryService : ITaskListQueryService
         string employee,
         int page,
         int pageSize,
+        string statsPeriod,
+        DateTime now,
         CancellationToken cancellationToken = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var statsRow = await _repo.GetCompletedTasksStatsAsync(employee, cancellationToken);
+        var (statsFrom, statsTo, normalizedStatsPeriod) = GetStatsPeriodRange(statsPeriod, now);
+        var statsRow = await _repo.GetCompletedTasksStatsAsync(employee, statsFrom, statsTo, cancellationToken);
         var pageResult = await _repo.GetCompletedTasksPaginatedAsync(employee, page, pageSize, cancellationToken);
 
         var taskIds = pageResult.Items.Select(t => t.Id).ToList();
@@ -10418,7 +10557,8 @@ public class TaskListQueryService : ITaskListQueryService
         {
             totalTasks = statsRow.TotalTasks,
             totalEstimate = statsRow.TotalEstimate,
-            totalActual = statsRow.TotalActual
+            totalActual = statsRow.TotalActual,
+            period = normalizedStatsPeriod
         };
 
         return new
@@ -10430,6 +10570,23 @@ public class TaskListQueryService : ITaskListQueryService
             totalCount = pageResult.TotalCount,
             totalPages = pageResult.TotalPages
         };
+    }
+
+    private static (DateTime? From, DateTime? To, string Period) GetStatsPeriodRange(string? statsPeriod, DateTime now)
+    {
+        var normalizedPeriod = (statsPeriod ?? "week").Trim().ToLowerInvariant();
+        return normalizedPeriod switch
+        {
+            "day" => (now.Date, now.Date.AddDays(1), "day"),
+            "all" => (null, null, "all"),
+            _ => (GetCurrentWorkWeekStart(now), GetCurrentWorkWeekStart(now).AddDays(5), "week")
+        };
+    }
+
+    private static DateTime GetCurrentWorkWeekStart(DateTime now)
+    {
+        var daysSinceMonday = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        return now.Date.AddDays(-daysSinceMonday);
     }
 
     private static object MapCompletedTaskToResult(ProductionTask task, List<WorkInterval> intervals) =>
@@ -10519,6 +10676,8 @@ public interface ITaskListQueryService
         string employee,
         int page,
         int pageSize,
+        string statsPeriod,
+        DateTime now,
         CancellationToken cancellationToken = default);
     Task<List<DeadlineRisk>> GetDeadlineRisksAsync(string employee, DateTime now, CancellationToken cancellationToken = default);
     Task<List<QueueOverloadAlert>> GetQueueOverloadsAsync(string employee, DateTime now, CancellationToken cancellationToken = default);
@@ -10847,6 +11006,7 @@ namespace ProductionPlanner.Services
         }
     }
 }=== ./Services/EmployeeStatsService.cs ===
+using System.Collections.Concurrent;
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
 
@@ -10861,6 +11021,7 @@ namespace ProductionPlanner.Services
 
     public class EmployeeStatsService : IEmployeeStatsService
     {
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> StatLocks = new();
         private readonly IProductionTaskRepository _repo;
 
         public EmployeeStatsService(IProductionTaskRepository repo, IAppTimeService timeService)
@@ -10870,24 +11031,36 @@ namespace ProductionPlanner.Services
 
         public async Task AddSavedHoursAsync(string employeeName, double savedHours, DateTime now)
         {
-            var stat = await _repo.GetEmployeeStatAsync(employeeName);
-            if (stat == null)
-            {
-                stat = new EmployeeStat
-                {
-                    EmployeeName = employeeName,
-                    TotalSavedHours = savedHours,
-                    TodaySavedHours = savedHours,
-                    LastResetDate = now.Date
-                };
-                await _repo.UpdateEmployeeStatAsync(stat);
+            if (string.IsNullOrWhiteSpace(employeeName))
                 return;
-            }
 
-            ApplyResetIfNeeded(stat, now);
-            stat.TotalSavedHours += savedHours;
-            stat.TodaySavedHours += savedHours;
-            await _repo.UpdateEmployeeStatAsync(stat);
+            var sem = StatLocks.GetOrAdd(employeeName, _ => new SemaphoreSlim(1, 1));
+            await sem.WaitAsync();
+            try
+            {
+                var stat = await _repo.GetEmployeeStatAsync(employeeName);
+                if (stat == null)
+                {
+                    stat = new EmployeeStat
+                    {
+                        EmployeeName = employeeName,
+                        TotalSavedHours = savedHours,
+                        TodaySavedHours = savedHours,
+                        LastResetDate = now.Date
+                    };
+                    await _repo.UpdateEmployeeStatAsync(stat);
+                    return;
+                }
+
+                ApplyResetIfNeeded(stat, now);
+                stat.TotalSavedHours += savedHours;
+                stat.TodaySavedHours += savedHours;
+                await _repo.UpdateEmployeeStatAsync(stat);
+            }
+            finally
+            {
+                sem.Release();
+            }
         }
 
         public async Task<double> GetTodaySavedHoursAsync(string employeeName, DateTime now)

@@ -56,20 +56,25 @@ public class TaskNotificationService : ITaskNotificationService
         // Data-sync для таблицы/календаря у всех подключённых клиентов:
         // таблица показывает все корневые задачи, и любой сотрудник, открывший её,
         // должен увидеть новую строку без ручного refresh.
-        await BroadcastAsync("TaskUpdated", task.Id, title, task.Deadline);
+        await BroadcastAsync("TaskUpdated", task.Id, title, task.Deadline, AffectedEmployees(task.EmployeeName));
     }
 
     public Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null) =>
-        BroadcastAsync("TaskUpdated", task.Id, GetNotificationTitle(task), task.Deadline);
+        BroadcastAsync(
+            "TaskUpdated",
+            task.Id,
+            GetNotificationTitle(task),
+            task.Deadline,
+            AffectedEmployees(task.EmployeeName, oldEmployeeName));
 
     public Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames) =>
-        BroadcastAsync("TaskDeleted", taskId);
+        BroadcastAsync("TaskDeleted", taskId, AffectedEmployees(employeeNames));
 
     public Task NotifyStatusChangedAsync(ProductionTask task, string newStatus) =>
-        BroadcastAsync("TaskStatusChanged", task.Id, newStatus);
+        BroadcastAsync("TaskStatusChanged", task.Id, newStatus, AffectedEmployees(task.EmployeeName));
 
     public Task NotifyProgressChangedAsync(ProductionTask task, double progress) =>
-        BroadcastAsync("TaskProgressChanged", task.Id, progress);
+        BroadcastAsync("TaskProgressChanged", task.Id, progress, AffectedEmployees(task.EmployeeName));
 
     /// <summary>
     /// Персональный push исполнителю о том, что админ перевёл задачу в «Согласовано» или
@@ -160,6 +165,20 @@ public class TaskNotificationService : ITaskNotificationService
     /// </summary>
     private Task BroadcastAsync(string method, params object?[] args) =>
         _hubContext.Clients.All.SendCoreAsync(method, args);
+
+    private static string[] AffectedEmployees(params string?[] employeeNames) =>
+        employeeNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    private static string[] AffectedEmployees(IEnumerable<string> employeeNames) =>
+        employeeNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
     public static string GetNotificationTitle(ProductionTask task)
     {

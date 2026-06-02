@@ -45,11 +45,12 @@ export async function getWeekCalendar(employee, startDate, options = {}) {
 }
 
 // Получить список выполненных задач (пагинация) и агрегированную статистику
-export async function getCompletedTasks(employee, page = 1, pageSize = 25, options = {}) {
+export async function getCompletedTasks(employee, page = 1, pageSize = 25, statsPeriod = 'week', options = {}) {
   const params = new URLSearchParams({
     employee,
     page: String(page),
-    pageSize: String(pageSize)
+    pageSize: String(pageSize),
+    statsPeriod
   });
   const res = await fetch(`${API_BASE}/tasks/completed?${params}`, {
     credentials: 'include',

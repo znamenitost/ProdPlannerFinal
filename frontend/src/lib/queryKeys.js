@@ -3,12 +3,13 @@ export const queryKeys = {
   activeTasks: (employee) => ['app', 'activeTasks', employee],
   weekCalendar: (employee, weekStartIso) => ['app', 'weekCalendar', employee, weekStartIso],
   weekCalendarAll: (employee) => ['app', 'weekCalendar', employee],
-  completedTasks: (employee, page, pageSize) => [
+  completedTasks: (employee, page, pageSize, statsPeriod = 'week') => [
     'app',
     'completedTasks',
     employee,
     page,
-    pageSize
+    pageSize,
+    statsPeriod
   ],
   completedAll: (employee) => ['app', 'completedTasks', employee],
   taskTable: (page, pageSize, employeeFilter) => [

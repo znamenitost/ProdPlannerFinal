@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -14,6 +14,7 @@ import {
   IconButton,
   Typography,
   Alert,
+  Divider,
   Paper,
   Checkbox,
   ListItemText,
@@ -48,6 +49,8 @@ export default function SplitTaskModal({
   const [executionMode, setExecutionMode] = useState(TASK_EXECUTION_PARALLEL);
   const [error, setError] = useState('');
   const [removeWarning, setRemoveWarning] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const isDraft = mode === 'draft';
   const isEdit = mode === 'edit';
@@ -78,6 +81,8 @@ export default function SplitTaskModal({
     }
     setError('');
     setRemoveWarning('');
+    setSubmitting(false);
+    submittingRef.current = false;
   }, [open, task, initialParts, mode, employees, taskTypes, isDraft, taskExecutionMode]);
 
   const revalidateHours = (newParts) => {
@@ -149,7 +154,11 @@ export default function SplitTaskModal({
   const displayTotalHours = partsSum;
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
     if (!validateParts()) return;
+
+    submittingRef.current = true;
+    setSubmitting(true);
 
     const supplyMode = executionMode === TASK_EXECUTION_SEQUENTIAL
       ? SUPPLY_MODE_INTERNAL
@@ -158,6 +167,8 @@ export default function SplitTaskModal({
     if (isDraft) {
       onDraftApply?.(partsToApi(parts), parts, executionMode);
       onClose();
+      submittingRef.current = false;
+      setSubmitting(false);
       return;
     }
 
@@ -177,10 +188,13 @@ export default function SplitTaskModal({
       onClose();
     } catch (err) {
       setError(err.message);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
-  const taskLabel = task?.fileName || task?.folderPath || '';
+  const taskLabel = task?.folderPath?.trim() || 'Новая задача';
   const title = isDraft
     ? 'Назначения'
     : isEdit
@@ -189,7 +203,18 @@ export default function SplitTaskModal({
   const submitLabel = isDraft ? 'Применить' : isEdit ? 'Сохранить' : 'Разделить';
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog
+      open={open}
+      onClose={submitting ? undefined : onClose}
+      maxWidth={false}
+      sx={{
+        '& .MuiDialog-paper': {
+          width: { xs: 'calc(100vw - 32px)', sm: '560px !important' },
+          maxWidth: { xs: 'calc(100vw - 32px)', sm: '560px !important' },
+          margin: 2
+        }
+      }}
+    >
       <DialogTitle>
         {title}
         {taskLabel && (
@@ -211,16 +236,9 @@ export default function SplitTaskModal({
                 : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`}
         </Typography>
       </DialogTitle>
+      <Divider />
 
-      <DialogContent>
-        {(isEdit || mode === 'split') && (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Укажите нужное время для каждого сотрудника — ограничений по столбцу «Часы» нет.
-            После сохранения в таблице отобразится сумма (или часы одного сотрудника).
-            Один сотрудник — обычная задача, несколько — общая.
-            Если убрать сотрудника, который уже начал подзадачу, она будет автоматически завершена.
-          </Alert>
-        )}
+      <DialogContent sx={{ px: 2.5 }}>
         {removeWarning && (
           <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setRemoveWarning('')}>
             {removeWarning}
@@ -262,19 +280,35 @@ export default function SplitTaskModal({
 
         <Stack spacing={2}>
           {parts.map((part, idx) => (
-            <Paper key={idx} variant="outlined" sx={{ p: 2 }}>
+            <Paper key={idx} variant="outlined" sx={{ p: 1.5 }}>
               {isSequential && parts.length > 1 && (
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                   Этап {idx + 1}
                 </Typography>
               )}
-              <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                <FormControl size="small" sx={{ minWidth: 120 }}>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{
+                  alignItems: 'flex-start',
+                  flexWrap: { xs: 'wrap', sm: 'nowrap' }
+                }}
+              >
+                <FormControl size="small" sx={{ width: 132, flexShrink: 0, maxWidth: '100%' }}>
                   <InputLabel>Сотрудник</InputLabel>
                   <Select
+                    autoWidth
                     value={part.employeeName}
                     label="Сотрудник"
                     onChange={(e) => updatePart(idx, 'employeeName', e.target.value)}
+                    MenuProps={{
+                      PaperProps: {
+                        sx: {
+                          minWidth: 132,
+                          maxWidth: 240
+                        }
+                      }
+                    }}
                   >
                     {employees.map(emp => (
                       <MenuItem key={emp} value={emp}>{emp}</MenuItem>
@@ -287,7 +321,7 @@ export default function SplitTaskModal({
                   )}
                 </FormControl>
 
-                <FormControl size="small" sx={{ minWidth: 200, flex: 2 }}>
+                <FormControl size="small" sx={{ width: 190, flexShrink: 0, maxWidth: '100%' }}>
                   <InputLabel>Типы работ</InputLabel>
                   <Select
                     multiple
@@ -296,6 +330,13 @@ export default function SplitTaskModal({
                     onChange={(e) => updatePart(idx, 'taskTypes', e.target.value)}
                     input={<OutlinedInput label="Типы работ" />}
                     renderValue={(selected) => selected.join(', ')}
+                    sx={{
+                      '& .MuiSelect-select': {
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }
+                    }}
                   >
                     {taskTypes.map((type) => (
                       <MenuItem key={type} value={type}>
@@ -309,11 +350,11 @@ export default function SplitTaskModal({
                 <EstimateHoursInput
                   value={part.hours}
                   onChange={(hours) => updatePart(idx, 'hours', hours)}
-                  sx={{ width: 100 }}
+                  sx={{ width: 104, flexShrink: 0 }}
                 />
 
                 {parts.length > 1 && (
-                  <IconButton color="error" onClick={() => removePart(idx)}>
+                  <IconButton size="small" color="error" onClick={() => removePart(idx)} sx={{ mt: 0.5, flexShrink: 0 }}>
                     <Delete />
                   </IconButton>
                 )}
@@ -328,8 +369,8 @@ export default function SplitTaskModal({
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose}>Отмена</Button>
-        <Button onClick={handleSubmit} variant="contained" color="primary">
+        <Button onClick={onClose} disabled={submitting}>Отмена</Button>
+        <Button onClick={handleSubmit} variant="contained" color="primary" disabled={submitting}>
           {submitLabel}
         </Button>
       </DialogActions>

@@ -12,6 +12,8 @@ namespace ProductionPlanner.Data
         private readonly ApplicationDbContext _context;
         private readonly IAppTimeService _timeService;
         private static readonly ConcurrentDictionary<int, SemaphoreSlim> LifecycleLocks = new();
+        private static readonly SemaphoreSlim DisplayOrderLock = new(1, 1);
+        private const long DisplayOrderAdvisoryLockKey = 7_326_001L;
 
         public ProductionTaskRepository(ApplicationDbContext context, IAppTimeService timeService)
         {
@@ -35,9 +37,20 @@ namespace ProductionPlanner.Data
 
         public async Task<CompletedTasksAggregateStats> GetCompletedTasksStatsAsync(
             string employeeName,
+            DateTime? completedFrom = null,
+            DateTime? completedTo = null,
             CancellationToken cancellationToken = default)
         {
             var query = CompletedTasksQuery(employeeName);
+            if (completedFrom.HasValue || completedTo.HasValue)
+            {
+                var rangeStart = completedFrom.HasValue ? ToDbDateTime(completedFrom.Value) : (DateTime?)null;
+                var rangeEnd = completedTo.HasValue ? ToDbDateTime(completedTo.Value) : (DateTime?)null;
+
+                query = query.Where(t =>
+                    (!rangeStart.HasValue || (t.CompletedAt ?? t.UpdatedAt) >= rangeStart.Value)
+                    && (!rangeEnd.HasValue || (t.CompletedAt ?? t.UpdatedAt) < rangeEnd.Value));
+            }
 
             var totalTasks = await query.CountAsync(cancellationToken);
             if (totalTasks == 0)
@@ -133,16 +146,39 @@ namespace ProductionPlanner.Data
 
         public async Task AppendRootDisplayOrderAsync(int rootTaskId, CancellationToken cancellationToken = default)
         {
-            var maxOrder = await _context.ProductionTasks
-                .AsNoTracking()
-                .Where(t => t.ParentRowNumber == null)
-                .MaxAsync(t => (int?)t.DisplayOrder, cancellationToken) ?? -1;
+            await DisplayOrderLock.WaitAsync(cancellationToken);
+            try
+            {
+                await ExecuteInTransactionAsync(async ct =>
+                {
+                    await AcquireDisplayOrderDbLockAsync(ct);
 
-            await _context.ProductionTasks
-                .Where(t => t.Id == rootTaskId && t.ParentRowNumber == null)
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(t => t.DisplayOrder, maxOrder + 1),
-                    cancellationToken);
+                    var maxOrder = await _context.ProductionTasks
+                        .AsNoTracking()
+                        .Where(t => t.ParentRowNumber == null)
+                        .MaxAsync(t => (int?)t.DisplayOrder, ct) ?? -1;
+
+                    await _context.ProductionTasks
+                        .Where(t => t.Id == rootTaskId && t.ParentRowNumber == null)
+                        .ExecuteUpdateAsync(
+                            s => s.SetProperty(t => t.DisplayOrder, maxOrder + 1),
+                            ct);
+                }, cancellationToken);
+            }
+            finally
+            {
+                DisplayOrderLock.Release();
+            }
+        }
+
+        private async Task AcquireDisplayOrderDbLockAsync(CancellationToken cancellationToken)
+        {
+            if (!_context.Database.IsNpgsql())
+                return;
+
+            await _context.Database.ExecuteSqlRawAsync(
+                $"SELECT pg_advisory_xact_lock({DisplayOrderAdvisoryLockKey})",
+                cancellationToken);
         }
 
         private IQueryable<ProductionTask> CompletedTasksQuery(string employeeName) =>
@@ -194,6 +230,50 @@ namespace ProductionPlanner.Data
                 _context.Entry(tracked).CurrentValues.SetValues(task);
 
             await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        public async Task UpdateTaskTableFieldsAsync(
+            ProductionTask task,
+            bool includeStatusFields = false,
+            CancellationToken cancellationToken = default)
+        {
+            var updatedAt = ToDbDateTime(task.UpdatedAt == default ? _timeService.Now : task.UpdatedAt);
+            var deadline = ToDbDateTime(task.Deadline);
+            var completedAt = task.CompletedAt.HasValue ? ToDbDateTime(task.CompletedAt.Value) : (DateTime?)null;
+
+            var query = _context.ProductionTasks.Where(t => t.Id == task.Id);
+
+            if (includeStatusFields)
+            {
+                await query.ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.FolderPath, task.FolderPath)
+                        .SetProperty(t => t.FileName, task.FileName)
+                        .SetProperty(t => t.Comment, task.Comment)
+                        .SetProperty(t => t.Deadline, deadline)
+                        .SetProperty(t => t.EstimateHours, task.EstimateHours)
+                        .SetProperty(t => t.Type, task.Type)
+                        .SetProperty(t => t.EmployeeName, task.EmployeeName)
+                        .SetProperty(t => t.ParentRowNumber, task.ParentRowNumber)
+                        .SetProperty(t => t.Status, task.Status)
+                        .SetProperty(t => t.Progress, task.Progress)
+                        .SetProperty(t => t.ActualHours, task.ActualHours)
+                        .SetProperty(t => t.CompletedAt, completedAt)
+                        .SetProperty(t => t.UpdatedAt, updatedAt),
+                    cancellationToken);
+                return;
+            }
+
+            await query.ExecuteUpdateAsync(
+                s => s.SetProperty(t => t.FolderPath, task.FolderPath)
+                    .SetProperty(t => t.FileName, task.FileName)
+                    .SetProperty(t => t.Comment, task.Comment)
+                    .SetProperty(t => t.Deadline, deadline)
+                    .SetProperty(t => t.EstimateHours, task.EstimateHours)
+                    .SetProperty(t => t.Type, task.Type)
+                    .SetProperty(t => t.EmployeeName, task.EmployeeName)
+                    .SetProperty(t => t.ParentRowNumber, task.ParentRowNumber)
+                    .SetProperty(t => t.UpdatedAt, updatedAt),
+                cancellationToken);
         }
 
         public async Task DeleteTaskAsync(int id, CancellationToken cancellationToken = default)
@@ -662,6 +742,21 @@ namespace ProductionPlanner.Data
                 s => s.SetProperty(t => t.Status, newStatus)
                     .SetProperty(t => t.UpdatedAt, updated),
                 cancellationToken);
+        }
+
+        public async Task<int> TryUpdateProgressAsync(
+            int taskId,
+            double progress,
+            DateTime updatedAt,
+            CancellationToken cancellationToken = default)
+        {
+            var updated = ToDbDateTime(updatedAt);
+            return await _context.ProductionTasks
+                .Where(t => t.Id == taskId && t.Status != JobStatus.Completed)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.Progress, progress)
+                        .SetProperty(t => t.UpdatedAt, updated),
+                    cancellationToken);
         }
 
         private DateTime ToDbDateTime(DateTime value) =>

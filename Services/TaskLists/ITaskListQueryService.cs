@@ -7,6 +7,8 @@ public interface ITaskListQueryService
         string employee,
         int page,
         int pageSize,
+        string statsPeriod,
+        DateTime now,
         CancellationToken cancellationToken = default);
     Task<List<DeadlineRisk>> GetDeadlineRisksAsync(string employee, DateTime now, CancellationToken cancellationToken = default);
     Task<List<QueueOverloadAlert>> GetQueueOverloadsAsync(string employee, DateTime now, CancellationToken cancellationToken = default);

@@ -48,12 +48,15 @@ public class TaskListQueryService : ITaskListQueryService
         string employee,
         int page,
         int pageSize,
+        string statsPeriod,
+        DateTime now,
         CancellationToken cancellationToken = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var statsRow = await _repo.GetCompletedTasksStatsAsync(employee, cancellationToken);
+        var (statsFrom, statsTo, normalizedStatsPeriod) = GetStatsPeriodRange(statsPeriod, now);
+        var statsRow = await _repo.GetCompletedTasksStatsAsync(employee, statsFrom, statsTo, cancellationToken);
         var pageResult = await _repo.GetCompletedTasksPaginatedAsync(employee, page, pageSize, cancellationToken);
 
         var taskIds = pageResult.Items.Select(t => t.Id).ToList();
@@ -72,7 +75,8 @@ public class TaskListQueryService : ITaskListQueryService
         {
             totalTasks = statsRow.TotalTasks,
             totalEstimate = statsRow.TotalEstimate,
-            totalActual = statsRow.TotalActual
+            totalActual = statsRow.TotalActual,
+            period = normalizedStatsPeriod
         };
 
         return new
@@ -84,6 +88,23 @@ public class TaskListQueryService : ITaskListQueryService
             totalCount = pageResult.TotalCount,
             totalPages = pageResult.TotalPages
         };
+    }
+
+    private static (DateTime? From, DateTime? To, string Period) GetStatsPeriodRange(string? statsPeriod, DateTime now)
+    {
+        var normalizedPeriod = (statsPeriod ?? "week").Trim().ToLowerInvariant();
+        return normalizedPeriod switch
+        {
+            "day" => (now.Date, now.Date.AddDays(1), "day"),
+            "all" => (null, null, "all"),
+            _ => (GetCurrentWorkWeekStart(now), GetCurrentWorkWeekStart(now).AddDays(5), "week")
+        };
+    }
+
+    private static DateTime GetCurrentWorkWeekStart(DateTime now)
+    {
+        var daysSinceMonday = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        return now.Date.AddDays(-daysSinceMonday);
     }
 
     private static object MapCompletedTaskToResult(ProductionTask task, List<WorkInterval> intervals) =>

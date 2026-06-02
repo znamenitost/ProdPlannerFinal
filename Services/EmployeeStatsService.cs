@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
 
@@ -12,6 +13,7 @@ namespace ProductionPlanner.Services
 
     public class EmployeeStatsService : IEmployeeStatsService
     {
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> StatLocks = new();
         private readonly IProductionTaskRepository _repo;
 
         public EmployeeStatsService(IProductionTaskRepository repo, IAppTimeService timeService)
@@ -21,24 +23,36 @@ namespace ProductionPlanner.Services
 
         public async Task AddSavedHoursAsync(string employeeName, double savedHours, DateTime now)
         {
-            var stat = await _repo.GetEmployeeStatAsync(employeeName);
-            if (stat == null)
-            {
-                stat = new EmployeeStat
-                {
-                    EmployeeName = employeeName,
-                    TotalSavedHours = savedHours,
-                    TodaySavedHours = savedHours,
-                    LastResetDate = now.Date
-                };
-                await _repo.UpdateEmployeeStatAsync(stat);
+            if (string.IsNullOrWhiteSpace(employeeName))
                 return;
-            }
 
-            ApplyResetIfNeeded(stat, now);
-            stat.TotalSavedHours += savedHours;
-            stat.TodaySavedHours += savedHours;
-            await _repo.UpdateEmployeeStatAsync(stat);
+            var sem = StatLocks.GetOrAdd(employeeName, _ => new SemaphoreSlim(1, 1));
+            await sem.WaitAsync();
+            try
+            {
+                var stat = await _repo.GetEmployeeStatAsync(employeeName);
+                if (stat == null)
+                {
+                    stat = new EmployeeStat
+                    {
+                        EmployeeName = employeeName,
+                        TotalSavedHours = savedHours,
+                        TodaySavedHours = savedHours,
+                        LastResetDate = now.Date
+                    };
+                    await _repo.UpdateEmployeeStatAsync(stat);
+                    return;
+                }
+
+                ApplyResetIfNeeded(stat, now);
+                stat.TotalSavedHours += savedHours;
+                stat.TodaySavedHours += savedHours;
+                await _repo.UpdateEmployeeStatAsync(stat);
+            }
+            finally
+            {
+                sem.Release();
+            }
         }
 
         public async Task<double> GetTodaySavedHoursAsync(string employeeName, DateTime now)

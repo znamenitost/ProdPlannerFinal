@@ -6,17 +6,14 @@ import {
   setProgress,
   completeTask,
   updateTaskRow,
-  buildTaskUpdatePayload,
-  debugApi
+  buildTaskUpdatePayload
 } from '../services/api';
 import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
-  Calculate,
   Sort
 } from '@mui/icons-material';
 import {
   Tooltip,
-  Button,
   Checkbox,
   IconButton,
   Divider,
@@ -53,15 +50,12 @@ function isBlockedActiveTask(task) {
 
 export default function ActiveTasksList({
   onUpdate,
-  onStatisticsRecalculated = onUpdate,
   embedded = false,
-  employee = '',
-  isAdmin = false
+  employee = ''
 }) {
-  const { showError, showSuccess, showWarning, confirm } = useUiFeedback();
+  const { showError, showWarning, confirm } = useUiFeedback();
   const { data: tasks = [] } = useActiveTasksQuery(employee, Boolean(employee));
   const [pendingTaskId, setPendingTaskId] = useState(null);
-  const [recalculatingStats, setRecalculatingStats] = useState(false);
   const pendingTaskIdRef = useRef(null);
   const [blockedBottomSort, setBlockedBottomSort] = useState(true);
   const [sortAnchorEl, setSortAnchorEl] = useState(null);
@@ -98,32 +92,6 @@ export default function ActiveTasksList({
   const handleToggleBlockedBottomSort = useCallback(() => {
     setBlockedBottomSort((prev) => !prev);
   }, []);
-
-  const handleRecalculateStatistics = useCallback(async () => {
-    if (recalculatingStats) return;
-
-    const confirmed = await confirm({
-      title: 'Пересчитать статистику?',
-      message: 'Фактическое время и сохранённые часы будут заново собраны из закрытых интервалов всех выполненных задач.',
-      confirmLabel: 'Пересчитать',
-      confirmColor: 'warning'
-    });
-    if (!confirmed) return;
-
-    setRecalculatingStats(true);
-    try {
-      const result = await debugApi.recalculateStatistics();
-      await onStatisticsRecalculated();
-      showSuccess(
-        `Статистика пересчитана: задач ${result?.tasksProcessed ?? 0}, изменено ${result?.tasksChanged ?? 0}`
-      );
-    } catch (err) {
-      console.error('Ошибка пересчёта статистики:', err);
-      showError(err.message || 'Не удалось пересчитать статистику');
-    } finally {
-      setRecalculatingStats(false);
-    }
-  }, [confirm, onStatisticsRecalculated, recalculatingStats, showError, showSuccess]);
 
   const runGuardedAction = useCallback(async (task, action, progress = null) => {
     if (pendingTaskIdRef.current === task.id) return;
@@ -171,18 +139,6 @@ export default function ActiveTasksList({
   const content = (
     <Stack spacing={2}>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
-        {isAdmin && (
-          <Button
-            size="small"
-            variant="outlined"
-            color="warning"
-            startIcon={<Calculate />}
-            disabled={recalculatingStats}
-            onClick={handleRecalculateStatistics}
-          >
-            {recalculatingStats ? 'Пересчёт...' : 'Пересчитать статистику'}
-          </Button>
-        )}
         <Tooltip title="Сортировка">
           <IconButton
             size="small"

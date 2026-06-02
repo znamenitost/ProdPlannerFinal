@@ -234,10 +234,10 @@ public class TaskLifecycleService : ITaskLifecycleService
             if (task == null) return;
         }
 
-        task.Progress = newProgress;
-        task.UpdatedAt = now;
+        var updated = await _repo.TryUpdateProgressAsync(taskId, newProgress, now, cancellationToken);
+        if (updated == 0)
+            return;
 
-        await _repo.UpdateTaskAsync(task, cancellationToken);
         await _notificationService.NotifyProgressChangedAsync(task, newProgress);
     }
 

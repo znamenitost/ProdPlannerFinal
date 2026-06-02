@@ -44,12 +44,17 @@ const alertSx = (color) => ({
   minWidth: 280,
   maxWidth: 360,
   alignItems: 'flex-start',
-  bgcolor: (theme) => alpha(theme.palette[color]?.main || theme.palette.primary.main, 0.08),
-  color: 'text.primary',
-  border: (theme) => `1px solid ${alpha(theme.palette[color]?.main || theme.palette.primary.main, 0.24)}`,
-  boxShadow: (theme) => `0 4px 20px ${alpha(theme.palette.grey[600], 0.08)}`,
-  '& .MuiAlert-icon': { color: `${color}.main`, mt: 0.25 },
-  '& .MuiAlert-message': { padding: 0 }
+  bgcolor: (theme) => theme.palette.grey[700],
+  color: (theme) => theme.palette.common.white,
+  border: (theme) => `1px solid ${alpha(theme.palette[color]?.main || theme.palette.primary.main, 0.7)}`,
+  borderLeft: (theme) => `5px solid ${theme.palette[color]?.main || theme.palette.primary.main}`,
+  boxShadow: (theme) => `0 14px 34px ${alpha(theme.palette.grey[700], 0.34)}`,
+  '& .MuiAlert-icon': {
+    color: (theme) => theme.palette[color]?.main || theme.palette.primary.main,
+    mt: 0.25
+  },
+  '& .MuiAlert-message': { padding: 0 },
+  '& .MuiAlert-action': { color: 'inherit' }
 });
 
 export default function PushNotificationSnackbars({ notifications, onClose }) {
@@ -71,7 +76,7 @@ export default function PushNotificationSnackbars({ notifications, onClose }) {
           >
             <Alert
               severity={variant.severity}
-              variant="outlined"
+              variant="filled"
               onClose={() => onClose(notification.id)}
               icon={variant.icon}
               sx={alertSx(variant.color)}
@@ -82,15 +87,22 @@ export default function PushNotificationSnackbars({ notifications, onClose }) {
                   label={variant.chip}
                   color={variant.color}
                   variant="outlined"
-                  sx={{ height: 22, fontSize: '0.68rem', fontWeight: 700 }}
+                  sx={(theme) => ({
+                    height: 22,
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    color: theme.palette.common.white,
+                    bgcolor: alpha(theme.palette[variant.color]?.main || theme.palette.primary.main, 0.18),
+                    borderColor: alpha(theme.palette[variant.color]?.main || theme.palette.primary.main, 0.72)
+                  })}
                 />
               </Box>
               <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
                 {notification.title}
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
-                <AccessTime sx={{ fontSize: 14 }} color="action" />
-                <Typography variant="caption" color="text.secondary">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'rgba(255, 255, 255, 0.78)' }}>
+                <AccessTime sx={{ fontSize: 14, color: 'inherit' }} />
+                <Typography variant="caption" sx={{ color: 'inherit' }}>
                   Дедлайн: {notification.deadline}
                 </Typography>
               </Box>

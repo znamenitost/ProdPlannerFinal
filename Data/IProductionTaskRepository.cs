@@ -5,7 +5,11 @@ namespace ProductionPlanner.Data
     public interface IProductionTaskRepository
     {
         Task<List<ProductionTask>> GetActiveTasksAsync(string employeeName, CancellationToken cancellationToken = default);
-        Task<CompletedTasksAggregateStats> GetCompletedTasksStatsAsync(string employeeName, CancellationToken cancellationToken = default);
+        Task<CompletedTasksAggregateStats> GetCompletedTasksStatsAsync(
+            string employeeName,
+            DateTime? completedFrom = null,
+            DateTime? completedTo = null,
+            CancellationToken cancellationToken = default);
         Task<PaginatedResult<ProductionTask>> GetCompletedTasksPaginatedAsync(
             string employeeName,
             int page,
@@ -30,6 +34,10 @@ namespace ProductionPlanner.Data
             bool includeIntervals = false);
         Task AddTaskAsync(ProductionTask task, CancellationToken cancellationToken = default);
         Task UpdateTaskAsync(ProductionTask task, CancellationToken cancellationToken = default);
+        Task UpdateTaskTableFieldsAsync(
+            ProductionTask task,
+            bool includeStatusFields = false,
+            CancellationToken cancellationToken = default);
         Task DeleteTaskAsync(int id, CancellationToken cancellationToken = default);
         Task DetachTasksFromSplitAsync(IReadOnlyList<int> childTaskIds, CancellationToken cancellationToken = default);
         Task DeleteAllTasksAsync(CancellationToken cancellationToken = default);
@@ -58,6 +66,11 @@ namespace ProductionPlanner.Data
             DateTime updatedAt,
             IReadOnlyList<JobStatus>? expectedStatuses = null,
             TaskStatusPatch? patch = null,
+            CancellationToken cancellationToken = default);
+        Task<int> TryUpdateProgressAsync(
+            int taskId,
+            double progress,
+            DateTime updatedAt,
             CancellationToken cancellationToken = default);
         void StageWorkInterval(WorkInterval interval);
         Task SaveChangesAsync(CancellationToken cancellationToken = default);

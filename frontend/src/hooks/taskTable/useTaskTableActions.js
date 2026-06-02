@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { combineDateTime, DEFAULT_TIME } from '../../utils/dateTimeHelpers';
 import { buildTaskUpdatePayload } from '../../services/api';
 import { runWorkflowWithSequenceGuard } from '../../utils/supplyStatusWorkflow';
@@ -31,6 +31,15 @@ export default function useTaskTableActions({
   applyPlanningWarnings
 }) {
   const [pendingLifecycleTaskId, setPendingLifecycleTaskId] = useState(null);
+  const pendingLifecycleTaskIdRef = useRef(null);
+  const savingNewRowRef = useRef(false);
+  const savingRowIdRef = useRef(null);
+  const deletingRowIdRef = useRef(null);
+
+  const setPendingLifecycleTask = useCallback((taskId) => {
+    pendingLifecycleTaskIdRef.current = taskId;
+    setPendingLifecycleTaskId(taskId);
+  }, []);
 
   const isNotFound = useCallback((err) => (
     err?.status === 404 || String(err?.message || '').includes('"status":404')
@@ -117,6 +126,8 @@ export default function useTaskTableActions({
   ]);
 
   const handleSaveNewRow = useCallback(async () => {
+    if (savingNewRowRef.current) return;
+
     const isShared = newRow.isSharedTask && newRow.assigneeParts?.length >= 2;
     const hasSingleAssignee = Boolean(newRow.employeeName);
 
@@ -154,6 +165,7 @@ export default function useTaskTableActions({
       payload.employeeName = newRow.employeeName;
     }
 
+    savingNewRowRef.current = true;
     try {
       const raw = await api.createRow(payload);
       const { task: created, planningWarnings } = unwrapTaskSaveResponse(raw);
@@ -167,6 +179,8 @@ export default function useTaskTableActions({
     } catch (err) {
       console.error('Ошибка сохранения:', err);
       showError(err.message || 'Ошибка сохранения задачи');
+    } finally {
+      savingNewRowRef.current = false;
     }
   }, [
     api,
@@ -181,6 +195,9 @@ export default function useTaskTableActions({
   ]);
 
   const handleUpdateRow = useCallback(async (row) => {
+    if (savingRowIdRef.current === row.id) return;
+
+    savingRowIdRef.current = row.id;
     try {
       const raw = await api.updateRow(row.id, {
         folderPath: row.folderPath,
@@ -199,13 +216,15 @@ export default function useTaskTableActions({
     } catch (err) {
       console.error('Ошибка обновления:', err);
       showError('Ошибка обновления задачи');
+    } finally {
+      savingRowIdRef.current = null;
     }
   }, [api, syncRowFromServer, setEditingId, showError, applyPlanningWarnings]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
-    if (pendingLifecycleTaskId === row.id) return;
+    if (pendingLifecycleTaskIdRef.current === row.id) return;
 
-    setPendingLifecycleTaskId(row.id);
+    setPendingLifecycleTask(row.id);
     try {
       await runWorkflowWithSequenceGuard({
         task: row,
@@ -235,16 +254,16 @@ export default function useTaskTableActions({
       }
       showError(err.message || 'Не удалось выполнить действие с задачей');
     } finally {
-      setPendingLifecycleTaskId(null);
+      setPendingLifecycleTask(null);
     }
   }, [
-    pendingLifecycleTaskId,
     syncRowFromServer,
     applyLifecycleResult,
     showError,
     confirm,
     api,
-    selectedEmployeeForHighlight
+    selectedEmployeeForHighlight,
+    setPendingLifecycleTask
   ]);
 
   const handleStartTask = useCallback(
@@ -265,9 +284,9 @@ export default function useTaskTableActions({
   );
 
   const handleSetStatus = useCallback(async (row, statusText, extra) => {
-    if (pendingLifecycleTaskId === row.id) return;
+    if (pendingLifecycleTaskIdRef.current === row.id) return;
 
-    setPendingLifecycleTaskId(row.id);
+    setPendingLifecycleTask(row.id);
     try {
       await api.updateRow(row.id, {
         folderPath: row.folderPath,
@@ -286,18 +305,24 @@ export default function useTaskTableActions({
       console.error(err);
       showError(err.message || 'Не удалось изменить статус задачи');
     } finally {
-      setPendingLifecycleTaskId(null);
+      setPendingLifecycleTask(null);
     }
-  }, [api, pendingLifecycleTaskId, syncRowFromServer, showError]);
+  }, [api, syncRowFromServer, showError, setPendingLifecycleTask]);
 
   const handleDeleteRow = useCallback(async (id) => {
+    if (deletingRowIdRef.current === id) return;
+
+    deletingRowIdRef.current = id;
     const confirmed = await confirm({
       title: 'Удалить задачу?',
       message: 'Задача будет удалена без возможности восстановления.',
       confirmLabel: 'Удалить',
       confirmColor: 'error',
     });
-    if (!confirmed) return;
+    if (!confirmed) {
+      deletingRowIdRef.current = null;
+      return;
+    }
     try {
       await api.deleteRow(id);
       removeRow(id);
@@ -305,6 +330,8 @@ export default function useTaskTableActions({
     } catch (err) {
       console.error(err);
       showError(err.message || 'Не удалось удалить задачу');
+    } finally {
+      deletingRowIdRef.current = null;
     }
   }, [api, removeRow, onCalendarRefresh, confirm, showError]);
 

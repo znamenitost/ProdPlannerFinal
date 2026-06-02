@@ -61,6 +61,7 @@ public class TaskListsController : ControllerBase
         [FromQuery] string employee,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
+        [FromQuery] string statsPeriod = "week",
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(employee))
@@ -68,7 +69,7 @@ public class TaskListsController : ControllerBase
 
         if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
 
-        var result = await _taskLists.GetCompletedTasksAsync(employee, page, pageSize, cancellationToken);
+        var result = await _taskLists.GetCompletedTasksAsync(employee, page, pageSize, statsPeriod, _timeService.Now, cancellationToken);
         return Ok(result);
     }
 

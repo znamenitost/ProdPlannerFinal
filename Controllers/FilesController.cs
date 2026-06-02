@@ -72,6 +72,11 @@ namespace ProductionPlanner.Controllers
                 error = pathError ?? "Не удалось определить путь к файлу";
                 return false;
             }
+            if (string.IsNullOrEmpty(correctedPath))
+            {
+                error = "Не удалось определить путь к файлу";
+                return false;
+            }
 
             var platform = clientPlatform ?? "";
             var isWindows = platform.Contains("Win", StringComparison.OrdinalIgnoreCase)
