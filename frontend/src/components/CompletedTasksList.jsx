@@ -11,14 +11,16 @@ import {
   TableRow,
   Chip,
   Box,
+  FormControl,
   Card,
   CardContent,
   Grid,
   Tooltip,
-  TablePagination,
+  Pagination,
   IconButton,
   Menu,
   MenuItem,
+  Select,
   ListItemText,
   Checkbox
 } from '@mui/material';
@@ -71,9 +73,10 @@ export default function CompletedTasksList({ employee }) {
   const totalCount = data?.totalCount ?? stats.totalTasks ?? 0;
 
   const totalDifference = stats.totalEstimate - stats.totalActual;
-  const selectedPeriodLabel =
-    STATS_PERIOD_OPTIONS.find((option) => option.value === statsPeriod)?.label ?? 'За неделю';
   const periodMenuOpen = Boolean(periodAnchorEl);
+  const pageCount = Math.max(1, Math.ceil(totalCount / rowsPerPage));
+  const rangeStart = totalCount === 0 ? 0 : page * rowsPerPage + 1;
+  const rangeEnd = Math.min((page + 1) * rowsPerPage, totalCount);
 
   const handleOpenPeriodMenu = (event) => {
     setPeriodAnchorEl(event.currentTarget);
@@ -199,10 +202,7 @@ export default function CompletedTasksList({ employee }) {
           })}>
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">Экономия</Typography>
-                  <Typography variant="caption" color="text.secondary">{selectedPeriodLabel}</Typography>
-                </Box>
+                <Typography variant="body2" color="text.secondary">Экономия</Typography>
                 {totalDifference >= 0 ? <TrendingUp color="success" /> : <TrendingDown color="error" />}
               </Box>
               <Typography
@@ -307,19 +307,56 @@ export default function CompletedTasksList({ employee }) {
 
       {completed.length === 0 && <EmptyState message="Нет выполненных задач" icon={TaskAlt} />}
 
-      <TablePagination
-        component="div"
-        count={totalCount}
-        page={page}
-        onPageChange={(_e, newPage) => setPage(newPage)}
-        rowsPerPage={rowsPerPage}
-        onRowsPerPageChange={(e) => {
-          setRowsPerPage(parseInt(e.target.value, 10));
-          setPage(0);
-        }}
-        rowsPerPageOptions={[10, 25, 50]}
-        labelRowsPerPage="Строк на странице"
-      />
+      {totalCount > 0 && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 1.5,
+            pt: 3,
+            mt: 2,
+            px: 1
+          }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {`${rangeStart}–${rangeEnd} из ${totalCount}`}
+          </Typography>
+
+          <Pagination
+            count={pageCount}
+            page={Math.min(page + 1, pageCount)}
+            onChange={(_event, newPage) => setPage(newPage - 1)}
+            color="primary"
+            shape="rounded"
+            size="medium"
+            showFirstButton
+            showLastButton
+          />
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              На странице
+            </Typography>
+            <FormControl size="small" sx={{ minWidth: 84 }}>
+              <Select
+                value={rowsPerPage}
+                onChange={(event) => {
+                  setRowsPerPage(Number(event.target.value));
+                  setPage(0);
+                }}
+              >
+                {[10, 25, 50].map((option) => (
+                  <MenuItem key={option} value={option}>
+                    {option}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </Box>
+      )}
     </Paper>
   );
 }

@@ -8,8 +8,8 @@ import {
   formatCalendarTaskTooltip,
   formatCalendarTime,
   getDuration,
+  getIntervalBandPercent,
   getLeft,
-  getLunchBandPercent,
   getNowMarkerPercent,
   getTimelineRange,
   getWidth,
@@ -20,13 +20,14 @@ import TimelineHourAxis from './TimelineHourAxis';
 import TimelineGridLines from './TimelineGridLines';
 import { useClockMinuteTick } from '../../context/ClockContext';
 
-function LunchBreak({ range, opacity = 0.7 }) {
-  const { left, width } = getLunchBandPercent(range);
+function LunchBreak({ interval, range, opacity = 0.7 }) {
+  const endTime = interval.endTime ?? interval.end ?? new Date();
+  const { left, width } = getIntervalBandPercent(interval.startTime ?? interval.start, endTime, range);
   return (
     <Tooltip
       title={(
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Restaurant fontSize="small" /> Обед (15:00–16:00)
+          <Restaurant fontSize="small" /> Обед ({formatCalendarTime(interval.startTime ?? interval.start)}–{formatCalendarTime(endTime)})
         </Box>
       )}
       arrow
@@ -55,6 +56,7 @@ function LunchBreak({ range, opacity = 0.7 }) {
 export default function TimelineSegments({
   workSegments,
   idleSegments,
+  lunchIntervals = [],
   isWorkingDay,
   detailedTimeline = false,
   dayDate = null,
@@ -89,7 +91,13 @@ export default function TimelineSegments({
         </Box>
       )}
 
-      {isWorkingDay && <LunchBreak range={range} />}
+      {isWorkingDay && lunchIntervals.map((interval, idx) => (
+        <LunchBreak
+          key={`lunch-${new Date(interval.startTime ?? interval.start).getTime()}-${idx}`}
+          interval={interval}
+          range={range}
+        />
+      ))}
 
       {workSegments.map((segment, idx) => {
         const layer = segment.layer ?? 0;

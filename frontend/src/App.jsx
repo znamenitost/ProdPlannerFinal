@@ -31,6 +31,8 @@ import {
   AdminPanelSettings,
   CloudUpload,
   Delete,
+  Restaurant,
+  TaskAlt,
 } from '@mui/icons-material';
 import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
@@ -49,6 +51,7 @@ import { queryClient } from './lib/queryClient';
 import useActiveTasksRefresh from './hooks/useActiveTasksRefresh';
 import useAuth from './hooks/useAuth';
 import useNotificationsHub from './hooks/useNotificationsHub';
+import { endLunch, getCurrentLunch, startLunch } from './services/api';
 import appTheme from './theme/appTheme';
 import { glassPaperSx, pageShellSx } from './theme/surfaces';
 import SectionCard from './components/ui/SectionCard';
@@ -59,6 +62,8 @@ function AppContent() {
   const { showSuccess, showError, showWarning, showInfo, confirm, promptInput } = useUiFeedback();
   const [activeTab, setActiveTab] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [lunchPending, setLunchPending] = useState(false);
+  const [currentLunch, setCurrentLunch] = useState(null);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [avatarKey, setAvatarKey] = useState(Date.now());
   const {
@@ -122,6 +127,28 @@ function AppContent() {
   const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers);
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
+
+  const targetLunchEmployee = employee || user?.fullName || '';
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!targetLunchEmployee) {
+      setCurrentLunch(null);
+      return;
+    }
+
+    getCurrentLunch(targetLunchEmployee)
+      .then((interval) => {
+        if (!cancelled) setCurrentLunch(interval);
+      })
+      .catch(() => {
+        if (!cancelled) setCurrentLunch(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [targetLunchEmployee]);
 
   const handleOpenUserMenu = (event) => setAnchorElUser(event.currentTarget);
   const handleCloseUserMenu = () => setAnchorElUser(null);
@@ -199,6 +226,38 @@ function AppContent() {
     } finally {
       setUploadingAvatar(false);
       handleCloseUserMenu();
+    }
+  };
+
+  const handleStartLunch = async () => {
+    if (!targetLunchEmployee || lunchPending) return;
+    handleCloseUserMenu();
+    setLunchPending(true);
+    try {
+      const interval = await startLunch(targetLunchEmployee);
+      setCurrentLunch(interval);
+      refreshAll();
+      showSuccess('Обед начат');
+    } catch (err) {
+      showError(err.message || 'Не удалось начать обед');
+    } finally {
+      setLunchPending(false);
+    }
+  };
+
+  const handleEndLunch = async () => {
+    if (!targetLunchEmployee || lunchPending) return;
+    handleCloseUserMenu();
+    setLunchPending(true);
+    try {
+      await endLunch(targetLunchEmployee);
+      setCurrentLunch(null);
+      refreshAll();
+      showSuccess('Обед завершён');
+    } catch (err) {
+      showError(err.message || 'Не удалось завершить обед');
+    } finally {
+      setLunchPending(false);
     }
   };
 
@@ -359,6 +418,18 @@ function AppContent() {
             />
           </Box>
         </MenuItem>
+        <Divider />
+        {currentLunch ? (
+          <MenuItem onClick={handleEndLunch} disabled={lunchPending || !targetLunchEmployee}>
+            <ListItemIcon><TaskAlt fontSize="small" color="success" /></ListItemIcon>
+            <ListItemText>Пообедал</ListItemText>
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={handleStartLunch} disabled={lunchPending || !targetLunchEmployee}>
+            <ListItemIcon><Restaurant fontSize="small" color="warning" /></ListItemIcon>
+            <ListItemText>Обед</ListItemText>
+          </MenuItem>
+        )}
         <Divider />
         <MenuItem onClick={handleFileSelect} disabled={uploadingAvatar}>
           <ListItemIcon><CloudUpload fontSize="small" /></ListItemIcon>

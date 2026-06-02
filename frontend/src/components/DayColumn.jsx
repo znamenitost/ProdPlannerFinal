@@ -23,7 +23,7 @@ export default function DayColumn({
   const isWorkingDay = isWorkingWeekday(date);
   const taskBlocksMap = buildTaskBlocksMap(allDays);
 
-  const rawTimelineSegments = getTimelineSegments(day.date, day.timeline);
+  const rawTimelineSegments = getTimelineSegments(day.timeline);
   const workSegments = rawTimelineSegments.filter((s) => s.type === 'work');
   const idleSegments = rawTimelineSegments
     .filter((s) => s.type === 'idle')
@@ -38,6 +38,7 @@ export default function DayColumn({
       <DayHeader date={day.date} />
       <PlannedBlocks
         taskBlocks={day.taskBlocks}
+        lunchIntervals={day.lunchIntervals}
         isWorkingDay={isWorkingDay}
         isHighlighted={isHighlighted}
         detailedTimeline={detailedTimeline}
@@ -50,6 +51,7 @@ export default function DayColumn({
       <TimelineSegments
         workSegments={workSegments}
         idleSegments={idleSegments}
+        lunchIntervals={day.lunchIntervals}
         isWorkingDay={isWorkingDay}
         detailedTimeline={detailedTimeline}
         dayDate={day.date}

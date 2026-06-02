@@ -13,7 +13,14 @@ public class WeekCalendarDayDto
     public double NetSaved { get; set; }
     public List<CalendarTaskBlockDto> TaskBlocks { get; set; } = new();
     public List<CalendarTimelineSegmentDto> Timeline { get; set; } = new();
+    public List<CalendarLunchIntervalDto> LunchIntervals { get; set; } = new();
     public List<CalendarDeadlineDto> Deadlines { get; set; } = new();
+}
+
+public class CalendarLunchIntervalDto
+{
+    public DateTime StartTime { get; set; }
+    public DateTime? EndTime { get; set; }
 }
 
 public class CalendarTaskBlockDto

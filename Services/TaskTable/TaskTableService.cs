@@ -478,6 +478,7 @@ public class TaskTableService : ITaskTableService
             var newActualHours = CalculateActualHours(new ProductionTask
             {
                 ActualHours = task.ActualHours,
+                EmployeeName = task.EmployeeName,
                 WorkIntervals = byId.Values.ToList()
             });
             var newSaved = task.EstimateHours - newActualHours;

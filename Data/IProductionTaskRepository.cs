@@ -45,6 +45,10 @@ namespace ProductionPlanner.Data
         Task UpdateWorkIntervalAsync(WorkInterval interval, CancellationToken cancellationToken = default);
         Task DeleteWorkIntervalAsync(WorkInterval interval, CancellationToken cancellationToken = default);
         Task DeleteAllWorkIntervalsAsync(CancellationToken cancellationToken = default);
+        Task<LunchInterval?> GetOpenLunchIntervalAsync(string employeeName, CancellationToken cancellationToken = default);
+        Task<List<LunchInterval>> GetLunchIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end, CancellationToken cancellationToken = default);
+        Task AddLunchIntervalAsync(LunchInterval interval, CancellationToken cancellationToken = default);
+        Task<int> CloseOpenLunchIntervalsAsync(string employeeName, DateTime closedAt, CancellationToken cancellationToken = default);
         Task<EmployeeStat?> GetEmployeeStatAsync(string employeeName, CancellationToken cancellationToken = default);
         Task UpdateEmployeeStatAsync(EmployeeStat stat, CancellationToken cancellationToken = default);
         Task<List<ProductionTask>> GetChildTasksAsync(int parentId, CancellationToken cancellationToken = default);

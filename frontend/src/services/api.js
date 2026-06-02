@@ -237,6 +237,36 @@ export async function getQueueOverloads(employee, options = {}) {
   return res.json();
 }
 
+export async function getCurrentLunch(employee, options = {}) {
+  const res = await fetch(`${API_BASE}/lunch/current?employee=${encodeURIComponent(employee)}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    signal: options.signal
+  });
+  await throwIfNotOk(res, 'Ошибка загрузки обеда');
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+export async function startLunch(employee) {
+  const res = await fetch(`${API_BASE}/lunch/start?employee=${encodeURIComponent(employee)}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  await throwIfNotOk(res, 'Не удалось начать обед');
+  return res.json();
+}
+
+export async function endLunch(employee) {
+  const res = await fetch(`${API_BASE}/lunch/end?employee=${encodeURIComponent(employee)}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  await throwIfNotOk(res, 'Не удалось завершить обед');
+}
+
 // Эндпоинты dev-панели (роль Admin). Мок-время и интервалы — на проде тоже.
 async function debugFetch(url, init = {}) {
   const res = await fetch(`${API_BASE}/debug${url}`, {

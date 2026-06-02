@@ -38,6 +38,11 @@ public class WeekCalendarService : IWeekCalendarService
             weekStart,
             weekEnd,
             cancellationToken);
+        var lunchIntervals = await _repo.GetLunchIntervalsForDateRangeAsync(
+            employee,
+            weekStart,
+            weekEnd,
+            cancellationToken);
 
         var intervalsByTask = intervals
             .GroupBy(i => i.ProductionTaskId)
@@ -76,6 +81,7 @@ public class WeekCalendarService : IWeekCalendarService
                 slots,
                 allEmployeeTasks,
                 completedTasks,
+                lunchIntervals,
                 layerByTask,
                 maxDepthByTask));
         }
@@ -94,20 +100,20 @@ public class WeekCalendarService : IWeekCalendarService
         List<ScheduledSlot> slots,
         List<ProductionTask> employeeTasks,
         List<ProductionTask> completedTasks,
+        List<LunchInterval> lunchIntervals,
         IReadOnlyDictionary<int, int> layerByTask,
         IReadOnlyDictionary<int, int> maxDepthByTask)
     {
         var dayStartTime = day.Date.AddHours(10);
         var dayEndTime = day.Date.AddHours(19);
-        var lunchStart = day.Date.AddHours(15);
-        var lunchEnd = day.Date.AddHours(16);
         var totalWorkHours = (dayEndTime - dayStartTime).TotalHours;
+        var lunchIntervalsForDay = GetLunchIntervalsForDay(lunchIntervals, day.Date, currentTime, dayEndTime);
 
         var taskBlocks = BuildPlannedTaskBlocks(
-            day, slots, dayStartTime, dayEndTime, lunchStart, lunchEnd, totalWorkHours);
+            day, slots, dayStartTime, dayEndTime, lunchIntervalsForDay, totalWorkHours);
 
         var timeline = BuildTimeline(
-            day, currentTime, employeeTasks, dayStartTime, dayEndTime, lunchStart, lunchEnd,
+            day, currentTime, employeeTasks, dayStartTime, dayEndTime, lunchIntervalsForDay,
             layerByTask, maxDepthByTask);
 
         var completedThisDay = completedTasks.Where(t =>
@@ -133,6 +139,9 @@ public class WeekCalendarService : IWeekCalendarService
             NetSaved = netSaved,
             TaskBlocks = taskBlocks,
             Timeline = timeline,
+            LunchIntervals = lunchIntervalsForDay
+                .Select(i => new CalendarLunchIntervalDto { StartTime = i.start, EndTime = i.end })
+                .ToList(),
             Deadlines = deadlines
         };
     }
@@ -142,8 +151,7 @@ public class WeekCalendarService : IWeekCalendarService
         List<ScheduledSlot> slots,
         DateTime dayStartTime,
         DateTime dayEndTime,
-        DateTime lunchStart,
-        DateTime lunchEnd,
+        List<(DateTime start, DateTime end)> lunchIntervals,
         double totalWorkHours)
     {
         var taskBlocks = new List<CalendarTaskBlockDto>();
@@ -179,14 +187,8 @@ public class WeekCalendarService : IWeekCalendarService
                 });
             }
 
-            if (start < lunchStart && end > lunchStart)
-                AddSegment(start, lunchStart);
-            if (start < lunchEnd && end > lunchEnd)
-                AddSegment(lunchEnd, end);
-            if (start >= dayStartTime && end <= lunchStart)
-                AddSegment(start, end);
-            if (start >= lunchEnd && end <= dayEndTime)
-                AddSegment(start, end);
+            foreach (var (segmentStart, segmentEnd) in SubtractLunchIntervals(start, end, lunchIntervals))
+                AddSegment(segmentStart, segmentEnd);
         }
 
         return taskBlocks;
@@ -198,8 +200,7 @@ public class WeekCalendarService : IWeekCalendarService
         List<ProductionTask> employeeTasks,
         DateTime dayStartTime,
         DateTime dayEndTime,
-        DateTime lunchStart,
-        DateTime lunchEnd,
+        List<(DateTime start, DateTime end)> lunchIntervals,
         IReadOnlyDictionary<int, int> layerByTask,
         IReadOnlyDictionary<int, int> maxDepthByTask)
     {
@@ -221,7 +222,7 @@ public class WeekCalendarService : IWeekCalendarService
             timeline.AddRange(BuildWorkTimelineSegments(intervalsForDay, layerByTask, maxDepthByTask));
 
         // Простой с 10:00 даже если за день ещё не было интервалов работы
-        timeline.AddRange(BuildIdleSegments(day, intervalsForDay, timelineEnd));
+        timeline.AddRange(BuildIdleSegments(day, intervalsForDay, lunchIntervals, timelineEnd));
 
         if (timeline.Count > 0)
             timeline = timeline.OrderBy(t => t.Start.Ticks).ToList();
@@ -266,27 +267,7 @@ public class WeekCalendarService : IWeekCalendarService
                 if (startInDay >= endInDay)
                     continue;
 
-                var lunchStartToday = dayDate.AddHours(15);
-                var lunchEndToday = dayDate.AddHours(16);
-
-                if (startInDay < lunchStartToday && endInDay > lunchStartToday)
-                {
-                    var segmentEnd = endInDay < lunchStartToday ? endInDay : lunchStartToday;
-                    if (startInDay < segmentEnd)
-                        intervalsForDay.Add((startInDay, segmentEnd, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText));
-                }
-
-                if (startInDay < lunchEndToday && endInDay > lunchEndToday)
-                {
-                    var segmentStart = startInDay > lunchEndToday ? startInDay : lunchEndToday;
-                    if (segmentStart < endInDay)
-                        intervalsForDay.Add((segmentStart, endInDay, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText));
-                }
-
-                if (endInDay <= lunchStartToday || startInDay >= lunchEndToday)
-                {
-                    intervalsForDay.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText));
-                }
+                intervalsForDay.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText));
             }
         }
 
@@ -329,8 +310,8 @@ public class WeekCalendarService : IWeekCalendarService
     }
 
     /// <summary>
-    /// Собирает интервалы работы за всю неделю (с разбиением вокруг обеда) — одна и та же
-    /// задача, ползущая через несколько дней, будет видна как набор кусков. Используется для
+    /// Собирает интервалы работы за всю неделю — одна и та же задача, ползущая через
+    /// несколько дней, будет видна как набор кусков. Используется для
     /// глобального расчёта слоя/глубины, чтобы высота полосы не «прыгала» между днями.
     /// </summary>
     private static List<(DateTime start, DateTime end, int taskId)> CollectIntervalsForWeek(
@@ -352,7 +333,6 @@ public class WeekCalendarService : IWeekCalendarService
             var timelineEnd = dayDate == currentDate
                 ? (currentTime > dayEndTime ? dayEndTime : currentTime)
                 : dayEndTime;
-
             var dayIntervals = CollectIntervalsForDay(
                 employeeTasks, dayDate, currentDate, dayStartTime, dayEndTime, timelineEnd);
             foreach (var iv in dayIntervals)
@@ -468,10 +448,16 @@ public class WeekCalendarService : IWeekCalendarService
     private static List<CalendarTimelineSegmentDto> BuildIdleSegments(
         DateTime day,
         List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervalsForDay,
+        List<(DateTime start, DateTime end)> lunchIntervals,
         DateTime timelineEnd)
     {
         var idleSegments = new List<CalendarTimelineSegmentDto>();
-        var workPeriods = new[] { (TimeSpan.FromHours(10), TimeSpan.FromHours(15)), (TimeSpan.FromHours(16), TimeSpan.FromHours(19)) };
+        var workPeriods = new[] { (TimeSpan.FromHours(10), TimeSpan.FromHours(19)) };
+        var blockers = intervalsForDay
+            .Select(i => (i.start, i.end))
+            .Concat(lunchIntervals)
+            .OrderBy(i => i.start)
+            .ToList();
 
         foreach (var (workStart, workEndPeriod) in workPeriods)
         {
@@ -483,14 +469,14 @@ public class WeekCalendarService : IWeekCalendarService
             var current = periodStart;
             while (current < periodEnd)
             {
-                var covering = intervalsForDay.FirstOrDefault(w => w.start <= current && w.end > current);
+                var covering = blockers.FirstOrDefault(w => w.start <= current && w.end > current);
                 if (covering != default)
                 {
                     current = covering.end;
                 }
                 else
                 {
-                    var next = intervalsForDay.FirstOrDefault(w => w.start > current);
+                    var next = blockers.FirstOrDefault(w => w.start > current);
                     var idleEnd = next != default && next.start < periodEnd ? next.start : periodEnd;
                     if (idleEnd > current)
                     {
@@ -510,5 +496,69 @@ public class WeekCalendarService : IWeekCalendarService
         }
 
         return idleSegments;
+    }
+
+    private static List<(DateTime start, DateTime end)> GetLunchIntervalsForDay(
+        List<LunchInterval> lunchIntervals,
+        DateTime dayDate,
+        DateTime currentTime,
+        DateTime dayEndTime)
+    {
+        var result = new List<(DateTime start, DateTime end)>();
+        var dayStartTime = dayDate.AddHours(10);
+
+        foreach (var interval in lunchIntervals)
+        {
+            var start = AppDateTime.ToMoscowWallClockFromDb(interval.StartTime);
+            var end = interval.EndTime.HasValue
+                ? AppDateTime.ToMoscowWallClockFromDb(interval.EndTime.Value)
+                : currentTime;
+
+            if (start.Date > dayDate || end.Date < dayDate)
+                continue;
+
+            var startInDay = start > dayStartTime ? start : dayStartTime;
+            var endInDay = end < dayEndTime ? end : dayEndTime;
+            if (startInDay < endInDay)
+                result.Add((startInDay, endInDay));
+        }
+
+        return result
+            .OrderBy(i => i.start)
+            .ToList();
+    }
+
+    private static List<(DateTime start, DateTime end)> SubtractLunchIntervals(
+        DateTime start,
+        DateTime end,
+        List<(DateTime start, DateTime end)> lunchIntervals)
+    {
+        var segments = new List<(DateTime start, DateTime end)> { (start, end) };
+
+        foreach (var lunch in lunchIntervals)
+        {
+            var next = new List<(DateTime start, DateTime end)>();
+            foreach (var segment in segments)
+            {
+                if (segment.end <= lunch.start || segment.start >= lunch.end)
+                {
+                    next.Add(segment);
+                    continue;
+                }
+
+                if (segment.start < lunch.start)
+                    next.Add((segment.start, lunch.start));
+                if (segment.end > lunch.end)
+                    next.Add((lunch.end, segment.end));
+            }
+
+            segments = next;
+            if (segments.Count == 0)
+                break;
+        }
+
+        return segments
+            .Where(s => s.start < s.end)
+            .ToList();
     }
 }

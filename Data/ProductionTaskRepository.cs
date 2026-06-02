@@ -592,6 +592,46 @@ namespace ProductionPlanner.Data
                 .ToListAsync(cancellationToken);
         }
 
+        public async Task<LunchInterval?> GetOpenLunchIntervalAsync(
+            string employeeName,
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.LunchIntervals
+                .AsNoTracking()
+                .Where(i => i.EmployeeName == employeeName && i.EndTime == null)
+                .OrderByDescending(i => i.StartTime)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        public async Task<List<LunchInterval>> GetLunchIntervalsForDateRangeAsync(
+            string employeeName,
+            DateTime start,
+            DateTime end,
+            CancellationToken cancellationToken = default)
+        {
+            var rangeStart = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(start) : start;
+            var rangeEnd = _context.Database.IsNpgsql() ? PostgresDateTime.ToUtc(end) : end;
+
+            return await _context.LunchIntervals
+                .AsNoTracking()
+                .Where(i => i.EmployeeName == employeeName &&
+                            i.StartTime < rangeEnd &&
+                            (i.EndTime == null || i.EndTime > rangeStart))
+                .OrderBy(i => i.StartTime)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task AddLunchIntervalAsync(
+            LunchInterval interval,
+            CancellationToken cancellationToken = default)
+        {
+            interval.StartTime = ToDbDateTime(interval.StartTime);
+            if (interval.EndTime.HasValue)
+                interval.EndTime = ToDbDateTime(interval.EndTime.Value);
+            _context.LunchIntervals.Add(interval);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
         public async Task ExecuteInTransactionAsync(
             Func<CancellationToken, Task> action,
             CancellationToken cancellationToken = default)
@@ -677,6 +717,17 @@ namespace ProductionPlanner.Data
             var end = ToDbDateTime(closedAt);
             return await _context.WorkIntervals
                 .Where(i => i.ProductionTaskId == taskId && i.EndTime == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(i => i.EndTime, end), cancellationToken);
+        }
+
+        public async Task<int> CloseOpenLunchIntervalsAsync(
+            string employeeName,
+            DateTime closedAt,
+            CancellationToken cancellationToken = default)
+        {
+            var end = ToDbDateTime(closedAt);
+            return await _context.LunchIntervals
+                .Where(i => i.EmployeeName == employeeName && i.EndTime == null)
                 .ExecuteUpdateAsync(s => s.SetProperty(i => i.EndTime, end), cancellationToken);
         }
 

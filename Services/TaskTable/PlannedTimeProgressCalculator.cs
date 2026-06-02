@@ -42,7 +42,9 @@ public static class PlannedTimeProgressCalculator
         return status is JobStatus.InProgress or JobStatus.Paused or JobStatus.Completed;
     }
 
-    private static double GetElapsedWorkHours(IReadOnlyList<WorkInterval> intervals, DateTime now)
+    private static double GetElapsedWorkHours(
+        IReadOnlyList<WorkInterval> intervals,
+        DateTime now)
     {
         var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
         double totalHours = 0;

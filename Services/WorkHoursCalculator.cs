@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
+using ProductionPlanner.Models;
 
 namespace ProductionPlanner.Services
 {
     public class WorkHoursCalculator : IWorkHoursCalculator
     {
         private readonly TimeSpan workStart = new(10, 0, 0);
-        private readonly TimeSpan lunchStart = new(15, 0, 0);
-        private readonly TimeSpan lunchEnd = new(16, 0, 0);
         private readonly TimeSpan workEnd = new(19, 0, 0);
 
         public bool IsWorkingHour(DateTime time)
@@ -15,15 +14,12 @@ namespace ProductionPlanner.Services
             if (time.DayOfWeek == DayOfWeek.Saturday || time.DayOfWeek == DayOfWeek.Sunday)
                 return false;
             var tod = time.TimeOfDay;
-            return (tod >= workStart && tod < lunchStart) || (tod >= lunchEnd && tod < workEnd);
+            return tod >= workStart && tod < workEnd;
         }
 
         public bool IsLunchTime(DateTime time)
         {
-            if (time.DayOfWeek == DayOfWeek.Saturday || time.DayOfWeek == DayOfWeek.Sunday)
-                return false;
-            var tod = time.TimeOfDay;
-            return tod >= lunchStart && tod < lunchEnd;
+            return false;
         }
 
         public DateTime GetNextWorkStart(DateTime from)
@@ -38,8 +34,6 @@ namespace ProductionPlanner.Services
                 var tod = t.TimeOfDay;
                 if (tod < workStart)
                     t = t.Date + workStart;
-                else if (tod >= lunchStart && tod < lunchEnd)
-                    t = t.Date + lunchEnd;
                 else if (tod >= workEnd)
                     t = t.Date.AddDays(1).Add(workStart);
             }
@@ -69,17 +63,6 @@ namespace ProductionPlanner.Services
                     if (intervalStart < intervalEnd)
                     {
                         var workMinutes = (intervalEnd - intervalStart).TotalMinutes;
-
-                        var lunchStartToday = currentDate + lunchStart;
-                        var lunchEndToday = currentDate + lunchEnd;
-
-                        if (intervalStart < lunchEndToday && intervalEnd > lunchStartToday)
-                        {
-                            var lunchOverlapStart = intervalStart > lunchStartToday ? intervalStart : lunchStartToday;
-                            var lunchOverlapEnd = intervalEnd < lunchEndToday ? intervalEnd : lunchEndToday;
-                            workMinutes -= (lunchOverlapEnd - lunchOverlapStart).TotalMinutes;
-                        }
-
                         totalMinutes += Math.Max(0, workMinutes);
                     }
                 }
@@ -132,22 +115,11 @@ namespace ProductionPlanner.Services
 
         private double GetRemainingWorkMinutesInDay(DateTime current, DateTime day)
         {
-            var dayStart = day + workStart;
             var dayEnd = day + workEnd;
-            var lunchStartToday = day + lunchStart;
-            var lunchEndToday = day + lunchEnd;
 
             if (current >= dayEnd) return 0;
 
-            if (current < lunchStartToday)
-            {
-                return (lunchStartToday - current).TotalMinutes;
-            }
-            else if (current >= lunchEndToday && current < dayEnd)
-            {
-                return (dayEnd - current).TotalMinutes;
-            }
-            return 0;
+            return (dayEnd - current).TotalMinutes;
         }
     }
 }

@@ -85,6 +85,7 @@ public static class DatabaseInitializer
 
             await ApplyTaskSplitsSchemaPatchesAsync(connection, logger);
             await EnsureUserNotificationsTableSqliteAsync(connection, logger);
+            await EnsureLunchIntervalsTableSqliteAsync(connection, logger);
             await connection.CloseAsync();
         }
         catch (Exception ex)
@@ -133,5 +134,24 @@ public static class DatabaseInitializer
             """;
         await createNotifications.ExecuteNonQueryAsync();
         logger.LogInformation("Таблица UserNotifications проверена/создана.");
+    }
+
+    private static async Task EnsureLunchIntervalsTableSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)
+    {
+        using var createLunchIntervals = connection.CreateCommand();
+        createLunchIntervals.CommandText = """
+            CREATE TABLE IF NOT EXISTS LunchIntervals (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                EmployeeName TEXT NOT NULL,
+                StartTime TEXT NOT NULL,
+                EndTime TEXT
+            );
+            CREATE INDEX IF NOT EXISTS IX_LunchIntervals_EmployeeName_StartTime
+                ON LunchIntervals(EmployeeName, StartTime);
+            CREATE INDEX IF NOT EXISTS IX_LunchIntervals_EmployeeName_EndTime
+                ON LunchIntervals(EmployeeName, EndTime);
+            """;
+        await createLunchIntervals.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблица LunchIntervals проверена/создана.");
     }
 }

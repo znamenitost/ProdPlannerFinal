@@ -3,7 +3,8 @@ import { alpha } from '@mui/material/styles';
 import { Restaurant } from '@mui/icons-material';
 import {
   CALENDAR_TOOLTIP_SX,
-  getLunchBandPercent,
+  formatCalendarTime,
+  getIntervalBandPercent,
   formatCalendarTaskTooltip,
   getPlannedBlockColor,
   getTimelineRange
@@ -12,13 +13,14 @@ import { tokens } from '../../theme/paletteTokens';
 import { calendarBlockLayoutTransitionSx } from '../../theme/motion';
 import TimelineGridLines from './TimelineGridLines';
 
-function LunchBreak({ range }) {
-  const { left, width } = getLunchBandPercent(range);
+function LunchBreak({ interval, range }) {
+  const endTime = interval.endTime ?? interval.end ?? new Date();
+  const { left, width } = getIntervalBandPercent(interval.startTime ?? interval.start, endTime, range);
   return (
     <Tooltip
       title={(
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Restaurant fontSize="small" /> Обед (15:00–16:00)
+          <Restaurant fontSize="small" /> Обед ({formatCalendarTime(interval.startTime ?? interval.start)}–{formatCalendarTime(endTime)})
         </Box>
       )}
       arrow
@@ -46,6 +48,7 @@ function LunchBreak({ range }) {
 
 export default function PlannedBlocks({
   taskBlocks,
+  lunchIntervals = [],
   isWorkingDay,
   isHighlighted,
   detailedTimeline = false
@@ -109,7 +112,13 @@ export default function PlannedBlocks({
           </Tooltip>
         );
       })}
-      {isWorkingDay && <LunchBreak range={range} />}
+      {isWorkingDay && lunchIntervals.map((interval, idx) => (
+        <LunchBreak
+          key={`planned-lunch-${new Date(interval.startTime ?? interval.start).getTime()}-${idx}`}
+          interval={interval}
+          range={range}
+        />
+      ))}
       {taskBlocks?.map((block, idx) => {
         const highlighted = isHighlighted(block);
         const blockKey = `planned-${block.taskId ?? idx}`;

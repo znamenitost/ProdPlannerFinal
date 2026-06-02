@@ -54,6 +54,7 @@ namespace ProductionPlanner.Data
 
         public DbSet<ProductionTask> ProductionTasks { get; set; }
         public DbSet<WorkInterval> WorkIntervals { get; set; }
+        public DbSet<LunchInterval> LunchIntervals { get; set; }
         public DbSet<EmployeeStat> EmployeeStats { get; set; }
         public DbSet<TaskSplit> TaskSplits { get; set; }
         public DbSet<UserNotification> UserNotifications { get; set; }
@@ -82,6 +83,13 @@ namespace ProductionPlanner.Data
 
             modelBuilder.Entity<WorkInterval>()
                 .HasIndex(i => new { i.ProductionTaskId, i.StartTime });
+
+            modelBuilder.Entity<LunchInterval>(entity =>
+            {
+                entity.HasIndex(i => new { i.EmployeeName, i.StartTime });
+                entity.HasIndex(i => new { i.EmployeeName, i.EndTime });
+                entity.Property(i => i.EmployeeName).HasMaxLength(100);
+            });
                 
             // Настройка таблиц Identity
             modelBuilder.Entity<User>(entity =>

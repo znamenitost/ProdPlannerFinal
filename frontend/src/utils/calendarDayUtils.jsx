@@ -45,10 +45,14 @@ export function getWidth(start, end, range = getTimelineRange(false)) {
   return (duration / span) * 100;
 }
 
-export function getLunchBandPercent(range = getTimelineRange(false)) {
+export function getIntervalBandPercent(start, end, range = getTimelineRange(false)) {
+  const s = new Date(start);
+  const e = new Date(end);
   const span = range.end - range.start;
-  const left = ((15 - range.start) / span) * 100;
-  const width = (1 / span) * 100;
+  const startHour = s.getHours() + s.getMinutes() / 60;
+  const endHour = e.getHours() + e.getMinutes() / 60;
+  const left = ((startHour - range.start) / span) * 100;
+  const width = ((endHour - startHour) / span) * 100;
   return { left, width };
 }
 
@@ -124,47 +128,14 @@ export function getPlannedBlockColor(block, theme) {
   return null;
 }
 
-export function getTimelineSegments(dayDate, timeline) {
+export function getTimelineSegments(timeline) {
   if (!timeline?.length) return [];
 
-  const date = new Date(dayDate);
-  const segments = [];
-  const lunchStart = new Date(date);
-  lunchStart.setHours(15, 0, 0, 0);
-  const lunchEnd = new Date(date);
-  lunchEnd.setHours(16, 0, 0, 0);
-
-  timeline.forEach((segment) => {
-    const start = new Date(segment.start);
-    const end = new Date(segment.end);
-
-    if (segment.type === 'work') {
-      if (start < lunchEnd && end > lunchStart) {
-        if (start < lunchStart) {
-          const beforeLunchEnd = end < lunchStart ? end : lunchStart;
-          if (beforeLunchEnd > start) {
-            segments.push({ ...segment, start, end: beforeLunchEnd });
-          }
-        }
-        if (end > lunchEnd) {
-          const afterLunchStart = start > lunchEnd ? start : lunchEnd;
-          if (end > afterLunchStart) {
-            segments.push({ ...segment, start: afterLunchStart, end });
-          }
-        }
-      } else {
-        segments.push({ ...segment, start, end });
-      }
-    } else {
-      const isLunchTime =
-        (start >= lunchStart && start < lunchEnd)
-        || (end > lunchStart && end <= lunchEnd)
-        || (start <= lunchStart && end >= lunchEnd);
-      if (!isLunchTime) {
-        segments.push({ ...segment, start, end });
-      }
-    }
-  });
+  const segments = timeline.map((segment) => ({
+    ...segment,
+    start: new Date(segment.start),
+    end: new Date(segment.end)
+  }));
 
   return segments.sort((a, b) => new Date(a.start) - new Date(b.start));
 }
