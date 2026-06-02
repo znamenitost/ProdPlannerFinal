@@ -115,6 +115,29 @@ export function isWorkingWeekday(date) {
   return day >= 1 && day <= 5;
 }
 
+/** Стандартное окно обеда по правилам производства (15:00–16:00). */
+export function getDefaultLunchInterval(dayDate) {
+  const d = new Date(dayDate);
+  return {
+    startTime: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 15, 0, 0, 0),
+    endTime: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 16, 0, 0, 0)
+  };
+}
+
+/** Записи обеда из API или стандартное окно, если в БД нет фактических обедов за день. */
+export function resolveLunchIntervalsForDay(dayDate, lunchIntervals = []) {
+  if (!dayDate || !isWorkingWeekday(new Date(dayDate))) return [];
+  if (lunchIntervals.length > 0) return lunchIntervals;
+  return [getDefaultLunchInterval(dayDate)];
+}
+
+export function getLunchBandPercent(range = getTimelineRange(false)) {
+  const span = range.end - range.start;
+  const left = ((15 - range.start) / span) * 100;
+  const width = (1 / span) * 100;
+  return { left, width };
+}
+
 export function getWorkColor(taskId, completed) {
   if (completed) return tokens.workDone;
   return tokens.work[taskId % tokens.work.length];

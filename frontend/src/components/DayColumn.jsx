@@ -8,7 +8,8 @@ import {
   buildTaskBlocksMap,
   getTaskInfoForDeadline,
   getTimelineSegments,
-  isWorkingWeekday
+  isWorkingWeekday,
+  resolveLunchIntervalsForDay
 } from '../utils/calendarDayUtils';
 
 export default function DayColumn({
@@ -32,13 +33,14 @@ export default function DayColumn({
   const isHighlighted = (block) => highlightedTaskId === block.taskId;
   const getTaskInfo = (taskId, taskTitle, status) =>
     getTaskInfoForDeadline(taskBlocksMap, taskId, taskTitle, status);
+  const lunchIntervals = resolveLunchIntervalsForDay(day.date, day.lunchIntervals);
 
   return (
     <Paper elevation={0} sx={{ ...glassCardSx, p: 2, borderRadius: 2 }}>
       <DayHeader date={day.date} />
       <PlannedBlocks
         taskBlocks={day.taskBlocks}
-        lunchIntervals={day.lunchIntervals}
+        lunchIntervals={lunchIntervals}
         isWorkingDay={isWorkingDay}
         isHighlighted={isHighlighted}
         detailedTimeline={detailedTimeline}
@@ -51,7 +53,7 @@ export default function DayColumn({
       <TimelineSegments
         workSegments={workSegments}
         idleSegments={idleSegments}
-        lunchIntervals={day.lunchIntervals}
+        lunchIntervals={lunchIntervals}
         isWorkingDay={isWorkingDay}
         detailedTimeline={detailedTimeline}
         dayDate={day.date}
