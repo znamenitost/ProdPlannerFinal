@@ -11,11 +11,13 @@ import {
   Warning
 } from '@mui/icons-material';
 import {
+  Backdrop,
   Box,
   Button,
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   IconButton,
   Stack,
   Tooltip,
@@ -73,7 +75,8 @@ function getBorderColor(task, theme) {
   return theme.palette.divider;
 }
 
-function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
+function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOpenFile }) {
+  const statusActionsDisabled = isPending || lifecycleBusy;
   const risk = getRiskProps(task.riskLevel);
   const statusLabel = getTaskStatusLine(task);
   const taskHeading = getTaskHeading(task);
@@ -164,6 +167,7 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
             )}
           </Stack>
 
+          <Box sx={{ position: 'relative', display: 'inline-flex', maxWidth: '100%' }}>
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
             {sequenceBlocked && !isCompleted && (
               <Button
@@ -171,7 +175,7 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                 variant="compact"
                 color="success"
                 startIcon={<PlayArrow />}
-                disabled={isPending}
+                disabled={statusActionsDisabled}
                 onClick={() => onAction(task, 'start')}
                 sx={blockedButtonSx}
               >
@@ -185,7 +189,7 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                   variant="compact"
                   color="success"
                   startIcon={<PlayArrow />}
-                  disabled={isPending}
+                  disabled={statusActionsDisabled}
                   onClick={() => onAction(task, 'start')}
                   sx={blockedButtonSx}
                 >
@@ -221,7 +225,7 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                     variant="compact"
                     color="success"
                     startIcon={<PlayArrow />}
-                    disabled={isPending}
+                    disabled={statusActionsDisabled}
                     onClick={() => onAction(task, isPaused ? 'resume' : 'start')}
                   >
                     {isPaused ? 'Продолжить' : 'Начал'}
@@ -233,7 +237,7 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                     variant="compact"
                     color="warning"
                     startIcon={<Pause />}
-                    disabled={isPending}
+                    disabled={statusActionsDisabled}
                     onClick={() => onAction(task, 'pause')}
                   >
                     Пауза
@@ -245,7 +249,7 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                     variant="compact"
                     color="primary"
                     startIcon={<CheckCircle />}
-                    disabled={isPending}
+                    disabled={statusActionsDisabled}
                     onClick={() => onAction(task, 'complete')}
                   >
                     Готово
@@ -261,7 +265,7 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                     size="small"
                     variant={isProgressMarkActive(task.progress, p) ? 'contained' : 'text'}
                     color="secondary"
-                    disabled={isPending}
+                    disabled={statusActionsDisabled}
                     onClick={() => onAction(task, 'progress', p)}
                     sx={compactButtonThemeStyles}
                   >
@@ -271,6 +275,19 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
               </>
             )}
           </Stack>
+          <Backdrop
+            open={isPending}
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 1,
+              borderRadius: 1,
+              bgcolor: 'rgba(255, 255, 255, 0.55)'
+            }}
+          >
+            <CircularProgress size={28} />
+          </Backdrop>
+          </Box>
 
           <Stack
             direction="row"

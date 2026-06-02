@@ -17,8 +17,6 @@ import {
   Inventory2,
   TaskAlt
 } from '@mui/icons-material';
-import { useUiFeedback } from '../context/UiFeedbackContext';
-import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
@@ -40,6 +38,7 @@ function infoMenuIcon(kind) {
 export default function EmployeeStatusButtons({
   task,
   pending = false,
+  lifecycleBusy = false,
   onStart,
   onPause,
   onResume,
@@ -48,7 +47,7 @@ export default function EmployeeStatusButtons({
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
-  const { confirm } = useUiFeedback();
+  const statusActionsDisabled = pending || lifecycleBusy;
 
   const status = task.statusText || 'Назначена';
   const isDone = status === STATUS_COMPLETED;
@@ -66,29 +65,21 @@ export default function EmployeeStatusButtons({
 
   const handleOpen = (event) => {
     event.stopPropagation();
+    if (statusActionsDisabled) return;
     setAnchorEl(event.currentTarget);
   };
 
   const handleClose = () => setAnchorEl(null);
 
-  const runWorkflow = (lifecycleAction, actionLabel) => async () => {
+  const runWorkflow = (lifecycleAction) => async () => {
     handleClose();
-    if (pending) return;
-    await runWorkflowWithSequenceGuard({
-      task,
-      statusText: status,
-      confirm,
-      resolveStatus: onSetStatus
-        ? (t, target, extra) => onSetStatus(t, target, extra)
-        : null,
-      runAction: async () => lifecycleAction(task),
-      actionLabel
-    });
+    if (statusActionsDisabled) return;
+    await lifecycleAction(task);
   };
 
   const runInfoStatus = (statusText) => () => {
     handleClose();
-    if (pending || !onSetStatus) return;
+    if (statusActionsDisabled || !onSetStatus) return;
     onSetStatus(task, statusText);
   };
 
@@ -107,7 +98,7 @@ export default function EmployeeStatusButtons({
         variant="soft"
         color="primary"
         onClick={handleOpen}
-        disabled={pending}
+        disabled={statusActionsDisabled}
         aria-label="Действия с задачей"
       >
         {pending ? <CircularProgress size={18} /> : <MoreVert fontSize="small" />}
@@ -123,7 +114,7 @@ export default function EmployeeStatusButtons({
         {(canStart || isInfo) && (
           <MenuItem
             sx={workflowItemSx}
-            onClick={runWorkflow(onStart, STATUS_IN_PROGRESS)}
+            onClick={runWorkflow(onStart)}
           >
             <ListItemIcon>
               <PlayArrow fontSize="small" color="success" />
@@ -134,7 +125,7 @@ export default function EmployeeStatusButtons({
         {canPause && (
           <MenuItem
             sx={workflowItemSx}
-            onClick={runWorkflow(onPause, STATUS_PAUSED)}
+            onClick={runWorkflow(onPause)}
           >
             <ListItemIcon>
               <Pause fontSize="small" color="warning" />
@@ -143,7 +134,7 @@ export default function EmployeeStatusButtons({
           </MenuItem>
         )}
         {canResume && (
-          <MenuItem onClick={runWorkflow(onResume, 'Продолжить')}>
+          <MenuItem onClick={runWorkflow(onResume)}>
             <ListItemIcon>
               <PlayArrow fontSize="small" color="success" />
             </ListItemIcon>
@@ -153,7 +144,7 @@ export default function EmployeeStatusButtons({
         {canComplete && (
           <MenuItem
             sx={workflowItemSx}
-            onClick={runWorkflow(onComplete, STATUS_COMPLETED)}
+            onClick={runWorkflow(onComplete)}
           >
             <ListItemIcon>
               <CheckCircle fontSize="small" color="primary" />

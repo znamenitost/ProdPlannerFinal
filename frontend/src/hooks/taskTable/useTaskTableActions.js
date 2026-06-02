@@ -222,7 +222,7 @@ export default function useTaskTableActions({
   }, [api, syncRowFromServer, setEditingId, showError, applyPlanningWarnings]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
-    if (pendingLifecycleTaskIdRef.current === row.id) return;
+    if (pendingLifecycleTaskIdRef.current != null) return;
 
     setPendingLifecycleTask(row.id);
     try {
@@ -284,7 +284,7 @@ export default function useTaskTableActions({
   );
 
   const handleSetStatus = useCallback(async (row, statusText, extra) => {
-    if (pendingLifecycleTaskIdRef.current === row.id) return;
+    if (pendingLifecycleTaskIdRef.current != null) return;
 
     setPendingLifecycleTask(row.id);
     try {
@@ -358,6 +358,7 @@ export default function useTaskTableActions({
 
   return {
     pendingLifecycleTaskId,
+    isLifecycleBusy: pendingLifecycleTaskId != null,
     handleSaveNewRow,
     handleUpdateRow,
     handleStartTask,

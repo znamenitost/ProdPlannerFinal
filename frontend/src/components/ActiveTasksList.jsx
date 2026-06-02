@@ -94,7 +94,7 @@ export default function ActiveTasksList({
   }, []);
 
   const runGuardedAction = useCallback(async (task, action, progress = null) => {
-    if (pendingTaskIdRef.current === task.id) return;
+    if (pendingTaskIdRef.current != null) return;
     setPendingTask(task.id);
 
     const runApi = async () => {
@@ -183,6 +183,7 @@ export default function ActiveTasksList({
             <ActiveTaskCard
               task={task}
               isPending={pendingTaskId === task.id}
+              lifecycleBusy={pendingTaskId != null}
               onAction={runGuardedAction}
               onOpenFile={openFile}
             />

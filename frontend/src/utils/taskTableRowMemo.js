@@ -29,6 +29,7 @@ export function areParentRowPropsEqual(prev, next) {
   if (prev.task.plannedTimeProgress !== next.task.plannedTimeProgress) return false;
   if (prev.isExpanded !== next.isExpanded) return false;
   if (prev.pendingLifecycleTaskId !== next.pendingLifecycleTaskId) return false;
+  if (prev.lifecycleBusy !== next.lifecycleBusy) return false;
   if (prev.highlightMyTasks !== next.highlightMyTasks) return false;
   if (prev.selectedEmployeeForHighlight !== next.selectedEmployeeForHighlight) return false;
   if (prev.showHoursTypeColumns !== next.showHoursTypeColumns) return false;
@@ -58,6 +59,7 @@ export function areChildRowPropsEqual(prev, next) {
   if ((prev.task.workIntervals?.length ?? 0) !== (next.task.workIntervals?.length ?? 0)) return false;
   if (workIntervalsKey(prev.task) !== workIntervalsKey(next.task)) return false;
   if (prev.pendingLifecycleTaskId !== next.pendingLifecycleTaskId) return false;
+  if (prev.lifecycleBusy !== next.lifecycleBusy) return false;
   if (prev.highlightMyTasks !== next.highlightMyTasks) return false;
   if (prev.selectedEmployeeForHighlight !== next.selectedEmployeeForHighlight) return false;
   if (prev.showHoursTypeColumns !== next.showHoursTypeColumns) return false;

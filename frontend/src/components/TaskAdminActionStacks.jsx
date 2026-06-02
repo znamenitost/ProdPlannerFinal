@@ -20,8 +20,6 @@ import {
   TaskAlt,
   AccessTime
 } from '@mui/icons-material';
-import { useUiFeedback } from '../context/UiFeedbackContext';
-import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
@@ -44,6 +42,7 @@ function infoMenuIcon(kind) {
 export default function TaskAdminActionStacks({
   task,
   pending = false,
+  lifecycleBusy = false,
   onEdit,
   onDelete,
   onIntervals,
@@ -57,7 +56,7 @@ export default function TaskAdminActionStacks({
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
-  const { confirm } = useUiFeedback();
+  const statusWorkflowDisabled = pending || lifecycleBusy;
 
   const status = task?.statusText || 'Назначена';
   const isDone = status === STATUS_COMPLETED;
@@ -81,26 +80,17 @@ export default function TaskAdminActionStacks({
   const canComplete = isStarted || isPaused;
   const startAction = isPaused ? onResume : onStart;
 
-  const runWorkflow = (lifecycleAction, actionLabel) => async (event) => {
+  const runWorkflow = (lifecycleAction) => async (event) => {
     event.stopPropagation();
     handleClose();
-    if (pending) return;
-    await runWorkflowWithSequenceGuard({
-      task,
-      statusText: status,
-      confirm,
-      resolveStatus: onSetStatus
-        ? (t, target, extra) => onSetStatus(t, target, extra)
-        : null,
-      runAction: async () => lifecycleAction(task),
-      actionLabel
-    });
+    if (statusWorkflowDisabled) return;
+    await lifecycleAction(task);
   };
 
   const runInfo = (statusText) => (event) => {
     event.stopPropagation();
     handleClose();
-    if (pending || !onSetStatus) return;
+    if (statusWorkflowDisabled || !onSetStatus) return;
     onSetStatus(task, statusText);
   };
 
@@ -172,9 +162,9 @@ export default function TaskAdminActionStacks({
           <>
             <Divider sx={menuDividerSx} />
             <MenuItem
-              disabled={!canStart && !isPaused}
+              disabled={statusWorkflowDisabled || (!canStart && !isPaused)}
               sx={workflowItemSx}
-              onClick={runWorkflow(startAction, STATUS_IN_PROGRESS)}
+              onClick={runWorkflow(startAction)}
             >
               <ListItemIcon>
                 <PlayArrow fontSize="small" color="success" />
@@ -183,8 +173,9 @@ export default function TaskAdminActionStacks({
             </MenuItem>
             {canPause && (
               <MenuItem
+                disabled={statusWorkflowDisabled}
                 sx={workflowItemSx}
-                onClick={runWorkflow(onPause, STATUS_PAUSED)}
+                onClick={runWorkflow(onPause)}
               >
                 <ListItemIcon>
                   <Pause fontSize="small" color="warning" />
@@ -193,7 +184,11 @@ export default function TaskAdminActionStacks({
               </MenuItem>
             )}
             {canComplete && (
-              <MenuItem sx={workflowItemSx} onClick={runWorkflow(onComplete, STATUS_COMPLETED)}>
+              <MenuItem
+                disabled={statusWorkflowDisabled}
+                sx={workflowItemSx}
+                onClick={runWorkflow(onComplete)}
+              >
                 <ListItemIcon>
                   <CheckCircle fontSize="small" color="primary" />
                 </ListItemIcon>
@@ -207,7 +202,11 @@ export default function TaskAdminActionStacks({
           <>
             <Divider sx={menuDividerSx} />
             {infoMenuItems.map((item) => (
-              <MenuItem key={item.statusText} onClick={runInfo(item.statusText)}>
+              <MenuItem
+                key={item.statusText}
+                disabled={statusWorkflowDisabled}
+                onClick={runInfo(item.statusText)}
+              >
                 <ListItemIcon>{infoMenuIcon(item.kind)}</ListItemIcon>
                 <ListItemText>{item.label}</ListItemText>
               </MenuItem>
