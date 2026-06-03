@@ -105,7 +105,7 @@ export default function NewTaskRow({
 
       <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, COL_EMPLOYEE)}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-          <IconButton size="small" onClick={onOpenAssigneeModal}>
+          <IconButton size="small" onClick={onOpenAssigneeModal} aria-label="Назначить сотрудников">
             <PeopleAlt fontSize="small" color={hasAssignees ? (isShared ? 'secondary' : 'action') : 'disabled'} />
           </IconButton>
           <Typography variant="caption" sx={{ color: hasAssignees ? 'text.primary' : 'text.disabled', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -133,10 +133,10 @@ export default function NewTaskRow({
 
       <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <IconButton size="small" color="primary" onClick={onSave}>
+          <IconButton size="small" color="primary" onClick={onSave} aria-label="Сохранить">
             <Save fontSize="small" />
           </IconButton>
-          <IconButton size="small" color="error" onClick={onCancel}>
+          <IconButton size="small" color="error" onClick={onCancel} aria-label="Отмена">
             <Cancel fontSize="small" />
           </IconButton>
         </Box>

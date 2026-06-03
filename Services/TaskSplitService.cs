@@ -144,7 +144,12 @@ namespace ProductionPlanner.Services
                 throw new Exception("Укажите сотрудника");
 
             if (parts.Count == 1)
+            {
+                if (!parentTask.IsSplitTask)
+                    return await UpdateRegularTaskAssignmentsAsync(parentTask, parts[0], cancellationToken);
+
                 return await ConvertToRegularTaskAsync(parentTask, parts[0], cancellationToken);
+            }
 
             if (!parentTask.IsSplitTask)
                 return await SplitTaskCoreAsync(parentTaskId, parts, supplyMode, cancellationToken);
@@ -155,6 +160,7 @@ namespace ProductionPlanner.Services
                 .ToListAsync(cancellationToken);
             var usedChildIds = new HashSet<int>();
             var now = _timeService.Now;
+            var previousSupplyMode = parentTask.SupplyMode;
 
             var totalAllocated = parts.Sum(p => p.AllocatedHours);
             parentTask.EstimateHours = totalAllocated;
@@ -206,18 +212,6 @@ namespace ProductionPlanner.Services
                 }
             }
 
-            if (SupplyWorkflow.IsSequential(parentTask.SupplyMode))
-            {
-                var ordered = await GetOrderedChildrenWithSequenceAsync(parentTaskId, cancellationToken);
-                SupplyWorkflow.ReconcileSequentialStatuses(ordered);
-                foreach (var (child, _) in ordered)
-                    await _repo.UpdateTaskAsync(child, cancellationToken);
-            }
-            else
-            {
-                await ReleaseSequenceWaitingStatusesAsync(parentTaskId, cancellationToken);
-            }
-
             var lifecycle = _serviceProvider.GetRequiredService<ITaskLifecycleService>();
 
             foreach (var orphan in existingChildren.Where(c => !usedChildIds.Contains(c.Id)))
@@ -240,31 +234,74 @@ namespace ProductionPlanner.Services
 
             await _repo.UpdateTaskAsync(parentTask, cancellationToken);
 
-            await RecalculateParentStatusAsync(parentTask.Id, cancellationToken);
+            await ApplySupplyModeChangeIfNeededAsync(
+                parentTaskId,
+                previousSupplyMode,
+                parentTask.SupplyMode,
+                cancellationToken);
 
             return parentTask;
+        }
+
+        private async Task ApplySupplyModeChangeIfNeededAsync(
+            int parentTaskId,
+            SupplyMode previousMode,
+            SupplyMode newMode,
+            CancellationToken cancellationToken)
+        {
+            var previous = NormalizeSplitSupplyMode(previousMode);
+            var next = NormalizeSplitSupplyMode(newMode);
+            if (previous == next)
+                return;
+
+            var ordered = await GetOrderedChildrenForSupplyModeAsync(parentTaskId, cancellationToken);
+            if (ordered.Count == 0)
+                return;
+
+            SupplyWorkflow.ApplySupplyModeChange(ordered, previous, next);
+
+            foreach (var (child, _) in ordered)
+                await _repo.UpdateTaskAsync(child, cancellationToken);
+        }
+
+        private async Task<List<(ProductionTask Child, int SequenceOrder)>> GetOrderedChildrenForSupplyModeAsync(
+            int parentTaskId,
+            CancellationToken cancellationToken)
+        {
+            var splits = await _context.TaskSplits
+                .AsNoTracking()
+                .Where(ts => ts.ParentRowNumber == parentTaskId)
+                .ToListAsync(cancellationToken);
+            if (splits.Count == 0)
+                return [];
+
+            var orderById = splits.ToDictionary(s => s.ChildTaskId, s => s.SequenceOrder);
+            var children = await GetChildTasksAsync(parentTaskId, cancellationToken);
+            return children
+                .Select(c => (c, orderById.GetValueOrDefault(c.Id, 0)))
+                .ToList();
+        }
+
+        /// <summary>
+        /// Редактирование одиночной задачи: только часы, тип и исполнитель — статус и история работы не трогаются.
+        /// </summary>
+        private async Task<ProductionTask> UpdateRegularTaskAssignmentsAsync(
+            ProductionTask parent,
+            SplitPart part,
+            CancellationToken cancellationToken)
+        {
+            parent.EstimateHours = part.AllocatedHours;
+            parent.Type = part.TaskType ?? string.Empty;
+            parent.EmployeeName = part.EmployeeName;
+            parent.UpdatedAt = _timeService.Now;
+            await _repo.UpdateTaskAsync(parent, cancellationToken);
+            return parent;
         }
 
         private static SupplyMode NormalizeSplitSupplyMode(SupplyMode? supplyMode) =>
             supplyMode == SupplyMode.InternalProduction
                 ? SupplyMode.InternalProduction
                 : SupplyMode.Cooperative;
-
-        private async Task ReleaseSequenceWaitingStatusesAsync(
-            int parentTaskId,
-            CancellationToken cancellationToken)
-        {
-            var ordered = await GetOrderedChildrenWithSequenceAsync(parentTaskId, cancellationToken);
-            foreach (var (child, _) in ordered)
-            {
-                if (child.Status != JobStatus.Waiting)
-                    continue;
-
-                child.Status = JobStatus.Assigned;
-                child.UpdatedAt = _timeService.Now;
-                await _repo.UpdateTaskAsync(child, cancellationToken);
-            }
-        }
 
         private async Task RunWithParentSplitLockAsync(
             int parentTaskId,
@@ -481,10 +518,18 @@ namespace ProductionPlanner.Services
             }
             else
             {
-                parent.Status = JobStatus.Assigned;
-                parent.Progress = 0;
-                parent.ActualHours = 0;
-                parent.CompletedAt = null;
+                var parentWithWork = await _context.ProductionTasks
+                    .Include(t => t.WorkIntervals)
+                    .FirstOrDefaultAsync(t => t.Id == parent.Id, cancellationToken)
+                    ?? parent;
+
+                if (!HasWorkHistory(parentWithWork))
+                {
+                    parent.Status = JobStatus.Assigned;
+                    parent.Progress = 0;
+                    parent.ActualHours = 0;
+                    parent.CompletedAt = null;
+                }
             }
 
             if (splits.Any())

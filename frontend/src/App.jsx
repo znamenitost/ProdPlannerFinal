@@ -18,7 +18,8 @@ import {
   IconButton,
   Divider,
   ListItemIcon,
-  ListItemText
+  ListItemText,
+  ListSubheader
 } from '@mui/material';
 import { 
   Today, 
@@ -53,8 +54,11 @@ import useNotificationsHub from './hooks/useNotificationsHub';
 import { endLunch, getCurrentLunch, startLunch } from './services/api';
 import appTheme from './theme/appTheme';
 import { pageShellSx } from './theme/surfaces';
-import SectionCard from './components/ui/SectionCard';
 import { MotionSwitch } from './components/ui/MotionSection';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { ruRU } from '@mui/x-date-pickers/locales';
+import 'dayjs/locale/ru';
 
 function AppContent() {
   const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
@@ -343,10 +347,10 @@ function AppContent() {
                 {isAdmin && (
                   <Button variant="outlined" startIcon={<RestartAlt />} onClick={handleReset} color="error" size="medium">Сброс БД</Button>
                 )}
-                <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
+                <IconButton onClick={handleOpenUserMenu} aria-label="Меню пользователя" sx={{ p: 0 }}>
                   <Avatar 
                     src={avatarUrl} 
-                    sx={{ width: 40, height: 40, bgcolor: 'primary.main' }}
+                    sx={{ width: 56, height: 56, fontSize: '1.25rem', bgcolor: 'primary.main' }}
                     onError={handleAvatarError}
                   >
                     {(!user?.avatarUrl) && (user?.fullName?.[0] || 'U')}
@@ -368,15 +372,15 @@ function AppContent() {
               <>
                 <WeekCalendar employee={employee} />
                 {!isAdmin && <DeadlineWarnings employee={employee} />}
-                <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
-                  <ActiveTasksList
-                    onUpdate={refreshCalendar}
-                    onStatisticsRecalculated={refreshAll}
-                    embedded
-                    employee={employee}
-                    isAdmin={isAdmin}
-                  />
-                </SectionCard>
+                <ActiveTasksList
+                  sectionTitle="Активные задачи"
+                  sectionIcon={<Today color="primary" />}
+                  sectionSx={{ mb: 3 }}
+                  onUpdate={refreshCalendar}
+                  onStatisticsRecalculated={refreshAll}
+                  employee={employee}
+                  isAdmin={isAdmin}
+                />
                 <CompletedTasksList employee={employee} />
               </>
             ) : (
@@ -403,7 +407,7 @@ function AppContent() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        <MenuItem disabled>
+        <ListSubheader disableSticky sx={{ lineHeight: 1.4, py: 1.5, bgcolor: 'transparent' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{user?.fullName}</Typography>
             <Typography variant="caption" color="text.secondary">{user?.email}</Typography>
@@ -416,7 +420,7 @@ function AppContent() {
               sx={{ mt: 0.5, fontSize: '0.65rem', width: 'fit-content' }}
             />
           </Box>
-        </MenuItem>
+        </ListSubheader>
         <Divider />
         {currentLunch ? (
           <MenuItem onClick={handleEndLunch} disabled={lunchPending || !targetLunchEmployee}>
@@ -459,13 +463,19 @@ function App() {
   return (
     <ThemeProvider theme={appTheme}>
       <CssBaseline />
-      <QueryClientProvider client={queryClient}>
-        <UiFeedbackProvider>
-          <ClockProvider>
-            <AppContent />
-          </ClockProvider>
-        </UiFeedbackProvider>
-      </QueryClientProvider>
+      <LocalizationProvider
+        dateAdapter={AdapterDayjs}
+        adapterLocale="ru"
+        localeText={ruRU.components.MuiLocalizationProvider.defaultProps.localeText}
+      >
+        <QueryClientProvider client={queryClient}>
+          <UiFeedbackProvider>
+            <ClockProvider>
+              <AppContent />
+            </ClockProvider>
+          </UiFeedbackProvider>
+        </QueryClientProvider>
+      </LocalizationProvider>
     </ThemeProvider>
   );
 }

@@ -29,7 +29,8 @@ import { taskTableColumnCount } from '../utils/taskTableColumns';
 const ROW_GROUP_BASE_HEIGHT = 44;
 const ROW_PROGRESS_HEIGHT = 6;
 const EDIT_ROW_HEIGHT = 72;
-const VIRTUAL_OVERSCAN = 8;
+const VIRTUAL_OVERSCAN = 15;
+const TEXT_LIMIT_MEASURE_DEBOUNCE_MS = 200;
 
 function isCompletedRow(row) {
   return row?.statusText === STATUS_COMPLETED || row?.status === 3;
@@ -121,7 +122,14 @@ export default function TaskTable({
 
   useEffect(() => {
     rowVirtualizer.measure();
-  }, [rowVirtualizer, estimateRowGroupHeight, columnSettings.textLimit]);
+  }, [rowVirtualizer, estimateRowGroupHeight]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      rowVirtualizer.measure();
+    }, TEXT_LIMIT_MEASURE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [rowVirtualizer, columnSettings.textLimit]);
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const shouldVirtualize = visibleRows.length > 30;
@@ -204,11 +212,8 @@ export default function TaskTable({
         sx={{
           maxHeight: '70vh',
           overflow: 'auto',
-          scrollBehavior: 'smooth',
           WebkitOverflowScrolling: 'touch',
-          '@media (prefers-reduced-motion: reduce)': {
-            scrollBehavior: 'auto'
-          }
+          overscrollBehavior: 'contain'
         }}
       >
         <Table

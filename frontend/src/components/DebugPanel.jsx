@@ -131,7 +131,7 @@ export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
                 <BugReport sx={{ fontSize: 'small', mr: 1, verticalAlign: 'middle' }} />
                 Панель отладки
               </Typography>
-              <IconButton size="small" onClick={() => setOpen(false)}>
+              <IconButton size="small" onClick={() => setOpen(false)} aria-label="Закрыть панель отладки">
                 <Close fontSize="small" />
               </IconButton>
             </Box>

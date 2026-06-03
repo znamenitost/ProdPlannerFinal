@@ -354,7 +354,13 @@ export default function SplitTaskModal({
                 />
 
                 {parts.length > 1 && (
-                  <IconButton size="small" color="error" onClick={() => removePart(idx)} sx={{ mt: 0.5, flexShrink: 0 }}>
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={() => removePart(idx)}
+                    aria-label={isSequential ? 'Удалить этап' : 'Удалить сотрудника'}
+                    sx={{ mt: 0.5, flexShrink: 0 }}
+                  >
                     <Delete />
                   </IconButton>
                 )}

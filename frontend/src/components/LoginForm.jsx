@@ -9,8 +9,8 @@ import {
   Container,
   Avatar,
   Card,
-  CardContent,
-  CircularProgress
+  CardActionArea,
+  CardContent
 } from '@mui/material';
 import { Login as LoginIcon, Person, AdminPanelSettings } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
@@ -243,12 +243,10 @@ export default function LoginForm({ onLogin }) {
                           : undefined;
 
                         return (
-                        <Card 
+                        <Card
                           key={emp.fullName}
-                          onClick={() => setSelectedEmployee(emp.fullName)}
                           sx={(theme) => ({
                             flex: 1,
-                            cursor: 'pointer',
                             border: selectedEmployee === emp.fullName
                               ? `2px solid ${theme.palette.primary.main}`
                               : `1px solid ${alpha(theme.palette.divider, 1)}`,
@@ -263,10 +261,14 @@ export default function LoginForm({ onLogin }) {
                             '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.light }
                           })}
                         >
+                          <CardActionArea
+                            onClick={() => setSelectedEmployee(emp.fullName)}
+                            aria-pressed={selectedEmployee === emp.fullName}
+                          >
                           <CardContent sx={{ textAlign: 'center', py: 2 }}>
                             <Avatar
                               src={avatarSrc}
-                              sx={{ width: 40, height: 40, mx: 'auto', mb: 1, bgcolor: 'primary.light' }}
+                              sx={{ width: 64, height: 64, fontSize: '1.5rem', mx: 'auto', mb: 1, bgcolor: 'primary.light' }}
                             >
                               {emp.fullName[0]}
                             </Avatar>
@@ -274,6 +276,7 @@ export default function LoginForm({ onLogin }) {
                               {emp.fullName}
                             </Typography>
                           </CardContent>
+                          </CardActionArea>
                         </Card>
                         );
                       })}
@@ -296,8 +299,8 @@ export default function LoginForm({ onLogin }) {
                   variant="contained"
                   size="large"
                   fullWidth
-                  disabled={loading}
-                  startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <LoginIcon />}
+                  loading={loading}
+                  startIcon={<LoginIcon />}
                   sx={{ mt: 2 }}
                 >
                   {loading ? 'Вход...' : 'Войти'}

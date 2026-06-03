@@ -173,7 +173,13 @@ function ParentTaskRow({
 
             <Box sx={ICON_SLOT_FILE}>
               <LazyTooltip title={`Открыть файл: ${fullFilePath}`} arrow>
-                <IconButton size="small" color="primary" onClick={() => onOpenFile(task)} sx={{ p: 0.5 }}>
+                <IconButton
+                  size="small"
+                  color="primary"
+                  onClick={() => onOpenFile(task)}
+                  aria-label={`Открыть файл: ${fullFilePath}`}
+                  sx={{ p: 0.5 }}
+                >
                   <FolderOpen fontSize="small" />
                 </IconButton>
               </LazyTooltip>

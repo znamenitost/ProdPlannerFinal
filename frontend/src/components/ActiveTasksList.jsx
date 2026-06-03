@@ -22,8 +22,10 @@ import {
   Typography,
   Menu,
   MenuItem,
-  Stack
+  Stack,
+  Paper
 } from '@mui/material';
+import { sectionTitleRowSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import useActiveTasksQuery from '../hooks/queries/useActiveTasksQuery';
 import { openFileOnClient } from '../utils/openFileOnClient';
@@ -50,7 +52,9 @@ function isBlockedActiveTask(task) {
 
 export default function ActiveTasksList({
   onUpdate,
-  embedded = false,
+  sectionTitle,
+  sectionIcon,
+  sectionSx,
   employee = ''
 }) {
   const { showError, showWarning, confirm } = useUiFeedback();
@@ -136,34 +140,44 @@ export default function ActiveTasksList({
     if (!result.ok) showError('Не удалось открыть файл');
   }, [showError, showWarning]);
 
-  const content = (
-    <Stack spacing={2}>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
-        <Tooltip title="Сортировка">
-          <IconButton
-            size="small"
-            onClick={handleOpenSortMenu}
-            color={blockedBottomSort ? 'primary' : 'default'}
-            sx={[
-              blockedBottomSort && { border: '1px solid', borderColor: 'primary.main' }
-            ]}
-          >
-            <Sort fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Menu
-          anchorEl={sortAnchorEl}
-          open={sortMenuOpen}
-          onClose={handleCloseSortMenu}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+  const sortControls = (
+    <>
+      <Tooltip title="Сортировка">
+        <IconButton
+          size="small"
+          onClick={handleOpenSortMenu}
+          color={blockedBottomSort ? 'primary' : 'default'}
+          aria-label="Сортировка активных задач"
+          sx={[
+            blockedBottomSort && { border: '1px solid', borderColor: 'primary.main' }
+          ]}
         >
-          <MenuItem onClick={handleToggleBlockedBottomSort}>
-            <Checkbox size="small" checked={blockedBottomSort} readOnly />
-            <ListItemText primary="Заблокированные снизу" />
-          </MenuItem>
-        </Menu>
-      </Box>
+          <Sort fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Menu
+        anchorEl={sortAnchorEl}
+        open={sortMenuOpen}
+        onClose={handleCloseSortMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem onClick={handleToggleBlockedBottomSort}>
+          <Checkbox
+            size="small"
+            checked={blockedBottomSort}
+            disableRipple
+            tabIndex={-1}
+            sx={{ pointerEvents: 'none' }}
+          />
+          <ListItemText primary="Заблокированные снизу" />
+        </MenuItem>
+      </Menu>
+    </>
+  );
+
+  const taskStack = (
+    <Stack spacing={2}>
       {visibleTasks.map((task, index) => {
         const showBlockedDivider =
           blockedBottomSort &&
@@ -194,14 +208,37 @@ export default function ActiveTasksList({
     </Stack>
   );
 
-  if (embedded) return content;
+  if (sectionTitle) {
+    return (
+      <Paper variant="section" sx={sectionSx}>
+        <Box
+          sx={{
+            ...sectionTitleRowSx,
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 1,
+            mb: 3
+          }}
+        >
+          <Box sx={sectionTitleRowSx}>
+            {sectionIcon}
+            <Typography variant="h2" component="h2">
+              {sectionTitle}
+            </Typography>
+          </Box>
+          {sortControls}
+        </Box>
+        {taskStack}
+      </Paper>
+    );
+  }
 
   return (
     <Box sx={{ mt: 3 }}>
       <Typography variant="h2" sx={{ mb: 2 }}>
         Активные задачи
       </Typography>
-      {content}
+      {taskStack}
     </Box>
   );
 }

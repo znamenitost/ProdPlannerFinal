@@ -12,5 +12,7 @@ namespace ProductionPlanner.Services
         Task ReturnTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default);
         /// <summary>Обновить статус родителя сплит-задачи после изменения дочерней.</summary>
         Task SyncSplitParentStatusAsync(int childTaskId, CancellationToken cancellationToken = default);
+        /// <summary>Закрыть все открытые интервалы на 19:00; задачи в работе — на паузу.</summary>
+        Task PauseOpenTasksAtEndOfWorkDayAsync(DateTime workDayEnd, CancellationToken cancellationToken = default);
     }
 }

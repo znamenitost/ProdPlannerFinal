@@ -42,7 +42,7 @@ export default function QueueOverloadWarnings({ employee }) {
               icon={<Queue fontSize="inherit" />}
               sx={{ borderRadius: 2, '& .MuiAlert-icon': { alignItems: 'center' } }}
               action={
-                <IconButton size="small" onClick={() => setOpen(false)}>
+                <IconButton size="small" onClick={() => setOpen(false)} aria-label="Скрыть предупреждения">
                   <Close fontSize="small" />
                 </IconButton>
               }

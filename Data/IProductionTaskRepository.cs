@@ -64,6 +64,7 @@ namespace ProductionPlanner.Data
         Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);
         Task ExecuteWithTaskLifecycleLockAsync(int taskId, Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);
         Task<int> CloseOpenIntervalsAsync(int taskId, DateTime closedAt, CancellationToken cancellationToken = default);
+        Task<List<int>> GetTaskIdsWithOpenWorkIntervalsAsync(CancellationToken cancellationToken = default);
         Task<int> TryTransitionStatusAsync(
             int taskId,
             JobStatus newStatus,

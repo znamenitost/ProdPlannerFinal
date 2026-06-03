@@ -41,6 +41,7 @@ export default function TaskCommentCell({ task, onOpenComment, iconButtonColor =
         size="small"
         color={iconButtonColor}
         onClick={() => onOpenComment(task)}
+        aria-label="Редактировать комментарий"
         sx={{ p: 0.5, flexShrink: 0 }}
       >
         <CommentIcon fontSize="small" sx={{ fontSize: 14 }} />

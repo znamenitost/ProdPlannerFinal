@@ -130,27 +130,18 @@ export default function useTaskTableModals({
     const parentId = splitModalTask?.id;
     applyPlanningWarnings(result?.planningWarnings);
     try {
-      if (parentId && result) {
-      const rowPatch = {
-        estimateHours: result.estimateHours,
-        isSplitTask: result.isSplitTask,
-        employeeName: result.employeeName ?? '',
-        type: result.type ?? '',
-        supplyMode: result.supplyMode
-      };
-      if (!result.isSplitTask) {
-        rowPatch.splitEmployeeNames = '';
+      if (parentId) {
+        const employee = selectedEmployeeForHighlight || '';
+        const updatedRow = await api.fetchTableRow(parentId, employee);
+        patchRow(parentId, updatedRow);
+
+        invalidateChildCache(parentId);
+        const children = await api.loadChildren(parentId);
+        setChildrenForParent(parentId, children);
+        if (expandedRows.has(parentId)) {
+          await loadChildrenForParent(parentId, { force: true });
+        }
       }
-      patchRow(parentId, rowPatch);
-    }
-    if (parentId) {
-      invalidateChildCache(parentId);
-      const children = await api.loadChildren(parentId);
-      setChildrenForParent(parentId, children);
-      if (expandedRows.has(parentId)) {
-        await loadChildrenForParent(parentId, { force: true });
-      }
-    }
     } catch (err) {
       console.error(err);
       showError(err.message || 'Не удалось обновить назначения');

@@ -56,7 +56,7 @@ export default function EmployeeHoursSelector({ employees, totalHours, onChange,
           const assigned = assignments.find(a => a.employeeName === emp);
           const checked = !!assigned;
           return (
-            <Grid item xs={12} key={emp}>
+            <Grid size={12} key={emp}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <FormControlLabel
                   control={

@@ -49,6 +49,11 @@ export default function PushNotificationSnackbars({ notifications, onClose }) {
           <Snackbar
             key={notification.id}
             open
+            autoHideDuration={8000}
+            onClose={(_event, reason) => {
+              if (reason === 'clickaway') return;
+              onClose(notification.id);
+            }}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             sx={{
               bottom: { xs: 16 + index * SNACKBAR_HEIGHT, sm: 24 + index * SNACKBAR_HEIGHT },

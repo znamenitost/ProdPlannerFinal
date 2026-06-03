@@ -11,8 +11,6 @@ import {
 } from '@mui/material';
 import { CalendarMonth } from '@mui/icons-material';
 import { DesktopDatePicker } from '@mui/x-date-pickers/DesktopDatePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { usePickerContext } from '@mui/x-date-pickers/hooks';
 import {
   usePickerLayout,
@@ -196,51 +194,49 @@ export default function DeadlineDateTimePicker({
   );
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="ru">
-      <DesktopDatePicker
-        value={pickerValue}
-        onChange={handlePickerChange}
-        disabled={disabled}
-        format="DD.MM.YYYY"
-        closeOnSelect={false}
-        slots={{
-          openPickerIcon: CalendarMonth,
-          layout: DeadlinePickerLayout,
-          actionBar: TimeActionBar
-        }}
-        slotProps={{
-          field: {
-            openPickerButtonPosition: 'end'
-          },
-          textField: {
-            size,
-            variant: 'outlined',
-            label: hideLabel ? undefined : label,
-            fullWidth,
-            sx: tableDatePickerSlotSx
-          },
-          openPickerButton: {
-            size: 'small'
-          },
-          openPickerIcon: {
-            sx: { fontSize: 20, color: 'action.active' }
-          },
-          popper: {
-            sx: {
-              '& .MuiPaper-root': {
-                borderRadius: 1,
-                overflow: 'hidden'
-              }
-            }
-          },
-          desktopPaper: {
-            sx: {
+    <DesktopDatePicker
+      value={pickerValue}
+      onChange={handlePickerChange}
+      disabled={disabled}
+      format="DD.MM.YYYY"
+      closeOnSelect={false}
+      slots={{
+        openPickerIcon: CalendarMonth,
+        layout: DeadlinePickerLayout,
+        actionBar: TimeActionBar
+      }}
+      slotProps={{
+        field: {
+          openPickerButtonPosition: 'end'
+        },
+        textField: {
+          size,
+          variant: 'outlined',
+          label: hideLabel ? undefined : label,
+          fullWidth,
+          sx: tableDatePickerSlotSx
+        },
+        openPickerButton: {
+          size: 'small'
+        },
+        openPickerIcon: {
+          sx: { fontSize: 20, color: 'action.active' }
+        },
+        popper: {
+          sx: {
+            '& .MuiPaper-root': {
               borderRadius: 1,
               overflow: 'hidden'
             }
           }
-        }}
-      />
-    </LocalizationProvider>
+        },
+        desktopPaper: {
+          sx: {
+            borderRadius: 1,
+            overflow: 'hidden'
+          }
+        }
+      }}
+    />
   );
 }

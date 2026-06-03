@@ -103,6 +103,7 @@ export default function EditTaskRow({
           <IconButton
             size="small"
             onClick={() => onOpenAssigneeModal(localTask)}
+            aria-label="Назначить сотрудников"
             sx={{ flexShrink: 0 }}
           >
             <PeopleAlt fontSize="small" color={isShared ? 'secondary' : 'action'} />
@@ -117,10 +118,10 @@ export default function EditTaskRow({
 
       <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, { width: '12%' })}>
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <IconButton size="small" color="primary" onClick={handleSave}>
+          <IconButton size="small" color="primary" onClick={handleSave} aria-label="Сохранить">
             <Save fontSize="small" />
           </IconButton>
-          <IconButton size="small" color="error" onClick={onCancel}>
+          <IconButton size="small" color="error" onClick={onCancel} aria-label="Отмена">
             <Cancel fontSize="small" />
           </IconButton>
         </Box>

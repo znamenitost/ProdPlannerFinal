@@ -115,8 +115,13 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-            <Tooltip title="Открыть файл" arrow>
-              <IconButton size="small" color="primary" onClick={() => onOpenFile(task.file)}>
+            <Tooltip title="Открыть файл" arrow describeChild>
+              <IconButton
+                size="small"
+                color="primary"
+                onClick={() => onOpenFile(task.file)}
+                aria-label="Открыть файл"
+              >
                 <FolderOpen fontSize="small" />
               </IconButton>
             </Tooltip>

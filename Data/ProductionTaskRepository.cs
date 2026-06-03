@@ -720,6 +720,16 @@ namespace ProductionPlanner.Data
                 .ExecuteUpdateAsync(s => s.SetProperty(i => i.EndTime, end), cancellationToken);
         }
 
+        public async Task<List<int>> GetTaskIdsWithOpenWorkIntervalsAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.WorkIntervals
+                .Where(i => i.EndTime == null)
+                .Select(i => i.ProductionTaskId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+        }
+
         public async Task<int> CloseOpenLunchIntervalsAsync(
             string employeeName,
             DateTime closedAt,

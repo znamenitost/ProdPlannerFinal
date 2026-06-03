@@ -30,6 +30,7 @@ public static class WebApplicationExtensions
         services.AddScoped<IAvatarService, AvatarService>();
         services.AddScoped<IAuthSessionService, AuthSessionService>();
         services.AddScoped<IAppTimeService, AppTimeService>();
+        services.AddHostedService<EndOfWorkDayBackgroundService>();
         return services;
     }
 

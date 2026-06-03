@@ -51,6 +51,7 @@ export default function TaskTableToolbar({
             variant="soft"
             color={highlightMyTasks ? 'warning' : 'primary'}
             onClick={onToggleHighlight}
+            aria-label={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}
             sx={highlightMyTasks && { border: '1px solid', borderColor: 'warning.main' }}
           >
             <Lightbulb />
@@ -61,6 +62,7 @@ export default function TaskTableToolbar({
             variant="soft"
             color="primary"
             onClick={handleOpenSortMenu}
+            aria-label="Сортировка таблицы задач"
             sx={completedBottomSort && { border: '1px solid', borderColor: 'primary.main' }}
           >
             <Sort />
@@ -74,7 +76,13 @@ export default function TaskTableToolbar({
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         >
           <MenuItem onClick={() => onCompletedBottomSortChange(!completedBottomSort)}>
-            <Checkbox size="small" checked={completedBottomSort} readOnly />
+            <Checkbox
+              size="small"
+              checked={completedBottomSort}
+              disableRipple
+              tabIndex={-1}
+              sx={{ pointerEvents: 'none' }}
+            />
             <ListItemText primary="Готовые всегда снизу" />
           </MenuItem>
         </Menu>

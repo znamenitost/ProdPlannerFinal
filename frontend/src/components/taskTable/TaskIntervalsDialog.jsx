@@ -90,7 +90,7 @@ export default function TaskIntervalsDialog({
                     onChange={(e) => handleRowChange(r.id, { startTime: e.target.value })}
                     fullWidth
                     size="small"
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                   />
                   <TextField
                     label="Окончание"
@@ -100,7 +100,7 @@ export default function TaskIntervalsDialog({
                     fullWidth
                     size="small"
                     disabled={r.isOpen}
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                   />
                 </Stack>
                 <FormControlLabel

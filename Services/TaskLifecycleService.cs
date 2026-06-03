@@ -178,6 +178,23 @@ public class TaskLifecycleService : ITaskLifecycleService
         await _notificationService.NotifyStatusChangedAsync(task, "Paused");
     }
 
+    public async Task PauseOpenTasksAtEndOfWorkDayAsync(
+        DateTime workDayEnd,
+        CancellationToken cancellationToken = default)
+    {
+        var taskIds = await _repo.GetTaskIdsWithOpenWorkIntervalsAsync(cancellationToken);
+        foreach (var taskId in taskIds)
+        {
+            var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
+            if (task == null) continue;
+
+            if (task.Status == JobStatus.InProgress)
+                await PauseTaskAsync(taskId, workDayEnd, cancellationToken);
+            else
+                await _repo.CloseOpenIntervalsAsync(taskId, workDayEnd, cancellationToken);
+        }
+    }
+
     public async Task ResumeTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
     {
         var startTime = _workHours.GetNextWorkStart(now);

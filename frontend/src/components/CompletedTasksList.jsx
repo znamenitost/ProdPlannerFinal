@@ -127,6 +127,7 @@ export default function CompletedTasksList({ employee }) {
             size="small"
             onClick={handleOpenPeriodMenu}
             color={statsPeriod !== 'week' ? 'primary' : 'default'}
+            aria-label="Период статистики"
             sx={[
               { ml: 'auto' },
               statsPeriod !== 'week' && { border: '1px solid', borderColor: 'primary.main' }
@@ -144,7 +145,13 @@ export default function CompletedTasksList({ employee }) {
         >
           {STATS_PERIOD_OPTIONS.map((option) => (
             <MenuItem key={option.value} onClick={() => handleSelectStatsPeriod(option.value)}>
-              <Checkbox size="small" checked={statsPeriod === option.value} readOnly />
+              <Checkbox
+                size="small"
+                checked={statsPeriod === option.value}
+                disableRipple
+                tabIndex={-1}
+                sx={{ pointerEvents: 'none' }}
+              />
               <ListItemText primary={option.label} />
             </MenuItem>
           ))}
@@ -159,7 +166,7 @@ export default function CompletedTasksList({ employee }) {
                 <Typography variant="body2" color="text.secondary">Всего задач</Typography>
                 <TaskAlt color="success" />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
+              <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalTasks}
               </Typography>
             </CardContent>
@@ -173,7 +180,7 @@ export default function CompletedTasksList({ employee }) {
                 <Typography variant="body2" color="text.secondary">Выделено часов</Typography>
                 <AccessTime color="info" />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
+              <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalEstimate.toFixed(1)} ч
               </Typography>
             </CardContent>
@@ -187,7 +194,7 @@ export default function CompletedTasksList({ employee }) {
                 <Typography variant="body2" color="text.secondary">Реально часов</Typography>
                 <HourglassEmpty color="warning" />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
+              <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalActual.toFixed(1)} ч
               </Typography>
             </CardContent>
@@ -202,7 +209,7 @@ export default function CompletedTasksList({ employee }) {
                 {totalDifference >= 0 ? <TrendingUp color="success" /> : <TrendingDown color="error" />}
               </Box>
               <Typography
-                variant="h4"
+                variant="h3"
                 sx={{
                   fontWeight: 700,
                   mt: 1,
