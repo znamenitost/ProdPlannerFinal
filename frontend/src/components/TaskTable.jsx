@@ -9,8 +9,8 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import SplitTaskModal from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
 import NewTaskRow from './NewTaskRow';
@@ -62,6 +62,7 @@ export default function TaskTable({
 }) {
   const isAdmin = userRole === 'Admin';
   const tableContainerRef = useRef(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
   const table = useTaskTableController({
     onCalendarRefresh,
     onRegisterHubHandler,
@@ -112,12 +113,36 @@ export default function TaskTable({
     [table.childrenCache, table.editingId, table.expandedRows, visibleRows]
   );
 
-  const rowVirtualizer = useVirtualizer({
+  const shouldVirtualize = visibleRows.length > 30;
+
+  const measureScrollMargin = useCallback(() => {
+    const el = tableContainerRef.current;
+    if (!el) return;
+    setScrollMargin(el.getBoundingClientRect().top + window.scrollY);
+  }, []);
+
+  useLayoutEffect(() => {
+    measureScrollMargin();
+    const el = tableContainerRef.current;
+    if (!el) return undefined;
+
+    const resizeObserver = new ResizeObserver(measureScrollMargin);
+    resizeObserver.observe(el);
+    window.addEventListener('resize', measureScrollMargin);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', measureScrollMargin);
+    };
+  }, [measureScrollMargin, table.rows.length, table.page, completedBottomSort]);
+
+  const rowVirtualizer = useWindowVirtualizer({
     count: visibleRows.length,
-    getScrollElement: () => tableContainerRef.current,
     estimateSize: estimateRowGroupHeight,
     getItemKey: (index) => visibleRows[index]?.id ?? index,
-    overscan: VIRTUAL_OVERSCAN
+    overscan: VIRTUAL_OVERSCAN,
+    scrollMargin,
+    enabled: shouldVirtualize
   });
 
   useEffect(() => {
@@ -132,11 +157,13 @@ export default function TaskTable({
   }, [rowVirtualizer, columnSettings.textLimit]);
 
   const virtualRows = rowVirtualizer.getVirtualItems();
-  const shouldVirtualize = visibleRows.length > 30;
-  const topPadding = virtualRows.length > 0 ? virtualRows[0].start : 0;
+  const topPadding = virtualRows.length > 0 ? virtualRows[0].start - scrollMargin : 0;
   const bottomPadding =
     virtualRows.length > 0
-      ? Math.max(0, rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end)
+      ? Math.max(
+          0,
+          rowVirtualizer.getTotalSize() - (virtualRows[virtualRows.length - 1].end - scrollMargin)
+        )
       : 0;
 
   const renderTaskRow = (parent) => {
@@ -207,15 +234,7 @@ export default function TaskTable({
         onCompletedBottomSortChange={setCompletedBottomSort}
       />
 
-      <TableContainer
-        ref={tableContainerRef}
-        sx={{
-          maxHeight: '70vh',
-          overflow: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          overscrollBehavior: 'contain'
-        }}
-      >
+      <TableContainer ref={tableContainerRef}>
         <Table
           stickyHeader
           size="small"
