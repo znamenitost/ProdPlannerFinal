@@ -41,7 +41,8 @@ function normalizeAffectedEmployees(value) {
  * @param {(event?: { type: string, taskId?: number, affectedEmployees?: string[] }) => void} [handlers.onCalendarRefresh] — календарь / completed
  * @param {() => void} [handlers.onFullRefresh] — reconnect и т.п.
  */
-export default function useNotificationsHub(user, handlers = {}) {
+export default function useNotificationsHub(user, handlers = {}, options = {}) {
+  const { enabled = true } = options;
   const [notifications, setNotifications] = useState([]);
   const refreshTimeoutRef = useRef(null);
   const taskEventChainRef = useRef(Promise.resolve());
@@ -144,7 +145,7 @@ export default function useNotificationsHub(user, handlers = {}) {
   }, [offerNotification]);
 
   const fetchPendingNotifications = useCallback(async (signal) => {
-    if (!user?.id) return;
+    if (!user?.id || !user?.isAuthenticated) return;
     try {
       const response = await fetch('/api/notifications/pending', {
         credentials: 'include',
@@ -161,7 +162,7 @@ export default function useNotificationsHub(user, handlers = {}) {
   }, [user?.id, offerNotification]);
 
   useEffect(() => {
-    if (!user?.id) return undefined;
+    if (!enabled || !user?.id || !user?.isAuthenticated) return undefined;
 
     let isMounted = true;
     const abort = new AbortController();
@@ -298,7 +299,9 @@ export default function useNotificationsHub(user, handlers = {}) {
       connection.stop().catch((err) => console.error('SignalR stop error:', err));
     };
   }, [
+    enabled,
     user?.id,
+    user?.isAuthenticated,
     offerNotification,
     fetchPendingNotifications,
     flushHiddenQueue,

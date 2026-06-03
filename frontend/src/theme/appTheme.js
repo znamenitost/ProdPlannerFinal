@@ -7,7 +7,6 @@ import {
   nestedCardThemeStyles,
   statCardThemeStyles,
   tableDatePickerSlotSx,
-  tableTextFieldThemeStyles,
   toastAlertThemeStyles
 } from './componentVariants';
 
@@ -206,10 +205,7 @@ export const appTheme = createTheme({
             '&.Mui-focused fieldset': { borderColor: primary.main }
           }
         }
-      },
-      variants: [
-        { props: { variant: 'table' }, style: tableTextFieldThemeStyles }
-      ]
+      }
     },
     MuiTableCell: {
       styleOverrides: {

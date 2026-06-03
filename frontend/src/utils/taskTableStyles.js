@@ -1,4 +1,5 @@
 /** Shared table column + field styles for task rows. */
+import { tableTextFieldThemeStyles } from '../theme/componentVariants';
 
 /** expand + shared-task + open-file (split parent rows need all three) */
 export const COL_ICON = { width: 104, minWidth: 104, maxWidth: 120, px: 0.5, whiteSpace: 'nowrap', verticalAlign: 'middle' };
@@ -40,10 +41,12 @@ export const COL_ACTIONS = {
   zIndex: 1
 };
 
+/** MUI 9 TextField supports only outlined | filled | standard; custom variant crashes on mount. */
 export const TASK_TABLE_TEXT_FIELD_PROPS = {
   size: 'small',
-  variant: 'table',
-  fullWidth: true
+  variant: 'outlined',
+  fullWidth: true,
+  sx: tableTextFieldThemeStyles
 };
 
 export const cellDisplayTextSx = {

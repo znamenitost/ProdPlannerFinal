@@ -10,9 +10,7 @@ import {
 import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
-import {
-  TASK_EXECUTION_SEQUENTIAL
-} from '../constants/taskStatuses';
+import { TASK_EXECUTION_SEQUENTIAL } from '../constants/taskStatuses';
 import {
   COL_ICON,
   COL_TASK,

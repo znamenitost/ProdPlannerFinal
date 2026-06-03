@@ -2,7 +2,7 @@ import { alpha } from '@mui/material/styles';
 import { tokens } from './paletteTokens';
 import { createMuiTransition } from './motion';
 
-const { neutral } = tokens;
+const { neutral, primary } = tokens;
 
 const STAT_CARD_ALPHA = {
   success: { bg: 0.08, border: 0.2 },
@@ -74,38 +74,71 @@ export function toastAlertThemeStyles(theme, accentColor = 'info') {
   };
 }
 
+/** Same radius as appTheme.shape.borderRadius — row TextField + deadline picker. */
+export const TABLE_FIELD_BORDER_RADIUS = 10;
+
+/** MUI small outlined control height (8.5px vertical padding × 2 + line). */
+export const TABLE_FIELD_CONTROL_HEIGHT = 40;
+
+const tableFieldOutlinedInputSelector =
+  '& .MuiOutlinedInput-root, & .MuiPickersOutlinedInput-root, & .MuiPickersInputBase-root';
+
+const tableFieldOutlinedFieldsetSx = {
+  borderRadius: TABLE_FIELD_BORDER_RADIUS,
+  borderColor: alpha(neutral[300], 0.9)
+};
+
+const tableFieldOutlinedInputSx = {
+  borderRadius: TABLE_FIELD_BORDER_RADIUS,
+  fontSize: '0.875rem',
+  backgroundColor: neutral[50],
+  height: TABLE_FIELD_CONTROL_HEIGHT,
+  boxSizing: 'border-box',
+  display: 'flex',
+  alignItems: 'center',
+  '& fieldset': tableFieldOutlinedFieldsetSx,
+  '&:hover fieldset': {
+    borderColor: alpha(primary.main, 0.45)
+  },
+  '&.Mui-focused fieldset, &.MuiPickersOutlinedInput-focused fieldset': {
+    borderColor: primary.main
+  }
+};
+
+const tableFieldControlWrapperSx = {
+  m: 0,
+  display: 'flex',
+  alignItems: 'center'
+};
+
 export const tableTextFieldThemeStyles = {
   minWidth: 72,
-  '& .MuiOutlinedInput-root': {
-    borderRadius: 1,
-    fontSize: '0.875rem',
-    backgroundColor: 'background.paper'
-  },
+  ...tableFieldControlWrapperSx,
+  [tableFieldOutlinedInputSelector]: tableFieldOutlinedInputSx,
   '& .MuiOutlinedInput-input': {
-    py: 0.875,
-    px: 1.25
+    padding: '8.5px 14px',
+    boxSizing: 'border-box'
   }
 };
 
 export const tableDatePickerSlotSx = {
   width: '100%',
   minWidth: 152,
-  '& .MuiPickersInputBase-root': {
-    borderRadius: 1,
-    fontSize: '0.875rem',
-    minHeight: 40,
+  ...tableFieldControlWrapperSx,
+  [tableFieldOutlinedInputSelector]: {
+    ...tableFieldOutlinedInputSx,
     minWidth: 152,
     width: '100%',
-    backgroundColor: 'background.paper',
     cursor: 'pointer',
     pr: 0.5
   },
-  '& .MuiPickersSectionList-root': {
-    py: 0.875,
-    px: 0.75,
-    fontSize: '0.875rem',
+  '& .MuiPickersOutlinedInput-input': {
+    padding: '8.5px 0',
+    display: 'flex',
+    alignItems: 'center',
     flex: 1,
-    minWidth: 0
+    minWidth: 0,
+    fontSize: '0.875rem'
   },
   '& .MuiIconButton-root': {
     p: 0.75,

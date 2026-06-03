@@ -123,7 +123,9 @@ function AppContent() {
     [handleHubTaskEvent, handleHubActiveTasksRefresh, handleHubTableFallbackRefresh, handleHubCalendarRefresh, refreshAll]
   );
 
-  const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers);
+  const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers, {
+    enabled: !loading && Boolean(user?.isAuthenticated)
+  });
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
 

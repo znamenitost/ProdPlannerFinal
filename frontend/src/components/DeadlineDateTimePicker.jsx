@@ -25,6 +25,7 @@ import {
   parseDateTime,
   WORK_TIME_OPTIONS
 } from '../utils/dateTimeHelpers';
+import { tableDatePickerSlotSx } from '../theme/componentVariants';
 
 export { COL_DEADLINE_INPUT as DEADLINE_COLUMN_SX } from '../utils/taskTableStyles';
 
@@ -215,7 +216,8 @@ export default function DeadlineDateTimePicker({
             size,
             variant: 'outlined',
             label: hideLabel ? undefined : label,
-            fullWidth
+            fullWidth,
+            sx: tableDatePickerSlotSx
           },
           openPickerButton: {
             size: 'small'

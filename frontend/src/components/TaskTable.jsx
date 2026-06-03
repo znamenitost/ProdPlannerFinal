@@ -124,7 +124,7 @@ export default function TaskTable({
   }, [rowVirtualizer, estimateRowGroupHeight, columnSettings.textLimit]);
 
   const virtualRows = rowVirtualizer.getVirtualItems();
-  const shouldVirtualize = !table.newRow && visibleRows.length > 30;
+  const shouldVirtualize = visibleRows.length > 30;
   const topPadding = virtualRows.length > 0 ? virtualRows[0].start : 0;
   const bottomPadding =
     virtualRows.length > 0
