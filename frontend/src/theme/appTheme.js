@@ -12,8 +12,8 @@ import {
 
 const { neutral, primary, secondary, success, warning, error, info } = tokens;
 
-const borderSubtle = alpha(neutral[300], 0.9);
-const shadowSoft = `0 4px 24px ${alpha(neutral[600], 0.06)}`;
+const borderSubtle = alpha(neutral[300], 0.98);
+const shadowSoft = `0 4px 24px ${alpha(neutral[600], 0.085)}`;
 
 export const appTheme = createTheme({
   palette: {
@@ -36,13 +36,13 @@ export const appTheme = createTheme({
     },
     background: {
       default: neutral[100],
-      paper: alpha(neutral[50], 0.96)
+      paper: neutral[50]
     },
     text: {
       primary: neutral[700],
-      secondary: neutral[500]
+      secondary: neutral[600]
     },
-    divider: alpha(neutral[300], 0.85),
+    divider: alpha(neutral[300], 0.92),
     action: {
       hover: alpha(primary.main, 0.05),
       selected: alpha(primary.main, 0.08),
@@ -63,8 +63,8 @@ export const appTheme = createTheme({
   shape: { borderRadius: 10 },
   shadows: [
     'none',
-    `0 1px 2px ${alpha(neutral[600], 0.04)}`,
-    `0 2px 8px ${alpha(neutral[600], 0.05)}`,
+    `0 1px 2px ${alpha(neutral[600], 0.055)}`,
+    `0 2px 8px ${alpha(neutral[600], 0.07)}`,
     shadowSoft,
     ...Array(21).fill(shadowSoft)
   ],
@@ -101,7 +101,7 @@ export const appTheme = createTheme({
         root: ({ theme }) => ({
           backgroundImage: 'none',
           border: `1px solid ${borderSubtle}`,
-          boxShadow: `0 2px 12px ${alpha(neutral[600], 0.04)}`,
+          boxShadow: `0 2px 12px ${alpha(neutral[600], 0.055)}`,
           transition: createMuiTransition(theme, 'box-shadow')
         })
       },
@@ -131,7 +131,7 @@ export const appTheme = createTheme({
           '&:hover': { boxShadow: `0 2px 8px ${alpha(primary.main, 0.2)}` }
         },
         outlined: {
-          borderColor: alpha(neutral[400], 0.5),
+          borderColor: alpha(neutral[400], 0.62),
           '&:hover': {
             borderColor: primary.main,
             backgroundColor: alpha(primary.main, 0.04)
@@ -189,8 +189,8 @@ export const appTheme = createTheme({
           borderRadius: 8,
           transition: createMuiTransition(theme, ['background-color', 'border-color', 'box-shadow'])
         }),
-        filled: { border: `1px solid ${alpha(neutral[300], 0.5)}` },
-        outlined: { borderColor: alpha(neutral[400], 0.45) }
+        filled: { border: `1px solid ${alpha(neutral[300], 0.68)}` },
+        outlined: { borderColor: alpha(neutral[400], 0.58) }
       }
     },
     MuiTextField: {
@@ -200,8 +200,8 @@ export const appTheme = createTheme({
           '& .MuiOutlinedInput-root': {
             borderRadius: 10,
             backgroundColor: neutral[50],
-            '& fieldset': { borderColor: alpha(neutral[300], 0.9) },
-            '&:hover fieldset': { borderColor: alpha(primary.main, 0.45) },
+            '& fieldset': { borderColor: alpha(neutral[300], 0.98) },
+            '&:hover fieldset': { borderColor: alpha(primary.main, 0.55) },
             '&.Mui-focused fieldset': { borderColor: primary.main }
           }
         }
@@ -212,13 +212,13 @@ export const appTheme = createTheme({
         head: {
           fontWeight: 600,
           fontSize: '0.8rem',
-          color: neutral[500],
+          color: neutral[600],
           backgroundColor: neutral[100],
-          borderBottom: `1px solid ${alpha(neutral[300], 0.8)}`
+          borderBottom: `1px solid ${alpha(neutral[300], 0.95)}`
         },
         body: {
           fontSize: '0.85rem',
-          borderBottom: `1px solid ${alpha(neutral[200], 0.9)}`
+          borderBottom: `1px solid ${alpha(neutral[300], 0.58)}`
         }
       }
     },
@@ -250,7 +250,7 @@ export const appTheme = createTheme({
         root: ({ theme }) => ({
           minHeight: 48,
           fontWeight: 500,
-          color: neutral[500],
+          color: neutral[600],
           transition: createMuiTransition(theme, ['color', 'background-color']),
           '&.Mui-selected': {
             fontWeight: 600,
@@ -278,7 +278,7 @@ export const appTheme = createTheme({
     },
     MuiAlert: {
       styleOverrides: {
-        root: { borderRadius: 10, border: `1px solid ${alpha(neutral[300], 0.6)}` },
+        root: { borderRadius: 10, border: `1px solid ${alpha(neutral[300], 0.72)}` },
         standardSuccess: { backgroundColor: alpha(success.light, 0.45) },
         standardWarning: { backgroundColor: alpha(warning.light, 0.5) },
         standardError: { backgroundColor: alpha(error.light, 0.45) },

@@ -8,10 +8,10 @@ export const tokens = {
     100: '#F4F6FA',
     200: '#E8ECF2',
     300: '#D5DCE6',
-    400: '#9AA5B5',
-    500: '#6B7585',
-    600: '#4A5260',
-    700: '#3D4451'
+    400: '#939EAE',
+    500: '#637080',
+    600: '#464E5B',
+    700: '#373D48'
   },
   primary: { main: '#8FAEC9', light: '#B8D0E4', dark: '#6E92B3', contrastText: '#FFFFFF' },
   secondary: { main: '#B0BBC8', light: '#D2DAE3', dark: '#8A96A6', contrastText: '#FFFFFF' },

@@ -31,8 +31,8 @@ export function panelHoverThemeStyles(theme) {
       transition: createMuiTransition(theme, ['box-shadow', 'border-color'])
     },
     '&:hover': {
-      boxShadow: `0 8px 28px ${alpha(theme.palette.primary.main, 0.1)}`,
-      borderColor: alpha(theme.palette.primary.main, 0.22),
+      boxShadow: `0 8px 28px ${alpha(theme.palette.primary.main, 0.12)}`,
+      borderColor: alpha(theme.palette.primary.main, 0.28),
       transform: 'translateY(-2px)',
       '@media (prefers-reduced-motion: reduce)': {
         transform: 'none'

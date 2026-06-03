@@ -26,7 +26,7 @@ export const sectionTitleRowSx = {
 
 export const childRowSx = {
   bgcolor: alpha(neutral[100], 0.7),
-  '& td': { borderBottom: `1px solid ${alpha(neutral[200], 0.9)}` },
+  '& td': { borderBottom: `1px solid ${alpha(neutral[300], 0.55)}` },
   transition: (theme) => theme.transitions.create('background-color', {
     duration: theme.transitions.duration.shorter
   }),

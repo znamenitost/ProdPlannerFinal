@@ -15,7 +15,7 @@ export function nestedCardThemeStyles(theme) {
   return {
     borderRadius: theme.spacing(1.5),
     backgroundColor: neutral[50],
-    border: `1px solid ${alpha(neutral[200], 0.95)}`,
+    border: `1px solid ${alpha(neutral[300], 0.72)}`,
     transition: createMuiTransition(theme, 'box-shadow'),
     '&:hover': {
       boxShadow: `0 4px 16px ${alpha(theme.palette.primary.main, 0.08)}`
@@ -85,7 +85,7 @@ const tableFieldOutlinedInputSelector =
 
 const tableFieldOutlinedFieldsetSx = {
   borderRadius: TABLE_FIELD_BORDER_RADIUS,
-  borderColor: alpha(neutral[300], 0.9)
+  borderColor: alpha(neutral[300], 0.98)
 };
 
 const tableFieldOutlinedInputSx = {
