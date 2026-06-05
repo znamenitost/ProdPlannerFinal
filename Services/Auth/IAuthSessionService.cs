@@ -10,4 +10,5 @@ public interface IAuthSessionService
     Task<(AuthUserDto? User, string? ErrorMessage)> LoginAdminAsync(string email, string password);
     Task<AuthUserDto> GetCurrentUserAsync(ClaimsPrincipal principal);
     Task<IReadOnlyList<LoginEmployeeDto>> GetLoginEmployeesAsync();
+    void InvalidateLoginEmployeesCache();
 }

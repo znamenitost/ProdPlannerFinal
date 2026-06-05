@@ -66,6 +66,9 @@ export function areChildRowPropsEqual(prev, next) {
   if (prev.columnVisibility !== next.columnVisibility) return false;
   if (prev.textLimit !== next.textLimit) return false;
   if (prev.canChangeStatus !== next.canChangeStatus) return false;
+  if (prev.sharedGroupParentTask?.id !== next.sharedGroupParentTask?.id) return false;
+  if (prev.sharedGroupParentTask?.statusText !== next.sharedGroupParentTask?.statusText) return false;
+  if (prev.isLastInSharedGroup !== next.isLastInSharedGroup) return false;
   return (
     prev.onOpenFile === next.onOpenFile &&
     prev.onStart === next.onStart &&

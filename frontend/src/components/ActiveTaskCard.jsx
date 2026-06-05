@@ -26,12 +26,10 @@ import {
 import { compactButtonThemeStyles } from '../theme/componentVariants';
 import {
   isInfoStatus,
-  isPendingApprovalCalendar,
   isSequenceBlocked,
-  STATUS_NO_ITEMS,
-  STATUS_PENDING_APPROVAL,
   SUPPLY_MODE_INTERNAL
 } from '../constants/taskStatuses';
+import { getTaskBorderColor } from '../utils/taskBorderColor';
 import { getTaskFileLabel, getTaskHeading, getTaskStatusLine } from './TaskTitleTwoLines';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 
@@ -64,17 +62,6 @@ function getRiskProps(riskLevel) {
   }
 }
 
-function getBorderColor(task, theme) {
-  const text = getTaskStatusLine(task);
-  if (text === STATUS_PENDING_APPROVAL || isPendingApprovalCalendar(text)) {
-    return theme.palette.secondary.main;
-  }
-  if (text === STATUS_NO_ITEMS) return theme.palette.error.main;
-  if (task.status === 1) return theme.palette.info.main;
-  if (task.status === 2) return theme.palette.warning.main;
-  return theme.palette.divider;
-}
-
 function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOpenFile }) {
   const statusActionsDisabled = isPending || lifecycleBusy;
   const risk = getRiskProps(task.riskLevel);
@@ -102,7 +89,7 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
       variant="nested"
       sx={(theme) => ({
         borderLeft: '4px solid',
-        borderLeftColor: getBorderColor(task, theme)
+        borderLeftColor: getTaskBorderColor({ ...task, statusText: statusLabel }, theme)
       })}
     >
       <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>

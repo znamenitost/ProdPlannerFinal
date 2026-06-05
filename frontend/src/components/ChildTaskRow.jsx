@@ -27,9 +27,12 @@ import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { childRowSx, highlightedTaskRowSx } from '../theme/surfaces';
 import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
+import { getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
 
 function ChildTaskRow({
   task,
+  sharedGroupParentTask = null,
+  isLastInSharedGroup = false,
   onOpenFile,
   onStart,
   onPause,
@@ -85,6 +88,16 @@ function ChildTaskRow({
         style['&:hover'] = { opacity: 0.85 };
       }
     }
+    if (sharedGroupParentTask) {
+      style = {
+        ...style,
+        ...getSharedGroupStripeRowSx(theme, sharedGroupParentTask, {
+          isFirst: false,
+          isLast: isLastInSharedGroup
+        })
+      };
+    }
+
     return bgColor ? { ...style, bgcolor: bgColor } : style;
   };
 

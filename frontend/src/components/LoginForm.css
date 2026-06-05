@@ -35,6 +35,8 @@
 
 .login-layer-fon1 {
   z-index: 0;
+  min-width: 100%;
+  min-height: 100%;
   transform: translate3d(var(--layer-1-x), var(--layer-1-y), 0) scale(1.04);
 }
 
@@ -84,6 +86,10 @@
   .login-form-shell {
     padding-block: 20px;
   }
+}
+
+.lunch-break-overlay {
+  z-index: 1200;
 }
 
 @media (prefers-reduced-motion: reduce) {

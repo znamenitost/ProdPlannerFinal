@@ -27,8 +27,11 @@ public static class WebApplicationExtensions
         services.AddScoped<ITaskListQueryService, TaskListQueryService>();
         services.AddScoped<IWeekCalendarService, WeekCalendarService>();
         services.AddScoped<IUserProvisioningService, UserProvisioningService>();
+        services.AddMemoryCache();
         services.AddScoped<IAvatarService, AvatarService>();
         services.AddScoped<IAuthSessionService, AuthSessionService>();
+        services.AddSingleton<ILoginEmployeesBootstrapService, LoginEmployeesBootstrapService>();
+        services.AddHostedService<LoginEmployeesBootstrapHostedService>();
         services.AddScoped<IAppTimeService, AppTimeService>();
         services.AddHostedService<EndOfWorkDayBackgroundService>();
         return services;
@@ -60,7 +63,12 @@ public static class WebApplicationExtensions
             {
                 var name = Path.GetFileName(ctx.File.Name);
                 var path = ctx.Context.Request.Path.Value ?? "";
-                if (name.Equals("index.html", StringComparison.OrdinalIgnoreCase)
+                if (name.Equals("login-employees.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    var headers = ctx.Context.Response.Headers;
+                    headers[HeaderNames.CacheControl] = "public, max-age=3600";
+                }
+                else if (name.Equals("index.html", StringComparison.OrdinalIgnoreCase)
                     || name.Equals("deploy-version.txt", StringComparison.OrdinalIgnoreCase)
                     || path.Contains("/assets/", StringComparison.OrdinalIgnoreCase))
                 {
@@ -78,7 +86,34 @@ public static class WebApplicationExtensions
         app.UseWebSockets();
         app.MapControllers();
         app.MapHub<NotificationHub>("/notificationHub");
-        app.MapFallbackToFile("index.html");
+        app.MapFallback(async (HttpContext context) =>
+        {
+            var path = context.Request.Path.Value ?? "";
+            if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith("/notificationHub", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            var indexPath = Path.Combine(app.Environment.WebRootPath!, "index.html");
+            if (!File.Exists(indexPath))
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            var html = await File.ReadAllTextAsync(indexPath);
+            var bootstrapService = context.RequestServices.GetRequiredService<ILoginEmployeesBootstrapService>();
+            var injection = IndexHtmlBootstrapBuilder.BuildInjection(bootstrapService.GetBootstrapJson());
+            html = html.Replace("<!-- LOGIN_EMPLOYEES_BOOTSTRAP -->", injection, StringComparison.Ordinal);
+
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.Headers[HeaderNames.CacheControl] = "no-cache, no-store, must-revalidate";
+            context.Response.Headers[HeaderNames.Pragma] = "no-cache";
+            context.Response.Headers[HeaderNames.Expires] = "0";
+            await context.Response.WriteAsync(html);
+        });
         return app;
     }
 }

@@ -39,12 +39,14 @@ public class UserAvatarController : ControllerBase
     }
 
     [HttpGet("avatar/{userId}")]
-    public async Task<IActionResult> GetAvatar(string userId)
+    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any, VaryByQueryKeys = ["w"])]
+    public async Task<IActionResult> GetAvatar(string userId, [FromQuery] int? w = null)
     {
-        var file = await _avatarService.GetFileAsync(userId);
+        var file = await _avatarService.GetFileAsync(userId, w);
         if (file == null)
             return NoContent();
 
+        Response.Headers.CacheControl = "public, max-age=86400";
         return File(file.Value.Bytes, file.Value.ContentType);
     }
 

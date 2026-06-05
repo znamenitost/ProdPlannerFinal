@@ -1,25 +1,32 @@
 using Microsoft.AspNetCore.Identity;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Webp;
+using SixLabors.ImageSharp.Processing;
 
 namespace ProductionPlanner.Services.Auth;
 
 public class AvatarService : IAvatarService
 {
+    private const int ThumbnailSize = 128;
     private static readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
 
     private readonly UserManager<User> _userManager;
     private readonly IWebHostEnvironment _environment;
     private readonly IAppTimeService _timeService;
+    private readonly ILoginEmployeesBootstrapService _loginEmployeesBootstrap;
 
     public AvatarService(
         UserManager<User> userManager,
         IWebHostEnvironment environment,
-        IAppTimeService timeService)
+        IAppTimeService timeService,
+        ILoginEmployeesBootstrapService loginEmployeesBootstrap)
     {
         _userManager = userManager;
         _environment = environment;
         _timeService = timeService;
+        _loginEmployeesBootstrap = loginEmployeesBootstrap;
     }
 
     public async Task<string> UploadAsync(User user, IFormFile file)
@@ -42,6 +49,10 @@ public class AvatarService : IAvatarService
             var oldFilePath = MapWebPath(user.AvatarUrl);
             if (File.Exists(oldFilePath))
                 File.Delete(oldFilePath);
+
+            var oldThumbPath = GetThumbnailPath(user.Id);
+            if (File.Exists(oldThumbPath))
+                File.Delete(oldThumbPath);
         }
 
         var fileName = $"{user.Id}_{_timeService.Now.Ticks}{extension}";
@@ -52,8 +63,11 @@ public class AvatarService : IAvatarService
             await file.CopyToAsync(stream);
         }
 
+        await SaveThumbnailAsync(filePath, GetThumbnailPath(user.Id));
+
         user.AvatarUrl = $"/avatars/{fileName}";
         await _userManager.UpdateAsync(user);
+        await _loginEmployeesBootstrap.RefreshAsync();
 
         return user.AvatarUrl;
     }
@@ -67,11 +81,16 @@ public class AvatarService : IAvatarService
         if (File.Exists(filePath))
             File.Delete(filePath);
 
+        var thumbPath = GetThumbnailPath(user.Id);
+        if (File.Exists(thumbPath))
+            File.Delete(thumbPath);
+
         user.AvatarUrl = null;
         await _userManager.UpdateAsync(user);
+        await _loginEmployeesBootstrap.RefreshAsync();
     }
 
-    public async Task<(byte[] Bytes, string ContentType)?> GetFileAsync(string userId)
+    public async Task<(byte[] Bytes, string ContentType)?> GetFileAsync(string userId, int? maxWidth = null)
     {
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null || string.IsNullOrEmpty(user.AvatarUrl))
@@ -81,10 +100,41 @@ public class AvatarService : IAvatarService
         if (!File.Exists(filePath))
             return null;
 
+        var useThumbnail = maxWidth.HasValue && maxWidth.Value <= ThumbnailSize;
+        if (useThumbnail)
+        {
+            var thumbPath = GetThumbnailPath(userId);
+            if (!File.Exists(thumbPath))
+                await SaveThumbnailAsync(filePath, thumbPath);
+
+            if (File.Exists(thumbPath))
+            {
+                var thumbBytes = await File.ReadAllBytesAsync(thumbPath);
+                return (thumbBytes, "image/webp");
+            }
+        }
+
         var fileBytes = await File.ReadAllBytesAsync(filePath);
         var contentType = GetContentType(Path.GetExtension(filePath));
         return (fileBytes, contentType);
     }
+
+    private async Task SaveThumbnailAsync(string sourcePath, string thumbPath)
+    {
+        await using var input = File.OpenRead(sourcePath);
+        using var image = await Image.LoadAsync(input);
+        image.Mutate(ctx => ctx.Resize(new ResizeOptions
+        {
+            Size = new Size(ThumbnailSize, ThumbnailSize),
+            Mode = ResizeMode.Crop
+        }));
+
+        var encoder = new WebpEncoder { Quality = 80 };
+        await image.SaveAsWebpAsync(thumbPath, encoder);
+    }
+
+    private string GetThumbnailPath(string userId) =>
+        Path.Combine(GetAvatarsFolder(), $"{userId}_thumb.webp");
 
     private string GetAvatarsFolder() =>
         Path.Combine(WebRootPath, "avatars");

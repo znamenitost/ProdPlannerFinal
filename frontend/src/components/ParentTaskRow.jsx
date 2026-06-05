@@ -47,6 +47,7 @@ import {
   needsTooltip
 } from '../utils/taskTableStyles';
 import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
+import { getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
 
 function ParentTaskRow({
   task,
@@ -113,6 +114,10 @@ function ParentTaskRow({
     return false;
   };
 
+  const childCount = childrenTasks?.length ?? 0;
+  const showSharedGroupStripe = hasChildren && isExpanded;
+  const sharedGroupExpanded = showSharedGroupStripe && childCount > 0;
+
   const getRowStyle = (theme) => {
     const overdue =
       task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
@@ -120,20 +125,30 @@ function ParentTaskRow({
       borderLeft: 'none',
       '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) }
     };
+    let style = base;
     if (highlightMyTasks && isMine) {
-      return { ...base, ...highlightedTaskRowSx(theme) };
-    }
-    if (highlightMyTasks && !isMine) {
-      return {
+      style = { ...base, ...highlightedTaskRowSx(theme) };
+    } else if (highlightMyTasks && !isMine) {
+      style = {
         ...base,
         opacity: 0.65,
         '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04), opacity: 0.85 }
       };
+    } else if (overdue) {
+      style = { ...base, ...overdueTaskRowSx(theme) };
     }
-    if (overdue) {
-      return { ...base, ...overdueTaskRowSx(theme) };
+
+    if (showSharedGroupStripe) {
+      style = {
+        ...style,
+        ...getSharedGroupStripeRowSx(theme, task, {
+          isFirst: true,
+          isLast: !sharedGroupExpanded
+        })
+      };
     }
-    return base;
+
+    return style;
   };
 
   const showActionButtons = canUserManage() && canChangeStatus && !hasChildren;
@@ -282,10 +297,12 @@ function ParentTaskRow({
         hideForSplitParent={hasChildren}
       />
 
-      {hasChildren && isExpanded && (childrenTasks || []).map((child) => (
+      {hasChildren && isExpanded && (childrenTasks || []).map((child, index) => (
         <ChildTaskRow
           key={child.id}
           task={child}
+          sharedGroupParentTask={task}
+          isLastInSharedGroup={index === childCount - 1}
           onOpenFile={onOpenFile}
           onStart={onStart}
           onPause={onPause}

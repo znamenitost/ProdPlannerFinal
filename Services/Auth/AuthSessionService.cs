@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using ProductionPlanner.Models;
 using ProductionPlanner.Models.Dtos;
 using System.Security.Claims;
@@ -8,18 +9,24 @@ namespace ProductionPlanner.Services.Auth;
 
 public class AuthSessionService : IAuthSessionService
 {
+    private const string LoginEmployeesCacheKey = "auth:login-employees";
+    private static readonly TimeSpan LoginEmployeesCacheDuration = TimeSpan.FromMinutes(5);
+
     private readonly SignInManager<User> _signInManager;
     private readonly UserManager<User> _userManager;
     private readonly IUserProvisioningService _provisioning;
+    private readonly IMemoryCache _cache;
 
     public AuthSessionService(
         SignInManager<User> signInManager,
         UserManager<User> userManager,
-        IUserProvisioningService provisioning)
+        IUserProvisioningService provisioning,
+        IMemoryCache cache)
     {
         _signInManager = signInManager;
         _userManager = userManager;
         _provisioning = provisioning;
+        _cache = cache;
     }
 
     public async Task<AuthUserDto> LoginEmployeeAsync(string fullName)
@@ -71,6 +78,17 @@ public class AuthSessionService : IAuthSessionService
     }
 
     public async Task<IReadOnlyList<LoginEmployeeDto>> GetLoginEmployeesAsync()
+    {
+        return await _cache.GetOrCreateAsync(LoginEmployeesCacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = LoginEmployeesCacheDuration;
+            return await LoadLoginEmployeesAsync();
+        }) ?? Array.Empty<LoginEmployeeDto>();
+    }
+
+    public void InvalidateLoginEmployeesCache() => _cache.Remove(LoginEmployeesCacheKey);
+
+    private async Task<IReadOnlyList<LoginEmployeeDto>> LoadLoginEmployeesAsync()
     {
         return await _userManager.Users
             .AsNoTracking()
