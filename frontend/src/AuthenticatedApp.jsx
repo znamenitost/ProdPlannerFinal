@@ -67,6 +67,7 @@ function AuthenticatedAppContent() {
   const [currentLunch, setCurrentLunch] = useState(null);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [avatarKey, setAvatarKey] = useState(Date.now());
+  const fileInputRef = useRef(null);
   const {
     refreshActiveTasks,
     refreshCalendar,
@@ -157,18 +158,16 @@ function AuthenticatedAppContent() {
   const handleCloseUserMenu = () => setAnchorElUser(null);
 
   const handleFileSelect = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/jpeg,image/png,image/gif,image/webp';
-    input.onchange = handleAvatarUpload;
-    input.click();
     handleCloseUserMenu();
+    requestAnimationFrame(() => {
+      fileInputRef.current?.click();
+    });
   };
 
   const handleAvatarUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith('image/') && !/\.svg$/i.test(file.name)) {
       showWarning('Пожалуйста, выберите изображение');
       return;
     }
@@ -188,7 +187,7 @@ function AuthenticatedAppContent() {
         credentials: 'include'
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
+      if (!response.ok) throw new Error(data.message || data.error || 'Ошибка загрузки');
 
       setUser(prev => ({
         ...prev,
@@ -200,6 +199,7 @@ function AuthenticatedAppContent() {
       showError(err.message || 'Ошибка загрузки');
     } finally {
       setUploadingAvatar(false);
+      event.target.value = '';
     }
   };
 
@@ -346,6 +346,7 @@ function AuthenticatedAppContent() {
                 )}
                 <IconButton onClick={handleOpenUserMenu} aria-label="Меню пользователя" sx={{ p: 0 }}>
                   <Avatar
+                    key={avatarKey}
                     src={avatarUrl}
                     imgProps={{ loading: 'lazy', decoding: 'async', fetchPriority: 'low' }}
                     sx={{ width: 56, height: 56, fontSize: '1.25rem', bgcolor: 'primary.main' }}
@@ -448,6 +449,14 @@ function AuthenticatedAppContent() {
           <ListItemText>Выйти</ListItemText>
         </MenuItem>
       </Menu>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        hidden
+        accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,.svg"
+        onChange={handleAvatarUpload}
+      />
 
       {isOnLunchBreak && (
         <LunchBreakOverlay

@@ -39,7 +39,6 @@ public class UserAvatarController : ControllerBase
     }
 
     [HttpGet("avatar/{userId}")]
-    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any, VaryByQueryKeys = ["w"])]
     public async Task<IActionResult> GetAvatar(string userId, [FromQuery] int? w = null)
     {
         var file = await _avatarService.GetFileAsync(userId, w);

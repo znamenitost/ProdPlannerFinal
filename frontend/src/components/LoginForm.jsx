@@ -37,27 +37,42 @@ export default function LoginForm({ onLogin }) {
     let cancelled = false;
     const controller = new AbortController();
 
-    fetch('/login-employees.json', {
-      signal: controller.signal,
-      priority: 'low',
-      cache: 'force-cache',
-    })
-      .then(async (response) => {
-        if (!response.ok) return null;
-        return response.json();
-      })
-      .then((list) => {
-        if (cancelled || !Array.isArray(list) || list.length === 0) return;
+    const loadEmployees = async () => {
+      let list = null;
 
-        const normalized = normalizeLoginEmployees(list);
-        if (normalized.length === 0) return;
+      try {
+        const jsonRes = await fetch('/login-employees.json', {
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+        if (jsonRes.ok) list = await jsonRes.json();
+      } catch {
+        // fallback ниже
+      }
 
-        setEmployees(normalized);
-        setSelectedEmployee((prev) =>
-          normalized.some((emp) => emp.fullName === prev) ? prev : normalized[0].fullName
-        );
-      })
-      .catch(() => {});
+      if (!Array.isArray(list) || list.length === 0) {
+        try {
+          const apiRes = await fetch('/api/auth/login-employees', {
+            signal: controller.signal,
+          });
+          if (apiRes.ok) list = await apiRes.json();
+        } catch {
+          return;
+        }
+      }
+
+      if (cancelled || !Array.isArray(list) || list.length === 0) return;
+
+      const normalized = normalizeLoginEmployees(list);
+      if (normalized.length === 0) return;
+
+      setEmployees(normalized);
+      setSelectedEmployee((prev) =>
+        normalized.some((emp) => emp.fullName === prev) ? prev : normalized[0].fullName
+      );
+    };
+
+    loadEmployees();
 
     return () => {
       cancelled = true;
@@ -182,9 +197,7 @@ export default function LoginForm({ onLogin }) {
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2 }}>
                       {employees.map((emp) => {
-                        const avatarSrc = emp.id && emp.avatarUrl
-                          ? avatarThumbUrl(emp.id)
-                          : undefined;
+                        const avatarSrc = emp.id ? avatarThumbUrl(emp.id) : undefined;
 
                         return (
                         <Card

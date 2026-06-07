@@ -10,7 +10,7 @@ namespace ProductionPlanner.Services.Auth;
 public class AvatarService : IAvatarService
 {
     private const int ThumbnailSize = 128;
-    private static readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+    private static readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"];
 
     private readonly UserManager<User> _userManager;
     private readonly IWebHostEnvironment _environment;
@@ -36,7 +36,7 @@ public class AvatarService : IAvatarService
 
         var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!AllowedExtensions.Contains(extension))
-            throw new ArgumentException("Разрешены только изображения (jpg, jpeg, png, gif, webp)");
+            throw new ArgumentException("Разрешены только изображения (jpg, jpeg, png, gif, webp, svg)");
 
         if (file.Length > 2 * 1024 * 1024)
             throw new ArgumentException("Размер файла не должен превышать 2MB");
@@ -63,7 +63,8 @@ public class AvatarService : IAvatarService
             await file.CopyToAsync(stream);
         }
 
-        await SaveThumbnailAsync(filePath, GetThumbnailPath(user.Id));
+        if (!IsSvg(filePath))
+            await SaveThumbnailAsync(filePath, GetThumbnailPath(user.Id));
 
         user.AvatarUrl = $"/avatars/{fileName}";
         await _userManager.UpdateAsync(user);
@@ -100,7 +101,7 @@ public class AvatarService : IAvatarService
         if (!File.Exists(filePath))
             return null;
 
-        var useThumbnail = maxWidth.HasValue && maxWidth.Value <= ThumbnailSize;
+        var useThumbnail = maxWidth.HasValue && maxWidth.Value <= ThumbnailSize && !IsSvg(filePath);
         if (useThumbnail)
         {
             var thumbPath = GetThumbnailPath(userId);
@@ -121,6 +122,9 @@ public class AvatarService : IAvatarService
 
     private async Task SaveThumbnailAsync(string sourcePath, string thumbPath)
     {
+        if (IsSvg(sourcePath))
+            return;
+
         await using var input = File.OpenRead(sourcePath);
         using var image = await Image.LoadAsync(input);
         image.Mutate(ctx => ctx.Resize(new ResizeOptions
@@ -145,12 +149,16 @@ public class AvatarService : IAvatarService
     private string MapWebPath(string avatarUrl) =>
         Path.Combine(WebRootPath, avatarUrl.TrimStart('/'));
 
+    private static bool IsSvg(string path) =>
+        Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase);
+
     private static string GetContentType(string extension) => extension.ToLower() switch
     {
         ".jpg" or ".jpeg" => "image/jpeg",
         ".png" => "image/png",
         ".gif" => "image/gif",
         ".webp" => "image/webp",
+        ".svg" => "image/svg+xml",
         _ => "application/octet-stream"
     };
 }
