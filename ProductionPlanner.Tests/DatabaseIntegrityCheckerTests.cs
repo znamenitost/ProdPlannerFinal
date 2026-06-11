@@ -70,6 +70,61 @@ public class DatabaseIntegrityCheckerTests
     }
 
     [Fact]
+    public async Task RunAsync_ignores_split_parent_without_own_open_interval()
+    {
+        await using var db = CreateDb();
+        var parent = new ProductionTask
+        {
+            DisplayOrder = 1,
+            FolderPath = "",
+            FileName = "shared.pdf",
+            Comment = "",
+            Deadline = DateTime.UtcNow.AddDays(1),
+            EstimateHours = 6,
+            Type = "Резка",
+            EmployeeName = "",
+            Status = JobStatus.InProgress,
+            IsSplitTask = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.ProductionTasks.Add(parent);
+        await db.SaveChangesAsync();
+
+        var child = new ProductionTask
+        {
+            DisplayOrder = -1,
+            FolderPath = "",
+            FileName = "shared-part.pdf",
+            Comment = "",
+            Deadline = parent.Deadline,
+            EstimateHours = 3,
+            Type = "Резка",
+            EmployeeName = "Иван",
+            Status = JobStatus.InProgress,
+            ParentRowNumber = parent.Id,
+            IsSplitTask = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.ProductionTasks.Add(child);
+        await db.SaveChangesAsync();
+
+        db.WorkIntervals.Add(new WorkInterval
+        {
+            ProductionTaskId = child.Id,
+            StartTime = DateTime.UtcNow.AddHours(-1),
+            EndTime = null
+        });
+        await db.SaveChangesAsync();
+
+        var report = await DatabaseIntegrityChecker.RunAsync(db, new PassthroughWorkHoursCalculator());
+
+        Assert.Equal(0, report.Checks.First(c => c.Id == "in_progress_without_open_interval").Count);
+        Assert.DoesNotContain(parent.Id, report.Checks.First(c => c.Id == "in_progress_without_open_interval").SampleIds);
+    }
+
+    [Fact]
     public async Task RunAsync_ok_when_data_is_consistent()
     {
         await using var db = CreateDb();

@@ -215,24 +215,12 @@ namespace ProductionPlanner.Services
                 }
             }
 
-            var lifecycle = _serviceProvider.GetRequiredService<ITaskLifecycleService>();
-
             foreach (var orphan in existingChildren.Where(c => !usedChildIds.Contains(c.Id)))
             {
                 if (CanRemoveChild(orphan))
-                {
-                    _context.ProductionTasks.Remove(orphan);
-                    var orphanSplits = splits.Where(s => s.ChildTaskId == orphan.Id).ToList();
-                    if (orphanSplits.Any())
-                        _context.TaskSplits.RemoveRange(orphanSplits);
-                }
-                else if (orphan.Status != JobStatus.Completed)
-                {
-                    await lifecycle.CompleteTaskAsync(orphan.Id, now, cancellationToken);
-                    var orphanSplits = splits.Where(s => s.ChildTaskId == orphan.Id).ToList();
-                    if (orphanSplits.Any())
-                        _context.TaskSplits.RemoveRange(orphanSplits);
-                }
+                    await RemoveSplitChildPhysicallyAsync(orphan.Id, splits, cancellationToken);
+                else
+                    await FinalizeRemovedSplitChildAsync(orphan.Id, now, cancellationToken);
             }
 
             await _repo.UpdateTaskAsync(parentTask, cancellationToken);
@@ -470,6 +458,46 @@ namespace ProductionPlanner.Services
             && child.ActualHours < 0.01
             && child.Progress < 0.01;
 
+        private static bool ShouldKeepRemovedChild(ProductionTask child) =>
+            (child.WorkIntervals?.Count ?? 0) > 0
+            || child.Status is not (JobStatus.Assigned or JobStatus.Waiting);
+
+        private async Task RemoveSplitChildPhysicallyAsync(
+            int childId,
+            List<TaskSplit> trackedSplits,
+            CancellationToken cancellationToken)
+        {
+            trackedSplits.RemoveAll(s => s.ChildTaskId == childId);
+            await _repo.DeleteTaskAsync(childId, cancellationToken);
+        }
+
+        /// <summary>
+        /// Убранная из сплита подзадача с историей: как удаление из таблицы — завершить,
+        /// скрыть от таблицы, отвязать от родителя (без «призрака» в TaskSplits).
+        /// </summary>
+        private async Task FinalizeRemovedSplitChildAsync(
+            int childId,
+            DateTime now,
+            CancellationToken cancellationToken)
+        {
+            var child = await _context.ProductionTasks
+                .Include(t => t.WorkIntervals)
+                .FirstOrDefaultAsync(t => t.Id == childId, cancellationToken);
+            if (child == null)
+                return;
+
+            var keepInCompletedStack = ShouldKeepRemovedChild(child);
+            var lifecycle = _serviceProvider.GetRequiredService<ITaskLifecycleService>();
+
+            if (child.Status != JobStatus.Completed)
+                await lifecycle.CompleteTaskAsync(child.Id, now, cancellationToken);
+
+            if (keepInCompletedStack)
+                await _repo.HideTaskFromTableAsync(child.Id, cancellationToken);
+
+            await _repo.DetachTasksFromSplitAsync([child.Id], cancellationToken);
+        }
+
         private static bool HasWorkHistory(ProductionTask task) =>
             (task.WorkIntervals?.Count ?? 0) > 0
             || task.Status is JobStatus.InProgress or JobStatus.Paused or JobStatus.Completed;
@@ -547,20 +575,15 @@ namespace ProductionPlanner.Services
             var splits = await _context.TaskSplits
                 .Where(ts => ts.ParentRowNumber == parent.Id)
                 .ToListAsync(cancellationToken);
-            var lifecycle = _serviceProvider.GetRequiredService<ITaskLifecycleService>();
 
             var keptChild = ResolveChildForPart(part, activeChildren, new HashSet<int>());
 
             foreach (var child in allChildren.Where(c => keptChild == null || c.Id != keptChild.Id))
             {
                 if (CanRemoveChild(child))
-                {
-                    _context.ProductionTasks.Remove(child);
-                }
-                else if (child.Status != JobStatus.Completed)
-                {
-                    await lifecycle.CompleteTaskAsync(child.Id, now, cancellationToken);
-                }
+                    await RemoveSplitChildPhysicallyAsync(child.Id, splits, cancellationToken);
+                else
+                    await FinalizeRemovedSplitChildAsync(child.Id, now, cancellationToken);
             }
 
             parent.EmployeeName = part.EmployeeName;
@@ -607,8 +630,11 @@ namespace ProductionPlanner.Services
                 }
             }
 
-            if (splits.Any())
-                _context.TaskSplits.RemoveRange(splits);
+            var remainingSplits = await _context.TaskSplits
+                .Where(ts => ts.ParentRowNumber == parent.Id)
+                .ToListAsync(cancellationToken);
+            if (remainingSplits.Count > 0)
+                _context.TaskSplits.RemoveRange(remainingSplits);
 
             await _repo.UpdateTaskAsync(parent, cancellationToken);
 

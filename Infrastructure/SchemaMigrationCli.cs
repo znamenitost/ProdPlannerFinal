@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ProductionPlanner.Data;
-using ProductionPlanner.Services;
 
 namespace ProductionPlanner.Infrastructure;
 
@@ -40,17 +39,13 @@ public static class SchemaMigrationCli
             options
                 .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
                 .UseNpgsql(postgres, npgsql => npgsql.EnableRetryOnFailure(maxRetryCount: 3)));
-        services.AddSingleton<IAppTimeService, AppTimeService>();
-        services.AddScoped<IProductionTaskRepository, ProductionTaskRepository>();
-
         await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         try
         {
-            await using var scope = provider.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            await PostgresSchemaMigrator.ApplyAsync(db, logger, cancellationToken: default);
-            await DeployDataPatches.ApplyAsync(provider, logger);
+            await PostgresSchemaMigrator.ApplyAsync(db, logger);
             Console.WriteLine("OK: схема PostgreSQL обновлена.");
             return 0;
         }

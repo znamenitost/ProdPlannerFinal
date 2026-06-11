@@ -25,6 +25,8 @@ export default function TaskTableToolbar({
   onColumnVisibilityReset,
   textLimit,
   onTextLimitChange,
+  deadlineSort,
+  onDeadlineSortChange,
   completedBottomSort,
   onCompletedBottomSortChange
 }) {
@@ -63,7 +65,11 @@ export default function TaskTableToolbar({
             color="primary"
             onClick={handleOpenSortMenu}
             aria-label="Сортировка таблицы задач"
-            sx={completedBottomSort ? { border: '1px solid', borderColor: 'primary.main' } : undefined}
+            sx={
+              deadlineSort || completedBottomSort
+                ? { border: '1px solid', borderColor: 'primary.main' }
+                : undefined
+            }
           >
             <Sort />
           </IconButton>
@@ -75,6 +81,16 @@ export default function TaskTableToolbar({
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         >
+          <MenuItem onClick={() => onDeadlineSortChange(!deadlineSort)}>
+            <Checkbox
+              size="small"
+              checked={deadlineSort}
+              disableRipple
+              tabIndex={-1}
+              sx={{ pointerEvents: 'none' }}
+            />
+            <ListItemText primary="По дедлайну" />
+          </MenuItem>
           <MenuItem onClick={() => onCompletedBottomSortChange(!completedBottomSort)}>
             <Checkbox
               size="small"
@@ -83,10 +99,7 @@ export default function TaskTableToolbar({
               tabIndex={-1}
               sx={{ pointerEvents: 'none' }}
             />
-            <ListItemText
-              primary="Готовые всегда снизу"
-              secondary="Сортировка по дедлайну"
-            />
+            <ListItemText primary="Готовые всегда снизу" />
           </MenuItem>
         </Menu>
         <TaskTableColumnSettings

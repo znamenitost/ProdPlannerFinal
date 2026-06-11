@@ -201,6 +201,7 @@ public static class DatabaseIntegrityChecker
         var ids = await db.ProductionTasks
             .AsNoTracking()
             .Where(t => t.Status == JobStatus.InProgress)
+            .Where(t => !(t.IsSplitTask && t.ParentRowNumber == null))
             .Where(t => !t.WorkIntervals.Any(i => i.EndTime == null))
             .Select(t => t.Id)
             .ToListAsync(cancellationToken);
@@ -210,7 +211,7 @@ public static class DatabaseIntegrityChecker
             "В работе без открытого интервала",
             "warning",
             ids,
-            "Поставьте на паузу и продолжите или создайте интервал вручную.");
+            "Поставьте на паузу и продолжите или создайте интервал вручную. Для общих задач интервалы учитываются у подзадач.");
     }
 
     private static async Task<DbIntegrityCheck> PausedWithOpenIntervalAsync(

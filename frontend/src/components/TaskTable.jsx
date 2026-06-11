@@ -43,18 +43,21 @@ function getDeadlineSortValue(row) {
   return Number.isNaN(value) ? Number.POSITIVE_INFINITY : value;
 }
 
-function compareTaskRows(a, b, completedBottomSort) {
+function compareTaskRows(a, b, { completedBottomSort, deadlineSort }) {
   if (completedBottomSort) {
     const completedDiff = Number(isCompletedRow(a)) - Number(isCompletedRow(b));
     if (completedDiff) return completedDiff;
   }
-  return getDeadlineSortValue(a) - getDeadlineSortValue(b);
+  if (deadlineSort) {
+    return getDeadlineSortValue(a) - getDeadlineSortValue(b);
+  }
+  return 0;
 }
 
-function sortRowsWithStableOrder(rows, completedBottomSort) {
+function sortRowsWithStableOrder(rows, sortOptions) {
   return rows
     .map((row, index) => ({ row, index }))
-    .sort((a, b) => compareTaskRows(a.row, b.row, completedBottomSort) || a.index - b.index)
+    .sort((a, b) => compareTaskRows(a.row, b.row, sortOptions) || a.index - b.index)
     .map(({ row }) => row);
 }
 
@@ -91,11 +94,16 @@ export default function TaskTable({
     selectedEmployeeForHighlight
   });
   const columnSettings = useTaskTableColumnVisibility(currentUser);
+  const [deadlineSort, setDeadlineSort] = useState(true);
   const [completedBottomSort, setCompletedBottomSort] = useState(true);
+  const sortOptions = useMemo(
+    () => ({ deadlineSort, completedBottomSort }),
+    [deadlineSort, completedBottomSort]
+  );
 
   const visibleRows = useMemo(
-    () => sortRowsWithStableOrder(table.rows, completedBottomSort),
-    [table.rows, completedBottomSort]
+    () => sortRowsWithStableOrder(table.rows, sortOptions),
+    [table.rows, sortOptions]
   );
 
   const tableColSpan = taskTableColumnCount(
@@ -149,7 +157,7 @@ export default function TaskTable({
       resizeObserver.disconnect();
       window.removeEventListener('resize', measureScrollMargin);
     };
-  }, [measureScrollMargin, table.rows.length, table.page, completedBottomSort]);
+  }, [measureScrollMargin, table.rows.length, table.page, sortOptions]);
 
   const rowVirtualizer = useWindowVirtualizer({
     count: visibleRows.length,
@@ -184,7 +192,7 @@ export default function TaskTable({
   const renderTaskRow = (parent) => {
     const children = sortRowsWithStableOrder(
       table.childrenCache.get(parent.id) || [],
-      completedBottomSort
+      sortOptions
     );
     const isExpanded = table.expandedRows.has(parent.id);
     return table.editingId === parent.id ? (
@@ -248,6 +256,8 @@ export default function TaskTable({
         onColumnVisibilityReset={columnSettings.resetColumns}
         textLimit={columnSettings.textLimit}
         onTextLimitChange={columnSettings.setTextLimit}
+        deadlineSort={deadlineSort}
+        onDeadlineSortChange={setDeadlineSort}
         completedBottomSort={completedBottomSort}
         onCompletedBottomSortChange={setCompletedBottomSort}
       />

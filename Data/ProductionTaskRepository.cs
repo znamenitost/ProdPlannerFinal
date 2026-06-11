@@ -296,6 +296,12 @@ namespace ProductionPlanner.Data
                 foreach (var taskId in taskIdsToClose.Distinct())
                     await CloseOpenIntervalsAsync(taskId, closedAt, ct);
 
+                var splitsAsChild = await _context.TaskSplits
+                    .Where(ts => ts.ChildTaskId == id)
+                    .ToListAsync(ct);
+                if (splitsAsChild.Count > 0)
+                    _context.TaskSplits.RemoveRange(splitsAsChild);
+
                 if (task.IsSplitTask)
                 {
                     var children = await _context.ProductionTasks
