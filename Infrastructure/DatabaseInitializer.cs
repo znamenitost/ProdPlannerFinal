@@ -33,8 +33,9 @@ public static class DatabaseInitializer
 
         if (db.Database.IsNpgsql())
         {
+            await PostgresSchemaMigrator.ApplyCompatibilityPatchesAsync(db, logger);
             logger.LogInformation(
-                "PostgreSQL: миграции при старте отключены. При деплое выполняйте: dotnet run -- apply-migrations");
+                "PostgreSQL: проверка совместимости схемы выполнена. Полные EF-миграции: dotnet run -- apply-migrations");
         }
         else
         {

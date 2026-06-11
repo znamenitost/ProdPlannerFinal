@@ -19,6 +19,20 @@ public static class PostgresSchemaMigrator
         await db.Database.MigrateAsync(cancellationToken);
         logger.LogInformation("Схема PostgreSQL применена (EF migrations).");
 
+        await ApplyCompatibilityPatchesAsync(db, logger, cancellationToken);
+    }
+
+    /// <summary>
+    /// Идемпотентные ALTER/CREATE для колонок вне цепочки EF или если apply-migrations не запускался при деплое.
+    /// </summary>
+    public static async Task ApplyCompatibilityPatchesAsync(
+        ApplicationDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken = default)
+    {
+        if (!db.Database.IsNpgsql())
+            return;
+
         await ApplyProductionTasksCompatibilityPatchAsync(db, logger, cancellationToken);
         await ApplyUserNotificationsPatchAsync(db, logger, cancellationToken);
         await ApplyLunchIntervalsPatchAsync(db, logger, cancellationToken);
@@ -38,8 +52,29 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE "ProductionTasks"
                     ADD COLUMN IF NOT EXISTS "HiddenFromTaskTable" boolean NOT NULL DEFAULT false;
 
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "RequiresTestBeforeProduction" boolean NOT NULL DEFAULT false;
+
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "TestEstimateHours" double precision NOT NULL DEFAULT 0;
+
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "ProductionEstimateHours" double precision NOT NULL DEFAULT 0;
+
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "WorkPhase" integer NOT NULL DEFAULT 0;
+
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "TestPhaseCompletedAt" timestamp with time zone NULL;
+
                 ALTER TABLE "TaskSplits"
                     ADD COLUMN IF NOT EXISTS "SequenceOrder" integer NOT NULL DEFAULT 0;
+
+                ALTER TABLE "TaskSplits"
+                    ADD COLUMN IF NOT EXISTS "IsApprovalTestPart" boolean NOT NULL DEFAULT false;
+
+                ALTER TABLE "TaskSplits"
+                    ADD COLUMN IF NOT EXISTS "ApprovalGateTestChildId" integer NULL;
                 """, cancellationToken);
             logger.LogInformation("Колонки совместимости ProductionTasks/TaskSplits проверены/созданы (PostgreSQL).");
         }

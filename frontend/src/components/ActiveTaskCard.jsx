@@ -81,6 +81,15 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
   const isInProgress = task.status === 1;
   const isPaused = task.status === 2;
   const isCompleted = task.status === 3;
+  const showWorkflowButtons = !isCompleted && (
+    sequenceBlocked || showInfoStatus || (!blocked && (isAssignedLike || isInProgress || isPaused))
+  );
+  const canComplete = isInProgress || isPaused;
+  const primaryAction = isPaused ? 'resume' : isInProgress ? 'pause' : 'start';
+  const primaryLabel = isPaused ? 'Продолжить' : isInProgress ? 'Пауза' : 'Начал';
+  const PrimaryIcon = isInProgress ? Pause : PlayArrow;
+  const primaryColor = isInProgress ? 'warning' : 'success';
+  const primaryBlocked = sequenceBlocked || showInfoStatus;
   const sharedTaskIconSx = {
     color: (theme) => task.supplyMode === SUPPLY_MODE_INTERNAL
       ? theme.palette.info.main
@@ -167,92 +176,30 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
 
           <Box sx={{ position: 'relative', display: 'inline-flex', maxWidth: '100%' }}>
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
-            {sequenceBlocked && !isCompleted && (
-              <Button
-                size="small"
-                variant="compact"
-                color="success"
-                startIcon={<PlayArrow />}
-                disabled={statusActionsDisabled}
-                onClick={() => onAction(task, 'start')}
-                sx={blockedButtonSx}
-              >
-                Начал
-              </Button>
-            )}
-            {!sequenceBlocked && showInfoStatus && !isCompleted && (
+            {showWorkflowButtons && (
               <>
                 <Button
                   size="small"
                   variant="compact"
-                  color="success"
-                  startIcon={<PlayArrow />}
+                  color={primaryColor}
+                  startIcon={<PrimaryIcon />}
                   disabled={statusActionsDisabled}
-                  onClick={() => onAction(task, 'start')}
-                  sx={blockedButtonSx}
+                  onClick={() => onAction(task, primaryAction)}
+                  sx={primaryBlocked ? blockedButtonSx : undefined}
                 >
-                  Начал
-                </Button>
-                <Button
-                  size="small"
-                  variant="compact"
-                  color="warning"
-                  startIcon={<Pause />}
-                  disabled
-                  sx={blockedButtonSx}
-                >
-                  Пауза
+                  {primaryLabel}
                 </Button>
                 <Button
                   size="small"
                   variant="compact"
                   color="primary"
                   startIcon={<CheckCircle />}
-                  disabled
-                  sx={blockedButtonSx}
+                  disabled={statusActionsDisabled || !canComplete}
+                  onClick={() => onAction(task, 'complete')}
+                  sx={primaryBlocked ? blockedButtonSx : undefined}
                 >
                   Готово
                 </Button>
-              </>
-            )}
-            {!blocked && (isAssignedLike || isInProgress || isPaused) && !isCompleted && (
-              <>
-                {(isAssignedLike || isPaused) && (
-                  <Button
-                    size="small"
-                    variant="compact"
-                    color="success"
-                    startIcon={<PlayArrow />}
-                    disabled={statusActionsDisabled}
-                    onClick={() => onAction(task, isPaused ? 'resume' : 'start')}
-                  >
-                    {isPaused ? 'Продолжить' : 'Начал'}
-                  </Button>
-                )}
-                {isInProgress && (
-                  <Button
-                    size="small"
-                    variant="compact"
-                    color="warning"
-                    startIcon={<Pause />}
-                    disabled={statusActionsDisabled}
-                    onClick={() => onAction(task, 'pause')}
-                  >
-                    Пауза
-                  </Button>
-                )}
-                {(isInProgress || isPaused) && (
-                  <Button
-                    size="small"
-                    variant="compact"
-                    color="primary"
-                    startIcon={<CheckCircle />}
-                    disabled={statusActionsDisabled}
-                    onClick={() => onAction(task, 'complete')}
-                  >
-                    Готово
-                  </Button>
-                )}
               </>
             )}
             {!blocked && !isCompleted && (
