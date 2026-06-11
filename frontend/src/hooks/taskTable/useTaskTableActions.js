@@ -127,59 +127,59 @@ export default function useTaskTableActions({
 
   const handleSaveNewRow = useCallback(async () => {
     if (savingNewRowRef.current) return;
-
-    const isShared = newRow.isSharedTask && newRow.assigneeParts?.length >= 2;
-    const hasSingleAssignee = Boolean(newRow.employeeName);
-
-    if (!isShared && !hasSingleAssignee) {
-      showWarning('Назначьте сотрудника и часы через иконку участников');
-      return;
-    }
-
-    const payload = {
-      folderPath: newRow.folderPath,
-      fileName: newRow.fileName,
-      comment: newRow.comment,
-      deadline: newRow.deadline,
-      parentRowNumber: null
-    };
-
-    if (isShared) {
-      payload.parts = newRow.assigneeParts;
-      payload.estimateHours = newRow.assigneeParts.reduce(
-        (s, p) => s + (p.allocatedHours || 0),
-        0
-      );
-      payload.supplyMode =
-        newRow.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL
-          ? SUPPLY_MODE_INTERNAL
-          : SUPPLY_MODE_COOPERATIVE;
-    } else if (newRow.requiresTestBeforeProduction) {
-      const testH = parseFloat(newRow.testEstimateHours);
-      const prodH = parseFloat(newRow.productionEstimateHours);
-      if (!testH || testH < 0.5 || !prodH || prodH < 0.5) {
-        showWarning('Укажите часы теста и основной части (от 0.5)');
-        return;
-      }
-      payload.requiresTestBeforeProduction = true;
-      payload.testEstimateHours = testH;
-      payload.productionEstimateHours = prodH;
-      payload.estimateHours = testH + prodH;
-      payload.type = (newRow.types || []).join(', ');
-      payload.employeeName = newRow.employeeName;
-    } else {
-      const hours = parseFloat(newRow.estimateHours);
-      if (!hours || hours < 0.5 || hours > 24) {
-        showWarning('Укажите часы в назначениях (от 0.5 до 24)');
-        return;
-      }
-      payload.estimateHours = hours;
-      payload.type = (newRow.types || []).join(', ');
-      payload.employeeName = newRow.employeeName;
-    }
-
     savingNewRowRef.current = true;
+
     try {
+      const isShared = newRow.isSharedTask && newRow.assigneeParts?.length >= 2;
+      const hasSingleAssignee = Boolean(newRow.employeeName);
+
+      if (!isShared && !hasSingleAssignee) {
+        showWarning('Назначьте сотрудника и часы через иконку участников');
+        return;
+      }
+
+      const payload = {
+        folderPath: newRow.folderPath,
+        fileName: newRow.fileName,
+        comment: newRow.comment,
+        deadline: newRow.deadline,
+        parentRowNumber: null
+      };
+
+      if (isShared) {
+        payload.parts = newRow.assigneeParts;
+        payload.estimateHours = newRow.assigneeParts.reduce(
+          (s, p) => s + (p.allocatedHours || 0),
+          0
+        );
+        payload.supplyMode =
+          newRow.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL
+            ? SUPPLY_MODE_INTERNAL
+            : SUPPLY_MODE_COOPERATIVE;
+      } else if (newRow.requiresTestBeforeProduction) {
+        const testH = parseFloat(newRow.testEstimateHours);
+        const prodH = parseFloat(newRow.productionEstimateHours);
+        if (!testH || testH < 0.5 || !prodH || prodH < 0.5) {
+          showWarning('Укажите часы теста и основной части (от 0.5)');
+          return;
+        }
+        payload.requiresTestBeforeProduction = true;
+        payload.testEstimateHours = testH;
+        payload.productionEstimateHours = prodH;
+        payload.estimateHours = testH + prodH;
+        payload.type = (newRow.types || []).join(', ');
+        payload.employeeName = newRow.employeeName;
+      } else {
+        const hours = parseFloat(newRow.estimateHours);
+        if (!hours || hours < 0.5 || hours > 24) {
+          showWarning('Укажите часы в назначениях (от 0.5 до 24)');
+          return;
+        }
+        payload.estimateHours = hours;
+        payload.type = (newRow.types || []).join(', ');
+        payload.employeeName = newRow.employeeName;
+      }
+
       const raw = await api.createRow(payload);
       const { task: created, planningWarnings } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
@@ -323,19 +323,17 @@ export default function useTaskTableActions({
   }, [api, syncRowFromServer, showError, setPendingLifecycleTask]);
 
   const handleDeleteRow = useCallback(async (id) => {
-    if (deletingRowIdRef.current === id) return;
+    if (deletingRowIdRef.current != null) return;
 
-    deletingRowIdRef.current = id;
     const confirmed = await confirm({
       title: 'Удалить задачу?',
       message: 'Задача будет удалена без возможности восстановления.',
       confirmLabel: 'Удалить',
       confirmColor: 'error',
     });
-    if (!confirmed) {
-      deletingRowIdRef.current = null;
-      return;
-    }
+    if (!confirmed) return;
+
+    deletingRowIdRef.current = id;
     try {
       await api.deleteRow(id);
       removeRow(id);

@@ -28,26 +28,21 @@ public class WeekCalendarService : IWeekCalendarService
         var weekStart = WeekCalendarDateHelper.ResolveWeekStart(startDate, currentTime);
         var weekEnd = weekStart.AddDays(7);
 
-        var tasksTask = _repo.GetEmployeeTasksForCalendarWeekAsync(
+        var allEmployeeTasks = await _repo.GetEmployeeTasksForCalendarWeekAsync(
             employee,
             weekStart,
             weekEnd,
             cancellationToken);
-        var intervalsTask = _repo.GetWorkIntervalsForDateRangeAsync(
+        var intervals = await _repo.GetWorkIntervalsForDateRangeAsync(
             employee,
             weekStart,
             weekEnd,
             cancellationToken);
-        var lunchTask = _repo.GetLunchIntervalsForDateRangeAsync(
+        var lunchIntervals = await _repo.GetLunchIntervalsForDateRangeAsync(
             employee,
             weekStart,
             weekEnd,
             cancellationToken);
-        await Task.WhenAll(tasksTask, intervalsTask, lunchTask);
-
-        var allEmployeeTasks = await tasksTask;
-        var intervals = await intervalsTask;
-        var lunchIntervals = await lunchTask;
 
         var intervalsByTask = intervals
             .GroupBy(i => i.ProductionTaskId)

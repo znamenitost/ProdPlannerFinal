@@ -60,6 +60,7 @@ export default function TaskIntervalsDialog({
   };
 
   const handleSubmit = () => {
+    if (pending) return;
     const payload = rows.map((r) => ({
       id: r.id,
       startTime: fromInputValue(r.startTime),

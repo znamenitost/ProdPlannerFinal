@@ -77,6 +77,7 @@ function ParentTaskRow({
   textLimit: limit = 23
 }) {
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
+  const lifecycleBusy = pendingLifecycleTaskId != null;
 
   const displayStatus = task.statusText || 'Назначена';
 
@@ -273,6 +274,7 @@ function ParentTaskRow({
               <TaskAdminActionStacks
                 task={task}
                 pending={pendingLifecycleTaskId === task.id}
+                lifecycleBusy={lifecycleBusy}
                 onEdit={() => onEdit(task.id)}
                 onDelete={() => onDelete(task.id)}
                 onIntervals={() => onOpenIntervals(task)}
@@ -288,6 +290,7 @@ function ParentTaskRow({
               <EmployeeStatusButtons
                 task={task}
                 pending={pendingLifecycleTaskId === task.id}
+                lifecycleBusy={lifecycleBusy}
                 onStart={onStart}
                 onPause={onPause}
                 onResume={onResume}

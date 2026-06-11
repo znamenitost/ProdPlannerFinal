@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { childrenToModalParts, apiPartsToModalParts, taskToModalParts } from '../../utils/splitTaskUtils';
 import { SUPPLY_MODE_INTERNAL, TASK_EXECUTION_PARALLEL, TASK_EXECUTION_SEQUENTIAL } from '../../constants/taskStatuses';
 
@@ -28,6 +28,8 @@ export default function useTaskTableModals({
   const [splitModalInitialParts, setSplitModalInitialParts] = useState(null);
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [selectedCommentTask, setSelectedCommentTask] = useState(null);
+  const [commentSaving, setCommentSaving] = useState(false);
+  const savingCommentRef = useRef(false);
 
   const closeSplitModal = useCallback(() => {
     setSplitModalOpen(false);
@@ -168,11 +170,13 @@ export default function useTaskTableModals({
   }, []);
 
   const handleSaveComment = useCallback(async (newComment) => {
-    if (!selectedCommentTask) return;
+    if (!selectedCommentTask || savingCommentRef.current) return;
+
+    savingCommentRef.current = true;
+    setCommentSaving(true);
     const task = selectedCommentTask;
-    const updatedTask = { ...task, comment: newComment };
     try {
-      await api.updateRow(updatedTask.id, updatedTask);
+      await api.updateRow(task.id, { ...task, comment: newComment });
 
       const parentId = task.parentRowNumber;
       if (parentId) {
@@ -189,6 +193,9 @@ export default function useTaskTableModals({
     } catch (err) {
       console.error(err);
       showError('Ошибка сохранения комментария');
+    } finally {
+      savingCommentRef.current = false;
+      setCommentSaving(false);
     }
   }, [
     api,
@@ -211,6 +218,7 @@ export default function useTaskTableModals({
     splitModalInitialParts,
     commentDialogOpen,
     selectedCommentTask,
+    commentSaving,
     closeSplitModal,
     handleOpenNewSharedModal,
     handleDraftApply,

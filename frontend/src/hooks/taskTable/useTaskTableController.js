@@ -26,6 +26,7 @@ export default function useTaskTableController({
   const [intervalsPending, setIntervalsPending] = useState(false);
   const [intervalsTask, setIntervalsTask] = useState(null);
   const [intervalsRows, setIntervalsRows] = useState([]);
+  const intervalsSavingRef = useRef(false);
 
   const rowsState = useTaskTableRows(api, {
     selectedEmployeeForHighlight,
@@ -145,7 +146,8 @@ export default function useTaskTableController({
   }, [intervalsPending]);
 
   const handleSaveIntervals = useCallback(async (payload) => {
-    if (!intervalsTask) return;
+    if (!intervalsTask || intervalsSavingRef.current) return;
+    intervalsSavingRef.current = true;
     setIntervalsPending(true);
     try {
       await api.updateIntervals(intervalsTask.id, payload);
@@ -155,6 +157,7 @@ export default function useTaskTableController({
     } catch (err) {
       showError(err.message || 'Не удалось сохранить интервалы');
     } finally {
+      intervalsSavingRef.current = false;
       setIntervalsPending(false);
     }
   }, [api, intervalsTask, refresh, showError, showSuccess]);
@@ -178,6 +181,7 @@ export default function useTaskTableController({
     handleCloseIntervals,
     handleSaveIntervals,
     handleSaveComment: modals.handleSaveComment,
+    commentSaving: modals.commentSaving,
     planningWarnings,
     dismissPlanningWarning
   };

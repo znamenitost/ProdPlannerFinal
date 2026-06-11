@@ -322,6 +322,7 @@ export default function TaskTable({
       <CommentDialog
         open={table.commentDialogOpen}
         comment={table.selectedCommentTask?.comment || ''}
+        pending={table.commentSaving}
         onSave={table.handleSaveComment}
         onClose={() => table.setCommentDialogOpen(false)}
       />

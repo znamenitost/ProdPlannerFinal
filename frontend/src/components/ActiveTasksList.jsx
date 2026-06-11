@@ -122,6 +122,9 @@ export default function ActiveTasksList({
       });
     } catch (err) {
       console.error('Ошибка действия:', err);
+      if (err?.code === 'concurrency_conflict') {
+        await onUpdate();
+      }
       showError(err.message || 'Не удалось выполнить действие');
     } finally {
       setPendingTask(null);

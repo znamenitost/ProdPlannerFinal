@@ -120,7 +120,7 @@ export async function completeTask(id) {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' }
   });
-  await throwIfNotOk(res, 'Ошибка завершения задачи');
+  if (!res.ok) await throwApiError(res, 'Ошибка завершения задачи');
 }
 
 export function buildTaskUpdatePayload(task, employeeName, statusText, extra) {

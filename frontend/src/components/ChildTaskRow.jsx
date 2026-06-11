@@ -105,6 +105,7 @@ function ChildTaskRow({
   };
 
   const showActionButtons = canUserManage() && canChangeStatus;
+  const lifecycleBusy = pendingLifecycleTaskId != null;
   const tableColSpan = taskTableColumnCount(columnVisibility, showHoursTypeColumns);
 
   return (
@@ -193,6 +194,7 @@ function ChildTaskRow({
             <TaskAdminActionStacks
               task={task}
               pending={pendingLifecycleTaskId === task.id}
+              lifecycleBusy={lifecycleBusy}
               onEdit={() => onEdit(task.id)}
               onDelete={() => onDelete(task.id)}
               onIntervals={() => onOpenIntervals(task)}
@@ -208,6 +210,7 @@ function ChildTaskRow({
             <EmployeeStatusButtons
             task={task}
             pending={pendingLifecycleTaskId === task.id}
+            lifecycleBusy={lifecycleBusy}
             onStart={onStart}
             onPause={onPause}
             onResume={onResume}

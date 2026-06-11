@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from '@mui/material';
 import { Comment, Save, Close } from '@mui/icons-material';
 
-export default function CommentDialog({ open, comment, onSave, onClose }) {
+export default function CommentDialog({ open, comment, pending = false, onSave, onClose }) {
   const [value, setValue] = useState(comment || '');
 
   useEffect(() => {
@@ -13,11 +13,12 @@ export default function CommentDialog({ open, comment, onSave, onClose }) {
   }, [open, comment]);
 
   const handleSave = () => {
+    if (pending) return;
     onSave(value);
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={pending ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <Comment color="primary" fontSize="small" />
         Редактирование комментария
@@ -35,8 +36,10 @@ export default function CommentDialog({ open, comment, onSave, onClose }) {
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} startIcon={<Close />}>Отмена</Button>
-        <Button onClick={handleSave} variant="contained" startIcon={<Save />}>Сохранить</Button>
+        <Button onClick={onClose} startIcon={<Close />} disabled={pending}>Отмена</Button>
+        <Button onClick={handleSave} variant="contained" startIcon={<Save />} disabled={pending}>
+          Сохранить
+        </Button>
       </DialogActions>
     </Dialog>
   );
