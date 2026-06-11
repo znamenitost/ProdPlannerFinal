@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
-export default function useTaskTableChildren(api, tableDataUpdatedAt) {
+export default function useTaskTableChildren(api) {
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [childrenCache, setChildrenCache] = useState(new Map());
   const [loadingChildren, setLoadingChildren] = useState(new Set());
@@ -58,46 +58,35 @@ export default function useTaskTableChildren(api, tableDataUpdatedAt) {
     }
   }, [api]);
 
-  useEffect(() => {
+  const refreshExpandedChildren = useCallback(async () => {
     const parents = [...expandedRowsRef.current];
-    if (parents.length === 0) {
-      setChildrenCache(new Map());
-      return undefined;
-    }
+    if (parents.length === 0) return;
 
-    let cancelled = false;
-    setChildrenCache(new Map());
-
-    parents.forEach(async (parentId) => {
-      try {
-        const children = await api.loadChildren(parentId);
-        if (!cancelled) {
+    await Promise.all(
+      parents.map(async (parentId) => {
+        try {
+          const children = await api.loadChildren(parentId);
           setChildrenCache((prev) => new Map(prev).set(parentId, children));
-        }
-      } catch (err) {
-        if (!cancelled) {
+        } catch (err) {
           console.error('Ошибка обновления дочерних задач', err);
         }
-      }
-    });
+      })
+    );
+  }, [api]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [tableDataUpdatedAt, api]);
-
-  const toggleExpand = async (parentId) => {
-    if (expandedRows.has(parentId)) {
+  const toggleExpand = useCallback(async (parentId) => {
+    if (expandedRowsRef.current.has(parentId)) {
       setExpandedRows((prev) => {
         const newSet = new Set(prev);
         newSet.delete(parentId);
         return newSet;
       });
-    } else {
-      await loadChildrenForParent(parentId, { force: true });
-      setExpandedRows((prev) => new Set(prev).add(parentId));
+      return;
     }
-  };
+
+    await loadChildrenForParent(parentId, { force: true });
+    setExpandedRows((prev) => new Set(prev).add(parentId));
+  }, [loadChildrenForParent]);
 
   const setChildrenForParent = useCallback((parentId, children) => {
     setChildrenCache((prev) => new Map(prev).set(parentId, children));
@@ -139,6 +128,7 @@ export default function useTaskTableChildren(api, tableDataUpdatedAt) {
     toggleExpand,
     loadChildrenForParent,
     refreshChildren,
+    refreshExpandedChildren,
     setChildrenForParent,
     clearChildrenCache,
     invalidateChildCache,

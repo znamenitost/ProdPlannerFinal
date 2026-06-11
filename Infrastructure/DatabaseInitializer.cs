@@ -97,6 +97,7 @@ public static class DatabaseInitializer
             await ApplyTaskSplitsSchemaPatchesAsync(connection, logger);
             await EnsureUserNotificationsTableSqliteAsync(connection, logger);
             await EnsureLunchIntervalsTableSqliteAsync(connection, logger);
+            await ApplyPhase2PerformanceIndexesSqliteAsync(connection, logger);
             await connection.CloseAsync();
         }
         catch (Exception ex)
@@ -161,6 +162,28 @@ public static class DatabaseInitializer
             """;
         await createNotifications.ExecuteNonQueryAsync();
         logger.LogInformation("Таблица UserNotifications проверена/создана.");
+    }
+
+    private static async Task ApplyPhase2PerformanceIndexesSqliteAsync(
+        System.Data.Common.DbConnection connection,
+        ILogger logger)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            CREATE INDEX IF NOT EXISTS IX_WorkIntervals_OpenInterval
+                ON WorkIntervals(ProductionTaskId) WHERE EndTime IS NULL;
+            CREATE INDEX IF NOT EXISTS IX_WorkIntervals_RangeLookup
+                ON WorkIntervals(StartTime, EndTime);
+            CREATE INDEX IF NOT EXISTS IX_ProductionTasks_EmployeeName_CompletedAt
+                ON ProductionTasks(EmployeeName, CompletedAt) WHERE Status = 3;
+            CREATE INDEX IF NOT EXISTS IX_ProductionTasks_RootTableVisible
+                ON ProductionTasks(DisplayOrder DESC, Id DESC)
+                WHERE ParentRowNumber IS NULL AND HiddenFromTaskTable = 0;
+            CREATE INDEX IF NOT EXISTS IX_Users_FullName
+                ON Users(FullName);
+            """;
+        await cmd.ExecuteNonQueryAsync();
+        logger.LogInformation("Индексы производительности (phase 2) проверены/созданы (SQLite).");
     }
 
     private static async Task EnsureLunchIntervalsTableSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)

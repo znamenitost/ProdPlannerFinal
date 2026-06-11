@@ -116,7 +116,8 @@ namespace ProductionPlanner.Data
 
             var taskIdsWithIntervals = await _context.WorkIntervals
                 .AsNoTracking()
-                .Where(i => i.StartTime < rangeEnd
+                .Where(i => i.Task.EmployeeName == employeeName
+                    && i.StartTime < rangeEnd
                     && (i.EndTime == null || i.EndTime > rangeStart))
                 .Select(i => i.ProductionTaskId)
                 .Distinct()
@@ -367,6 +368,9 @@ namespace ProductionPlanner.Data
             await _context.SaveChangesAsync(cancellationToken);
         }
 
+        public void StageWorkIntervalForUpdate(WorkInterval interval) =>
+            _context.WorkIntervals.Update(interval);
+
         public async Task DeleteWorkIntervalAsync(WorkInterval interval, CancellationToken cancellationToken = default)
         {
             _context.WorkIntervals.Remove(interval);
@@ -587,10 +591,10 @@ namespace ProductionPlanner.Data
 
             return await _context.WorkIntervals
                 .AsNoTracking()
-                .Include(i => i.Task)
                 .Where(i => i.Task.EmployeeName == employeeName &&
                             i.StartTime < rangeEnd &&
                             (i.EndTime == null || i.EndTime > rangeStart))
+                .OrderBy(i => i.StartTime)
                 .ToListAsync(cancellationToken);
         }
 

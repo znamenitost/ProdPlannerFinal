@@ -40,10 +40,6 @@ public class NotificationHub : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, userId);
         }
 
-        var user = await _userManager.GetUserAsync(Context.User!);
-        if (user != null && await _userManager.IsInRoleAsync(user, "Admin"))
-            await Groups.AddToGroupAsync(Context.ConnectionId, NotificationGroups.Admins);
-
         _logger.LogDebug(
             "SignalR connected {ConnectionId} user {UserId} (active: {Count})",
             Context.ConnectionId,
@@ -62,14 +58,37 @@ public class NotificationHub : Hub
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, userId);
         }
 
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, NotificationGroups.Admins);
-
         if (exception != null)
             _logger.LogDebug(exception, "SignalR disconnected {ConnectionId}", Context.ConnectionId);
         else
             _logger.LogDebug("SignalR disconnected {ConnectionId}", Context.ConnectionId);
 
         await base.OnDisconnectedAsync(exception);
+    }
+
+    public Task JoinTableViewers() =>
+        Groups.AddToGroupAsync(Context.ConnectionId, NotificationGroups.TableViewers);
+
+    public Task LeaveTableViewers() =>
+        Groups.RemoveFromGroupAsync(Context.ConnectionId, NotificationGroups.TableViewers);
+
+    public async Task JoinCalendarViewers(string employeeName)
+    {
+        var trimmed = employeeName?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            throw new HubException("Employee name is required.");
+
+        await EnsureCanViewCalendarAsync(trimmed);
+        await Groups.AddToGroupAsync(Context.ConnectionId, NotificationGroups.ForCalendarViewer(trimmed));
+    }
+
+    public Task LeaveCalendarViewers(string employeeName)
+    {
+        var trimmed = employeeName?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            return Task.CompletedTask;
+
+        return Groups.RemoveFromGroupAsync(Context.ConnectionId, NotificationGroups.ForCalendarViewer(trimmed));
     }
 
     public async Task JoinUserGroup(string userId)
@@ -88,5 +107,18 @@ public class NotificationHub : Hub
             throw new HubException("Cannot leave another user's notification group.");
 
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, userId);
+    }
+
+    private async Task EnsureCanViewCalendarAsync(string employeeName)
+    {
+        var user = await _userManager.GetUserAsync(Context.User!);
+        if (user == null)
+            throw new HubException("Unauthorized.");
+
+        if (await _userManager.IsInRoleAsync(user, "Admin"))
+            return;
+
+        if (!string.Equals(employeeName, user.FullName, StringComparison.Ordinal))
+            throw new HubException("Cannot subscribe to another employee's calendar.");
     }
 }

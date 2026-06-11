@@ -371,7 +371,6 @@ export default function useTaskTableActions({
 
   return {
     pendingLifecycleTaskId,
-    isLifecycleBusy: pendingLifecycleTaskId != null,
     handleSaveNewRow,
     handleUpdateRow,
     handleStartTask,

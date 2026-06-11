@@ -13,7 +13,7 @@ export default function useTaskTableRows(api, { selectedEmployeeForHighlight, on
 
   const employeeFilter = selectedEmployeeForHighlight || '';
 
-  const { data, refetch, dataUpdatedAt } = useTaskTableQuery(
+  const { data, refetch } = useTaskTableQuery(
     api,
     page,
     rowsPerPage,
@@ -77,7 +77,6 @@ export default function useTaskTableRows(api, { selectedEmployeeForHighlight, on
     handleChangeRowsPerPage,
     refresh,
     patchRow,
-    removeRow,
-    tableDataUpdatedAt: dataUpdatedAt
+    removeRow
   };
 }

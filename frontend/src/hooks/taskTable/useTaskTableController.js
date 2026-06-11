@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import useTaskTableApi from '../useTaskTableApi';
 import { useUiFeedback } from '../../context/UiFeedbackContext';
 import { TASK_TABLE_EMPLOYEES, TASK_TABLE_TYPES } from './taskTableConstants';
@@ -32,7 +32,7 @@ export default function useTaskTableController({
     onCalendarRefresh
   });
 
-  const childrenState = useTaskTableChildren(api, rowsState.tableDataUpdatedAt);
+  const childrenState = useTaskTableChildren(api);
 
   const actions = useTaskTableActions({
     api,
@@ -55,6 +55,24 @@ export default function useTaskTableController({
     applyPlanningWarnings
   });
 
+  const refresh = useCallback(async () => {
+    await rowsState.refresh();
+    await childrenState.refreshExpandedChildren();
+  }, [rowsState.refresh, childrenState.refreshExpandedChildren]);
+
+  const { refreshExpandedChildren, expandedRows } = childrenState;
+
+  useEffect(() => {
+    if (expandedRows.size === 0) return undefined;
+    let cancelled = false;
+    refreshExpandedChildren().catch((err) => {
+      if (!cancelled) console.error('Ошибка обновления дочерних задач при смене фильтра', err);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEmployeeForHighlight, expandedRows.size, refreshExpandedChildren]);
+
   const hubCtxRef = useRef(null);
   hubCtxRef.current = {
     rows: rowsState.rows,
@@ -76,13 +94,13 @@ export default function useTaskTableController({
     return () => onRegisterHubHandler(null);
   }, [onRegisterHubHandler]);
 
-  const handleOpenFile = async (row) => {
+  const handleOpenFile = useCallback(async (row) => {
     try {
       await api.openFile(row);
     } catch (err) {
       showError(err.message || 'Не удалось открыть файл');
     }
-  };
+  }, [api, showError]);
 
   const modals = useTaskTableModals({
     api,
@@ -108,7 +126,7 @@ export default function useTaskTableController({
 
   const showHoursTypeColumns = shouldShowHoursTypeColumns(rowsState.newRow);
 
-  const handleOpenIntervals = async (task) => {
+  const handleOpenIntervals = useCallback(async (task) => {
     try {
       const intervals = await api.getIntervals(task.id);
       setIntervalsTask(task);
@@ -117,21 +135,21 @@ export default function useTaskTableController({
     } catch (err) {
       showError(err.message || 'Не удалось загрузить интервалы');
     }
-  };
+  }, [api, showError]);
 
-  const handleCloseIntervals = () => {
+  const handleCloseIntervals = useCallback(() => {
     if (intervalsPending) return;
     setIntervalsDialogOpen(false);
     setIntervalsTask(null);
     setIntervalsRows([]);
-  };
+  }, [intervalsPending]);
 
-  const handleSaveIntervals = async (payload) => {
+  const handleSaveIntervals = useCallback(async (payload) => {
     if (!intervalsTask) return;
     setIntervalsPending(true);
     try {
       await api.updateIntervals(intervalsTask.id, payload);
-      await rowsState.refresh();
+      await refresh();
       setIntervalsDialogOpen(false);
       showSuccess('Интервалы сохранены');
     } catch (err) {
@@ -139,7 +157,7 @@ export default function useTaskTableController({
     } finally {
       setIntervalsPending(false);
     }
-  };
+  }, [api, intervalsTask, refresh, showError, showSuccess]);
 
   return {
     api,
@@ -147,6 +165,7 @@ export default function useTaskTableController({
     taskTypes: TASK_TABLE_TYPES,
     showHoursTypeColumns,
     ...rowsState,
+    refresh,
     ...childrenState,
     ...actions,
     ...modals,
@@ -158,7 +177,7 @@ export default function useTaskTableController({
     handleOpenIntervals,
     handleCloseIntervals,
     handleSaveIntervals,
-    handleSaveComment: (comment) => modals.handleSaveComment(comment, api.updateRow),
+    handleSaveComment: modals.handleSaveComment,
     planningWarnings,
     dismissPlanningWarning
   };

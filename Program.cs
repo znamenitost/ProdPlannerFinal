@@ -47,7 +47,7 @@ var usePostgres = !string.IsNullOrWhiteSpace(postgresConnection);
 if (usePostgres)
 {
     var postgresConnectionString = PostgresConnectionHelper.Normalize(postgresConnection!);
-    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    builder.Services.AddDbContextPool<ApplicationDbContext>(options =>
         options
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .UseNpgsql(postgresConnectionString, npgsql =>
@@ -58,7 +58,7 @@ else
     var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "App_Data");
     Directory.CreateDirectory(dataDirectory);
     var dbPath = Path.Combine(dataDirectory, "ProductionPlanner.db");
-    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    builder.Services.AddDbContextPool<ApplicationDbContext>(options =>
         options
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .UseSqlite($"Data Source={dbPath}"));

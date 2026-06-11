@@ -62,7 +62,6 @@ function ParentTaskRow({
   onComplete,
   onSetStatus,
   pendingLifecycleTaskId = null,
-  lifecycleBusy = false,
   onEdit,
   onDelete,
   onOpenComment,
@@ -274,7 +273,6 @@ function ParentTaskRow({
               <TaskAdminActionStacks
                 task={task}
                 pending={pendingLifecycleTaskId === task.id}
-                lifecycleBusy={lifecycleBusy}
                 onEdit={() => onEdit(task.id)}
                 onDelete={() => onDelete(task.id)}
                 onIntervals={() => onOpenIntervals(task)}
@@ -290,7 +288,6 @@ function ParentTaskRow({
               <EmployeeStatusButtons
                 task={task}
                 pending={pendingLifecycleTaskId === task.id}
-                lifecycleBusy={lifecycleBusy}
                 onStart={onStart}
                 onPause={onPause}
                 onResume={onResume}
@@ -321,7 +318,6 @@ function ParentTaskRow({
           onComplete={onComplete}
           onSetStatus={onSetStatus}
           pendingLifecycleTaskId={pendingLifecycleTaskId}
-          lifecycleBusy={lifecycleBusy}
           onEdit={onEdit}
           onDelete={onDelete}
           onOpenComment={onOpenComment}

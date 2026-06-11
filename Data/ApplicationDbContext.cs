@@ -81,8 +81,14 @@ namespace ProductionPlanner.Data
             modelBuilder.Entity<ProductionTask>()
                 .HasIndex(t => new { t.EmployeeName, t.Status });
 
+            modelBuilder.Entity<ProductionTask>()
+                .HasIndex(t => new { t.EmployeeName, t.CompletedAt });
+
             modelBuilder.Entity<WorkInterval>()
                 .HasIndex(i => new { i.ProductionTaskId, i.StartTime });
+
+            modelBuilder.Entity<WorkInterval>()
+                .HasIndex(i => new { i.StartTime, i.EndTime });
 
             modelBuilder.Entity<LunchInterval>(entity =>
             {
@@ -97,6 +103,7 @@ namespace ProductionPlanner.Data
                 entity.ToTable("Users");
                 entity.Property(u => u.FullName).HasMaxLength(100);
                 entity.Property(u => u.Role).HasMaxLength(50);
+                entity.HasIndex(u => u.FullName);
             });
             
             modelBuilder.Entity<IdentityRole>(entity =>

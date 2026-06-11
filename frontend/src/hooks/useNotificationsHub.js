@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as signalR from '@microsoft/signalr';
+import { buildViewSubscriptionState, syncHubViewGroups } from '../utils/hubViewSubscription';
 
 function formatNotificationDeadline(deadline) {
   if (deadline == null || deadline === '') return 'не указан';
@@ -34,25 +35,58 @@ function normalizeAffectedEmployees(value) {
   return name ? [name] : [];
 }
 
+function shouldRefreshActiveTasks(event) {
+  return ['TaskStatusChanged', 'TaskProgressChanged', 'TaskUpdated', 'TaskDeleted'].includes(event.type);
+}
+
+function shouldRefreshCalendar(event) {
+  return ['TaskStatusChanged', 'TaskUpdated', 'TaskDeleted'].includes(event.type);
+}
+
 /**
  * @param {object} handlers
  * @param {(event: { type: string, taskId?: number, affectedEmployees?: string[] }) => Promise<boolean>|boolean} [handlers.onTaskEvent]
  * @param {() => void} [handlers.onTableFallbackRefresh] — полная перезагрузка таблицы, если строка не на экране
  * @param {(event?: { type: string, taskId?: number, affectedEmployees?: string[] }) => void} [handlers.onCalendarRefresh] — календарь / completed
  * @param {() => void} [handlers.onFullRefresh] — reconnect и т.п.
+ * @param {object} [options.viewSubscription] — { activeTab, employee, userFullName, isAdmin }
  */
 export default function useNotificationsHub(user, handlers = {}, options = {}) {
-  const { enabled = true } = options;
+  const { enabled = true, viewSubscription } = options;
   const [notifications, setNotifications] = useState([]);
   const refreshTimeoutRef = useRef(null);
   const taskEventChainRef = useRef(Promise.resolve());
   const handlersRef = useRef(handlers);
   const displayedServerIdsRef = useRef(new Set());
   const hiddenQueueRef = useRef([]);
+  const connectionRef = useRef(null);
+  const prevViewRef = useRef(null);
+  const viewSubscriptionRef = useRef(viewSubscription);
+  viewSubscriptionRef.current = viewSubscription;
+
+  const applyViewSubscription = useCallback(async () => {
+    const conn = connectionRef.current;
+    const vs = viewSubscriptionRef.current;
+    if (!conn || conn.state !== signalR.HubConnectionState.Connected || !vs) return;
+
+    const next = buildViewSubscriptionState(vs);
+    await syncHubViewGroups(conn, prevViewRef.current, next);
+    prevViewRef.current = next;
+  }, []);
 
   useEffect(() => {
     handlersRef.current = handlers;
   }, [handlers]);
+
+  useEffect(() => {
+    applyViewSubscription();
+  }, [
+    applyViewSubscription,
+    viewSubscription?.activeTab,
+    viewSubscription?.employee,
+    viewSubscription?.userFullName,
+    viewSubscription?.isAdmin
+  ]);
 
   const scheduleCalendarRefresh = useCallback(() => {
     if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
@@ -70,8 +104,12 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       } catch (err) {
         console.error('Hub task event handler error:', err);
       }
-      h.onActiveTasksRefresh?.(event);
-      h.onCalendarRefresh?.(event);
+      if (shouldRefreshActiveTasks(event)) {
+        h.onActiveTasksRefresh?.(event);
+      }
+      if (shouldRefreshCalendar(event)) {
+        h.onCalendarRefresh?.(event);
+      }
       if (!tableHandled) {
         h.onTableFallbackRefresh?.(event);
       }
@@ -259,6 +297,9 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
           return;
         }
         await connection.invoke('JoinUserGroup', user.id).catch(() => {});
+        connectionRef.current = connection;
+        prevViewRef.current = null;
+        await applyViewSubscription();
         await fetchPendingNotifications(abort.signal);
       } catch (err) {
         if (!isMounted) return;
@@ -278,6 +319,9 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     connection.onreconnected(async () => {
       if (!isMounted) return;
       await connection.invoke('JoinUserGroup', user.id).catch(() => {});
+      connectionRef.current = connection;
+      prevViewRef.current = null;
+      await applyViewSubscription();
       await fetchPendingNotifications(abort.signal);
       flushHiddenQueue();
       handlersRef.current.onFullRefresh?.();
@@ -309,6 +353,8 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       connection.off('TaskStatusChanged', handleTaskStatusChanged);
       connection.off('TaskProgressChanged', handleTaskProgressChanged);
       connection.off('ForceDisconnect', handleForceDisconnect);
+      connectionRef.current = null;
+      prevViewRef.current = null;
       if (connection.state !== 'Disconnected' && connection.state !== 'Disconnecting') {
         connection.stop().catch((err) => console.error('SignalR stop error:', err));
       }
@@ -322,6 +368,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     flushHiddenQueue,
     scheduleCalendarRefresh,
     scheduleTaskEvent,
+    applyViewSubscription
   ]);
 
   const closeNotification = useCallback((id) => {

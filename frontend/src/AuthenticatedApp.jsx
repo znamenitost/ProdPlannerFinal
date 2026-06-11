@@ -87,49 +87,53 @@ function AuthenticatedAppContent() {
     return tableHubHandlerRef.current(event);
   }, []);
 
-  const handleHubTableFallbackRefresh = useCallback(
-    (event) => {
-      const instantTableSync =
-        event?.type === 'TaskStatusChanged' || event?.type === 'TaskProgressChanged';
-      if (instantTableSync || activeTab === 1) {
-        refreshTable();
-      }
-    },
-    [activeTab, refreshTable]
+  const handleHubTaskEventForTab = useCallback((event) => {
+    if (activeTab !== 1) return false;
+    return handleHubTaskEvent(event);
+  }, [activeTab, handleHubTaskEvent]);
+
+  const handleHubTableFallbackRefresh = useCallback(() => {
+    if (activeTab === 1) refreshTable();
+  }, [activeTab, refreshTable]);
+
+  const handleHubActiveTasksRefresh = useCallback(() => {
+    if (activeTab === 0) refreshActiveTasks();
+  }, [activeTab, refreshActiveTasks]);
+
+  const handleHubCalendarRefresh = useCallback(() => {
+    if (activeTab === 0) refreshCalendar();
+  }, [activeTab, refreshCalendar]);
+
+  const viewSubscription = useMemo(
+    () => ({
+      activeTab,
+      employee,
+      userFullName: user?.fullName,
+      isAdmin: user?.role === 'Admin'
+    }),
+    [activeTab, employee, user?.fullName, user?.role]
   );
-
-  const shouldRefreshSelectedEmployee = useCallback((event) => {
-    const affectedEmployees = event?.affectedEmployees;
-    if (!Array.isArray(affectedEmployees)) return true;
-    if (!employee) return false;
-    return affectedEmployees.includes(employee);
-  }, [employee]);
-
-  const handleHubActiveTasksRefresh = useCallback((event) => {
-    if (shouldRefreshSelectedEmployee(event)) {
-      refreshActiveTasks();
-    }
-  }, [refreshActiveTasks, shouldRefreshSelectedEmployee]);
-
-  const handleHubCalendarRefresh = useCallback((event) => {
-    if (shouldRefreshSelectedEmployee(event)) {
-      refreshCalendar();
-    }
-  }, [refreshCalendar, shouldRefreshSelectedEmployee]);
 
   const notificationHandlers = useMemo(
     () => ({
-      onTaskEvent: handleHubTaskEvent,
+      onTaskEvent: handleHubTaskEventForTab,
       onActiveTasksRefresh: handleHubActiveTasksRefresh,
       onTableFallbackRefresh: handleHubTableFallbackRefresh,
       onCalendarRefresh: handleHubCalendarRefresh,
       onFullRefresh: refreshAll
     }),
-    [handleHubTaskEvent, handleHubActiveTasksRefresh, handleHubTableFallbackRefresh, handleHubCalendarRefresh, refreshAll]
+    [
+      handleHubTaskEventForTab,
+      handleHubActiveTasksRefresh,
+      handleHubTableFallbackRefresh,
+      handleHubCalendarRefresh,
+      refreshAll
+    ]
   );
 
   const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers, {
-    enabled: Boolean(user?.isAuthenticated)
+    enabled: Boolean(user?.isAuthenticated),
+    viewSubscription
   });
 
   useEffect(() => { setAnchorElUser(null); }, [user]);

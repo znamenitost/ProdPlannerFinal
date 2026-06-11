@@ -1,8 +1,8 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../../lib/queryKeys';
+import { PLANNED_TIME_PROGRESS_VISIBLE } from '../../components/taskTable/TaskPlannedProgressFooter';
 
-// В таблице у активных задач крутится локальный прогресс-бар «по выделенным часам»,
-// который рассчитывается на бэке. Чтобы он сам ехал, минутно обновляем строки.
+// Прогресс-бар в таблице сейчас скрыт; polling включается только когда он снова нужен.
 const ONE_MINUTE_MS = 60_000;
 
 export default function useTaskTableQuery(api, page, rowsPerPage, employeeFilter) {
@@ -13,7 +13,7 @@ export default function useTaskTableQuery(api, page, rowsPerPage, employeeFilter
     queryFn: ({ signal }) =>
       api.loadRows(page + 1, rowsPerPage, filter, { signal }),
     placeholderData: keepPreviousData,
-    refetchInterval: ONE_MINUTE_MS,
+    refetchInterval: PLANNED_TIME_PROGRESS_VISIBLE ? ONE_MINUTE_MS : false,
     refetchOnWindowFocus: true
   });
 }

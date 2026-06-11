@@ -9,17 +9,20 @@ namespace ProductionPlanner.Services;
 public class TaskNotificationService : ITaskNotificationService
 {
     private readonly IHubContext<NotificationHub> _hubContext;
+    private readonly ITaskDataSyncHubBroadcaster _dataSync;
     private readonly UserManager<User> _userManager;
     private readonly INotificationInboxService _inbox;
     private readonly ILogger<TaskNotificationService> _logger;
 
     public TaskNotificationService(
         IHubContext<NotificationHub> hubContext,
+        ITaskDataSyncHubBroadcaster dataSync,
         UserManager<User> userManager,
         INotificationInboxService inbox,
         ILogger<TaskNotificationService> logger)
     {
         _hubContext = hubContext;
+        _dataSync = dataSync;
         _userManager = userManager;
         _inbox = inbox;
         _logger = logger;
@@ -37,8 +40,6 @@ public class TaskNotificationService : ITaskNotificationService
                 title,
                 task.Deadline);
 
-            // Персональный push-снэкбар «Новая задача» — только исполнителю,
-            // его не должны видеть другие пользователи.
             await SendToGroupsAsync(
                 [userId],
                 "NewTask",
@@ -53,36 +54,46 @@ public class TaskNotificationService : ITaskNotificationService
             _logger.LogDebug("User not found for new task notification: {EmployeeName}", task.EmployeeName);
         }
 
-        // Data-sync для таблицы/календаря у всех подключённых клиентов:
-        // таблица показывает все корневые задачи, и любой сотрудник, открывший её,
-        // должен увидеть новую строку без ручного refresh.
-        await BroadcastAsync("TaskUpdated", task.Id, title, task.Deadline, AffectedEmployees(task.EmployeeName));
+        await _dataSync.BroadcastAsync(
+            "TaskUpdated",
+            AffectedEmployees(task.EmployeeName),
+            task.Id,
+            title,
+            task.Deadline,
+            AffectedEmployees(task.EmployeeName));
     }
 
     public Task NotifyTaskUpdatedAsync(ProductionTask task, string? oldEmployeeName = null) =>
-        BroadcastAsync(
+        _dataSync.BroadcastAsync(
             "TaskUpdated",
+            AffectedEmployees(task.EmployeeName, oldEmployeeName),
             task.Id,
             GetNotificationTitle(task),
             task.Deadline,
             AffectedEmployees(task.EmployeeName, oldEmployeeName));
 
     public Task NotifyTaskDeletedAsync(int taskId, IEnumerable<string> employeeNames) =>
-        BroadcastAsync("TaskDeleted", taskId, AffectedEmployees(employeeNames));
+        _dataSync.BroadcastAsync(
+            "TaskDeleted",
+            AffectedEmployees(employeeNames),
+            taskId,
+            AffectedEmployees(employeeNames));
 
     public Task NotifyStatusChangedAsync(ProductionTask task, string newStatus) =>
-        BroadcastAsync("TaskStatusChanged", task.Id, newStatus, AffectedEmployees(task.EmployeeName));
+        _dataSync.BroadcastAsync(
+            "TaskStatusChanged",
+            AffectedEmployees(task.EmployeeName),
+            task.Id,
+            newStatus,
+            AffectedEmployees(task.EmployeeName));
 
-    public Task NotifyProgressChangedAsync(ProductionTask task, double progress) =>
-        BroadcastAsync("TaskProgressChanged", task.Id, progress, AffectedEmployees(task.EmployeeName));
+    public Task NotifyProgressChangedAsync(ProductionTask task, double progress)
+    {
+        var affected = AffectedEmployees(task.EmployeeName);
+        _dataSync.ScheduleProgressChanged(task, progress, affected);
+        return Task.CompletedTask;
+    }
 
-    /// <summary>
-    /// Персональный push исполнителю о том, что админ перевёл задачу в «Согласовано» или
-    /// «В наличии» — то есть блокирующее условие снято, можно начинать работу. Использует
-    /// тот же транспорт <c>NewTask</c>, что и снэкбар о новой задаче, но передаёт отдельный
-    /// тип для визуальной группировки на фронте. Запись складывается в инбокс с тем же типом,
-    /// поэтому переживёт офлайн/перезагрузку страницы и поднимется через /api/notifications/pending.
-    /// </summary>
     public async Task NotifyTaskReadyToStartAsync(ProductionTask task, JobStatus readyStatus)
     {
         if (string.IsNullOrWhiteSpace(task.EmployeeName))
@@ -155,16 +166,6 @@ public class TaskNotificationService : ITaskNotificationService
             return Task.CompletedTask;
         return _hubContext.Clients.Groups(groups).SendCoreAsync(method, args);
     }
-
-    /// <summary>
-    /// Broadcast события синхронизации данных всем подключённым клиентам хаба
-    /// (хаб под <c>[Authorize]</c>, так что это все авторизованные пользователи).
-    /// Используется для TaskUpdated/TaskDeleted/TaskStatusChanged/TaskProgressChanged,
-    /// чтобы таблица и календарь обновлялись у каждого, кто их сейчас открыл,
-    /// а не только у админа и исполнителя задачи.
-    /// </summary>
-    private Task BroadcastAsync(string method, params object?[] args) =>
-        _hubContext.Clients.All.SendCoreAsync(method, args);
 
     private static string[] AffectedEmployees(params string?[] employeeNames) =>
         employeeNames

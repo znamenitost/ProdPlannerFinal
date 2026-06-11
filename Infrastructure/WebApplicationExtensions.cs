@@ -21,6 +21,7 @@ public static class WebApplicationExtensions
         services.AddScoped<IEmployeeStatsService, EmployeeStatsService>();
         services.AddScoped<IProductionTaskRepository, ProductionTaskRepository>();
         services.AddScoped<ITaskSplitService, TaskSplitService>();
+        services.AddSingleton<ITaskDataSyncHubBroadcaster, TaskDataSyncHubBroadcaster>();
         services.AddScoped<ITaskNotificationService, TaskNotificationService>();
         services.AddScoped<INotificationInboxService, NotificationInboxService>();
         services.AddScoped<ITaskTableService, TaskTableService>();

@@ -36,6 +36,7 @@ public static class PostgresSchemaMigrator
         await ApplyProductionTasksCompatibilityPatchAsync(db, logger, cancellationToken);
         await ApplyUserNotificationsPatchAsync(db, logger, cancellationToken);
         await ApplyLunchIntervalsPatchAsync(db, logger, cancellationToken);
+        await ApplyPhase2PerformanceIndexesPatchAsync(db, logger, cancellationToken);
     }
 
     private static async Task ApplyProductionTasksCompatibilityPatchAsync(
@@ -139,6 +140,41 @@ public static class PostgresSchemaMigrator
         catch (Exception ex)
         {
             logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (LunchIntervals)");
+            throw;
+        }
+    }
+
+    private static async Task ApplyPhase2PerformanceIndexesPatchAsync(
+        ApplicationDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE INDEX IF NOT EXISTS "IX_WorkIntervals_OpenInterval"
+                    ON "WorkIntervals" ("ProductionTaskId")
+                    WHERE "EndTime" IS NULL;
+
+                CREATE INDEX IF NOT EXISTS "IX_WorkIntervals_RangeLookup"
+                    ON "WorkIntervals" ("StartTime", "EndTime");
+
+                CREATE INDEX IF NOT EXISTS "IX_ProductionTasks_EmployeeName_CompletedAt"
+                    ON "ProductionTasks" ("EmployeeName", "CompletedAt")
+                    WHERE "Status" = 3;
+
+                CREATE INDEX IF NOT EXISTS "IX_ProductionTasks_RootTableVisible"
+                    ON "ProductionTasks" ("DisplayOrder" DESC, "Id" DESC)
+                    WHERE "ParentRowNumber" IS NULL AND NOT "HiddenFromTaskTable";
+
+                CREATE INDEX IF NOT EXISTS "IX_Users_FullName"
+                    ON "Users" ("FullName");
+                """, cancellationToken);
+            logger.LogInformation("Индексы производительности (phase 2) проверены/созданы (PostgreSQL).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при создании индексов производительности (PostgreSQL)");
             throw;
         }
     }

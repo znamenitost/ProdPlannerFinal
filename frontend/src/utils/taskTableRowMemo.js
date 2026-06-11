@@ -6,6 +6,13 @@ function workIntervalsKey(task) {
     .join(';');
 }
 
+function pendingLifecycleAffectsRow(prevPending, nextPending, taskId, relatedTaskIds = null) {
+  if (prevPending === nextPending) return false;
+  if (prevPending === taskId || nextPending === taskId) return true;
+  if (!relatedTaskIds?.length) return false;
+  return relatedTaskIds.some((id) => prevPending === id || nextPending === id);
+}
+
 function sameChildren(a, b) {
   if (a === b) return true;
   if (!a || !b) return a === b;
@@ -31,8 +38,12 @@ export function areParentRowPropsEqual(prev, next) {
   if (workIntervalsKey(prev.task) !== workIntervalsKey(next.task)) return false;
   if (prev.task.plannedTimeProgress !== next.task.plannedTimeProgress) return false;
   if (prev.isExpanded !== next.isExpanded) return false;
-  if (prev.pendingLifecycleTaskId !== next.pendingLifecycleTaskId) return false;
-  if (prev.lifecycleBusy !== next.lifecycleBusy) return false;
+  if (pendingLifecycleAffectsRow(
+    prev.pendingLifecycleTaskId,
+    next.pendingLifecycleTaskId,
+    prev.task.id,
+    prev.childrenTasks?.map((child) => child.id)
+  )) return false;
   if (prev.highlightMyTasks !== next.highlightMyTasks) return false;
   if (prev.selectedEmployeeForHighlight !== next.selectedEmployeeForHighlight) return false;
   if (prev.showHoursTypeColumns !== next.showHoursTypeColumns) return false;
@@ -67,8 +78,11 @@ export function areChildRowPropsEqual(prev, next) {
   if (prev.task.workPhase !== next.task.workPhase) return false;
   if (prev.task.supplyMode !== next.task.supplyMode) return false;
   if (prev.task.sequenceOrder !== next.task.sequenceOrder) return false;
-  if (prev.pendingLifecycleTaskId !== next.pendingLifecycleTaskId) return false;
-  if (prev.lifecycleBusy !== next.lifecycleBusy) return false;
+  if (pendingLifecycleAffectsRow(
+    prev.pendingLifecycleTaskId,
+    next.pendingLifecycleTaskId,
+    prev.task.id
+  )) return false;
   if (prev.highlightMyTasks !== next.highlightMyTasks) return false;
   if (prev.selectedEmployeeForHighlight !== next.selectedEmployeeForHighlight) return false;
   if (prev.showHoursTypeColumns !== next.showHoursTypeColumns) return false;

@@ -13,6 +13,7 @@ import {
 export default function DayColumn({
   day,
   allDays,
+  taskBlocksMap: taskBlocksMapProp = null,
   highlightedTaskId,
   onTaskHover,
   detailedTimeline = false,
@@ -20,7 +21,7 @@ export default function DayColumn({
 }) {
   const date = new Date(day.date);
   const isWorkingDay = isWorkingWeekday(date);
-  const taskBlocksMap = buildTaskBlocksMap(allDays);
+  const taskBlocksMap = taskBlocksMapProp ?? buildTaskBlocksMap(allDays);
 
   const rawTimelineSegments = getTimelineSegments(day.timeline);
   const workSegments = rawTimelineSegments.filter((s) => s.type === 'work');

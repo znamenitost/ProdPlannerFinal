@@ -502,7 +502,7 @@ public class TaskTableService : ITaskTableService
             interval.EndTime = row.EndTime.HasValue
                 ? NormalizeIntervalWallClock(row.EndTime.Value)
                 : null;
-            await _repo.UpdateWorkIntervalAsync(interval, cancellationToken);
+            _repo.StageWorkIntervalForUpdate(interval);
         }
 
         if (task.Status == JobStatus.Completed)

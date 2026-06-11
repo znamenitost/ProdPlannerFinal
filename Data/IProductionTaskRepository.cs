@@ -43,6 +43,7 @@ namespace ProductionPlanner.Data
         Task DeleteAllTasksAsync(CancellationToken cancellationToken = default);
         Task AddWorkIntervalAsync(WorkInterval interval, CancellationToken cancellationToken = default);
         Task UpdateWorkIntervalAsync(WorkInterval interval, CancellationToken cancellationToken = default);
+        void StageWorkIntervalForUpdate(WorkInterval interval);
         Task DeleteWorkIntervalAsync(WorkInterval interval, CancellationToken cancellationToken = default);
         Task DeleteAllWorkIntervalsAsync(CancellationToken cancellationToken = default);
         Task<LunchInterval?> GetOpenLunchIntervalAsync(string employeeName, CancellationToken cancellationToken = default);

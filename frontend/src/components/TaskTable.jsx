@@ -219,7 +219,6 @@ export default function TaskTable({
         onComplete={table.handleCompleteTask}
         onSetStatus={table.handleSetStatus}
         pendingLifecycleTaskId={table.pendingLifecycleTaskId}
-        lifecycleBusy={table.isLifecycleBusy}
         onEdit={table.handleEditRow}
         onDelete={table.handleDeleteRow}
         onOpenComment={table.handleOpenComment}

@@ -14,7 +14,7 @@ import useWeekCalendarQuery from '../hooks/queries/useWeekCalendarQuery';
 import DayColumn from './DayColumn';
 import { CalendarLoadingState } from './LoadingState';
 import { MotionSwitch } from './ui/MotionSection';
-import { isSameCalendarDay, toCalendarDayKey } from '../utils/calendarDayUtils';
+import { buildTaskBlocksMap, isSameCalendarDay, toCalendarDayKey } from '../utils/calendarDayUtils';
 
 export default function WeekCalendar({ employee }) {
   const { showError } = useUiFeedback();
@@ -29,6 +29,11 @@ export default function WeekCalendar({ employee }) {
   );
 
   const { data: weekData, isPending, isError } = useWeekCalendarQuery(employee, weekStart);
+
+  const taskBlocksMap = useMemo(
+    () => (weekData?.days ? buildTaskBlocksMap(weekData.days) : null),
+    [weekData?.days]
+  );
 
   useEffect(() => {
     if (isError) {
@@ -187,6 +192,7 @@ export default function WeekCalendar({ employee }) {
                 key={day.date}
                 day={day}
                 allDays={weekData.days}
+                taskBlocksMap={taskBlocksMap}
                 highlightedTaskId={highlightedTaskId}
                 onTaskHover={setHighlightedTaskId}
                 detailedTimeline={viewMode === 'day'}

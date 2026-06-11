@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { childrenToModalParts, apiPartsToModalParts, taskToModalParts } from '../../utils/splitTaskUtils';
 import { SUPPLY_MODE_INTERNAL, TASK_EXECUTION_PARALLEL, TASK_EXECUTION_SEQUENTIAL } from '../../constants/taskStatuses';
 
@@ -29,13 +29,13 @@ export default function useTaskTableModals({
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [selectedCommentTask, setSelectedCommentTask] = useState(null);
 
-  const closeSplitModal = () => {
+  const closeSplitModal = useCallback(() => {
     setSplitModalOpen(false);
     setSplitModalTask(null);
     setSplitModalInitialParts(null);
-  };
+  }, []);
 
-  const handleOpenNewSharedModal = () => {
+  const handleOpenNewSharedModal = useCallback(() => {
     setSplitModalMode('draft');
     setSplitModalTask({
       estimateHours: newRow.estimateHours,
@@ -53,9 +53,9 @@ export default function useTaskTableModals({
     }
     setSplitModalInitialParts(initialParts);
     setSplitModalOpen(true);
-  };
+  }, [newRow, employees, taskTypes]);
 
-  const handleDraftApply = (apiParts, _parts, executionMode) => {
+  const handleDraftApply = useCallback((apiParts, _parts, executionMode) => {
     const isShared = apiParts.length >= 2;
     const totalFromParts = apiParts.reduce((s, p) => s + (p.allocatedHours || 0), 0);
     const taskExecutionMode = executionMode || TASK_EXECUTION_PARALLEL;
@@ -87,9 +87,9 @@ export default function useTaskTableModals({
         productionEstimateHours: part.productionEstimateHours ?? 0,
       }));
     }
-  };
+  }, [setNewRow]);
 
-  const openEditSharedModal = async (task) => {
+  const openEditSharedModal = useCallback(async (task) => {
     let children = childrenCache.get(task.id);
     if (!children?.length) {
       children = await api.loadChildren(task.id);
@@ -107,9 +107,9 @@ export default function useTaskTableModals({
     });
     setSplitModalInitialParts(childrenToModalParts(children, employees, taskTypes));
     setSplitModalOpen(true);
-  };
+  }, [api, childrenCache, employees, setChildrenForParent, taskTypes]);
 
-  const handleOpenAssigneeModal = async (task) => {
+  const handleOpenAssigneeModal = useCallback(async (task) => {
     try {
       if (task.isSplitTask) {
         await openEditSharedModal(task);
@@ -127,9 +127,9 @@ export default function useTaskTableModals({
     } catch (err) {
       showError(err.message || 'Не удалось открыть назначения');
     }
-  };
+  }, [employees, openEditSharedModal, showError, taskTypes]);
 
-  const handleSplitSuccess = async (result) => {
+  const handleSplitSuccess = useCallback(async (result) => {
     const parentId = splitModalTask?.id;
     applyPlanningWarnings(result?.planningWarnings);
     try {
@@ -149,19 +149,30 @@ export default function useTaskTableModals({
       console.error(err);
       showError(err.message || 'Не удалось обновить назначения');
     }
-  };
+  }, [
+    api,
+    applyPlanningWarnings,
+    expandedRows,
+    invalidateChildCache,
+    loadChildrenForParent,
+    patchRow,
+    selectedEmployeeForHighlight,
+    setChildrenForParent,
+    showError,
+    splitModalTask?.id
+  ]);
 
-  const handleOpenComment = (row) => {
+  const handleOpenComment = useCallback((row) => {
     setSelectedCommentTask(row);
     setCommentDialogOpen(true);
-  };
+  }, []);
 
-  const handleSaveComment = async (newComment, updateRow) => {
+  const handleSaveComment = useCallback(async (newComment) => {
     if (!selectedCommentTask) return;
     const task = selectedCommentTask;
     const updatedTask = { ...task, comment: newComment };
     try {
-      await updateRow(updatedTask.id, updatedTask);
+      await api.updateRow(updatedTask.id, updatedTask);
 
       const parentId = task.parentRowNumber;
       if (parentId) {
@@ -179,7 +190,19 @@ export default function useTaskTableModals({
       console.error(err);
       showError('Ошибка сохранения комментария');
     }
-  };
+  }, [
+    api,
+    invalidateChildCache,
+    patchChildInCache,
+    patchRow,
+    selectedCommentTask,
+    setChildrenForParent,
+    showError
+  ]);
+
+  const setCommentDialogOpenStable = useCallback((open) => {
+    setCommentDialogOpen(open);
+  }, []);
 
   return {
     splitModalOpen,
@@ -195,6 +218,6 @@ export default function useTaskTableModals({
     handleSplitSuccess,
     handleOpenComment,
     handleSaveComment,
-    setCommentDialogOpen
+    setCommentDialogOpen: setCommentDialogOpenStable
   };
 }
