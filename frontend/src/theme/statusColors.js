@@ -4,7 +4,7 @@ export function getStatusChipColor(status) {
   if (text === "Готово" || text === "Согласовано" || text === "В наличии") return "success";
   if (text === "Начал") return "info";
   if (text === "Пауза") return "warning";
-  if (text === 'Согласование' || text === 'На согласовании') return 'secondary';
+  if (text === 'Согласование' || text === 'На согласовании') return 'warning';
   if (text === "Нет изделий") return "error";
   if (text === "Ожидание") return "default";
   return "default";

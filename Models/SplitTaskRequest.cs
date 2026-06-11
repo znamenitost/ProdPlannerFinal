@@ -32,4 +32,11 @@ public class SplitPart
 
     /// <summary>Порядок этапа (заполняется автоматически при создании).</summary>
     public int SequenceOrder { get; set; }
+
+    /// <summary>Назначение «через тест» (тест → согласование → основная часть).</summary>
+    public bool RequiresTestBeforeProduction { get; set; }
+
+    public double TestEstimateHours { get; set; }
+
+    public double ProductionEstimateHours { get; set; }
 }

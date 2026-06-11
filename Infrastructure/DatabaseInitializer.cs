@@ -74,6 +74,16 @@ public static class DatabaseInitializer
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN SupplyMode INTEGER NOT NULL DEFAULT 0");
             if (!columns.Contains("HiddenFromTaskTable"))
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN HiddenFromTaskTable INTEGER NOT NULL DEFAULT 0");
+            if (!columns.Contains("RequiresTestBeforeProduction"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN RequiresTestBeforeProduction INTEGER NOT NULL DEFAULT 0");
+            if (!columns.Contains("TestEstimateHours"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN TestEstimateHours REAL NOT NULL DEFAULT 0");
+            if (!columns.Contains("ProductionEstimateHours"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN ProductionEstimateHours REAL NOT NULL DEFAULT 0");
+            if (!columns.Contains("WorkPhase"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN WorkPhase INTEGER NOT NULL DEFAULT 0");
+            if (!columns.Contains("TestPhaseCompletedAt"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN TestPhaseCompletedAt TEXT NULL");
 
             foreach (var alterCmd in alterCommands)
             {
@@ -112,6 +122,22 @@ public static class DatabaseInitializer
             alter.CommandText = "ALTER TABLE TaskSplits ADD COLUMN SequenceOrder INTEGER NOT NULL DEFAULT 0";
             await alter.ExecuteNonQueryAsync();
             logger.LogInformation("Выполнен ALTER TaskSplits: SequenceOrder");
+        }
+
+        if (!columns.Contains("IsApprovalTestPart"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE TaskSplits ADD COLUMN IsApprovalTestPart INTEGER NOT NULL DEFAULT 0";
+            await alter.ExecuteNonQueryAsync();
+            logger.LogInformation("Выполнен ALTER TaskSplits: IsApprovalTestPart");
+        }
+
+        if (!columns.Contains("ApprovalGateTestChildId"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE TaskSplits ADD COLUMN ApprovalGateTestChildId INTEGER NULL";
+            await alter.ExecuteNonQueryAsync();
+            logger.LogInformation("Выполнен ALTER TaskSplits: ApprovalGateTestChildId");
         }
     }
 

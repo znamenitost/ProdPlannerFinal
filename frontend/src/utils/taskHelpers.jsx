@@ -19,6 +19,7 @@ export const getStatusColor = (status) => {
   if (status === 'Готово') return 'success.main';
   if (status === 'Начал') return 'info.main';
   if (status === 'Пауза') return 'warning.main';
+  if (status === 'Согласование' || status === 'На согласовании') return 'warning.main';
   return 'text.secondary';
 };
 

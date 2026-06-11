@@ -31,6 +31,14 @@ public class CreateTaskRequest : IValidatableObject
     /// <summary>Режим выполнения: 0 — обычная, 1 — последовательная, 2 — параллельная (общая).</summary>
     public SupplyMode SupplyMode { get; set; }
 
+    public bool RequiresTestBeforeProduction { get; set; }
+
+    [Range(0, 1000)]
+    public double TestEstimateHours { get; set; }
+
+    [Range(0, 1000)]
+    public double ProductionEstimateHours { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         var validParts = Parts?
@@ -47,6 +55,29 @@ public class CreateTaskRequest : IValidatableObject
             yield return new ValidationResult(
                 "Укажите сотрудника или задайте 2+ части для общей задачи.",
                 new[] { nameof(EmployeeName) });
+        }
+
+        if (RequiresTestBeforeProduction && !hasMultipleParts)
+        {
+            if (TestEstimateHours < 0.5 || ProductionEstimateHours < 0.5)
+            {
+                yield return new ValidationResult(
+                    "Укажите часы теста и основной части (от 0.5).",
+                    new[] { nameof(TestEstimateHours) });
+            }
+        }
+
+        if (validParts != null)
+        {
+            foreach (var part in validParts.Where(p => p.RequiresTestBeforeProduction))
+            {
+                if (part.TestEstimateHours < 0.5 || part.ProductionEstimateHours < 0.5)
+                {
+                    yield return new ValidationResult(
+                        "Укажите часы теста и основной части (от 0.5) для каждого назначения.",
+                        new[] { nameof(Parts) });
+                }
+            }
         }
     }
 }

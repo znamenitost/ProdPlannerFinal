@@ -7,7 +7,7 @@ import {
 export function getTaskBorderColor(task, theme) {
   const text = task.statusText ?? task.statusLabel ?? '';
   if (text === STATUS_PENDING_APPROVAL || isPendingApprovalCalendar(text)) {
-    return theme.palette.secondary.main;
+    return theme.palette.warning.main;
   }
   if (text === STATUS_NO_ITEMS) return theme.palette.error.main;
   if (task.status === 1) return theme.palette.info.main;

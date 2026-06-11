@@ -32,7 +32,7 @@ function infoMenuIcon(kind) {
   if (kind === 'approved') return <TaskAlt fontSize="small" color="success" />;
   if (kind === 'inStock') return <Inventory2 fontSize="small" color="success" />;
   if (kind === 'noItems') return <Inventory2 fontSize="small" color="error" />;
-  return <FactCheck fontSize="small" color="secondary" />;
+  return <FactCheck fontSize="small" color="warning" />;
 }
 
 export default function EmployeeStatusButtons({

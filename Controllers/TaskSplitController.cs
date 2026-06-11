@@ -147,7 +147,11 @@ namespace ProductionPlanner.Controllers
                     plannedTimeProgress = PlannedTimeProgressCalculator.GetPercent(
                         c,
                         intervals,
-                        _timeService.Now)
+                        _timeService.Now),
+                    requiresTestBeforeProduction = c.RequiresTestBeforeProduction,
+                    testEstimateHours = c.TestEstimateHours,
+                    productionEstimateHours = c.ProductionEstimateHours,
+                    workPhase = (int)c.WorkPhase
                 };
             });
             return Ok(result);

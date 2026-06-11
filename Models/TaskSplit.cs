@@ -24,6 +24,12 @@ namespace ProductionPlanner.Models
 
         /// <summary>Порядок этапа в последовательной задаче (1, 2, 3…).</summary>
         public int SequenceOrder { get; set; }
+
+        /// <summary>Тестовая часть пары «через согласование».</summary>
+        public bool IsApprovalTestPart { get; set; }
+
+        /// <summary>Дочерняя задача-тест, после согласования которой разблокируется эта часть.</summary>
+        public int? ApprovalGateTestChildId { get; set; }
         
         // Связь с задачей
         public ProductionTask ChildTask { get; set; } = null!;

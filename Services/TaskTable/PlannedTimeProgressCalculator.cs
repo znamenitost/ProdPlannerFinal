@@ -14,9 +14,11 @@ public static class PlannedTimeProgressCalculator
     public static double GetPercent(
         ProductionTask task,
         IReadOnlyList<WorkInterval> intervals,
-        DateTime now)
+        DateTime now,
+        double? estimateHoursOverride = null)
     {
-        if (task.EstimateHours <= 0)
+        var estimateHours = estimateHoursOverride ?? task.EstimateHours;
+        if (estimateHours <= 0)
             return 0;
 
         if (task.Status == JobStatus.Completed)
@@ -26,13 +28,19 @@ public static class PlannedTimeProgressCalculator
             return 0;
 
         var elapsedHours = GetElapsedWorkHours(intervals, now);
-        var percent = elapsedHours / task.EstimateHours * 100;
+        var percent = elapsedHours / estimateHours * 100;
         return Math.Clamp(Math.Round(percent), 0, 100);
     }
 
-    public static bool ShouldShow(ProductionTask task, IReadOnlyList<WorkInterval> intervals) =>
-        task.EstimateHours > 0
-        && (HasWorkStarted(task.Status, intervals) || task.Status == JobStatus.Completed);
+    public static bool ShouldShow(
+        ProductionTask task,
+        IReadOnlyList<WorkInterval> intervals,
+        double? estimateHoursOverride = null)
+    {
+        var estimateHours = estimateHoursOverride ?? task.EstimateHours;
+        return estimateHours > 0
+            && (HasWorkStarted(task.Status, intervals) || task.Status == JobStatus.Completed);
+    }
 
     private static bool HasWorkStarted(JobStatus status, IReadOnlyList<WorkInterval> intervals)
     {

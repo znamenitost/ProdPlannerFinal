@@ -52,7 +52,7 @@ export default function TaskTableToolbar({
             color={highlightMyTasks ? 'warning' : 'primary'}
             onClick={onToggleHighlight}
             aria-label={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}
-            sx={highlightMyTasks && { border: '1px solid', borderColor: 'warning.main' }}
+            sx={highlightMyTasks ? { border: '1px solid', borderColor: 'warning.main' } : undefined}
           >
             <Lightbulb />
           </IconButton>
@@ -63,7 +63,7 @@ export default function TaskTableToolbar({
             color="primary"
             onClick={handleOpenSortMenu}
             aria-label="Сортировка таблицы задач"
-            sx={completedBottomSort && { border: '1px solid', borderColor: 'primary.main' }}
+            sx={completedBottomSort ? { border: '1px solid', borderColor: 'primary.main' } : undefined}
           >
             <Sort />
           </IconButton>

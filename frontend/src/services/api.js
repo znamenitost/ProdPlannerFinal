@@ -281,6 +281,16 @@ async function debugFetch(url, init = {}) {
 }
 
 export const debugApi = {
+  getLogs: ({ warning = true, error = true, tail = 500 } = {}) => {
+    const params = new URLSearchParams({
+      warning: String(warning),
+      error: String(error),
+      tail: String(tail)
+    });
+    return debugFetch(`/logs?${params}`);
+  },
+  getConnections: () => debugFetch('/connections'),
+  getDatabaseIntegrity: () => debugFetch('/db-integrity'),
   setMockTime: (mockDateTime) =>
     debugFetch('/set-time', { method: 'POST', body: JSON.stringify({ mockDateTime }) }),
   resetMockTime: () => debugFetch('/reset-time', { method: 'POST' }),

@@ -33,6 +33,19 @@ public class TaskTableRowDto
 
     public bool ShowPlannedTimeProgress { get; set; }
 
+    public bool RequiresTestBeforeProduction { get; set; }
+
+    public double TestEstimateHours { get; set; }
+
+    public double ProductionEstimateHours { get; set; }
+
+    public TaskWorkPhase WorkPhase { get; set; }
+
+    /// <summary>Порядок этапа для дочерней подзадачи (из TaskSplits).</summary>
+    public int SequenceOrder { get; set; }
+
+    public bool SequenceStartBlocked { get; set; }
+
     public static TaskTableRowDto FromParent(
         ProductionTask parent,
         string statusText,
@@ -54,6 +67,8 @@ public class TaskTableRowDto
         var at = now ?? DateTime.UtcNow;
         var intervals = workIntervals ?? Array.Empty<WorkInterval>();
         var hidePlannedBar = parent.IsSplitTask && children is { Count: > 0 };
+        var phaseEstimate = TestPhaseWorkflow.GetActiveEstimateHours(parent);
+        var progressIntervals = TestPhaseWorkflow.GetIntervalsForProgress(parent, intervals.ToList());
 
         return new TaskTableRowDto
         {
@@ -77,10 +92,15 @@ public class TaskTableRowDto
             HasCurrentUserSubtask = hasCurrentUserSubtask,
             SplitEmployeeNames = splitEmployeeNames,
             WorkIntervals = intervals.Select(WorkIntervalDto.FromEntity).ToList(),
-            PlannedTimeProgress = PlannedTimeProgressCalculator.GetPercent(parent, intervals, at),
+            PlannedTimeProgress = PlannedTimeProgressCalculator.GetPercent(
+                parent, progressIntervals, at, phaseEstimate),
             ShowPlannedTimeProgress = !hidePlannedBar
-                && (PlannedTimeProgressCalculator.ShouldShow(parent, intervals)
-                    || statusText is "Начал" or "Пауза" or "Готово")
+                && (PlannedTimeProgressCalculator.ShouldShow(parent, progressIntervals, phaseEstimate)
+                    || statusText is "Начал" or "Пауза" or "Готово"),
+            RequiresTestBeforeProduction = parent.RequiresTestBeforeProduction,
+            TestEstimateHours = parent.TestEstimateHours,
+            ProductionEstimateHours = parent.ProductionEstimateHours,
+            WorkPhase = parent.WorkPhase
         };
     }
 }

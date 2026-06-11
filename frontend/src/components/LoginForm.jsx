@@ -225,10 +225,12 @@ export default function LoginForm({ onLogin }) {
                           <CardContent sx={{ textAlign: 'center', py: 2 }}>
                             <Avatar
                               src={avatarSrc}
-                              imgProps={{
-                                loading: 'lazy',
-                                decoding: 'async',
-                                fetchPriority: 'low',
+                              slotProps={{
+                                img: {
+                                  loading: 'lazy',
+                                  decoding: 'async',
+                                  fetchpriority: 'low',
+                                },
                               }}
                               sx={{ width: 64, height: 64, fontSize: '1.5rem', mx: 'auto', mb: 1, bgcolor: 'primary.light' }}
                             >

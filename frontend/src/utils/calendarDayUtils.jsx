@@ -122,7 +122,7 @@ export function getWorkColor(taskId, completed) {
 
 export function getPlannedBlockColor(block, theme) {
   if (block?.statusText === STATUS_PENDING_APPROVAL || block?.statusText === 'На согласовании') {
-    return theme.palette.secondary.main;
+    return theme.palette.warning.main;
   }
   if (block?.statusText === STATUS_NO_ITEMS) return theme.palette.error.main;
   return null;

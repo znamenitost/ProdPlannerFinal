@@ -9,6 +9,12 @@ export const STATUS_APPROVED = 'Согласовано';
 export const STATUS_IN_STOCK = 'В наличии';
 export const STATUS_WAITING = 'Ожидание';
 
+/** Фазы одиночной задачи «через тест» (TaskWorkPhase на бэкенде). */
+export const WORK_PHASE_TEST = 1;
+export const WORK_PHASE_AWAITING_APPROVAL = 2;
+export const WORK_PHASE_PRODUCTION = 3;
+export const WORK_PHASE_DONE = 4;
+
 /** Режимы выполнения многоэтапной задачи (совпадают с SupplyMode на бэкенде). */
 export const SUPPLY_MODE_NONE = 0;
 export const SUPPLY_MODE_INTERNAL = 1;
@@ -33,6 +39,14 @@ export function isInfoStatus(statusText) {
   if (!statusText) return false;
   if (INFO_STATUSES.includes(statusText)) return true;
   return statusText === 'На согласовании';
+}
+
+/** Чип статуса в активных задачах: инфостатусы, их решения и блокировка этапа. */
+export function shouldShowActiveTaskStatusChip(task, statusText) {
+  const text = normalizeStatusText(statusText);
+  if (isInfoStatus(text)) return true;
+  if (text === STATUS_APPROVED || text === STATUS_IN_STOCK) return true;
+  return isSequenceBlocked(task, text) || task?.status === 8;
 }
 
 export function isPendingApprovalCalendar(statusText) {
@@ -103,6 +117,7 @@ export function canStartWithoutConfirm(task) {
     return [STATUS_ASSIGNED, STATUS_APPROVED, STATUS_IN_STOCK].includes(text);
   }
   if (task?.status === 8 || task?.sequenceStartBlocked) return false;
+  if (task?.workPhase === WORK_PHASE_AWAITING_APPROVAL) return false;
   const s = task?.status;
   return s === 0 || s === 6 || s === 7;
 }

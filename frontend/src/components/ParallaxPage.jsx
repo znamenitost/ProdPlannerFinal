@@ -61,13 +61,13 @@ export default function ParallaxPage({ children, className = '' }) {
         src={FON1_URL}
         alt=""
         aria-hidden="true"
-        fetchPriority="high"
+        fetchpriority="high"
         decoding="sync"
       />
-      <img className="login-sun-layer" src={sunUrl} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchPriority="low" />
-      <img className="login-parallax-layer login-layer-fon2" src={fon2Url} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchPriority="low" />
-      <img className="login-parallax-layer login-layer-fon3" src={fon3Url} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchPriority="low" />
-      <img className="login-parallax-layer login-layer-fon5" src={fon5Url} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchPriority="low" />
+      <img className="login-sun-layer" src={sunUrl} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchpriority="low" />
+      <img className="login-parallax-layer login-layer-fon2" src={fon2Url} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchpriority="low" />
+      <img className="login-parallax-layer login-layer-fon3" src={fon3Url} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchpriority="low" />
+      <img className="login-parallax-layer login-layer-fon5" src={fon5Url} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchpriority="low" />
       {children}
     </main>
   );

@@ -24,6 +24,7 @@ import {
   RestartAlt,
   TableChart,
   CalendarMonth,
+  Article,
   Logout,
   Person,
   AdminPanelSettings,
@@ -38,6 +39,7 @@ import DeadlineWarnings from './components/DeadlineWarnings';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
 import DebugPanel from './components/DebugPanel';
+import AdminLogsPage from './components/AdminLogsPage';
 import TaskTable from './components/TaskTable';
 import LunchBreakOverlay from './components/LunchBreakOverlay';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
@@ -132,7 +134,7 @@ function AuthenticatedAppContent() {
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
 
-  const targetLunchEmployee = employee || user?.fullName || '';
+  const targetLunchEmployee = user?.fullName || employee || '';
 
   useEffect(() => {
     let cancelled = false;
@@ -308,7 +310,7 @@ function AuthenticatedAppContent() {
 
   const handleTabChange = (_event, newValue) => setActiveTab(newValue);
   const isAdmin = user?.role === 'Admin';
-  const isOnLunchBreak = Boolean(currentLunch) && !isAdmin;
+  const isOnLunchBreak = Boolean(currentLunch);
   const avatarUrl = user?.avatarUrl && user?.id
     ? avatarDisplayUrl(user.id, { size: 128, cacheBust: avatarKey })
     : null;
@@ -348,7 +350,9 @@ function AuthenticatedAppContent() {
                   <Avatar
                     key={avatarKey}
                     src={avatarUrl}
-                    imgProps={{ loading: 'lazy', decoding: 'async', fetchPriority: 'low' }}
+                    slotProps={{
+                      img: { loading: 'lazy', decoding: 'async', fetchpriority: 'low' },
+                    }}
                     sx={{ width: 56, height: 56, fontSize: '1.25rem', bgcolor: 'primary.main' }}
                     onError={handleAvatarError}
                   >
@@ -363,11 +367,14 @@ function AuthenticatedAppContent() {
             <Tabs value={activeTab} onChange={handleTabChange} centered variant="fullWidth">
               <Tab icon={<CalendarMonth />} iconPosition="start" label="Календарь" />
               <Tab icon={<TableChart />} iconPosition="start" label="Таблица задач" />
+              {isAdmin && (
+                <Tab icon={<Article />} iconPosition="start" label="Журнал" />
+              )}
             </Tabs>
           </Paper>
 
           <MotionSwitch transitionKey={activeTab}>
-            {activeTab === 0 ? (
+            {activeTab === 0 && (
               <>
                 <WeekCalendar employee={employee} />
                 {!isAdmin && <DeadlineWarnings employee={employee} />}
@@ -382,7 +389,8 @@ function AuthenticatedAppContent() {
                 />
                 <CompletedTasksList employee={employee} />
               </>
-            ) : (
+            )}
+            {activeTab === 1 && (
               <TaskTable
                 onCalendarRefresh={refreshCalendar}
                 onRegisterHubHandler={registerTableHubHandler}
@@ -391,6 +399,7 @@ function AuthenticatedAppContent() {
                 selectedEmployeeForHighlight={employee}
               />
             )}
+            {activeTab === 2 && isAdmin && <AdminLogsPage />}
           </MotionSwitch>
 
           {isAdmin && (

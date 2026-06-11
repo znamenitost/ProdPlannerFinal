@@ -10,13 +10,14 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  TextField,
   IconButton,
   Typography,
   Alert,
   Divider,
   Paper,
   Checkbox,
+  Switch,
+  FormControlLabel,
   ListItemText,
   OutlinedInput,
   Box,
@@ -32,6 +33,13 @@ import {
   TASK_EXECUTION_PARALLEL,
   TASK_EXECUTION_SEQUENTIAL
 } from '../constants/taskStatuses';
+
+function partTotalHours(part) {
+  if (part.throughTest) {
+    return (parseFloat(part.testHours) || 0) + (parseFloat(part.productionHours) || 0);
+  }
+  return parseFloat(part.hours) || 0;
+}
 
 export default function SplitTaskModal({
   open,
@@ -57,22 +65,33 @@ export default function SplitTaskModal({
   const isFreeHoursMode = isDraft || isEdit || mode === 'split';
   const isSequential = executionMode === TASK_EXECUTION_SEQUENTIAL;
   const showExecutionModePicker = isDraft || (isEdit && parts.length >= 2);
+  const hasThroughTestPart = parts.some((p) => p.throughTest);
 
   useEffect(() => {
     if (!open) return;
 
     setExecutionMode(taskExecutionMode || TASK_EXECUTION_PARALLEL);
 
-    const defaultPart = { employeeName: employees[0], taskTypes: [taskTypes[0]], hours: 0 };
+    const defaultPart = {
+      employeeName: employees[0],
+      taskTypes: [],
+      hours: 0,
+      throughTest: false,
+      testHours: 0,
+      productionHours: 0,
+    };
 
     if (initialParts?.length) {
       setParts(initialParts.map(p => ({
         childTaskId: p.childTaskId,
         employeeName: p.employeeName,
-        taskTypes: p.taskTypes?.length ? p.taskTypes : [taskTypes[0]],
+        taskTypes: p.taskTypes?.length ? p.taskTypes : [],
         hours: p.hours ?? 0,
         statusText: p.statusText || '',
-        started: p.started ?? false
+        started: p.started ?? false,
+        throughTest: p.throughTest ?? false,
+        testHours: p.testHours ?? 0,
+        productionHours: p.productionHours ?? 0,
       })));
     } else if (isDraft) {
       setParts([{ ...defaultPart, hours: 0 }]);
@@ -86,7 +105,7 @@ export default function SplitTaskModal({
   }, [open, task, initialParts, mode, employees, taskTypes, isDraft, taskExecutionMode]);
 
   const revalidateHours = (newParts) => {
-    const sum = newParts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
+    const sum = newParts.reduce((acc, p) => acc + partTotalHours(p), 0);
     if (isFreeHoursMode) {
       if (newParts.length < 1) {
         setError('Добавьте сотрудника');
@@ -100,8 +119,17 @@ export default function SplitTaskModal({
     setError('');
   };
 
+  const createBlankPart = () => ({
+    employeeName: employees[0],
+    taskTypes: [],
+    hours: 0,
+    throughTest: false,
+    testHours: 0,
+    productionHours: 0,
+  });
+
   const addPart = () => {
-    const next = [...parts, { employeeName: employees[0], taskTypes: [taskTypes[0]], hours: 0 }];
+    const next = [...parts, createBlankPart()];
     setParts(next);
     revalidateHours(next);
   };
@@ -122,18 +150,45 @@ export default function SplitTaskModal({
     revalidateHours(next);
   };
 
+  const toggleThroughTest = (index) => {
+    const part = parts[index];
+    const next = [...parts];
+    const enabled = !part.throughTest;
+    next[index] = {
+      ...part,
+      throughTest: enabled,
+      testHours: enabled ? (part.testHours || part.hours || 0) : 0,
+      productionHours: enabled ? (part.productionHours || 0) : 0,
+      hours: enabled ? 0 : (part.testHours + part.productionHours) || part.hours,
+    };
+    setParts(next);
+    revalidateHours(next);
+  };
+
   const updatePart = (index, field, value) => {
     const next = [...parts];
-    next[index][field] = value;
+    next[index] = { ...next[index], [field]: value };
     setParts(next);
     revalidateHours(next);
   };
 
   const validateParts = () => {
-    const sum = parts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
-    if (parts.some(p => !p.employeeName || p.taskTypes.length === 0 || !(parseFloat(p.hours) > 0))) {
-      setError('Заполните все поля для каждой части');
-      return false;
+    for (const part of parts) {
+      if (!part.employeeName || part.taskTypes.length === 0) {
+        setError('Заполните сотрудника и тип работы');
+        return false;
+      }
+      if (part.throughTest) {
+        const testH = parseFloat(part.testHours);
+        const prodH = parseFloat(part.productionHours);
+        if (!(testH >= 0.5) || !(prodH >= 0.5)) {
+          setError('Укажите часы теста и основной части (от 0.5)');
+          return false;
+        }
+      } else if (!(parseFloat(part.hours) > 0)) {
+        setError('Заполните все поля для каждой части');
+        return false;
+      }
     }
     if (isDraft && isSequential && parts.length < 2) {
       setError('Для последовательной задачи добавьте минимум 2 этапа');
@@ -143,6 +198,7 @@ export default function SplitTaskModal({
       setError('Добавьте сотрудника');
       return false;
     }
+    const sum = parts.reduce((acc, p) => acc + partTotalHours(p), 0);
     if (isFreeHoursMode && sum <= 0) {
       setError('Укажите часы для каждого сотрудника');
       return false;
@@ -150,8 +206,7 @@ export default function SplitTaskModal({
     return true;
   };
 
-  const partsSum = parts.reduce((acc, p) => acc + (parseFloat(p.hours) || 0), 0);
-  const displayTotalHours = partsSum;
+  const displayTotalHours = parts.reduce((acc, p) => acc + partTotalHours(p), 0);
 
   const handleSubmit = async () => {
     if (submittingRef.current) return;
@@ -207,15 +262,18 @@ export default function SplitTaskModal({
       open={open}
       onClose={submitting ? undefined : onClose}
       maxWidth={false}
+      scroll="paper"
       sx={{
         '& .MuiDialog-paper': {
-          width: { xs: 'calc(100vw - 32px)', sm: '560px !important' },
-          maxWidth: { xs: 'calc(100vw - 32px)', sm: '560px !important' },
-          margin: 2
+          width: 'fit-content',
+          maxWidth: 'calc(100vw - 32px)',
+          minWidth: { xs: 'min(100%, 320px)', sm: 480 },
+          m: 2,
+          px: { xs: 0.5, sm: 1 }
         }
       }}
     >
-      <DialogTitle>
+      <DialogTitle sx={{ px: { xs: 2, sm: 3 }, pt: 2.5, pb: 1.5 }}>
         {title}
         {taskLabel && (
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -223,22 +281,24 @@ export default function SplitTaskModal({
           </Typography>
         )}
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          {isDraft
-            ? parts.length >= 2
-              ? isSequential
-                ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
-                : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`
-              : `Обычная задача · ${displayTotalHours.toFixed(1)} ч`
-            : parts.length === 1
-              ? `Обычная задача · ${displayTotalHours.toFixed(1)} ч (попадёт в столбец «Часы»)`
-              : isSequential
-                ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
-                : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`}
+          {hasThroughTestPart
+            ? `Есть назначения через тест · ${displayTotalHours.toFixed(1)} ч`
+            : isDraft
+              ? parts.length >= 2
+                ? isSequential
+                  ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
+                  : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`
+                : `Обычная задача · ${displayTotalHours.toFixed(1)} ч`
+              : parts.length === 1
+                ? `Обычная задача · ${displayTotalHours.toFixed(1)} ч`
+                : isSequential
+                  ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
+                  : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`}
         </Typography>
       </DialogTitle>
       <Divider />
 
-      <DialogContent sx={{ px: 2.5 }}>
+      <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: 2.5, overflowX: 'auto' }}>
         {removeWarning && (
           <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setRemoveWarning('')}>
             {removeWarning}
@@ -270,17 +330,12 @@ export default function SplitTaskModal({
                 Последовательная
               </ToggleButton>
             </ToggleButtonGroup>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-              {isSequential
-                ? 'Этапы выполняются по очереди: следующий начинается после «Готово» предыдущего.'
-                : 'Все этапы доступны сразу — как общая задача.'}
-            </Typography>
           </Box>
         )}
 
         <Stack spacing={2}>
           {parts.map((part, idx) => (
-            <Paper key={idx} variant="outlined" sx={{ p: 1.5 }}>
+            <Paper key={idx} variant="outlined" sx={{ p: 1.5, display: 'inline-block', maxWidth: '100%' }}>
               {isSequential && parts.length > 1 && (
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                   Этап {idx + 1}
@@ -288,10 +343,13 @@ export default function SplitTaskModal({
               )}
               <Stack
                 direction="row"
-                spacing={1}
+                spacing={1.25}
                 sx={{
-                  alignItems: 'flex-start',
-                  flexWrap: { xs: 'wrap', sm: 'nowrap' }
+                  alignItems: 'center',
+                  flexWrap: 'nowrap',
+                  width: 'max-content',
+                  maxWidth: 'none',
+                  pr: 0.5
                 }}
               >
                 <FormControl size="small" sx={{ width: 132, flexShrink: 0, maxWidth: '100%' }}>
@@ -301,42 +359,48 @@ export default function SplitTaskModal({
                     value={part.employeeName}
                     label="Сотрудник"
                     onChange={(e) => updatePart(idx, 'employeeName', e.target.value)}
-                    MenuProps={{
-                      PaperProps: {
-                        sx: {
-                          minWidth: 132,
-                          maxWidth: 240
-                        }
-                      }
-                    }}
                   >
                     {employees.map(emp => (
                       <MenuItem key={emp} value={emp}>{emp}</MenuItem>
                     ))}
                   </Select>
-                  {isEdit && part.started && (
-                    <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>
-                      {part.statusText || 'В работе'}
-                    </Typography>
-                  )}
                 </FormControl>
 
+                <FormControlLabel
+                  control={
+                    isDraft ? (
+                      <Switch
+                        size="small"
+                        checked={Boolean(part.throughTest)}
+                        onChange={() => toggleThroughTest(idx)}
+                      />
+                    ) : (
+                      <Checkbox
+                        size="small"
+                        checked={Boolean(part.throughTest)}
+                        onChange={() => toggleThroughTest(idx)}
+                      />
+                    )
+                  }
+                  label="Через тест"
+                  sx={{
+                    m: 0,
+                    flexShrink: 0,
+                    alignItems: 'center',
+                    '& .MuiSwitch-root': { my: 0 },
+                    '& .MuiCheckbox-root': { p: 0.5 }
+                  }}
+                />
+
                 <FormControl size="small" sx={{ width: 190, flexShrink: 0, maxWidth: '100%' }}>
-                  <InputLabel>Типы работ</InputLabel>
+                  <InputLabel>Тип работы</InputLabel>
                   <Select
                     multiple
                     value={part.taskTypes}
-                    label="Типы работ"
+                    label="Тип работы"
                     onChange={(e) => updatePart(idx, 'taskTypes', e.target.value)}
-                    input={<OutlinedInput label="Типы работ" />}
+                    input={<OutlinedInput label="Тип работы" />}
                     renderValue={(selected) => selected.join(', ')}
-                    sx={{
-                      '& .MuiSelect-select': {
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }
-                    }}
                   >
                     {taskTypes.map((type) => (
                       <MenuItem key={type} value={type}>
@@ -347,19 +411,35 @@ export default function SplitTaskModal({
                   </Select>
                 </FormControl>
 
-                <EstimateHoursInput
-                  value={part.hours}
-                  onChange={(hours) => updatePart(idx, 'hours', hours)}
-                  sx={{ width: 104, flexShrink: 0 }}
-                />
+                {part.throughTest ? (
+                  <>
+                    <EstimateHoursInput
+                      placeholder="Тест"
+                      value={part.testHours}
+                      onChange={(hours) => updatePart(idx, 'testHours', hours)}
+                      sx={{ flexShrink: 0 }}
+                    />
+                    <EstimateHoursInput
+                      placeholder="Основн."
+                      value={part.productionHours}
+                      onChange={(hours) => updatePart(idx, 'productionHours', hours)}
+                      sx={{ flexShrink: 0 }}
+                    />
+                  </>
+                ) : (
+                  <EstimateHoursInput
+                    value={part.hours}
+                    onChange={(hours) => updatePart(idx, 'hours', hours)}
+                    sx={{ flexShrink: 0 }}
+                  />
+                )}
 
                 {parts.length > 1 && (
                   <IconButton
                     size="small"
                     color="error"
                     onClick={() => removePart(idx)}
-                    aria-label={isSequential ? 'Удалить этап' : 'Удалить сотрудника'}
-                    sx={{ mt: 0.5, flexShrink: 0 }}
+                    sx={{ flexShrink: 0 }}
                   >
                     <Delete />
                   </IconButton>
@@ -374,7 +454,7 @@ export default function SplitTaskModal({
         </Stack>
       </DialogContent>
 
-      <DialogActions>
+      <DialogActions sx={{ px: { xs: 2, sm: 3 }, pb: 2 }}>
         <Button onClick={onClose} disabled={submitting}>Отмена</Button>
         <Button onClick={handleSubmit} variant="contained" color="primary" disabled={submitting}>
           {submitLabel}

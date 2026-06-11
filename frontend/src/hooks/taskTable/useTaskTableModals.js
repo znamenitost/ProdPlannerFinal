@@ -47,7 +47,7 @@ export default function useTaskTableModals({
     if (!initialParts?.length && newRow.employeeName) {
       initialParts = [{
         employeeName: newRow.employeeName,
-        taskTypes: newRow.types?.length ? newRow.types : [taskTypes[0]],
+        taskTypes: newRow.types?.length ? newRow.types : [],
         hours: Number(newRow.estimateHours) || 0
       }];
     }
@@ -81,7 +81,10 @@ export default function useTaskTableModals({
         estimateHours: totalFromParts,
         employeeName: part.employeeName,
         types,
-        taskExecutionMode: TASK_EXECUTION_PARALLEL
+        taskExecutionMode: TASK_EXECUTION_PARALLEL,
+        requiresTestBeforeProduction: Boolean(part.requiresTestBeforeProduction),
+        testEstimateHours: part.testEstimateHours ?? 0,
+        productionEstimateHours: part.productionEstimateHours ?? 0,
       }));
     }
   };

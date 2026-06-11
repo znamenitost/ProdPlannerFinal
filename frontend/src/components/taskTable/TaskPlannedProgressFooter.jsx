@@ -2,10 +2,13 @@ import { TableRow, TableCell, LinearProgress } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { COL_ACTIONS } from '../../utils/taskTableStyles';
 
+/** false — полоска скрыта в UI; расчёт и пропсы строк не отключаются. */
+export const PLANNED_TIME_PROGRESS_VISIBLE = false;
+
 export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitParent = false }) {
   const show = task.showPlannedTimeProgress ?? false;
 
-  if (hideForSplitParent || !show) {
+  if (hideForSplitParent || !show || !PLANNED_TIME_PROGRESS_VISIBLE) {
     return null;
   }
 

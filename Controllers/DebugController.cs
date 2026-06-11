@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Infrastructure;
+using ProductionPlanner.Infrastructure.Logging;
+using ProductionPlanner.Hubs;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models;
 using System.Security.Cryptography;
@@ -21,6 +23,7 @@ public class DebugController : ControllerBase
     private readonly IWorkHoursCalculator _workHours;
     private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _configuration;
+    private readonly NotificationConnectionRegistry _connections;
 
     public DebugController(
         IProductionTaskRepository repo,
@@ -28,7 +31,8 @@ public class DebugController : ControllerBase
         IAppTimeService timeService,
         IWorkHoursCalculator workHours,
         IWebHostEnvironment environment,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        NotificationConnectionRegistry connections)
     {
         _repo = repo;
         _context = context;
@@ -36,10 +40,104 @@ public class DebugController : ControllerBase
         _workHours = workHours;
         _environment = environment;
         _configuration = configuration;
+        _connections = connections;
     }
 
     private ActionResult? DevOnly() =>
         _environment.IsDevelopment() ? null : NotFound();
+
+    [HttpGet("logs")]
+    public IActionResult GetLogs(
+        [FromQuery] bool warning = true,
+        [FromQuery] bool error = true,
+        [FromQuery] int tail = 500)
+    {
+        var levels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (warning) levels.Add("Warning");
+        if (error)
+        {
+            levels.Add("Error");
+            levels.Add("Critical");
+        }
+
+        if (levels.Count == 0)
+        {
+            return Ok(new
+            {
+                path = "logs/app.log",
+                fileSizeBytes = 0L,
+                entries = Array.Empty<object>()
+            });
+        }
+
+        var path = GetLogFilePath();
+        var fileSizeBytes = System.IO.File.Exists(path) ? new FileInfo(path).Length : 0L;
+        var entries = AppLogReader.ReadEntries(path, levels, tail);
+
+        return Ok(new
+        {
+            path = "logs/app.log",
+            fileSizeBytes,
+            entries = entries.Select(e => new
+            {
+                e.Timestamp,
+                e.Level,
+                e.Category,
+                e.Message,
+                details = e.Details
+            })
+        });
+    }
+
+    private static string GetLogFilePath() =>
+        Path.Combine(Directory.GetCurrentDirectory(), "logs", "app.log");
+
+    [HttpGet("db-integrity")]
+    public async Task<IActionResult> GetDatabaseIntegrity(CancellationToken cancellationToken)
+    {
+        var report = await DatabaseIntegrityChecker.RunAsync(_context, _workHours, cancellationToken);
+        return Ok(new
+        {
+            ok = report.Ok,
+            capturedAt = report.CapturedAt,
+            checks = report.Checks.Select(c => new
+            {
+                c.Id,
+                c.Title,
+                c.Severity,
+                c.Count,
+                sampleIds = c.SampleIds,
+                c.Hint
+            })
+        });
+    }
+
+    [HttpGet("connections")]
+    public IActionResult GetConnections()
+    {
+        var snapshot = _connections.GetSnapshot();
+        var process = System.Diagnostics.Process.GetCurrentProcess();
+
+        return Ok(new
+        {
+            signalR = new
+            {
+                snapshot.ActiveTotal,
+                snapshot.TotalOpened,
+                totalClosed = snapshot.TotalClosed,
+                snapshot.UsersOnline,
+                snapshot.MaxConnectionsPerUser,
+                balance = snapshot.Balance,
+                byUser = snapshot.ByUser
+            },
+            memory = new
+            {
+                gcHeapMb = Math.Round(GC.GetTotalMemory(false) / 1024.0 / 1024.0, 2),
+                workingSetMb = Math.Round(process.WorkingSet64 / 1024.0 / 1024.0, 2)
+            },
+            capturedAt = DateTime.UtcNow
+        });
+    }
 
     [HttpGet("memory")]
     public IActionResult GetMemory()

@@ -252,16 +252,28 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     const startConnection = async () => {
       try {
         await connection.start();
-        if (!isMounted) return;
+        if (!isMounted) {
+          if (connection.state !== 'Disconnected' && connection.state !== 'Disconnecting') {
+            await connection.stop();
+          }
+          return;
+        }
         await connection.invoke('JoinUserGroup', user.id).catch(() => {});
         await fetchPendingNotifications(abort.signal);
       } catch (err) {
-        console.warn('SignalR start error:', err?.message ?? err);
+        if (!isMounted) return;
+        const message = err?.message ?? String(err);
+        if (message.includes('stopped during negotiation')) return;
+        console.warn('SignalR start error:', message);
         await fetchPendingNotifications(abort.signal);
       }
     };
 
-    startConnection();
+    // Отложенный старт: в Strict Mode cleanup успевает до negotiate первого mount.
+    const startTimer = setTimeout(() => {
+      if (!isMounted) return;
+      startConnection();
+    }, 0);
 
     connection.onreconnected(async () => {
       if (!isMounted) return;
@@ -283,6 +295,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
 
     return () => {
       isMounted = false;
+      clearTimeout(startTimer);
       abort.abort();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', onVisibilityChange);
@@ -296,7 +309,9 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       connection.off('TaskStatusChanged', handleTaskStatusChanged);
       connection.off('TaskProgressChanged', handleTaskProgressChanged);
       connection.off('ForceDisconnect', handleForceDisconnect);
-      connection.stop().catch((err) => console.error('SignalR stop error:', err));
+      if (connection.state !== 'Disconnected' && connection.state !== 'Disconnecting') {
+        connection.stop().catch((err) => console.error('SignalR stop error:', err));
+      }
     };
   }, [
     enabled,

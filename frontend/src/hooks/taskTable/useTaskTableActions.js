@@ -154,6 +154,19 @@ export default function useTaskTableActions({
         newRow.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL
           ? SUPPLY_MODE_INTERNAL
           : SUPPLY_MODE_COOPERATIVE;
+    } else if (newRow.requiresTestBeforeProduction) {
+      const testH = parseFloat(newRow.testEstimateHours);
+      const prodH = parseFloat(newRow.productionEstimateHours);
+      if (!testH || testH < 0.5 || !prodH || prodH < 0.5) {
+        showWarning('Укажите часы теста и основной части (от 0.5)');
+        return;
+      }
+      payload.requiresTestBeforeProduction = true;
+      payload.testEstimateHours = testH;
+      payload.productionEstimateHours = prodH;
+      payload.estimateHours = testH + prodH;
+      payload.type = (newRow.types || []).join(', ');
+      payload.employeeName = newRow.employeeName;
     } else {
       const hours = parseFloat(newRow.estimateHours);
       if (!hours || hours < 0.5 || hours > 24) {

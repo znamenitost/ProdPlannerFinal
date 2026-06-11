@@ -26,9 +26,14 @@ export function clampEstimateHoursToRange(
   return Math.min(max, Math.max(min, stepped));
 }
 
+// 2× кнопка (30) + поле (48) + рамка; minWidth не даёт родителю обрезать «+»
+const FIELD_MIN_WIDTH = 112;
+
 const fieldSx = {
   display: 'inline-flex',
   alignItems: 'stretch',
+  width: 'fit-content',
+  minWidth: FIELD_MIN_WIDTH,
   border: 1,
   borderColor: 'divider',
   borderRadius: 1,
@@ -98,7 +103,7 @@ export default function EstimateHoursInput({
   };
 
   return (
-    <Box sx={{ ...fieldSx, ...sx }}>
+    <Box sx={{ ...fieldSx, ...sx, minWidth: FIELD_MIN_WIDTH }}>
       <NumberField.Root
         value={numericValue}
         onValueChange={handleValueChange}
@@ -109,7 +114,7 @@ export default function EstimateHoursInput({
         disabled={disabled}
         format={{ minimumFractionDigits: 0, maximumFractionDigits: 1 }}
       >
-        <NumberField.Group style={{ display: 'flex', alignItems: 'stretch' }}>
+        <NumberField.Group style={{ display: 'flex', alignItems: 'stretch', width: '100%' }}>
           <NumberField.Decrement aria-label="Уменьшить">
             <Remove sx={{ fontSize: 18 }} />
           </NumberField.Decrement>

@@ -1,3 +1,80 @@
+=== ./frontend/src/context/AuthContext.jsx ===
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+const DEFAULT_EMPLOYEE = 'Дима';
+
+const AuthContext = createContext(null);
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [employee, setEmployee] = useState(DEFAULT_EMPLOYEE);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function checkAuth() {
+      try {
+        const response = await fetch('/api/auth/me', {
+          credentials: 'include',
+          signal: controller.signal
+        });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (data.isAuthenticated) {
+          setUser(data);
+          if (data.role !== 'Admin') setEmployee(data.fullName);
+        } else {
+          setUser(null);
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error('Ошибка проверки авторизации:', err);
+        }
+      } finally {
+        if (!controller.signal.aborted) setAuthChecking(false);
+      }
+    }
+
+    checkAuth();
+    return () => controller.abort();
+  }, []);
+
+  const handleLogin = useCallback((userData) => {
+    setUser(userData);
+    if (userData.role !== 'Admin') setEmployee(userData.fullName);
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    setUser(null);
+    setEmployee(DEFAULT_EMPLOYEE);
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      user,
+      setUser,
+      authChecking,
+      employee,
+      setEmployee,
+      handleLogin,
+      handleLogout,
+    }),
+    [user, authChecking, employee, handleLogin, handleLogout]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export default function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+}
 === ./frontend/src/context/TextLimitContext.jsx ===
 import { createContext, useContext } from 'react';
 import { TASK_TABLE_DEFAULT_TEXT_LIMIT } from '../constants/taskTableColumnsConfig';
@@ -22,24 +99,8 @@ import {
   Snackbar,
   TextField,
 } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 
 const UiFeedbackContext = createContext(null);
-
-const snackbarAlertSx = (severity) => ({
-  width: '100%',
-  color: (theme) => theme.palette.common.white,
-  bgcolor: (theme) => theme.palette.grey[700],
-  border: (theme) => `1px solid ${alpha(theme.palette[severity]?.main || theme.palette.info.main, 0.7)}`,
-  borderLeft: (theme) => `5px solid ${theme.palette[severity]?.main || theme.palette.info.main}`,
-  boxShadow: (theme) => `0 12px 32px ${alpha(theme.palette.grey[700], 0.32)}`,
-  '& .MuiAlert-icon': {
-    color: (theme) => theme.palette[severity]?.main || theme.palette.info.main,
-  },
-  '& .MuiAlert-action': {
-    color: 'inherit',
-  },
-});
 
 const defaultConfirmState = {
   open: false,
@@ -140,8 +201,7 @@ export function UiFeedbackProvider({ children }) {
         <Alert
           onClose={handleSnackbarClose}
           severity={snackbar.severity}
-          variant="filled"
-          sx={snackbarAlertSx(snackbar.severity)}
+          variant="toast"
         >
           {snackbar.message}
         </Alert>
@@ -393,10 +453,14 @@ export function getWidth(start, end, range = getTimelineRange(false)) {
   return (duration / span) * 100;
 }
 
-export function getLunchBandPercent(range = getTimelineRange(false)) {
+export function getIntervalBandPercent(start, end, range = getTimelineRange(false)) {
+  const s = new Date(start);
+  const e = new Date(end);
   const span = range.end - range.start;
-  const left = ((15 - range.start) / span) * 100;
-  const width = (1 / span) * 100;
+  const startHour = s.getHours() + s.getMinutes() / 60;
+  const endHour = e.getHours() + e.getMinutes() / 60;
+  const left = ((startHour - range.start) / span) * 100;
+  const width = ((endHour - startHour) / span) * 100;
   return { left, width };
 }
 
@@ -472,47 +536,14 @@ export function getPlannedBlockColor(block, theme) {
   return null;
 }
 
-export function getTimelineSegments(dayDate, timeline) {
+export function getTimelineSegments(timeline) {
   if (!timeline?.length) return [];
 
-  const date = new Date(dayDate);
-  const segments = [];
-  const lunchStart = new Date(date);
-  lunchStart.setHours(15, 0, 0, 0);
-  const lunchEnd = new Date(date);
-  lunchEnd.setHours(16, 0, 0, 0);
-
-  timeline.forEach((segment) => {
-    const start = new Date(segment.start);
-    const end = new Date(segment.end);
-
-    if (segment.type === 'work') {
-      if (start < lunchEnd && end > lunchStart) {
-        if (start < lunchStart) {
-          const beforeLunchEnd = end < lunchStart ? end : lunchStart;
-          if (beforeLunchEnd > start) {
-            segments.push({ ...segment, start, end: beforeLunchEnd });
-          }
-        }
-        if (end > lunchEnd) {
-          const afterLunchStart = start > lunchEnd ? start : lunchEnd;
-          if (end > afterLunchStart) {
-            segments.push({ ...segment, start: afterLunchStart, end });
-          }
-        }
-      } else {
-        segments.push({ ...segment, start, end });
-      }
-    } else {
-      const isLunchTime =
-        (start >= lunchStart && start < lunchEnd)
-        || (end > lunchStart && end <= lunchEnd)
-        || (start <= lunchStart && end >= lunchEnd);
-      if (!isLunchTime) {
-        segments.push({ ...segment, start, end });
-      }
-    }
-  });
+  const segments = timeline.map((segment) => ({
+    ...segment,
+    start: new Date(segment.start),
+    end: new Date(segment.end)
+  }));
 
   return segments.sort((a, b) => new Date(a.start) - new Date(b.start));
 }
@@ -661,7 +692,7 @@ export function MotionCollapse({ in: inProp, children, sx, ...rest }) {
 }
 === ./frontend/src/components/ui/SectionCard.jsx ===
 import { Paper, Box, Typography } from '@mui/material';
-import { glassPaperSx, sectionHeaderSx, sectionTitleRowSx } from '../../theme/surfaces';
+import { sectionHeaderSx, sectionTitleRowSx } from '../../theme/surfaces';
 import { MotionFade } from './MotionSection';
 
 /**
@@ -679,7 +710,7 @@ export default function SectionCard({
 }) {
   return (
     <MotionFade appear>
-    <Paper sx={[glassPaperSx, sx]} {...paperProps}>
+    <Paper variant="section" sx={sx} {...paperProps}>
       {(title || action) && (
         <Box sx={sectionHeaderSx}>
           <Box sx={sectionTitleRowSx}>
@@ -714,25 +745,25 @@ import {
   Warning
 } from '@mui/icons-material';
 import {
+  Backdrop,
   Box,
   Button,
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   IconButton,
   Stack,
   Tooltip,
   Typography
 } from '@mui/material';
-import { compactActionButtonSx, glassCardSx } from '../theme/surfaces';
+import { compactButtonThemeStyles } from '../theme/componentVariants';
 import {
   isInfoStatus,
-  isPendingApprovalCalendar,
   isSequenceBlocked,
-  STATUS_NO_ITEMS,
-  STATUS_PENDING_APPROVAL,
   SUPPLY_MODE_INTERNAL
 } from '../constants/taskStatuses';
+import { getTaskBorderColor } from '../utils/taskBorderColor';
 import { getTaskFileLabel, getTaskHeading, getTaskStatusLine } from './TaskTitleTwoLines';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 
@@ -765,18 +796,8 @@ function getRiskProps(riskLevel) {
   }
 }
 
-function getBorderColor(task, theme) {
-  const text = getTaskStatusLine(task);
-  if (text === STATUS_PENDING_APPROVAL || isPendingApprovalCalendar(text)) {
-    return theme.palette.secondary.main;
-  }
-  if (text === STATUS_NO_ITEMS) return theme.palette.error.main;
-  if (task.status === 1) return theme.palette.info.main;
-  if (task.status === 2) return theme.palette.warning.main;
-  return theme.palette.divider;
-}
-
-function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
+function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOpenFile }) {
+  const statusActionsDisabled = isPending || lifecycleBusy;
   const risk = getRiskProps(task.riskLevel);
   const statusLabel = getTaskStatusLine(task);
   const taskHeading = getTaskHeading(task);
@@ -799,10 +820,10 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
 
   return (
     <Card
+      variant="nested"
       sx={(theme) => ({
-        ...glassCardSx,
         borderLeft: '4px solid',
-        borderLeftColor: getBorderColor(task, theme)
+        borderLeftColor: getTaskBorderColor({ ...task, statusText: statusLabel }, theme)
       })}
     >
       <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -815,8 +836,13 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-            <Tooltip title="Открыть файл" arrow>
-              <IconButton size="small" color="primary" onClick={() => onOpenFile(task.file)}>
+            <Tooltip title="Открыть файл" arrow describeChild>
+              <IconButton
+                size="small"
+                color="primary"
+                onClick={() => onOpenFile(task.file)}
+                aria-label="Открыть файл"
+              >
                 <FolderOpen fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -867,16 +893,17 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
             )}
           </Stack>
 
+          <Box sx={{ position: 'relative', display: 'inline-flex', maxWidth: '100%' }}>
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
             {sequenceBlocked && !isCompleted && (
               <Button
                 size="small"
-                variant="outlined"
+                variant="compact"
                 color="success"
                 startIcon={<PlayArrow />}
-                disabled={isPending}
+                disabled={statusActionsDisabled}
                 onClick={() => onAction(task, 'start')}
-                sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
+                sx={blockedButtonSx}
               >
                 Начал
               </Button>
@@ -885,32 +912,32 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
               <>
                 <Button
                   size="small"
-                  variant="outlined"
+                  variant="compact"
                   color="success"
                   startIcon={<PlayArrow />}
-                  disabled={isPending}
+                  disabled={statusActionsDisabled}
                   onClick={() => onAction(task, 'start')}
-                  sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
+                  sx={blockedButtonSx}
                 >
                   Начал
                 </Button>
                 <Button
                   size="small"
-                  variant="outlined"
+                  variant="compact"
                   color="warning"
                   startIcon={<Pause />}
                   disabled
-                  sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
+                  sx={blockedButtonSx}
                 >
                   Пауза
                 </Button>
                 <Button
                   size="small"
-                  variant="outlined"
+                  variant="compact"
                   color="primary"
                   startIcon={<CheckCircle />}
                   disabled
-                  sx={{ ...compactActionButtonSx, ...blockedButtonSx }}
+                  sx={blockedButtonSx}
                 >
                   Готово
                 </Button>
@@ -921,12 +948,11 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                 {(isAssignedLike || isPaused) && (
                   <Button
                     size="small"
-                    variant={isPaused ? 'contained' : 'outlined'}
+                    variant="compact"
                     color="success"
                     startIcon={<PlayArrow />}
-                    disabled={isPending}
+                    disabled={statusActionsDisabled}
                     onClick={() => onAction(task, isPaused ? 'resume' : 'start')}
-                    sx={compactActionButtonSx}
                   >
                     {isPaused ? 'Продолжить' : 'Начал'}
                   </Button>
@@ -934,12 +960,11 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                 {isInProgress && (
                   <Button
                     size="small"
-                    variant="outlined"
+                    variant="compact"
                     color="warning"
                     startIcon={<Pause />}
-                    disabled={isPending}
+                    disabled={statusActionsDisabled}
                     onClick={() => onAction(task, 'pause')}
-                    sx={compactActionButtonSx}
                   >
                     Пауза
                   </Button>
@@ -947,12 +972,11 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                 {(isInProgress || isPaused) && (
                   <Button
                     size="small"
-                    variant="outlined"
+                    variant="compact"
                     color="primary"
                     startIcon={<CheckCircle />}
-                    disabled={isPending}
+                    disabled={statusActionsDisabled}
                     onClick={() => onAction(task, 'complete')}
-                    sx={compactActionButtonSx}
                   >
                     Готово
                   </Button>
@@ -967,9 +991,9 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
                     size="small"
                     variant={isProgressMarkActive(task.progress, p) ? 'contained' : 'text'}
                     color="secondary"
-                    disabled={isPending}
+                    disabled={statusActionsDisabled}
                     onClick={() => onAction(task, 'progress', p)}
-                    sx={compactActionButtonSx}
+                    sx={compactButtonThemeStyles}
                   >
                     {Math.round(p * 100)}%
                   </Button>
@@ -977,6 +1001,19 @@ function ActiveTaskCard({ task, isPending, onAction, onOpenFile }) {
               </>
             )}
           </Stack>
+          <Backdrop
+            open={isPending}
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 1,
+              borderRadius: 1,
+              bgcolor: 'rgba(255, 255, 255, 0.55)'
+            }}
+          >
+            <CircularProgress size={28} />
+          </Backdrop>
+          </Box>
 
           <Stack
             direction="row"
@@ -1101,7 +1138,7 @@ export default function TaskIntervalsDialog({
                     onChange={(e) => handleRowChange(r.id, { startTime: e.target.value })}
                     fullWidth
                     size="small"
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                   />
                   <TextField
                     label="Окончание"
@@ -1111,7 +1148,7 @@ export default function TaskIntervalsDialog({
                     fullWidth
                     size="small"
                     disabled={r.isOpen}
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                   />
                 </Stack>
                 <FormControlLabel
@@ -1216,6 +1253,7 @@ export default function TaskCommentCell({ task, onOpenComment, iconButtonColor =
         size="small"
         color={iconButtonColor}
         onClick={() => onOpenComment(task)}
+        aria-label="Редактировать комментарий"
         sx={{ p: 0.5, flexShrink: 0 }}
       >
         <CommentIcon fontSize="small" sx={{ fontSize: 14 }} />
@@ -1307,7 +1345,6 @@ import {
   TASK_TABLE_TEXT_LIMIT_MIN,
   TASK_TABLE_TEXT_LIMIT_MAX
 } from '../../constants/taskTableColumnsConfig';
-import { softIconButtonSx } from '../../theme/surfaces';
 
 export default function TaskTableColumnSettings({
   visibility,
@@ -1323,9 +1360,10 @@ export default function TaskTableColumnSettings({
     <>
       <Tooltip title="Настройки колонок" arrow>
         <IconButton
+          variant="soft"
+          color="primary"
           onClick={(e) => setAnchorEl(e.currentTarget)}
           aria-label="Настройки колонок таблицы"
-          sx={softIconButtonSx('primary')}
         >
           <Settings />
         </IconButton>
@@ -1447,6 +1485,81 @@ export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitP
     </TableRow>
   );
 }
+=== ./frontend/src/components/ParallaxPage.jsx ===
+import { useRef } from 'react';
+import fon2Url from '../../../sprites/fon2.svg';
+import fon3Url from '../../../sprites/fon3.svg';
+import fon5Url from '../../../sprites/fon5.svg';
+import sunUrl from '../../../sprites/sun.svg';
+import './LoginForm.css';
+
+const FON1_URL = '/sprites/fon1.svg';
+
+export default function ParallaxPage({ children, className = '' }) {
+  const pageRef = useRef(null);
+
+  const handleParallaxMove = (event) => {
+    const page = pageRef.current;
+    if (!page) return;
+
+    const rect = page.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width - 0.5;
+    const y = (event.clientY - rect.top) / rect.height - 0.5;
+
+    page.style.setProperty('--layer-1-x', `${x * -13}px`);
+    page.style.setProperty('--layer-1-y', `${y * -5}px`);
+    page.style.setProperty('--layer-2-x', `${x * -30}px`);
+    page.style.setProperty('--layer-2-y', `${y * -10}px`);
+    page.style.setProperty('--layer-3-x', `${x * -50}px`);
+    page.style.setProperty('--layer-3-y', `${y * -16}px`);
+    page.style.setProperty('--layer-5-x', `${x * -84}px`);
+    page.style.setProperty('--layer-5-y', `${y * -24}px`);
+  };
+
+  const resetParallax = () => {
+    const page = pageRef.current;
+    if (!page) return;
+
+    page.style.setProperty('--layer-1-x', '0px');
+    page.style.setProperty('--layer-1-y', '0px');
+    page.style.setProperty('--layer-2-x', '0px');
+    page.style.setProperty('--layer-2-y', '0px');
+    page.style.setProperty('--layer-3-x', '0px');
+    page.style.setProperty('--layer-3-y', '0px');
+    page.style.setProperty('--layer-5-x', '0px');
+    page.style.setProperty('--layer-5-y', '0px');
+  };
+
+  return (
+    <main
+      ref={pageRef}
+      className={`login-parallax-page${className ? ` ${className}` : ''}`}
+      onMouseMove={handleParallaxMove}
+      onMouseLeave={resetParallax}
+      style={{
+        '--fon1-image': `url(${FON1_URL})`,
+        '--fon2-image': `url(${fon2Url})`,
+        '--fon3-image': `url(${fon3Url})`,
+        '--fon5-image': `url(${fon5Url})`,
+        '--sun-image': `url(${sunUrl})`
+      }}
+    >
+      <img
+        className="login-parallax-layer login-layer-fon1"
+        src={FON1_URL}
+        alt=""
+        aria-hidden="true"
+        fetchPriority="high"
+        decoding="sync"
+      />
+      <img className="login-sun-layer" src={sunUrl} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchPriority="low" />
+      <img className="login-parallax-layer login-layer-fon2" src={fon2Url} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchPriority="low" />
+      <img className="login-parallax-layer login-layer-fon3" src={fon3Url} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchPriority="low" />
+      <img className="login-parallax-layer login-layer-fon5" src={fon5Url} alt="" aria-hidden="true" loading="lazy" decoding="async" fetchPriority="low" />
+      {children}
+    </main>
+  );
+}
 === ./frontend/src/components/calendar/TimelineHourAxis.jsx ===
 import { Box, Typography } from '@mui/material';
 import { positionLeftTransitionSx } from '../../theme/motion';
@@ -1527,8 +1640,8 @@ import {
   formatCalendarTaskTooltip,
   formatCalendarTime,
   getDuration,
+  getIntervalBandPercent,
   getLeft,
-  getLunchBandPercent,
   getNowMarkerPercent,
   getTimelineRange,
   getWidth,
@@ -1539,13 +1652,14 @@ import TimelineHourAxis from './TimelineHourAxis';
 import TimelineGridLines from './TimelineGridLines';
 import { useClockMinuteTick } from '../../context/ClockContext';
 
-function LunchBreak({ range, opacity = 0.7 }) {
-  const { left, width } = getLunchBandPercent(range);
+function LunchBreak({ interval, range, opacity = 0.7 }) {
+  const endTime = interval.endTime ?? interval.end ?? new Date();
+  const { left, width } = getIntervalBandPercent(interval.startTime ?? interval.start, endTime, range);
   return (
     <Tooltip
       title={(
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Restaurant fontSize="small" /> Обед (15:00–16:00)
+          <Restaurant fontSize="small" /> Обед ({formatCalendarTime(interval.startTime ?? interval.start)}–{formatCalendarTime(endTime)})
         </Box>
       )}
       arrow
@@ -1574,6 +1688,7 @@ function LunchBreak({ range, opacity = 0.7 }) {
 export default function TimelineSegments({
   workSegments,
   idleSegments,
+  lunchIntervals = [],
   isWorkingDay,
   detailedTimeline = false,
   dayDate = null,
@@ -1608,7 +1723,13 @@ export default function TimelineSegments({
         </Box>
       )}
 
-      {isWorkingDay && <LunchBreak range={range} />}
+      {isWorkingDay && lunchIntervals.map((interval, idx) => (
+        <LunchBreak
+          key={`lunch-${new Date(interval.startTime ?? interval.start).getTime()}-${idx}`}
+          interval={interval}
+          range={range}
+        />
+      ))}
 
       {workSegments.map((segment, idx) => {
         const layer = segment.layer ?? 0;
@@ -1916,7 +2037,8 @@ import { alpha } from '@mui/material/styles';
 import { Restaurant } from '@mui/icons-material';
 import {
   CALENDAR_TOOLTIP_SX,
-  getLunchBandPercent,
+  formatCalendarTime,
+  getIntervalBandPercent,
   formatCalendarTaskTooltip,
   getPlannedBlockColor,
   getTimelineRange
@@ -1925,13 +2047,14 @@ import { tokens } from '../../theme/paletteTokens';
 import { calendarBlockLayoutTransitionSx } from '../../theme/motion';
 import TimelineGridLines from './TimelineGridLines';
 
-function LunchBreak({ range }) {
-  const { left, width } = getLunchBandPercent(range);
+function LunchBreak({ interval, range }) {
+  const endTime = interval.endTime ?? interval.end ?? new Date();
+  const { left, width } = getIntervalBandPercent(interval.startTime ?? interval.start, endTime, range);
   return (
     <Tooltip
       title={(
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Restaurant fontSize="small" /> Обед (15:00–16:00)
+          <Restaurant fontSize="small" /> Обед ({formatCalendarTime(interval.startTime ?? interval.start)}–{formatCalendarTime(endTime)})
         </Box>
       )}
       arrow
@@ -1959,6 +2082,7 @@ function LunchBreak({ range }) {
 
 export default function PlannedBlocks({
   taskBlocks,
+  lunchIntervals = [],
   isWorkingDay,
   isHighlighted,
   detailedTimeline = false
@@ -2022,7 +2146,13 @@ export default function PlannedBlocks({
           </Tooltip>
         );
       })}
-      {isWorkingDay && <LunchBreak range={range} />}
+      {isWorkingDay && lunchIntervals.map((interval, idx) => (
+        <LunchBreak
+          key={`planned-lunch-${new Date(interval.startTime ?? interval.start).getTime()}-${idx}`}
+          interval={interval}
+          range={range}
+        />
+      ))}
       {taskBlocks?.map((block, idx) => {
         const highlighted = isHighlighted(block);
         const blockKey = `planned-${block.taskId ?? idx}`;
@@ -2235,7 +2365,7 @@ export default function DebugPanel({ employee, onTimeChange, onRefresh }) {
                 <BugReport sx={{ fontSize: 'small', mr: 1, verticalAlign: 'middle' }} />
                 Панель отладки
               </Typography>
-              <IconButton size="small" onClick={() => setOpen(false)}>
+              <IconButton size="small" onClick={() => setOpen(false)} aria-label="Закрыть панель отладки">
                 <Close fontSize="small" />
               </IconButton>
             </Box>
@@ -2470,8 +2600,8 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import SplitTaskModal from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
 import NewTaskRow from './NewTaskRow';
@@ -2490,7 +2620,8 @@ import { taskTableColumnCount } from '../utils/taskTableColumns';
 const ROW_GROUP_BASE_HEIGHT = 44;
 const ROW_PROGRESS_HEIGHT = 6;
 const EDIT_ROW_HEIGHT = 72;
-const VIRTUAL_OVERSCAN = 8;
+const VIRTUAL_OVERSCAN = 15;
+const TEXT_LIMIT_MEASURE_DEBOUNCE_MS = 200;
 
 function isCompletedRow(row) {
   return row?.statusText === STATUS_COMPLETED || row?.status === 3;
@@ -2522,6 +2653,7 @@ export default function TaskTable({
 }) {
   const isAdmin = userRole === 'Admin';
   const tableContainerRef = useRef(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
   const table = useTaskTableController({
     onCalendarRefresh,
     onRegisterHubHandler,
@@ -2572,24 +2704,57 @@ export default function TaskTable({
     [table.childrenCache, table.editingId, table.expandedRows, visibleRows]
   );
 
-  const rowVirtualizer = useVirtualizer({
+  const shouldVirtualize = visibleRows.length > 30;
+
+  const measureScrollMargin = useCallback(() => {
+    const el = tableContainerRef.current;
+    if (!el) return;
+    setScrollMargin(el.getBoundingClientRect().top + window.scrollY);
+  }, []);
+
+  useLayoutEffect(() => {
+    measureScrollMargin();
+    const el = tableContainerRef.current;
+    if (!el) return undefined;
+
+    const resizeObserver = new ResizeObserver(measureScrollMargin);
+    resizeObserver.observe(el);
+    window.addEventListener('resize', measureScrollMargin);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', measureScrollMargin);
+    };
+  }, [measureScrollMargin, table.rows.length, table.page, completedBottomSort]);
+
+  const rowVirtualizer = useWindowVirtualizer({
     count: visibleRows.length,
-    getScrollElement: () => tableContainerRef.current,
     estimateSize: estimateRowGroupHeight,
     getItemKey: (index) => visibleRows[index]?.id ?? index,
-    overscan: VIRTUAL_OVERSCAN
+    overscan: VIRTUAL_OVERSCAN,
+    scrollMargin,
+    enabled: shouldVirtualize
   });
 
   useEffect(() => {
     rowVirtualizer.measure();
-  }, [rowVirtualizer, estimateRowGroupHeight, columnSettings.textLimit]);
+  }, [rowVirtualizer, estimateRowGroupHeight]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      rowVirtualizer.measure();
+    }, TEXT_LIMIT_MEASURE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [rowVirtualizer, columnSettings.textLimit]);
 
   const virtualRows = rowVirtualizer.getVirtualItems();
-  const shouldVirtualize = !table.newRow && visibleRows.length > 30;
-  const topPadding = virtualRows.length > 0 ? virtualRows[0].start : 0;
+  const topPadding = virtualRows.length > 0 ? virtualRows[0].start - scrollMargin : 0;
   const bottomPadding =
     virtualRows.length > 0
-      ? Math.max(0, rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end)
+      ? Math.max(
+          0,
+          rowVirtualizer.getTotalSize() - (virtualRows[virtualRows.length - 1].end - scrollMargin)
+        )
       : 0;
 
   const renderTaskRow = (parent) => {
@@ -2619,6 +2784,7 @@ export default function TaskTable({
         onComplete={table.handleCompleteTask}
         onSetStatus={table.handleSetStatus}
         pendingLifecycleTaskId={table.pendingLifecycleTaskId}
+        lifecycleBusy={table.isLifecycleBusy}
         onEdit={table.handleEditRow}
         onDelete={table.handleDeleteRow}
         onOpenComment={table.handleOpenComment}
@@ -2638,7 +2804,7 @@ export default function TaskTable({
 
   return (
     <TextLimitProvider value={columnSettings.textLimit}>
-    <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 3 }}>
+    <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 2.5 }}>
       {isAdmin && (
         <PlanningWarningsBanner
           warnings={table.planningWarnings}
@@ -2659,7 +2825,7 @@ export default function TaskTable({
         onCompletedBottomSortChange={setCompletedBottomSort}
       />
 
-      <TableContainer ref={tableContainerRef} sx={{ maxHeight: '70vh', overflow: 'auto' }}>
+      <TableContainer ref={tableContainerRef}>
         <Table
           stickyHeader
           size="small"
@@ -3114,6 +3280,7 @@ import {
   needsTooltip
 } from '../utils/taskTableStyles';
 import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
+import { getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
 
 function ParentTaskRow({
   task,
@@ -3127,6 +3294,7 @@ function ParentTaskRow({
   onComplete,
   onSetStatus,
   pendingLifecycleTaskId = null,
+  lifecycleBusy = false,
   onEdit,
   onDelete,
   onOpenComment,
@@ -3179,6 +3347,10 @@ function ParentTaskRow({
     return false;
   };
 
+  const childCount = childrenTasks?.length ?? 0;
+  const showSharedGroupStripe = hasChildren && isExpanded;
+  const sharedGroupExpanded = showSharedGroupStripe && childCount > 0;
+
   const getRowStyle = (theme) => {
     const overdue =
       task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
@@ -3186,20 +3358,30 @@ function ParentTaskRow({
       borderLeft: 'none',
       '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) }
     };
+    let style = base;
     if (highlightMyTasks && isMine) {
-      return { ...base, ...highlightedTaskRowSx(theme) };
-    }
-    if (highlightMyTasks && !isMine) {
-      return {
+      style = { ...base, ...highlightedTaskRowSx(theme) };
+    } else if (highlightMyTasks && !isMine) {
+      style = {
         ...base,
         opacity: 0.65,
         '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04), opacity: 0.85 }
       };
+    } else if (overdue) {
+      style = { ...base, ...overdueTaskRowSx(theme) };
     }
-    if (overdue) {
-      return { ...base, ...overdueTaskRowSx(theme) };
+
+    if (showSharedGroupStripe) {
+      style = {
+        ...style,
+        ...getSharedGroupStripeRowSx(theme, task, {
+          isFirst: true,
+          isLast: !sharedGroupExpanded
+        })
+      };
     }
-    return base;
+
+    return style;
   };
 
   const showActionButtons = canUserManage() && canChangeStatus && !hasChildren;
@@ -3218,7 +3400,14 @@ function ParentTaskRow({
           <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', width: '100%' }}>
             <Box sx={ICON_SLOT_EXPAND}>
               {hasChildren ? (
-                <IconButton size="small" onClick={() => onToggleExpand(task.id)} sx={{ p: 0.5 }}>
+                <IconButton
+                  size="small"
+                  variant="soft"
+                  color="primary"
+                  onClick={() => onToggleExpand(task.id)}
+                  aria-label={isExpanded ? 'Свернуть подзадачи' : 'Развернуть подзадачи'}
+                  sx={{ p: 0.5 }}
+                >
                   {isExpanded ? <ExpandMore fontSize="small" /> : <ChevronRight fontSize="small" />}
                 </IconButton>
               ) : null}
@@ -3232,7 +3421,13 @@ function ParentTaskRow({
 
             <Box sx={ICON_SLOT_FILE}>
               <LazyTooltip title={`Открыть файл: ${fullFilePath}`} arrow>
-                <IconButton size="small" color="primary" onClick={() => onOpenFile(task)} sx={{ p: 0.5 }}>
+                <IconButton
+                  size="small"
+                  color="primary"
+                  onClick={() => onOpenFile(task)}
+                  aria-label={`Открыть файл: ${fullFilePath}`}
+                  sx={{ p: 0.5 }}
+                >
                   <FolderOpen fontSize="small" />
                 </IconButton>
               </LazyTooltip>
@@ -3301,6 +3496,7 @@ function ParentTaskRow({
               <TaskAdminActionStacks
                 task={task}
                 pending={pendingLifecycleTaskId === task.id}
+                lifecycleBusy={lifecycleBusy}
                 onEdit={() => onEdit(task.id)}
                 onDelete={() => onDelete(task.id)}
                 onIntervals={() => onOpenIntervals(task)}
@@ -3316,6 +3512,7 @@ function ParentTaskRow({
               <EmployeeStatusButtons
                 task={task}
                 pending={pendingLifecycleTaskId === task.id}
+                lifecycleBusy={lifecycleBusy}
                 onStart={onStart}
                 onPause={onPause}
                 onResume={onResume}
@@ -3333,10 +3530,12 @@ function ParentTaskRow({
         hideForSplitParent={hasChildren}
       />
 
-      {hasChildren && isExpanded && (childrenTasks || []).map((child) => (
+      {hasChildren && isExpanded && (childrenTasks || []).map((child, index) => (
         <ChildTaskRow
           key={child.id}
           task={child}
+          sharedGroupParentTask={task}
+          isLastInSharedGroup={index === childCount - 1}
           onOpenFile={onOpenFile}
           onStart={onStart}
           onPause={onPause}
@@ -3344,6 +3543,7 @@ function ParentTaskRow({
           onComplete={onComplete}
           onSetStatus={onSetStatus}
           pendingLifecycleTaskId={pendingLifecycleTaskId}
+          lifecycleBusy={lifecycleBusy}
           onEdit={onEdit}
           onDelete={onDelete}
           onOpenComment={onOpenComment}
@@ -3392,9 +3592,12 @@ import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { childRowSx, highlightedTaskRowSx } from '../theme/surfaces';
 import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
+import { getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
 
 function ChildTaskRow({
   task,
+  sharedGroupParentTask = null,
+  isLastInSharedGroup = false,
   onOpenFile,
   onStart,
   onPause,
@@ -3402,6 +3605,7 @@ function ChildTaskRow({
   onComplete,
   onSetStatus,
   pendingLifecycleTaskId = null,
+  lifecycleBusy = false,
   onEdit,
   onDelete,
   onOpenComment,
@@ -3449,6 +3653,16 @@ function ChildTaskRow({
         style['&:hover'] = { opacity: 0.85 };
       }
     }
+    if (sharedGroupParentTask) {
+      style = {
+        ...style,
+        ...getSharedGroupStripeRowSx(theme, sharedGroupParentTask, {
+          isFirst: false,
+          isLast: isLastInSharedGroup
+        })
+      };
+    }
+
     return bgColor ? { ...style, bgcolor: bgColor } : style;
   };
 
@@ -3533,6 +3747,7 @@ function ChildTaskRow({
             <TaskAdminActionStacks
               task={task}
               pending={pendingLifecycleTaskId === task.id}
+              lifecycleBusy={lifecycleBusy}
               onEdit={() => onEdit(task.id)}
               onDelete={() => onDelete(task.id)}
               onIntervals={() => onOpenIntervals(task)}
@@ -3548,6 +3763,7 @@ function ChildTaskRow({
             <EmployeeStatusButtons
             task={task}
             pending={pendingLifecycleTaskId === task.id}
+            lifecycleBusy={lifecycleBusy}
             onStart={onStart}
             onPause={onPause}
             onResume={onResume}
@@ -3578,14 +3794,16 @@ import {
   TableRow,
   Chip,
   Box,
+  FormControl,
   Card,
   CardContent,
   Grid,
   Tooltip,
-  TablePagination,
+  Pagination,
   IconButton,
   Menu,
   MenuItem,
+  Select,
   ListItemText,
   Checkbox
 } from '@mui/material';
@@ -3602,8 +3820,7 @@ import {
   Sort,
   EventNote  // добавлена для иконки периода выполнения (опционально)
 } from '@mui/icons-material';
-import { alpha } from '@mui/material/styles';
-import { glassPaperSx, sectionTitleRowSx } from '../theme/surfaces';
+import { sectionTitleRowSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import EmptyState from './ui/EmptyState';
 import TaskTitleTwoLines from './TaskTitleTwoLines';
@@ -3638,9 +3855,10 @@ export default function CompletedTasksList({ employee }) {
   const totalCount = data?.totalCount ?? stats.totalTasks ?? 0;
 
   const totalDifference = stats.totalEstimate - stats.totalActual;
-  const selectedPeriodLabel =
-    STATS_PERIOD_OPTIONS.find((option) => option.value === statsPeriod)?.label ?? 'За неделю';
   const periodMenuOpen = Boolean(periodAnchorEl);
+  const pageCount = Math.max(1, Math.ceil(totalCount / rowsPerPage));
+  const rangeStart = totalCount === 0 ? 0 : page * rowsPerPage + 1;
+  const rangeEnd = Math.min((page + 1) * rowsPerPage, totalCount);
 
   const handleOpenPeriodMenu = (event) => {
     setPeriodAnchorEl(event.currentTarget);
@@ -3679,7 +3897,7 @@ export default function CompletedTasksList({ employee }) {
   };
 
   return (
-    <Paper sx={glassPaperSx}>
+    <Paper variant="section">
       <Box sx={{ ...sectionTitleRowSx, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Assessment color="primary" />
@@ -3692,6 +3910,7 @@ export default function CompletedTasksList({ employee }) {
             size="small"
             onClick={handleOpenPeriodMenu}
             color={statsPeriod !== 'week' ? 'primary' : 'default'}
+            aria-label="Период статистики"
             sx={[
               { ml: 'auto' },
               statsPeriod !== 'week' && { border: '1px solid', borderColor: 'primary.main' }
@@ -3709,7 +3928,13 @@ export default function CompletedTasksList({ employee }) {
         >
           {STATS_PERIOD_OPTIONS.map((option) => (
             <MenuItem key={option.value} onClick={() => handleSelectStatsPeriod(option.value)}>
-              <Checkbox size="small" checked={statsPeriod === option.value} readOnly />
+              <Checkbox
+                size="small"
+                checked={statsPeriod === option.value}
+                disableRipple
+                tabIndex={-1}
+                sx={{ pointerEvents: 'none' }}
+              />
               <ListItemText primary={option.label} />
             </MenuItem>
           ))}
@@ -3718,13 +3943,13 @@ export default function CompletedTasksList({ employee }) {
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: (t) => alpha(t.palette.success.main, 0.08), border: (t) => `1px solid ${alpha(t.palette.success.main, 0.2)}` }}>
+          <Card variant="statSuccess">
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Всего задач</Typography>
                 <TaskAlt color="success" />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
+              <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalTasks}
               </Typography>
             </CardContent>
@@ -3732,13 +3957,13 @@ export default function CompletedTasksList({ employee }) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: (t) => alpha(t.palette.info.main, 0.08), border: (t) => `1px solid ${alpha(t.palette.info.main, 0.2)}` }}>
+          <Card variant="statInfo">
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Выделено часов</Typography>
                 <AccessTime color="info" />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
+              <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalEstimate.toFixed(1)} ч
               </Typography>
             </CardContent>
@@ -3746,13 +3971,13 @@ export default function CompletedTasksList({ employee }) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ bgcolor: (t) => alpha(t.palette.warning.main, 0.1), border: (t) => `1px solid ${alpha(t.palette.warning.main, 0.25)}` }}>
+          <Card variant="statWarning">
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">Реально часов</Typography>
                 <HourglassEmpty color="warning" />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>
+              <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }}>
                 {stats.totalActual.toFixed(1)} ч
               </Typography>
             </CardContent>
@@ -3760,20 +3985,14 @@ export default function CompletedTasksList({ employee }) {
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={(t) => ({
-            bgcolor: alpha(totalDifference >= 0 ? t.palette.success.main : t.palette.error.main, 0.08),
-            border: `1px solid ${alpha(totalDifference >= 0 ? t.palette.success.main : t.palette.error.main, 0.22)}`
-          })}>
+          <Card variant={totalDifference >= 0 ? 'statSuccess' : 'statError'}>
             <CardContent>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">Экономия</Typography>
-                  <Typography variant="caption" color="text.secondary">{selectedPeriodLabel}</Typography>
-                </Box>
+                <Typography variant="body2" color="text.secondary">Экономия</Typography>
                 {totalDifference >= 0 ? <TrendingUp color="success" /> : <TrendingDown color="error" />}
               </Box>
               <Typography
-                variant="h4"
+                variant="h3"
                 sx={{
                   fontWeight: 700,
                   mt: 1,
@@ -3874,22 +4093,148 @@ export default function CompletedTasksList({ employee }) {
 
       {completed.length === 0 && <EmptyState message="Нет выполненных задач" icon={TaskAlt} />}
 
-      <TablePagination
-        component="div"
-        count={totalCount}
-        page={page}
-        onPageChange={(_e, newPage) => setPage(newPage)}
-        rowsPerPage={rowsPerPage}
-        onRowsPerPageChange={(e) => {
-          setRowsPerPage(parseInt(e.target.value, 10));
-          setPage(0);
-        }}
-        rowsPerPageOptions={[10, 25, 50]}
-        labelRowsPerPage="Строк на странице"
-      />
+      {totalCount > 0 && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 1.5,
+            pt: 3,
+            mt: 2,
+            px: 1
+          }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {`${rangeStart}–${rangeEnd} из ${totalCount}`}
+          </Typography>
+
+          <Pagination
+            count={pageCount}
+            page={Math.min(page + 1, pageCount)}
+            onChange={(_event, newPage) => setPage(newPage - 1)}
+            color="primary"
+            shape="rounded"
+            size="medium"
+            showFirstButton
+            showLastButton
+          />
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              На странице
+            </Typography>
+            <FormControl size="small" sx={{ minWidth: 84 }}>
+              <Select
+                value={rowsPerPage}
+                onChange={(event) => {
+                  setRowsPerPage(Number(event.target.value));
+                  setPage(0);
+                }}
+              >
+                {[10, 25, 50].map((option) => (
+                  <MenuItem key={option} value={option}>
+                    {option}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </Box>
+      )}
     </Paper>
   );
-}=== ./frontend/src/components/CurrentDateTime.jsx ===
+}=== ./frontend/src/components/LunchBreakOverlay.jsx ===
+import {
+  Avatar,
+  Box,
+  Button,
+  Chip,
+  Container,
+  Paper,
+  Typography
+} from '@mui/material';
+import { AdminPanelSettings, Person, SwitchAccount, TaskAlt } from '@mui/icons-material';
+import ParallaxPage from './ParallaxPage';
+
+export default function LunchBreakOverlay({
+  user,
+  avatarUrl,
+  onAvatarError,
+  onSwitchUser,
+  onEndLunch,
+  lunchPending
+}) {
+  const isAdmin = user?.role === 'Admin';
+
+  return (
+    <ParallaxPage className="lunch-break-overlay">
+      <Container maxWidth="sm" className="login-content">
+        <Box className="login-form-shell">
+          <Paper variant="section" sx={{ p: 4, width: '100%', textAlign: 'center' }}>
+            <Typography variant="h2" gutterBottom sx={{ mb: 1 }}>
+              Обед
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Приятного аппетита! Когда вернётесь — нажмите «Пообедал».
+            </Typography>
+
+            <Avatar
+              src={avatarUrl}
+              sx={{ width: 96, height: 96, fontSize: '2rem', bgcolor: 'primary.main', mx: 'auto', mb: 2 }}
+              onError={onAvatarError}
+            >
+              {!user?.avatarUrl && (user?.fullName?.[0] || 'U')}
+            </Avatar>
+
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+              {user?.fullName}
+            </Typography>
+
+            <Chip
+              size="small"
+              color={isAdmin ? 'warning' : 'info'}
+              variant="outlined"
+              icon={isAdmin
+                ? <AdminPanelSettings sx={{ fontSize: '0.85rem !important' }} />
+                : <Person sx={{ fontSize: '0.85rem !important' }} />}
+              label={isAdmin ? 'Администратор' : 'Сотрудник'}
+              sx={{ mb: 3, fontSize: '0.65rem' }}
+            />
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Button
+                variant="contained"
+                color="success"
+                size="large"
+                fullWidth
+                startIcon={<TaskAlt />}
+                onClick={onEndLunch}
+                disabled={lunchPending}
+                loading={lunchPending}
+              >
+                Пообедал
+              </Button>
+
+              <Button
+                variant="outlined"
+                size="medium"
+                fullWidth
+                startIcon={<SwitchAccount />}
+                onClick={onSwitchUser}
+                disabled={lunchPending}
+              >
+                Сменить пользователя
+              </Button>
+            </Box>
+          </Paper>
+        </Box>
+      </Container>
+    </ParallaxPage>
+  );
+}
+=== ./frontend/src/components/CurrentDateTime.jsx ===
 import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import { Schedule } from '@mui/icons-material';
@@ -3949,9 +4294,7 @@ import {
 import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
-import {
-  TASK_EXECUTION_SEQUENTIAL
-} from '../constants/taskStatuses';
+import { TASK_EXECUTION_SEQUENTIAL } from '../constants/taskStatuses';
 import {
   COL_ICON,
   COL_TASK,
@@ -3959,7 +4302,8 @@ import {
   COL_COMMENT,
   COL_EMPLOYEE,
   COL_STATUS,
-  COL_ACTIONS
+  COL_ACTIONS,
+  TASK_TABLE_TEXT_FIELD_PROPS
 } from '../utils/taskTableStyles';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 
@@ -3998,31 +4342,28 @@ export default function NewTaskRow({
 
       <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           placeholder="Путь к папке"
           value={newRow.folderPath || ''}
           onChange={(e) => setNewRow({ ...newRow, folderPath: e.target.value })}
-          fullWidth
         />
       </TableCell>
 
       <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           placeholder="Имя файла"
           value={newRow.fileName || ''}
           onChange={(e) => setNewRow({ ...newRow, fileName: e.target.value })}
-          fullWidth
         />
       </TableCell>
 
       <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           placeholder="Комментарий"
           value={newRow.comment}
           onChange={(e) => setNewRow({ ...newRow, comment: e.target.value })}
-          fullWidth
         />
       </TableCell>
 
@@ -4048,7 +4389,7 @@ export default function NewTaskRow({
 
       <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, COL_EMPLOYEE)}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-          <IconButton size="small" onClick={onOpenAssigneeModal}>
+          <IconButton size="small" onClick={onOpenAssigneeModal} aria-label="Назначить сотрудников">
             <PeopleAlt fontSize="small" color={hasAssignees ? (isShared ? 'secondary' : 'action') : 'disabled'} />
           </IconButton>
           <Typography variant="caption" sx={{ color: hasAssignees ? 'text.primary' : 'text.disabled', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -4076,10 +4417,10 @@ export default function NewTaskRow({
 
       <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <IconButton size="small" color="primary" onClick={onSave}>
+          <IconButton size="small" color="primary" onClick={onSave} aria-label="Сохранить">
             <Save fontSize="small" />
           </IconButton>
-          <IconButton size="small" color="error" onClick={onCancel}>
+          <IconButton size="small" color="error" onClick={onCancel} aria-label="Отмена">
             <Cancel fontSize="small" />
           </IconButton>
         </Box>
@@ -4132,7 +4473,7 @@ export default function QueueOverloadWarnings({ employee }) {
               icon={<Queue fontSize="inherit" />}
               sx={{ borderRadius: 2, '& .MuiAlert-icon': { alignItems: 'center' } }}
               action={
-                <IconButton size="small" onClick={() => setOpen(false)}>
+                <IconButton size="small" onClick={() => setOpen(false)} aria-label="Скрыть предупреждения">
                   <Close fontSize="small" />
                 </IconButton>
               }
@@ -4264,7 +4605,7 @@ import {
   Typography
 } from '@mui/material';
 import { Add, Lightbulb, Sort, TableChart } from '@mui/icons-material';
-import { sectionHeaderSx, sectionTitleRowSx, softIconButtonSx } from '../theme/surfaces';
+import { sectionHeaderSx, sectionTitleRowSx } from '../theme/surfaces';
 import TaskTableColumnSettings from './taskTable/TaskTableColumnSettings';
 
 export default function TaskTableToolbar({
@@ -4300,24 +4641,22 @@ export default function TaskTableToolbar({
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
         <Tooltip title={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}>
           <IconButton
+            variant="soft"
+            color={highlightMyTasks ? 'warning' : 'primary'}
             onClick={onToggleHighlight}
-            color={highlightMyTasks ? 'warning' : 'default'}
-            sx={[
-              softIconButtonSx(highlightMyTasks ? 'warning' : 'primary'),
-              highlightMyTasks && { border: '1px solid', borderColor: 'warning.main' }
-            ]}
+            aria-label={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}
+            sx={highlightMyTasks && { border: '1px solid', borderColor: 'warning.main' }}
           >
             <Lightbulb />
           </IconButton>
         </Tooltip>
         <Tooltip title="Сортировка">
           <IconButton
+            variant="soft"
+            color="primary"
             onClick={handleOpenSortMenu}
-            color={completedBottomSort ? 'primary' : 'default'}
-            sx={[
-              softIconButtonSx('primary'),
-              completedBottomSort && { border: '1px solid', borderColor: 'primary.main' }
-            ]}
+            aria-label="Сортировка таблицы задач"
+            sx={completedBottomSort && { border: '1px solid', borderColor: 'primary.main' }}
           >
             <Sort />
           </IconButton>
@@ -4330,7 +4669,13 @@ export default function TaskTableToolbar({
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         >
           <MenuItem onClick={() => onCompletedBottomSortChange(!completedBottomSort)}>
-            <Checkbox size="small" checked={completedBottomSort} readOnly />
+            <Checkbox
+              size="small"
+              checked={completedBottomSort}
+              disableRipple
+              tabIndex={-1}
+              sx={{ pointerEvents: 'none' }}
+            />
             <ListItemText primary="Готовые всегда снизу" />
           </MenuItem>
         </Menu>
@@ -4372,9 +4717,6 @@ import {
   TaskAlt,
   AccessTime
 } from '@mui/icons-material';
-import { softIconButtonSx } from '../theme/surfaces';
-import { useUiFeedback } from '../context/UiFeedbackContext';
-import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
@@ -4397,6 +4739,7 @@ function infoMenuIcon(kind) {
 export default function TaskAdminActionStacks({
   task,
   pending = false,
+  lifecycleBusy = false,
   onEdit,
   onDelete,
   onIntervals,
@@ -4410,7 +4753,7 @@ export default function TaskAdminActionStacks({
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
-  const { confirm } = useUiFeedback();
+  const statusWorkflowDisabled = pending || lifecycleBusy;
 
   const status = task?.statusText || 'Назначена';
   const isDone = status === STATUS_COMPLETED;
@@ -4434,26 +4777,17 @@ export default function TaskAdminActionStacks({
   const canComplete = isStarted || isPaused;
   const startAction = isPaused ? onResume : onStart;
 
-  const runWorkflow = (lifecycleAction, actionLabel) => async (event) => {
+  const runWorkflow = (lifecycleAction) => async (event) => {
     event.stopPropagation();
     handleClose();
-    if (pending) return;
-    await runWorkflowWithSequenceGuard({
-      task,
-      statusText: status,
-      confirm,
-      resolveStatus: onSetStatus
-        ? (t, target, extra) => onSetStatus(t, target, extra)
-        : null,
-      runAction: async () => lifecycleAction(task),
-      actionLabel
-    });
+    if (statusWorkflowDisabled) return;
+    await lifecycleAction(task);
   };
 
   const runInfo = (statusText) => (event) => {
     event.stopPropagation();
     handleClose();
-    if (pending || !onSetStatus) return;
+    if (statusWorkflowDisabled || !onSetStatus) return;
     onSetStatus(task, statusText);
   };
 
@@ -4465,10 +4799,11 @@ export default function TaskAdminActionStacks({
     <>
       <IconButton
         size="small"
+        variant="soft"
+        color="primary"
         onClick={handleOpen}
         disabled={pending}
         aria-label="Действия с задачей"
-        sx={softIconButtonSx('primary')}
       >
         {pending ? <CircularProgress size={18} /> : <MoreVert fontSize="small" />}
       </IconButton>
@@ -4524,9 +4859,9 @@ export default function TaskAdminActionStacks({
           <>
             <Divider sx={menuDividerSx} />
             <MenuItem
-              disabled={!canStart && !isPaused}
+              disabled={statusWorkflowDisabled || (!canStart && !isPaused)}
               sx={workflowItemSx}
-              onClick={runWorkflow(startAction, STATUS_IN_PROGRESS)}
+              onClick={runWorkflow(startAction)}
             >
               <ListItemIcon>
                 <PlayArrow fontSize="small" color="success" />
@@ -4535,8 +4870,9 @@ export default function TaskAdminActionStacks({
             </MenuItem>
             {canPause && (
               <MenuItem
+                disabled={statusWorkflowDisabled}
                 sx={workflowItemSx}
-                onClick={runWorkflow(onPause, STATUS_PAUSED)}
+                onClick={runWorkflow(onPause)}
               >
                 <ListItemIcon>
                   <Pause fontSize="small" color="warning" />
@@ -4545,7 +4881,11 @@ export default function TaskAdminActionStacks({
               </MenuItem>
             )}
             {canComplete && (
-              <MenuItem sx={workflowItemSx} onClick={runWorkflow(onComplete, STATUS_COMPLETED)}>
+              <MenuItem
+                disabled={statusWorkflowDisabled}
+                sx={workflowItemSx}
+                onClick={runWorkflow(onComplete)}
+              >
                 <ListItemIcon>
                   <CheckCircle fontSize="small" color="primary" />
                 </ListItemIcon>
@@ -4559,7 +4899,11 @@ export default function TaskAdminActionStacks({
           <>
             <Divider sx={menuDividerSx} />
             {infoMenuItems.map((item) => (
-              <MenuItem key={item.statusText} onClick={runInfo(item.statusText)}>
+              <MenuItem
+                key={item.statusText}
+                disabled={statusWorkflowDisabled}
+                onClick={runInfo(item.statusText)}
+              >
                 <ListItemIcon>{infoMenuIcon(item.kind)}</ListItemIcon>
                 <ListItemText>{item.label}</ListItemText>
               </MenuItem>
@@ -4642,7 +4986,7 @@ export default function DeadlineWarnings({ employee }) {
                 '& .MuiAlert-icon': { alignItems: 'center' }
               }}
               action={
-                <IconButton size="small" onClick={() => setOpen(false)}>
+                <IconButton size="small" onClick={() => setOpen(false)} aria-label="Скрыть предупреждения">
                   <Close fontSize="small" />
                 </IconButton>
               }
@@ -4687,7 +5031,7 @@ export default function DeadlineWarnings({ employee }) {
   );
 }
 === ./frontend/src/components/LoginForm.jsx ===
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   Paper, 
   TextField, 
@@ -4698,30 +5042,24 @@ import {
   Container,
   Avatar,
   Card,
-  CardContent,
-  CircularProgress
+  CardActionArea,
+  CardContent
 } from '@mui/material';
 import { Login as LoginIcon, Person, AdminPanelSettings } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
-import { glassPaperSx } from '../theme/surfaces';
 import { createMuiTransition } from '../theme/motion';
-import fon1Url from '../../../sprites/fon1.svg';
-import fon2Url from '../../../sprites/fon2.svg';
-import fon3Url from '../../../sprites/fon3.svg';
-import fon5Url from '../../../sprites/fon5.svg';
-import sunUrl from '../../../sprites/sun.svg';
+import {
+  avatarThumbUrl,
+  normalizeLoginEmployees,
+  parseLoginEmployeesBootstrap,
+} from '../utils/loginEmployeesBootstrap';
+import ParallaxPage from './ParallaxPage';
 import './LoginForm.css';
 
-const FALLBACK_EMPLOYEES = [
-  { id: null, fullName: 'Дима', avatarUrl: null },
-  { id: null, fullName: 'Яромир', avatarUrl: null },
-];
-
 export default function LoginForm({ onLogin }) {
-  const pageRef = useRef(null);
   const [loginType, setLoginType] = useState('employee'); // 'employee' or 'admin'
   const [selectedEmployee, setSelectedEmployee] = useState('Дима');
-  const [employees, setEmployees] = useState(FALLBACK_EMPLOYEES);
+  const [employees, setEmployees] = useState(() => parseLoginEmployeesBootstrap());
   const [adminPassword, setAdminPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -4730,71 +5068,54 @@ export default function LoginForm({ onLogin }) {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
-    fetch('/api/auth/login-employees')
-      .then(async (response) => {
-        if (!response.ok) return null;
-        return response.json();
-      })
-      .then((list) => {
-        if (cancelled || !Array.isArray(list) || list.length === 0) return;
+    const loadEmployees = async () => {
+      let list = null;
 
-        const normalized = list
-          .map((emp) => ({
-            id: emp.id ?? null,
-            fullName: emp.fullName ?? '',
-            avatarUrl: emp.avatarUrl ?? null,
-          }))
-          .filter((emp) => emp.fullName);
+      try {
+        const jsonRes = await fetch('/login-employees.json', {
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+        if (jsonRes.ok) list = await jsonRes.json();
+      } catch {
+        // fallback ниже
+      }
 
-        if (normalized.length === 0) return;
+      if (!Array.isArray(list) || list.length === 0) {
+        try {
+          const apiRes = await fetch('/api/auth/login-employees', {
+            signal: controller.signal,
+          });
+          if (apiRes.ok) list = await apiRes.json();
+        } catch {
+          return;
+        }
+      }
 
-        setEmployees(normalized);
-        setSelectedEmployee((prev) =>
-          normalized.some((emp) => emp.fullName === prev) ? prev : normalized[0].fullName
-        );
-      })
-      .catch(() => {});
+      if (cancelled || !Array.isArray(list) || list.length === 0) return;
+
+      const normalized = normalizeLoginEmployees(list);
+      if (normalized.length === 0) return;
+
+      setEmployees(normalized);
+      setSelectedEmployee((prev) =>
+        normalized.some((emp) => emp.fullName === prev) ? prev : normalized[0].fullName
+      );
+    };
+
+    loadEmployees();
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, []);
+
   const handleLoginTypeChange = (type) => {
     setLoginType(type);
     setError('');
-  };
-
-  const handleParallaxMove = (event) => {
-    const page = pageRef.current;
-    if (!page) return;
-
-    const rect = page.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width - 0.5;
-    const y = (event.clientY - rect.top) / rect.height - 0.5;
-
-    page.style.setProperty('--layer-1-x', `${x * -13}px`);
-    page.style.setProperty('--layer-1-y', `${y * -5}px`);
-    page.style.setProperty('--layer-2-x', `${x * -30}px`);
-    page.style.setProperty('--layer-2-y', `${y * -10}px`);
-    page.style.setProperty('--layer-3-x', `${x * -50}px`);
-    page.style.setProperty('--layer-3-y', `${y * -16}px`);
-    page.style.setProperty('--layer-5-x', `${x * -84}px`);
-    page.style.setProperty('--layer-5-y', `${y * -24}px`);
-  };
-
-  const resetParallax = () => {
-    const page = pageRef.current;
-    if (!page) return;
-
-    page.style.setProperty('--layer-1-x', '0px');
-    page.style.setProperty('--layer-1-y', '0px');
-    page.style.setProperty('--layer-2-x', '0px');
-    page.style.setProperty('--layer-2-y', '0px');
-    page.style.setProperty('--layer-3-x', '0px');
-    page.style.setProperty('--layer-3-y', '0px');
-    page.style.setProperty('--layer-5-x', '0px');
-    page.style.setProperty('--layer-5-y', '0px');
   };
 
   const handleEmployeeLogin = async () => {
@@ -4868,31 +5189,13 @@ export default function LoginForm({ onLogin }) {
   };
 
   return (
-    <main
-      ref={pageRef}
-      className="login-parallax-page"
-      onMouseMove={handleParallaxMove}
-      onMouseLeave={resetParallax}
-      style={{
-        '--fon1-image': `url(${fon1Url})`,
-        '--fon2-image': `url(${fon2Url})`,
-        '--fon3-image': `url(${fon3Url})`,
-        '--fon5-image': `url(${fon5Url})`,
-        '--sun-image': `url(${sunUrl})`
-      }}
-    >
-      <img className="login-parallax-layer login-layer-fon1" src={fon1Url} alt="" aria-hidden="true" />
-      <img className="login-sun-layer" src={sunUrl} alt="" aria-hidden="true" />
-      <img className="login-parallax-layer login-layer-fon2" src={fon2Url} alt="" aria-hidden="true" />
-      <img className="login-parallax-layer login-layer-fon3" src={fon3Url} alt="" aria-hidden="true" />
-      <img className="login-parallax-layer login-layer-fon5" src={fon5Url} alt="" aria-hidden="true" />
-
+    <ParallaxPage>
       <Container
         maxWidth="sm"
         className="login-content"
       >
         <Box className="login-form-shell">
-          <Paper sx={{ ...glassPaperSx, p: 4, width: '100%' }}>
+          <Paper variant="section" sx={{ p: 4, width: '100%' }}>
             <Typography variant="h2" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>
               Вход в систему
             </Typography>
@@ -4921,24 +5224,19 @@ export default function LoginForm({ onLogin }) {
                 {error && <Alert severity="error">{error}</Alert>}
                 
                 {loginType === 'employee' ? (
-                  // Вход для сотрудника - выбор имени
                   <>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                       Выберите сотрудника:
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2 }}>
                       {employees.map((emp) => {
-                        const avatarSrc = emp.avatarUrl && emp.id
-                          ? `/api/auth/avatar/${emp.id}`
-                          : undefined;
+                        const avatarSrc = emp.id ? avatarThumbUrl(emp.id) : undefined;
 
                         return (
-                        <Card 
+                        <Card
                           key={emp.fullName}
-                          onClick={() => setSelectedEmployee(emp.fullName)}
                           sx={(theme) => ({
                             flex: 1,
-                            cursor: 'pointer',
                             border: selectedEmployee === emp.fullName
                               ? `2px solid ${theme.palette.primary.main}`
                               : `1px solid ${alpha(theme.palette.divider, 1)}`,
@@ -4953,10 +5251,19 @@ export default function LoginForm({ onLogin }) {
                             '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.light }
                           })}
                         >
+                          <CardActionArea
+                            onClick={() => setSelectedEmployee(emp.fullName)}
+                            aria-pressed={selectedEmployee === emp.fullName}
+                          >
                           <CardContent sx={{ textAlign: 'center', py: 2 }}>
                             <Avatar
                               src={avatarSrc}
-                              sx={{ width: 40, height: 40, mx: 'auto', mb: 1, bgcolor: 'primary.light' }}
+                              imgProps={{
+                                loading: 'lazy',
+                                decoding: 'async',
+                                fetchPriority: 'low',
+                              }}
+                              sx={{ width: 64, height: 64, fontSize: '1.5rem', mx: 'auto', mb: 1, bgcolor: 'primary.light' }}
                             >
                               {emp.fullName[0]}
                             </Avatar>
@@ -4964,13 +5271,13 @@ export default function LoginForm({ onLogin }) {
                               {emp.fullName}
                             </Typography>
                           </CardContent>
+                          </CardActionArea>
                         </Card>
                         );
                       })}
                     </Box>
                   </>
                 ) : (
-                  // Вход для администратора - общий пароль без отображения email.
                   <TextField
                     label="Пароль администратора"
                     type="password"
@@ -4986,8 +5293,8 @@ export default function LoginForm({ onLogin }) {
                   variant="contained"
                   size="large"
                   fullWidth
-                  disabled={loading}
-                  startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <LoginIcon />}
+                  loading={loading}
+                  startIcon={<LoginIcon />}
                   sx={{ mt: 2 }}
                 >
                   {loading ? 'Вход...' : 'Войти'}
@@ -4997,9 +5304,10 @@ export default function LoginForm({ onLogin }) {
           </Paper>
         </Box>
       </Container>
-    </main>
+    </ParallaxPage>
   );
-}=== ./frontend/src/components/WeekCalendar.jsx ===
+}
+=== ./frontend/src/components/WeekCalendar.jsx ===
 import { useState, useEffect, useMemo } from 'react';
 import {
   Box,
@@ -5011,7 +5319,6 @@ import {
   ToggleButtonGroup
 } from '@mui/material';
 import { ChevronLeft, ChevronRight, CalendarMonth, Today } from '@mui/icons-material';
-import { glassPaperSx, softIconButtonSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import useWeekCalendarQuery from '../hooks/queries/useWeekCalendarQuery';
 import DayColumn from './DayColumn';
@@ -5109,7 +5416,7 @@ export default function WeekCalendar({ employee }) {
   const isAnchorToday = isSameCalendarDay(anchorDate, currentWorkday);
 
   return (
-    <Paper sx={{ ...glassPaperSx, mb: 3 }}>
+    <Paper variant="section" sx={{ mb: 3 }}>
       <Box
         sx={{
           display: 'flex',
@@ -5122,7 +5429,7 @@ export default function WeekCalendar({ employee }) {
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-          <IconButton onClick={goPrev} sx={softIconButtonSx('primary')} aria-label={`Предыдущая ${navLabel}`}>
+          <IconButton variant="soft" color="primary" onClick={goPrev} aria-label={`Предыдущая ${navLabel}`}>
             <ChevronLeft />
           </IconButton>
           <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
@@ -5131,7 +5438,7 @@ export default function WeekCalendar({ employee }) {
               {headerTitle}
             </Typography>
           </Box>
-          <IconButton onClick={goNext} sx={softIconButtonSx('primary')} aria-label={`Следующая ${navLabel}`}>
+          <IconButton variant="soft" color="primary" onClick={goNext} aria-label={`Следующая ${navLabel}`}>
             <ChevronRight />
           </IconButton>
           <ToggleButtonGroup
@@ -5250,6 +5557,7 @@ import { TableRow, TableCell, TextField, IconButton, Box, Typography } from '@mu
 import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
+import { TASK_TABLE_TEXT_FIELD_PROPS } from '../utils/taskTableStyles';
 import { columnCellSx } from '../utils/taskTableColumns';
 import { COLLAPSED_COLUMN_SX } from '../utils/taskTableColumns';
 
@@ -5309,30 +5617,27 @@ export default function EditTaskRow({
 
       <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, { width: '15%' })}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           value={localTask.folderPath}
           onChange={(e) => handleFieldChange('folderPath', e.target.value)}
-          fullWidth
           placeholder="Путь к папке"
         />
       </TableCell>
 
       <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, { width: '10%' })}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           value={localTask.fileName}
           onChange={(e) => handleFieldChange('fileName', e.target.value)}
-          fullWidth
           placeholder="Имя файла"
         />
       </TableCell>
 
       <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, { width: '12%' })}>
         <TextField
-          size="small"
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
           value={localTask.comment}
           onChange={(e) => handleFieldChange('comment', e.target.value)}
-          fullWidth
         />
       </TableCell>
 
@@ -5352,6 +5657,7 @@ export default function EditTaskRow({
           <IconButton
             size="small"
             onClick={() => onOpenAssigneeModal(localTask)}
+            aria-label="Назначить сотрудников"
             sx={{ flexShrink: 0 }}
           >
             <PeopleAlt fontSize="small" color={isShared ? 'secondary' : 'action'} />
@@ -5366,10 +5672,10 @@ export default function EditTaskRow({
 
       <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, { width: '12%' })}>
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <IconButton size="small" color="primary" onClick={handleSave}>
+          <IconButton size="small" color="primary" onClick={handleSave} aria-label="Сохранить">
             <Save fontSize="small" />
           </IconButton>
-          <IconButton size="small" color="error" onClick={onCancel}>
+          <IconButton size="small" color="error" onClick={onCancel} aria-label="Отмена">
             <Cancel fontSize="small" />
           </IconButton>
         </Box>
@@ -5378,8 +5684,7 @@ export default function EditTaskRow({
   );
 }
 === ./frontend/src/components/DayColumn.jsx ===
-import { Paper } from '@mui/material';
-import { glassCardSx } from '../theme/surfaces';
+import { Card } from '@mui/material';
 import DayHeader from './calendar/DayHeader';
 import PlannedBlocks from './calendar/PlannedBlocks';
 import DeadlineMarkers from './calendar/DeadlineMarkers';
@@ -5403,7 +5708,7 @@ export default function DayColumn({
   const isWorkingDay = isWorkingWeekday(date);
   const taskBlocksMap = buildTaskBlocksMap(allDays);
 
-  const rawTimelineSegments = getTimelineSegments(day.date, day.timeline);
+  const rawTimelineSegments = getTimelineSegments(day.timeline);
   const workSegments = rawTimelineSegments.filter((s) => s.type === 'work');
   const idleSegments = rawTimelineSegments
     .filter((s) => s.type === 'idle')
@@ -5414,10 +5719,11 @@ export default function DayColumn({
     getTaskInfoForDeadline(taskBlocksMap, taskId, taskTitle, status);
 
   return (
-    <Paper elevation={0} sx={{ ...glassCardSx, p: 2, borderRadius: 2 }}>
+    <Card variant="nested" sx={{ p: 2 }}>
       <DayHeader date={day.date} />
       <PlannedBlocks
         taskBlocks={day.taskBlocks}
+        lunchIntervals={day.lunchIntervals}
         isWorkingDay={isWorkingDay}
         isHighlighted={isHighlighted}
         detailedTimeline={detailedTimeline}
@@ -5430,12 +5736,13 @@ export default function DayColumn({
       <TimelineSegments
         workSegments={workSegments}
         idleSegments={idleSegments}
+        lunchIntervals={day.lunchIntervals}
         isWorkingDay={isWorkingDay}
         detailedTimeline={detailedTimeline}
         dayDate={day.date}
         currentTime={currentTime}
       />
-    </Paper>
+    </Card>
   );
 }
 === ./frontend/src/components/EmployeeHoursSelector.jsx ===
@@ -5497,7 +5804,7 @@ export default function EmployeeHoursSelector({ employees, totalHours, onChange,
           const assigned = assignments.find(a => a.employeeName === emp);
           const checked = !!assigned;
           return (
-            <Grid item xs={12} key={emp}>
+            <Grid size={12} key={emp}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <FormControlLabel
                   control={
@@ -5674,8 +5981,6 @@ import {
 } from '@mui/material';
 import { CalendarMonth } from '@mui/icons-material';
 import { DesktopDatePicker } from '@mui/x-date-pickers/DesktopDatePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { usePickerContext } from '@mui/x-date-pickers/hooks';
 import {
   usePickerLayout,
@@ -5688,7 +5993,7 @@ import {
   parseDateTime,
   WORK_TIME_OPTIONS
 } from '../utils/dateTimeHelpers';
-import { taskTableDatePickerSx } from '../utils/taskTableStyles';
+import { tableDatePickerSlotSx } from '../theme/componentVariants';
 
 export { COL_DEADLINE_INPUT as DEADLINE_COLUMN_SX } from '../utils/taskTableStyles';
 
@@ -5859,57 +6164,56 @@ export default function DeadlineDateTimePicker({
   );
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="ru">
-      <DesktopDatePicker
-        value={pickerValue}
-        onChange={handlePickerChange}
-        disabled={disabled}
-        format="DD.MM.YYYY"
-        closeOnSelect={false}
-        slots={{
-          openPickerIcon: CalendarMonth,
-          layout: DeadlinePickerLayout,
-          actionBar: TimeActionBar
-        }}
-        slotProps={{
-          field: {
-            openPickerButtonPosition: 'end'
-          },
-          textField: {
-            size,
-            variant: 'outlined',
-            label: hideLabel ? undefined : label,
-            fullWidth,
-            sx: taskTableDatePickerSx
-          },
-          openPickerButton: {
-            size: 'small'
-          },
-          openPickerIcon: {
-            sx: { fontSize: 20, color: 'action.active' }
-          },
-          popper: {
-            sx: {
-              '& .MuiPaper-root': {
-                borderRadius: 1,
-                overflow: 'hidden'
-              }
-            }
-          },
-          desktopPaper: {
-            sx: {
+    <DesktopDatePicker
+      value={pickerValue}
+      onChange={handlePickerChange}
+      disabled={disabled}
+      format="DD.MM.YYYY"
+      closeOnSelect={false}
+      slots={{
+        openPickerIcon: CalendarMonth,
+        layout: DeadlinePickerLayout,
+        actionBar: TimeActionBar
+      }}
+      slotProps={{
+        field: {
+          openPickerButtonPosition: 'end'
+        },
+        textField: {
+          size,
+          variant: 'outlined',
+          label: hideLabel ? undefined : label,
+          fullWidth,
+          sx: tableDatePickerSlotSx
+        },
+        openPickerButton: {
+          size: 'small'
+        },
+        openPickerIcon: {
+          sx: { fontSize: 20, color: 'action.active' }
+        },
+        popper: {
+          sx: {
+            '& .MuiPaper-root': {
               borderRadius: 1,
               overflow: 'hidden'
             }
           }
-        }}
-      />
-    </LocalizationProvider>
+        },
+        desktopPaper: {
+          sx: {
+            borderRadius: 1,
+            overflow: 'hidden'
+          }
+        }
+      }}
+    />
   );
 }
 === ./frontend/src/components/PushNotificationSnackbars.jsx ===
 import { Snackbar, Alert, Box, Chip, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import { toastAlertThemeStyles } from '../theme/componentVariants';
 import { Assignment, AccessTime, CheckCircle, Inventory2, PlayArrow } from '@mui/icons-material';
 
 const SNACKBAR_HEIGHT = 108;
@@ -5949,24 +6253,6 @@ const notificationVariants = {
 
 const getNotificationVariant = (type) => notificationVariants[type] || notificationVariants.NewTask;
 
-const alertSx = (color) => ({
-  width: '100%',
-  minWidth: 280,
-  maxWidth: 360,
-  alignItems: 'flex-start',
-  bgcolor: (theme) => theme.palette.grey[700],
-  color: (theme) => theme.palette.common.white,
-  border: (theme) => `1px solid ${alpha(theme.palette[color]?.main || theme.palette.primary.main, 0.7)}`,
-  borderLeft: (theme) => `5px solid ${theme.palette[color]?.main || theme.palette.primary.main}`,
-  boxShadow: (theme) => `0 14px 34px ${alpha(theme.palette.grey[700], 0.34)}`,
-  '& .MuiAlert-icon': {
-    color: (theme) => theme.palette[color]?.main || theme.palette.primary.main,
-    mt: 0.25
-  },
-  '& .MuiAlert-message': { padding: 0 },
-  '& .MuiAlert-action': { color: 'inherit' }
-});
-
 export default function PushNotificationSnackbars({ notifications, onClose }) {
   return (
     <>
@@ -5976,6 +6262,11 @@ export default function PushNotificationSnackbars({ notifications, onClose }) {
           <Snackbar
             key={notification.id}
             open
+            autoHideDuration={8000}
+            onClose={(_event, reason) => {
+              if (reason === 'clickaway') return;
+              onClose(notification.id);
+            }}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             sx={{
               bottom: { xs: 16 + index * SNACKBAR_HEIGHT, sm: 24 + index * SNACKBAR_HEIGHT },
@@ -5986,10 +6277,17 @@ export default function PushNotificationSnackbars({ notifications, onClose }) {
           >
             <Alert
               severity={variant.severity}
-              variant="filled"
+              variant="toast"
               onClose={() => onClose(notification.id)}
               icon={variant.icon}
-              sx={alertSx(variant.color)}
+              sx={(theme) => ({
+                ...toastAlertThemeStyles(theme, variant.color),
+                minWidth: 280,
+                maxWidth: 360,
+                alignItems: 'flex-start',
+                '& .MuiAlert-message': { padding: 0 },
+                '& .MuiAlert-icon': { mt: 0.25 }
+              })}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
                 <Chip
@@ -6043,9 +6341,6 @@ import {
   Inventory2,
   TaskAlt
 } from '@mui/icons-material';
-import { softIconButtonSx } from '../theme/surfaces';
-import { useUiFeedback } from '../context/UiFeedbackContext';
-import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
@@ -6067,6 +6362,7 @@ function infoMenuIcon(kind) {
 export default function EmployeeStatusButtons({
   task,
   pending = false,
+  lifecycleBusy = false,
   onStart,
   onPause,
   onResume,
@@ -6075,7 +6371,7 @@ export default function EmployeeStatusButtons({
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
-  const { confirm } = useUiFeedback();
+  const statusActionsDisabled = pending || lifecycleBusy;
 
   const status = task.statusText || 'Назначена';
   const isDone = status === STATUS_COMPLETED;
@@ -6093,29 +6389,21 @@ export default function EmployeeStatusButtons({
 
   const handleOpen = (event) => {
     event.stopPropagation();
+    if (statusActionsDisabled) return;
     setAnchorEl(event.currentTarget);
   };
 
   const handleClose = () => setAnchorEl(null);
 
-  const runWorkflow = (lifecycleAction, actionLabel) => async () => {
+  const runWorkflow = (lifecycleAction) => async () => {
     handleClose();
-    if (pending) return;
-    await runWorkflowWithSequenceGuard({
-      task,
-      statusText: status,
-      confirm,
-      resolveStatus: onSetStatus
-        ? (t, target, extra) => onSetStatus(t, target, extra)
-        : null,
-      runAction: async () => lifecycleAction(task),
-      actionLabel
-    });
+    if (statusActionsDisabled) return;
+    await lifecycleAction(task);
   };
 
   const runInfoStatus = (statusText) => () => {
     handleClose();
-    if (pending || !onSetStatus) return;
+    if (statusActionsDisabled || !onSetStatus) return;
     onSetStatus(task, statusText);
   };
 
@@ -6131,10 +6419,11 @@ export default function EmployeeStatusButtons({
     <>
       <IconButton
         size="small"
+        variant="soft"
+        color="primary"
         onClick={handleOpen}
-        disabled={pending}
+        disabled={statusActionsDisabled}
         aria-label="Действия с задачей"
-        sx={softIconButtonSx('primary')}
       >
         {pending ? <CircularProgress size={18} /> : <MoreVert fontSize="small" />}
       </IconButton>
@@ -6149,7 +6438,7 @@ export default function EmployeeStatusButtons({
         {(canStart || isInfo) && (
           <MenuItem
             sx={workflowItemSx}
-            onClick={runWorkflow(onStart, STATUS_IN_PROGRESS)}
+            onClick={runWorkflow(onStart)}
           >
             <ListItemIcon>
               <PlayArrow fontSize="small" color="success" />
@@ -6160,7 +6449,7 @@ export default function EmployeeStatusButtons({
         {canPause && (
           <MenuItem
             sx={workflowItemSx}
-            onClick={runWorkflow(onPause, STATUS_PAUSED)}
+            onClick={runWorkflow(onPause)}
           >
             <ListItemIcon>
               <Pause fontSize="small" color="warning" />
@@ -6169,7 +6458,7 @@ export default function EmployeeStatusButtons({
           </MenuItem>
         )}
         {canResume && (
-          <MenuItem onClick={runWorkflow(onResume, 'Продолжить')}>
+          <MenuItem onClick={runWorkflow(onResume)}>
             <ListItemIcon>
               <PlayArrow fontSize="small" color="success" />
             </ListItemIcon>
@@ -6179,7 +6468,7 @@ export default function EmployeeStatusButtons({
         {canComplete && (
           <MenuItem
             sx={workflowItemSx}
-            onClick={runWorkflow(onComplete, STATUS_COMPLETED)}
+            onClick={runWorkflow(onComplete)}
           >
             <ListItemIcon>
               <CheckCircle fontSize="small" color="primary" />
@@ -6599,7 +6888,13 @@ export default function SplitTaskModal({
                 />
 
                 {parts.length > 1 && (
-                  <IconButton size="small" color="error" onClick={() => removePart(idx)} sx={{ mt: 0.5, flexShrink: 0 }}>
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={() => removePart(idx)}
+                    aria-label={isSequential ? 'Удалить этап' : 'Удалить сотрудника'}
+                    sx={{ mt: 0.5, flexShrink: 0 }}
+                  >
                     <Delete />
                   </IconButton>
                 )}
@@ -6631,17 +6926,14 @@ import {
   setProgress,
   completeTask,
   updateTaskRow,
-  buildTaskUpdatePayload,
-  debugApi
+  buildTaskUpdatePayload
 } from '../services/api';
 import { runWorkflowWithSequenceGuard } from '../utils/supplyStatusWorkflow';
 import {
-  Calculate,
   Sort
 } from '@mui/icons-material';
 import {
   Tooltip,
-  Button,
   Checkbox,
   IconButton,
   Divider,
@@ -6650,8 +6942,10 @@ import {
   Typography,
   Menu,
   MenuItem,
-  Stack
+  Stack,
+  Paper
 } from '@mui/material';
+import { sectionTitleRowSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import useActiveTasksQuery from '../hooks/queries/useActiveTasksQuery';
 import { openFileOnClient } from '../utils/openFileOnClient';
@@ -6678,15 +6972,14 @@ function isBlockedActiveTask(task) {
 
 export default function ActiveTasksList({
   onUpdate,
-  onStatisticsRecalculated = onUpdate,
-  embedded = false,
-  employee = '',
-  isAdmin = false
+  sectionTitle,
+  sectionIcon,
+  sectionSx,
+  employee = ''
 }) {
-  const { showError, showSuccess, showWarning, confirm } = useUiFeedback();
+  const { showError, showWarning, confirm } = useUiFeedback();
   const { data: tasks = [] } = useActiveTasksQuery(employee, Boolean(employee));
   const [pendingTaskId, setPendingTaskId] = useState(null);
-  const [recalculatingStats, setRecalculatingStats] = useState(false);
   const pendingTaskIdRef = useRef(null);
   const [blockedBottomSort, setBlockedBottomSort] = useState(true);
   const [sortAnchorEl, setSortAnchorEl] = useState(null);
@@ -6724,34 +7017,8 @@ export default function ActiveTasksList({
     setBlockedBottomSort((prev) => !prev);
   }, []);
 
-  const handleRecalculateStatistics = useCallback(async () => {
-    if (recalculatingStats) return;
-
-    const confirmed = await confirm({
-      title: 'Пересчитать статистику?',
-      message: 'Фактическое время и сохранённые часы будут заново собраны из закрытых интервалов всех выполненных задач.',
-      confirmLabel: 'Пересчитать',
-      confirmColor: 'warning'
-    });
-    if (!confirmed) return;
-
-    setRecalculatingStats(true);
-    try {
-      const result = await debugApi.recalculateStatistics();
-      await onStatisticsRecalculated();
-      showSuccess(
-        `Статистика пересчитана: задач ${result?.tasksProcessed ?? 0}, изменено ${result?.tasksChanged ?? 0}`
-      );
-    } catch (err) {
-      console.error('Ошибка пересчёта статистики:', err);
-      showError(err.message || 'Не удалось пересчитать статистику');
-    } finally {
-      setRecalculatingStats(false);
-    }
-  }, [confirm, onStatisticsRecalculated, recalculatingStats, showError, showSuccess]);
-
   const runGuardedAction = useCallback(async (task, action, progress = null) => {
-    if (pendingTaskIdRef.current === task.id) return;
+    if (pendingTaskIdRef.current != null) return;
     setPendingTask(task.id);
 
     const runApi = async () => {
@@ -6793,46 +7060,44 @@ export default function ActiveTasksList({
     if (!result.ok) showError('Не удалось открыть файл');
   }, [showError, showWarning]);
 
-  const content = (
-    <Stack spacing={2}>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
-        {isAdmin && (
-          <Button
-            size="small"
-            variant="outlined"
-            color="warning"
-            startIcon={<Calculate />}
-            disabled={recalculatingStats}
-            onClick={handleRecalculateStatistics}
-          >
-            {recalculatingStats ? 'Пересчёт...' : 'Пересчитать статистику'}
-          </Button>
-        )}
-        <Tooltip title="Сортировка">
-          <IconButton
-            size="small"
-            onClick={handleOpenSortMenu}
-            color={blockedBottomSort ? 'primary' : 'default'}
-            sx={[
-              blockedBottomSort && { border: '1px solid', borderColor: 'primary.main' }
-            ]}
-          >
-            <Sort fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Menu
-          anchorEl={sortAnchorEl}
-          open={sortMenuOpen}
-          onClose={handleCloseSortMenu}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+  const sortControls = (
+    <>
+      <Tooltip title="Сортировка">
+        <IconButton
+          size="small"
+          onClick={handleOpenSortMenu}
+          color={blockedBottomSort ? 'primary' : 'default'}
+          aria-label="Сортировка активных задач"
+          sx={[
+            blockedBottomSort && { border: '1px solid', borderColor: 'primary.main' }
+          ]}
         >
-          <MenuItem onClick={handleToggleBlockedBottomSort}>
-            <Checkbox size="small" checked={blockedBottomSort} readOnly />
-            <ListItemText primary="Заблокированные снизу" />
-          </MenuItem>
-        </Menu>
-      </Box>
+          <Sort fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Menu
+        anchorEl={sortAnchorEl}
+        open={sortMenuOpen}
+        onClose={handleCloseSortMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem onClick={handleToggleBlockedBottomSort}>
+          <Checkbox
+            size="small"
+            checked={blockedBottomSort}
+            disableRipple
+            tabIndex={-1}
+            sx={{ pointerEvents: 'none' }}
+          />
+          <ListItemText primary="Заблокированные снизу" />
+        </MenuItem>
+      </Menu>
+    </>
+  );
+
+  const taskStack = (
+    <Stack spacing={2}>
       {visibleTasks.map((task, index) => {
         const showBlockedDivider =
           blockedBottomSort &&
@@ -6852,6 +7117,7 @@ export default function ActiveTasksList({
             <ActiveTaskCard
               task={task}
               isPending={pendingTaskId === task.id}
+              lifecycleBusy={pendingTaskId != null}
               onAction={runGuardedAction}
               onOpenFile={openFile}
             />
@@ -6862,14 +7128,37 @@ export default function ActiveTasksList({
     </Stack>
   );
 
-  if (embedded) return content;
+  if (sectionTitle) {
+    return (
+      <Paper variant="section" sx={sectionSx}>
+        <Box
+          sx={{
+            ...sectionTitleRowSx,
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 1,
+            mb: 3
+          }}
+        >
+          <Box sx={sectionTitleRowSx}>
+            {sectionIcon}
+            <Typography variant="h2" component="h2">
+              {sectionTitle}
+            </Typography>
+          </Box>
+          {sortControls}
+        </Box>
+        {taskStack}
+      </Paper>
+    );
+  }
 
   return (
     <Box sx={{ mt: 3 }}>
       <Typography variant="h2" sx={{ mb: 2 }}>
         Активные задачи
       </Typography>
-      {content}
+      {taskStack}
     </Box>
   );
 }
@@ -7113,7 +7402,6 @@ export default function useExpandedRows() {
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
-import './App.css'
 
 document.body.style.margin = '0';
 
@@ -7122,39 +7410,74 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>,
 )=== ./frontend/src/App.jsx ===
+import { lazy, Suspense } from 'react';
+import { ThemeProvider, CssBaseline } from '@mui/material';
+import LoginForm from './components/LoginForm';
+import { LoadingState } from './components/LoadingState';
+import { AuthProvider } from './context/AuthContext.jsx';
+import useAuth from './hooks/useAuth';
+import appTheme from './theme/appTheme';
+
+const AuthenticatedApp = lazy(() => import('./AuthenticatedApp.jsx'));
+
+function AppContent() {
+  const { user, handleLogin } = useAuth();
+
+  if (!user) return <LoginForm onLogin={handleLogin} />;
+
+  return (
+    <Suspense fallback={<LoadingState fullScreen />}>
+      <AuthenticatedApp />
+    </Suspense>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider theme={appTheme}>
+      <CssBaseline />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
+  );
+}
+
+export default App;
+=== ./frontend/src/AuthenticatedApp.jsx ===
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Typography,
   Container,
   Box,
   Paper,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
+  Autocomplete,
+  TextField,
   Button,
-  ThemeProvider,
-  CssBaseline,
   Chip,
   Tab,
   Tabs,
   Avatar,
   Menu,
+  MenuItem,
   IconButton,
   Divider,
   ListItemIcon,
-  ListItemText
+  ListItemText,
+  ListSubheader
 } from '@mui/material';
-import { 
-  Today, 
-  RestartAlt, 
-  TableChart, 
-  CalendarMonth, 
-  Logout, 
+import {
+  Today,
+  RestartAlt,
+  TableChart,
+  CalendarMonth,
+  Logout,
   Person,
   AdminPanelSettings,
   CloudUpload,
   Delete,
+  Restaurant,
+  TaskAlt,
 } from '@mui/icons-material';
 import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
@@ -7163,9 +7486,8 @@ import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
 import DebugPanel from './components/DebugPanel';
 import TaskTable from './components/TaskTable';
-import LoginForm from './components/LoginForm';
+import LunchBreakOverlay from './components/LunchBreakOverlay';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
-import { LoadingState } from './components/LoadingState';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { UiFeedbackProvider, useUiFeedback } from './context/UiFeedbackContext';
 import { ClockProvider } from './context/ClockContext';
@@ -7173,18 +7495,26 @@ import { queryClient } from './lib/queryClient';
 import useActiveTasksRefresh from './hooks/useActiveTasksRefresh';
 import useAuth from './hooks/useAuth';
 import useNotificationsHub from './hooks/useNotificationsHub';
-import appTheme from './theme/appTheme';
-import { glassPaperSx, pageShellSx } from './theme/surfaces';
-import SectionCard from './components/ui/SectionCard';
+import { endLunch, getCurrentLunch, startLunch } from './services/api';
+import { avatarDisplayUrl } from './utils/avatarUrl';
+import { pageShellSx } from './theme/surfaces';
 import { MotionSwitch } from './components/ui/MotionSection';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { ruRU } from '@mui/x-date-pickers/locales';
+import 'dayjs/locale/ru';
+import './App.css';
 
-function AppContent() {
-  const { user, setUser, loading, employee, setEmployee, handleLogin, handleLogout } = useAuth();
+function AuthenticatedAppContent() {
+  const { user, setUser, employee, setEmployee, handleLogout } = useAuth();
   const { showSuccess, showError, showWarning, showInfo, confirm, promptInput } = useUiFeedback();
   const [activeTab, setActiveTab] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [lunchPending, setLunchPending] = useState(false);
+  const [currentLunch, setCurrentLunch] = useState(null);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [avatarKey, setAvatarKey] = useState(Date.now());
+  const fileInputRef = useRef(null);
   const {
     refreshActiveTasks,
     refreshCalendar,
@@ -7243,26 +7573,48 @@ function AppContent() {
     [handleHubTaskEvent, handleHubActiveTasksRefresh, handleHubTableFallbackRefresh, handleHubCalendarRefresh, refreshAll]
   );
 
-  const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers);
+  const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers, {
+    enabled: Boolean(user?.isAuthenticated)
+  });
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
+
+  const targetLunchEmployee = user?.fullName || employee || '';
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.isAuthenticated || !targetLunchEmployee) {
+      setCurrentLunch(null);
+      return undefined;
+    }
+
+    getCurrentLunch(targetLunchEmployee)
+      .then((interval) => {
+        if (!cancelled) setCurrentLunch(interval);
+      })
+      .catch(() => {
+        if (!cancelled) setCurrentLunch(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [targetLunchEmployee, user?.isAuthenticated, user?.id]);
 
   const handleOpenUserMenu = (event) => setAnchorElUser(event.currentTarget);
   const handleCloseUserMenu = () => setAnchorElUser(null);
 
   const handleFileSelect = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/jpeg,image/png,image/gif,image/webp';
-    input.onchange = handleAvatarUpload;
-    input.click();
     handleCloseUserMenu();
+    requestAnimationFrame(() => {
+      fileInputRef.current?.click();
+    });
   };
 
   const handleAvatarUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith('image/') && !/\.svg$/i.test(file.name)) {
       showWarning('Пожалуйста, выберите изображение');
       return;
     }
@@ -7282,7 +7634,7 @@ function AppContent() {
         credentials: 'include'
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
+      if (!response.ok) throw new Error(data.message || data.error || 'Ошибка загрузки');
 
       setUser(prev => ({
         ...prev,
@@ -7294,6 +7646,7 @@ function AppContent() {
       showError(err.message || 'Ошибка загрузки');
     } finally {
       setUploadingAvatar(false);
+      event.target.value = '';
     }
   };
 
@@ -7323,6 +7676,38 @@ function AppContent() {
     } finally {
       setUploadingAvatar(false);
       handleCloseUserMenu();
+    }
+  };
+
+  const handleStartLunch = async () => {
+    if (!targetLunchEmployee || lunchPending) return;
+    handleCloseUserMenu();
+    setLunchPending(true);
+    try {
+      const interval = await startLunch(targetLunchEmployee);
+      setCurrentLunch(interval);
+      refreshAll();
+      showSuccess('Обед начат');
+    } catch (err) {
+      showError(err.message || 'Не удалось начать обед');
+    } finally {
+      setLunchPending(false);
+    }
+  };
+
+  const handleEndLunch = async () => {
+    if (!targetLunchEmployee || lunchPending) return;
+    handleCloseUserMenu();
+    setLunchPending(true);
+    try {
+      await endLunch(targetLunchEmployee);
+      setCurrentLunch(null);
+      refreshAll();
+      showSuccess('Обед завершён');
+    } catch (err) {
+      showError(err.message || 'Не удалось завершить обед');
+    } finally {
+      setLunchPending(false);
     }
   };
 
@@ -7370,49 +7755,48 @@ function AppContent() {
 
   const handleTabChange = (_event, newValue) => setActiveTab(newValue);
   const isAdmin = user?.role === 'Admin';
-
-  if (loading) return <LoadingState fullScreen />;
-  if (!user) return <LoginForm onLogin={handleLogin} />;
-
-  const avatarUrl = user?.avatarUrl && user?.id ? `/api/auth/avatar/${user.id}?t=${avatarKey}` : null;
+  const isOnLunchBreak = Boolean(currentLunch);
+  const avatarUrl = user?.avatarUrl && user?.id
+    ? avatarDisplayUrl(user.id, { size: 128, cacheBust: avatarKey })
+    : null;
 
   return (
     <>
       <Box sx={pageShellSx}>
         <Container maxWidth="xl">
-          <Paper sx={{ ...glassPaperSx, p: 2, mb: 3 }}>
+          <Paper sx={{ p: 2, mb: 3, borderRadius: 2.5 }}>
             <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                 <Today color="primary" sx={{ fontSize: 36 }} />
                 <Typography variant="h1" component="h1">Mainstream Assistant</Typography>
               </Box>
-              
+
               <CurrentDateTime />
 
               <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                 {isAdmin && (
-                  <FormControl size="small" sx={{ minWidth: 130 }}>
-                    <InputLabel id="admin-employee-label">Сотрудник</InputLabel>
-                    <Select
-                      labelId="admin-employee-label"
-                      value={employee}
-                      label="Сотрудник"
-                      onChange={(e) => setEmployee(e.target.value)}
-                    >
-                      <MenuItem value="Дима">Дима</MenuItem>
-                      <MenuItem value="Яромир">Яромир</MenuItem>
-                      <MenuItem value="Павел">Павел</MenuItem>
-                    </Select>
-                  </FormControl>
+                  <Autocomplete
+                    size="small"
+                    disableClearable
+                    options={['Дима', 'Яромир', 'Павел']}
+                    value={employee}
+                    onChange={(_e, value) => {
+                      if (value) setEmployee(value);
+                    }}
+                    sx={{ minWidth: 160 }}
+                    renderInput={(params) => <TextField {...params} label="Сотрудник" />}
+                  />
                 )}
                 {isAdmin && <Divider orientation="vertical" flexItem sx={{ height: 30 }} />}
                 {isAdmin && (
                   <Button variant="outlined" startIcon={<RestartAlt />} onClick={handleReset} color="error" size="medium">Сброс БД</Button>
                 )}
-                <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
-                  <Avatar 
-                    src={avatarUrl} 
-                    sx={{ width: 40, height: 40, bgcolor: 'primary.main' }}
+                <IconButton onClick={handleOpenUserMenu} aria-label="Меню пользователя" sx={{ p: 0 }}>
+                  <Avatar
+                    key={avatarKey}
+                    src={avatarUrl}
+                    imgProps={{ loading: 'lazy', decoding: 'async', fetchPriority: 'low' }}
+                    sx={{ width: 56, height: 56, fontSize: '1.25rem', bgcolor: 'primary.main' }}
                     onError={handleAvatarError}
                   >
                     {(!user?.avatarUrl) && (user?.fullName?.[0] || 'U')}
@@ -7422,7 +7806,7 @@ function AppContent() {
             </Box>
           </Paper>
 
-          <Paper sx={{ mb: 3, borderRadius: 3, overflow: 'hidden' }}>
+          <Paper sx={{ mb: 3, borderRadius: 2.5, overflow: 'hidden' }}>
             <Tabs value={activeTab} onChange={handleTabChange} centered variant="fullWidth">
               <Tab icon={<CalendarMonth />} iconPosition="start" label="Календарь" />
               <Tab icon={<TableChart />} iconPosition="start" label="Таблица задач" />
@@ -7434,15 +7818,15 @@ function AppContent() {
               <>
                 <WeekCalendar employee={employee} />
                 {!isAdmin && <DeadlineWarnings employee={employee} />}
-                <SectionCard title="Активные задачи" icon={<Today color="primary" />} sx={{ mb: 3 }} disablePadding>
-                  <ActiveTasksList
-                    onUpdate={refreshCalendar}
-                    onStatisticsRecalculated={refreshAll}
-                    embedded
-                    employee={employee}
-                    isAdmin={isAdmin}
-                  />
-                </SectionCard>
+                <ActiveTasksList
+                  sectionTitle="Активные задачи"
+                  sectionIcon={<Today color="primary" />}
+                  sectionSx={{ mb: 3 }}
+                  onUpdate={refreshCalendar}
+                  onStatisticsRecalculated={refreshAll}
+                  employee={employee}
+                  isAdmin={isAdmin}
+                />
                 <CompletedTasksList employee={employee} />
               </>
             ) : (
@@ -7469,7 +7853,7 @@ function AppContent() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        <MenuItem disabled>
+        <ListSubheader disableSticky sx={{ lineHeight: 1.4, py: 1.5, bgcolor: 'transparent' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{user?.fullName}</Typography>
             <Typography variant="caption" color="text.secondary">{user?.email}</Typography>
@@ -7482,7 +7866,19 @@ function AppContent() {
               sx={{ mt: 0.5, fontSize: '0.65rem', width: 'fit-content' }}
             />
           </Box>
-        </MenuItem>
+        </ListSubheader>
+        <Divider />
+        {currentLunch ? (
+          <MenuItem onClick={handleEndLunch} disabled={lunchPending || !targetLunchEmployee}>
+            <ListItemIcon><TaskAlt fontSize="small" color="success" /></ListItemIcon>
+            <ListItemText>Пообедал</ListItemText>
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={handleStartLunch} disabled={lunchPending || !targetLunchEmployee}>
+            <ListItemIcon><Restaurant fontSize="small" color="warning" /></ListItemIcon>
+            <ListItemText>Обед</ListItemText>
+          </MenuItem>
+        )}
         <Divider />
         <MenuItem onClick={handleFileSelect} disabled={uploadingAvatar}>
           <ListItemIcon><CloudUpload fontSize="small" /></ListItemIcon>
@@ -7501,6 +7897,25 @@ function AppContent() {
         </MenuItem>
       </Menu>
 
+      <input
+        ref={fileInputRef}
+        type="file"
+        hidden
+        accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,.svg"
+        onChange={handleAvatarUpload}
+      />
+
+      {isOnLunchBreak && (
+        <LunchBreakOverlay
+          user={user}
+          avatarUrl={avatarUrl}
+          onAvatarError={handleAvatarError}
+          onSwitchUser={handleLogout}
+          onEndLunch={handleEndLunch}
+          lunchPending={lunchPending}
+        />
+      )}
+
       <PushNotificationSnackbars
         notifications={notifications}
         onClose={closeNotification}
@@ -7509,19 +7924,20 @@ function AppContent() {
   );
 }
 
-function App() {
+export default function AuthenticatedApp() {
   return (
-    <ThemeProvider theme={appTheme}>
-      <CssBaseline />
+    <LocalizationProvider
+      dateAdapter={AdapterDayjs}
+      adapterLocale="ru"
+      localeText={ruRU.components.MuiLocalizationProvider.defaultProps.localeText}
+    >
       <QueryClientProvider client={queryClient}>
         <UiFeedbackProvider>
           <ClockProvider>
-            <AppContent />
+            <AuthenticatedAppContent />
           </ClockProvider>
         </UiFeedbackProvider>
       </QueryClientProvider>
-    </ThemeProvider>
+    </LocalizationProvider>
   );
 }
-
-export default App;

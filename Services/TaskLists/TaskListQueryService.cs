@@ -180,7 +180,11 @@ public class TaskListQueryService : ITaskListQueryService
             SequenceStartBlocked = supplyMode == SupplyMode.InternalProduction && task.Status == JobStatus.Waiting,
             StatusText = TaskStatusMapper.ToText(task.Status),
             RowNumber = task.Id,
-            RiskLevel = riskLevel
+            RiskLevel = riskLevel,
+            task.RequiresTestBeforeProduction,
+            task.TestEstimateHours,
+            task.ProductionEstimateHours,
+            WorkPhase = task.WorkPhase
         };
     }
 }

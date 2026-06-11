@@ -79,7 +79,7 @@ export default function EmployeeHoursSelector({ employees, totalHours, onChange,
                     value={assigned.hours}
                     onChange={(hours) => updateAssignment(emp, hours)}
                     max={totalHours}
-                    sx={{ width: 100 }}
+                    sx={{ flexShrink: 0 }}
                   />
                 )}
               </Box>

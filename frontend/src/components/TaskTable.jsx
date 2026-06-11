@@ -25,6 +25,7 @@ import useTaskTableColumnVisibility from '../hooks/taskTable/useTaskTableColumnV
 import { TextLimitProvider } from '../context/TextLimitContext';
 import { STATUS_COMPLETED } from '../constants/taskStatuses';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
+import { PLANNED_TIME_PROGRESS_VISIBLE } from './taskTable/TaskPlannedProgressFooter';
 
 const ROW_GROUP_BASE_HEIGHT = 44;
 const ROW_PROGRESS_HEIGHT = 6;
@@ -37,7 +38,7 @@ function isCompletedRow(row) {
 }
 
 function hasProgressFooter(row) {
-  return row?.showPlannedTimeProgress === true;
+  return PLANNED_TIME_PROGRESS_VISIBLE && row?.showPlannedTimeProgress === true;
 }
 
 function VirtualPaddingRow({ height, colSpan }) {

@@ -71,6 +71,7 @@ namespace ProductionPlanner.Services
 
             foreach (var (part, index) in parts.Select((p, i) => (p, i)))
             {
+                ValidateTestPart(part);
                 var sequenceOrder = part.SequenceOrder > 0 ? part.SequenceOrder : index + 1;
 
                 var migrateParentWork = parentHasWorkHistory
@@ -98,6 +99,7 @@ namespace ProductionPlanner.Services
                     AllocatedHours = part.AllocatedHours,
                     SequenceOrder = sequenceOrder
                 };
+
                 await _context.TaskSplits.AddAsync(split);
 
                 await _notificationService.NotifyNewTaskAsync(childTask);
@@ -172,6 +174,7 @@ namespace ProductionPlanner.Services
 
             foreach (var (part, index) in parts.Select((p, i) => (p, i)))
             {
+                ValidateTestPart(part);
                 var sequenceOrder = part.SequenceOrder > 0 ? part.SequenceOrder : index + 1;
                 var child = ResolveChildForPart(part, existingChildren, usedChildIds);
 
@@ -290,10 +293,28 @@ namespace ProductionPlanner.Services
             SplitPart part,
             CancellationToken cancellationToken)
         {
-            parent.EstimateHours = part.AllocatedHours;
             parent.Type = part.TaskType ?? string.Empty;
             parent.EmployeeName = part.EmployeeName;
             parent.UpdatedAt = _timeService.Now;
+
+            if (part.RequiresTestBeforeProduction)
+            {
+                parent.RequiresTestBeforeProduction = true;
+                parent.TestEstimateHours = part.TestEstimateHours;
+                parent.ProductionEstimateHours = part.ProductionEstimateHours;
+                parent.EstimateHours = part.TestEstimateHours + part.ProductionEstimateHours;
+                if (parent.WorkPhase == TaskWorkPhase.None)
+                    parent.WorkPhase = TaskWorkPhase.Test;
+            }
+            else
+            {
+                parent.RequiresTestBeforeProduction = false;
+                parent.TestEstimateHours = 0;
+                parent.ProductionEstimateHours = 0;
+                parent.WorkPhase = TaskWorkPhase.None;
+                parent.EstimateHours = part.AllocatedHours;
+            }
+
             await _repo.UpdateTaskAsync(parent, cancellationToken);
             return parent;
         }
@@ -350,33 +371,82 @@ namespace ProductionPlanner.Services
             return parent;
         }
 
-        private static ProductionTask CreateChildFromPart(ProductionTask parent, SplitPart part, int sequenceOrder) => new()
+        private static void ValidateTestPart(SplitPart part)
         {
-            DisplayOrder = -1,
-            FolderPath = parent.FolderPath,
-            FileName = $"{parent.FileName} [{part.TaskType}]",
-            Comment = "",
-            Deadline = parent.Deadline,
-            EstimateHours = part.AllocatedHours,
-            Type = part.TaskType,
-            EmployeeName = part.EmployeeName,
-            Status = SupplyWorkflow.InitialChildStatus(parent.SupplyMode, sequenceOrder),
-            Progress = 0,
-            ActualHours = 0,
-            ParentRowNumber = parent.Id,
-            IsSplitTask = true,
-            WorkIntervals = new List<WorkInterval>()
-        };
+            if (!part.RequiresTestBeforeProduction)
+                return;
+
+            if (part.TestEstimateHours < 0.5 || part.ProductionEstimateHours < 0.5)
+                throw new InvalidOperationException("Укажите часы теста и основной части (от 0.5).");
+
+            var expected = part.TestEstimateHours + part.ProductionEstimateHours;
+            if (Math.Abs(part.AllocatedHours - expected) > 0.01)
+                throw new InvalidOperationException(
+                    $"Сумма часов теста и основной части ({expected}) должна совпадать с выделенным временем ({part.AllocatedHours}).");
+        }
+
+        private static ProductionTask CreateChildFromPart(ProductionTask parent, SplitPart part, int sequenceOrder)
+        {
+            var child = new ProductionTask
+            {
+                DisplayOrder = -1,
+                FolderPath = parent.FolderPath,
+                FileName = $"{parent.FileName} [{part.TaskType}]",
+                Comment = "",
+                Deadline = parent.Deadline,
+                EstimateHours = part.AllocatedHours,
+                Type = part.TaskType,
+                EmployeeName = part.EmployeeName,
+                Status = SupplyWorkflow.InitialChildStatus(parent.SupplyMode, sequenceOrder),
+                Progress = 0,
+                ActualHours = 0,
+                ParentRowNumber = parent.Id,
+                IsSplitTask = true,
+                WorkIntervals = new List<WorkInterval>()
+            };
+            ApplyTestPhaseFromPart(child, part, isNewChild: true);
+            return child;
+        }
 
         private void ApplyPartToChild(ProductionTask child, ProductionTask parent, SplitPart part)
         {
-            child.EstimateHours = part.AllocatedHours;
+            ApplyTestPhaseFromPart(child, part, isNewChild: false);
             child.Type = part.TaskType;
             child.EmployeeName = part.EmployeeName;
             child.Deadline = parent.Deadline;
             child.FolderPath = parent.FolderPath;
             child.FileName = $"{parent.FileName} [{part.TaskType}]";
             child.UpdatedAt = _timeService.Now;
+        }
+
+        private static void ApplyTestPhaseFromPart(ProductionTask task, SplitPart part, bool isNewChild)
+        {
+            if (!part.RequiresTestBeforeProduction)
+            {
+                if (isNewChild || task.WorkPhase == TaskWorkPhase.None)
+                {
+                    task.RequiresTestBeforeProduction = false;
+                    task.TestEstimateHours = 0;
+                    task.ProductionEstimateHours = 0;
+                    task.WorkPhase = TaskWorkPhase.None;
+                    task.TestPhaseCompletedAt = null;
+                }
+
+                task.EstimateHours = part.AllocatedHours;
+                return;
+            }
+
+            task.RequiresTestBeforeProduction = true;
+            task.TestEstimateHours = part.TestEstimateHours;
+            task.ProductionEstimateHours = part.ProductionEstimateHours;
+            task.EstimateHours = part.TestEstimateHours + part.ProductionEstimateHours;
+
+            if (isNewChild
+                || (task.WorkPhase == TaskWorkPhase.None
+                    && task.Status is JobStatus.Assigned or JobStatus.Approved or JobStatus.InStock))
+            {
+                task.WorkPhase = TaskWorkPhase.Test;
+            }
         }
 
         private static ProductionTask? ResolveChildForPart(
@@ -507,6 +577,11 @@ namespace ProductionPlanner.Services
                 parent.Progress = keptChild.Progress;
                 parent.ActualHours = keptChild.ActualHours;
                 parent.CompletedAt = keptChild.CompletedAt;
+                parent.RequiresTestBeforeProduction = keptChild.RequiresTestBeforeProduction;
+                parent.TestEstimateHours = keptChild.TestEstimateHours;
+                parent.ProductionEstimateHours = keptChild.ProductionEstimateHours;
+                parent.WorkPhase = keptChild.WorkPhase;
+                parent.TestPhaseCompletedAt = keptChild.TestPhaseCompletedAt;
 
                 foreach (var interval in keptChild.WorkIntervals.ToList())
                 {

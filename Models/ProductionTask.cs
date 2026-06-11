@@ -70,6 +70,18 @@ namespace ProductionPlanner.Models
         /// <summary>Режим выполнения дочерних этапов (параллельный / последовательный).</summary>
         public SupplyMode SupplyMode { get; set; }
 
+        /// <summary>Задача выполняется в два этапа: тест, затем согласование и основная часть.</summary>
+        public bool RequiresTestBeforeProduction { get; set; }
+
+        public double TestEstimateHours { get; set; }
+
+        public double ProductionEstimateHours { get; set; }
+
+        public TaskWorkPhase WorkPhase { get; set; }
+
+        /// <summary>Момент завершения тестовой фазы (для учёта интервалов основной части).</summary>
+        public DateTime? TestPhaseCompletedAt { get; set; }
+
         public List<TaskSplit> ChildSplits { get; set; } = new();
         
         public DateTime CreatedAt { get; set; }

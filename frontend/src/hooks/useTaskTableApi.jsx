@@ -75,6 +75,11 @@ export default function useTaskTableApi() {
     if (rowData.supplyMode != null) {
       body.supplyMode = rowData.supplyMode;
     }
+    if (rowData.requiresTestBeforeProduction) {
+      body.requiresTestBeforeProduction = true;
+      body.testEstimateHours = rowData.testEstimateHours;
+      body.productionEstimateHours = rowData.productionEstimateHours;
+    }
     const response = await fetch('/api/tasks/table/row', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

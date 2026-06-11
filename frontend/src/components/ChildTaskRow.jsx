@@ -21,6 +21,7 @@ import TaskDeadlineCell from './taskTable/TaskDeadlineCell';
 import TaskHoursCell from './taskTable/TaskHoursCell';
 import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
+import ThroughApprovalChip from './taskTable/ThroughApprovalChip';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
@@ -28,6 +29,7 @@ import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { childRowSx, highlightedTaskRowSx } from '../theme/surfaces';
 import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
 import { getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
+import { getSplitSupplyMode } from '../utils/throughApproval';
 
 function ChildTaskRow({
   task,
@@ -54,7 +56,9 @@ function ChildTaskRow({
   columnVisibility,
   textLimit
 }) {
-  const isSequentialChild = task.supplyMode === SUPPLY_MODE_INTERNAL;
+  const supplyMode = getSplitSupplyMode(task, sharedGroupParentTask);
+  const isSequentialChild = supplyMode === SUPPLY_MODE_INTERNAL;
+  const sequenceOrder = task.sequenceOrder ?? 0;
   const overdue = task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
 
   let isMine = false;
@@ -124,13 +128,13 @@ function ChildTaskRow({
               }}
             />
           </Box>
-          {isSequentialChild && task.sequenceOrder ? (
+          {isSequentialChild && sequenceOrder > 0 ? (
             <Typography
               variant="caption"
               color="text.secondary"
               sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
             >
-              Этап {task.sequenceOrder}
+              Этап {sequenceOrder}
             </Typography>
           ) : (
             <Box sx={{ ...ICON_SLOT_FILE, height: 34 }} />
@@ -150,7 +154,12 @@ function ChildTaskRow({
       </TableCell>
 
       <TableCell align="center" sx={hoursColumnSx(columnVisibility, showHoursTypeColumns)}>
-        <TaskHoursCell estimateHours={task.estimateHours} />
+        <TaskHoursCell
+          estimateHours={task.estimateHours}
+          requiresTestBeforeProduction={task.requiresTestBeforeProduction}
+          testEstimateHours={task.testEstimateHours}
+          productionEstimateHours={task.productionEstimateHours}
+        />
       </TableCell>
 
       <TableCell sx={typeColumnSx(columnVisibility, showHoursTypeColumns)}>
@@ -173,7 +182,10 @@ function ChildTaskRow({
       </TableCell>
 
       <TableCell sx={columnCellSx('status', columnVisibility, showHoursTypeColumns, COL_STATUS)}>
-        <TaskStatusCell statusText={task.statusText} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
+          <TaskStatusCell statusText={task.statusText} />
+          <ThroughApprovalChip task={task} />
+        </Box>
       </TableCell>
 
       <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>

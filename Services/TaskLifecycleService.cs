@@ -263,6 +263,12 @@ public class TaskLifecycleService : ITaskLifecycleService
         var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null || task.Status == JobStatus.Completed) return;
 
+        if (TestPhaseWorkflow.IsActiveTestPhase(task))
+        {
+            await CompleteTestPhaseAsync(taskId, now, cancellationToken);
+            return;
+        }
+
         if (task.Status is JobStatus.Assigned or JobStatus.Approved or JobStatus.InStock)
         {
             await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
@@ -279,14 +285,22 @@ public class TaskLifecycleService : ITaskLifecycleService
                     ct);
             }, cancellationToken);
 
-            await _statsService.AddSavedHoursAsync(task.EmployeeName, task.EstimateHours, now);
+            var estimateForStats = TestPhaseWorkflow.IsProductionPhase(task)
+                ? task.ProductionEstimateHours
+                : task.EstimateHours;
+            await _statsService.AddSavedHoursAsync(task.EmployeeName, estimateForStats, now);
 
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
                 await UpdateParentStatusAsync(task.Id, cancellationToken);
 
             task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
             if (task != null)
+            {
+                if (TestPhaseWorkflow.IsProductionPhase(task))
+                    task.WorkPhase = TaskWorkPhase.Done;
+                await _repo.UpdateTaskAsync(task, cancellationToken);
                 await _notificationService.NotifyStatusChangedAsync(task, "Completed");
+            }
 
             await TryCompleteParentAfterChildrenAsync(taskId, now, cancellationToken);
             await TryAdvanceSequentialStageAsync(taskId, cancellationToken);
@@ -328,16 +342,67 @@ public class TaskLifecycleService : ITaskLifecycleService
         task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null) return;
 
-        double saved = task.EstimateHours - task.ActualHours;
+        var phaseEstimate = TestPhaseWorkflow.GetActiveEstimateHours(task);
+        double saved = phaseEstimate - actualHours;
         await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
 
         if (task.ParentRowNumber.HasValue && task.IsSplitTask)
             await UpdateParentStatusAsync(task.Id, cancellationToken);
 
-        await TryCompleteParentAfterChildrenAsync(taskId, now, cancellationToken);
-        await TryAdvanceSequentialStageAsync(taskId, cancellationToken);
+        if (TestPhaseWorkflow.IsProductionPhase(task))
+        {
+            task.WorkPhase = TaskWorkPhase.Done;
+            await _repo.UpdateTaskAsync(task, cancellationToken);
+        }
 
         await _notificationService.NotifyStatusChangedAsync(task, "Completed");
+
+        await TryCompleteParentAfterChildrenAsync(taskId, now, cancellationToken);
+        await TryAdvanceSequentialStageAsync(taskId, cancellationToken);
+    }
+
+    private async Task CompleteTestPhaseAsync(
+        int taskId,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var actualHours = 0.0;
+
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
+        {
+            await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
+
+            var intervals = (await _repo.GetTaskByIdAsync(taskId, ct, includeIntervals: true))?.WorkIntervals ?? [];
+            foreach (var interval in intervals)
+            {
+                if (interval.EndTime.HasValue)
+                {
+                    actualHours += _workHours.GetWorkHoursBetween(
+                        AppDateTime.ToMoscowWallClockFromDb(interval.StartTime),
+                        AppDateTime.ToMoscowWallClockFromDb(interval.EndTime.Value));
+                }
+            }
+        }, cancellationToken);
+
+        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
+        if (task == null) return;
+
+        var testSaved = task.TestEstimateHours - actualHours;
+        await _statsService.AddSavedHoursAsync(task.EmployeeName, testSaved, now);
+
+        task.Status = JobStatus.PendingApproval;
+        task.WorkPhase = TaskWorkPhase.AwaitingApproval;
+        task.Progress = 0;
+        task.ActualHours = actualHours;
+        task.TestPhaseCompletedAt = now;
+        task.CompletedAt = null;
+        task.UpdatedAt = now;
+        await _repo.UpdateTaskAsync(task, cancellationToken);
+
+        if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+            await UpdateParentStatusAsync(task.Id, cancellationToken);
+
+        await _notificationService.NotifyStatusChangedAsync(task, "PendingApproval");
     }
 
     private async Task TryAdvanceSequentialStageAsync(

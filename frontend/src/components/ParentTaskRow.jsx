@@ -21,6 +21,7 @@ import TaskDeadlineCell from './taskTable/TaskDeadlineCell';
 import TaskHoursCell from './taskTable/TaskHoursCell';
 import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
+import ThroughApprovalChip from './taskTable/ThroughApprovalChip';
 import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
@@ -180,11 +181,13 @@ function ParentTaskRow({
               ) : null}
             </Box>
 
-            {task.isSplitTask && (
-              <Box sx={ICON_SLOT_GROUPS}>
-                <Groups fontSize="small" sx={sharedTaskIconSx} />
-              </Box>
-            )}
+            <Box sx={ICON_SLOT_GROUPS}>
+              {task.isSplitTask ? (
+                <LazyTooltip title="Общая задача" arrow>
+                  <Groups fontSize="small" sx={sharedTaskIconSx} />
+                </LazyTooltip>
+              ) : null}
+            </Box>
 
             <Box sx={ICON_SLOT_FILE}>
               <LazyTooltip title={`Открыть файл: ${fullFilePath}`} arrow>
@@ -239,7 +242,12 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell align="center" sx={hoursColumnSx(columnVisibility, showHoursTypeColumns)}>
-          <TaskHoursCell estimateHours={task.estimateHours} />
+          <TaskHoursCell
+            estimateHours={task.estimateHours}
+            requiresTestBeforeProduction={task.requiresTestBeforeProduction}
+            testEstimateHours={task.testEstimateHours}
+            productionEstimateHours={task.productionEstimateHours}
+          />
         </TableCell>
 
         <TableCell sx={typeColumnSx(columnVisibility, showHoursTypeColumns)}>
@@ -251,10 +259,13 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell sx={columnCellSx('status', columnVisibility, showHoursTypeColumns, COL_STATUS)}>
-          <TaskStatusCell
-            statusText={task.statusText}
-            label={hasChildren ? displayStatus : undefined}
-          />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
+            <TaskStatusCell
+              statusText={task.statusText}
+              label={hasChildren ? displayStatus : undefined}
+            />
+            <ThroughApprovalChip task={task} />
+          </Box>
         </TableCell>
 
         <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>

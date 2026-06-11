@@ -58,20 +58,11 @@ namespace ProductionPlanner.Data
                 return new CompletedTasksAggregateStats();
             }
 
-            var totals = await query
-                .GroupBy(_ => 1)
-                .Select(g => new
-                {
-                    TotalEstimate = g.Sum(t => t.EstimateHours),
-                    TotalActual = g.Sum(t => t.ActualHours)
-                })
-                .FirstAsync(cancellationToken);
-
             return new CompletedTasksAggregateStats
             {
                 TotalTasks = totalTasks,
-                TotalEstimate = totals.TotalEstimate,
-                TotalActual = totals.TotalActual
+                TotalEstimate = await query.SumAsync(t => t.EstimateHours, cancellationToken),
+                TotalActual = await query.SumAsync(t => t.ActualHours, cancellationToken)
             };
         }
 
@@ -240,6 +231,9 @@ namespace ProductionPlanner.Data
             var updatedAt = ToDbDateTime(task.UpdatedAt == default ? _timeService.Now : task.UpdatedAt);
             var deadline = ToDbDateTime(task.Deadline);
             var completedAt = task.CompletedAt.HasValue ? ToDbDateTime(task.CompletedAt.Value) : (DateTime?)null;
+            var testPhaseCompletedAt = task.TestPhaseCompletedAt.HasValue
+                ? ToDbDateTime(task.TestPhaseCompletedAt.Value)
+                : (DateTime?)null;
 
             var query = _context.ProductionTasks.Where(t => t.Id == task.Id);
 
@@ -258,6 +252,8 @@ namespace ProductionPlanner.Data
                         .SetProperty(t => t.Progress, task.Progress)
                         .SetProperty(t => t.ActualHours, task.ActualHours)
                         .SetProperty(t => t.CompletedAt, completedAt)
+                        .SetProperty(t => t.WorkPhase, task.WorkPhase)
+                        .SetProperty(t => t.TestPhaseCompletedAt, testPhaseCompletedAt)
                         .SetProperty(t => t.UpdatedAt, updatedAt),
                     cancellationToken);
                 return;
@@ -596,11 +592,13 @@ namespace ProductionPlanner.Data
             string employeeName,
             CancellationToken cancellationToken = default)
         {
-            return await _context.LunchIntervals
+            var rows = await _context.LunchIntervals
                 .AsNoTracking()
                 .Where(i => i.EmployeeName == employeeName && i.EndTime == null)
                 .OrderByDescending(i => i.StartTime)
-                .FirstOrDefaultAsync(cancellationToken);
+                .Take(1)
+                .ToListAsync(cancellationToken);
+            return rows.Count > 0 ? rows[0] : null;
         }
 
         public async Task<List<LunchInterval>> GetLunchIntervalsForDateRangeAsync(

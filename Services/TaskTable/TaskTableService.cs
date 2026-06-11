@@ -111,12 +111,21 @@ public class TaskTableService : ITaskTableService
 
         if (task.ParentRowNumber != null)
         {
-            return TaskTableRowDto.FromParent(
+            var parent = await _repo.GetTaskByIdAsync(task.ParentRowNumber.Value, cancellationToken);
+            var splits = await _repo.GetTaskSplitsByParentIdAsync(task.ParentRowNumber.Value, cancellationToken);
+            var sequenceOrder = splits.FirstOrDefault(s => s.ChildTaskId == task.Id)?.SequenceOrder ?? 0;
+
+            var dto = TaskTableRowDto.FromParent(
                 task,
                 TaskStatusMapper.ToText(task.Status),
                 hasCurrentUserSubtask: false,
                 workIntervals: intervals,
                 now: now);
+            dto.SupplyMode = parent?.SupplyMode ?? SupplyMode.None;
+            dto.SequenceOrder = sequenceOrder;
+            dto.SequenceStartBlocked = parent?.SupplyMode == SupplyMode.InternalProduction
+                && task.Status == JobStatus.Waiting;
+            return dto;
         }
 
         IReadOnlyList<ProductionTask>? children = null;
@@ -216,6 +225,23 @@ public class TaskTableService : ITaskTableService
             CreatedAt = _timeService.Now,
             UpdatedAt = _timeService.Now
         };
+
+        var throughTest = request.RequiresTestBeforeProduction
+            || (singlePart?.RequiresTestBeforeProduction ?? false);
+        if (throughTest)
+        {
+            var testHours = request.RequiresTestBeforeProduction
+                ? request.TestEstimateHours
+                : singlePart!.TestEstimateHours;
+            var productionHours = request.RequiresTestBeforeProduction
+                ? request.ProductionEstimateHours
+                : singlePart!.ProductionEstimateHours;
+            task.RequiresTestBeforeProduction = true;
+            task.TestEstimateHours = testHours;
+            task.ProductionEstimateHours = productionHours;
+            task.EstimateHours = testHours + productionHours;
+            task.WorkPhase = TaskWorkPhase.Test;
+        }
 
         await _repo.AddTaskAsync(task, cancellationToken);
         await _repo.AppendRootDisplayOrderAsync(task.Id, cancellationToken);
@@ -367,6 +393,14 @@ public class TaskTableService : ITaskTableService
                         && await IsBlockedByPreviousSequentialStagesAsync(task, cancellationToken))
                     {
                         resolvedStatus = JobStatus.Waiting;
+                    }
+
+                    if (resolvedStatus == JobStatus.Approved
+                        && TestPhaseWorkflow.IsAwaitingProductionApproval(task))
+                    {
+                        task.WorkPhase = TaskWorkPhase.Production;
+                        task.Progress = 0;
+                        task.ActualHours = 0;
                     }
 
                     task.Status = resolvedStatus;
