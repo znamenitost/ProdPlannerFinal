@@ -18,6 +18,7 @@ import {
   TaskAlt
 } from '@mui/icons-material';
 import {
+  ACTION_RESUME,
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
   STATUS_PAUSED,
@@ -138,7 +139,7 @@ export default function EmployeeStatusButtons({
             <ListItemIcon>
               <PlayArrow fontSize="small" color="success" />
             </ListItemIcon>
-            <ListItemText>Продолжить</ListItemText>
+            <ListItemText>{ACTION_RESUME}</ListItemText>
           </MenuItem>
         )}
         {canComplete && (

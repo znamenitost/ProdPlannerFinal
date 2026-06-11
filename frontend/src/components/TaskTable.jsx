@@ -37,6 +37,27 @@ function isCompletedRow(row) {
   return row?.statusText === STATUS_COMPLETED || row?.status === 3;
 }
 
+function getDeadlineSortValue(row) {
+  if (!row?.deadline) return Number.POSITIVE_INFINITY;
+  const value = new Date(row.deadline).getTime();
+  return Number.isNaN(value) ? Number.POSITIVE_INFINITY : value;
+}
+
+function compareTaskRows(a, b, completedBottomSort) {
+  if (completedBottomSort) {
+    const completedDiff = Number(isCompletedRow(a)) - Number(isCompletedRow(b));
+    if (completedDiff) return completedDiff;
+  }
+  return getDeadlineSortValue(a) - getDeadlineSortValue(b);
+}
+
+function sortRowsWithStableOrder(rows, completedBottomSort) {
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => compareTaskRows(a.row, b.row, completedBottomSort) || a.index - b.index)
+    .map(({ row }) => row);
+}
+
 function hasProgressFooter(row) {
   return PLANNED_TIME_PROGRESS_VISIBLE && row?.showPlannedTimeProgress === true;
 }
@@ -72,17 +93,10 @@ export default function TaskTable({
   const columnSettings = useTaskTableColumnVisibility(currentUser);
   const [completedBottomSort, setCompletedBottomSort] = useState(true);
 
-  const visibleRows = useMemo(() => {
-    if (!completedBottomSort) return table.rows;
-
-    return table.rows
-      .map((row, index) => ({ row, index }))
-      .sort((a, b) => {
-        const completedDiff = Number(isCompletedRow(a.row)) - Number(isCompletedRow(b.row));
-        return completedDiff || a.index - b.index;
-      })
-      .map(({ row }) => row);
-  }, [table.rows, completedBottomSort]);
+  const visibleRows = useMemo(
+    () => sortRowsWithStableOrder(table.rows, completedBottomSort),
+    [table.rows, completedBottomSort]
+  );
 
   const tableColSpan = taskTableColumnCount(
     columnSettings.visibility,
@@ -168,7 +182,10 @@ export default function TaskTable({
       : 0;
 
   const renderTaskRow = (parent) => {
-    const children = table.childrenCache.get(parent.id) || [];
+    const children = sortRowsWithStableOrder(
+      table.childrenCache.get(parent.id) || [],
+      completedBottomSort
+    );
     const isExpanded = table.expandedRows.has(parent.id);
     return table.editingId === parent.id ? (
       <EditTaskRow

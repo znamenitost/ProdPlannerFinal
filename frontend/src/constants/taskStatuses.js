@@ -1,6 +1,8 @@
 /** Тексты статусов — совпадают с TaskStatusMapper на бэкенде. */
 export const STATUS_ASSIGNED = 'Назначена';
 export const STATUS_IN_PROGRESS = 'Начал';
+/** Подпись кнопки возобновления (не статус в БД). */
+export const ACTION_RESUME = 'Продолжить';
 export const STATUS_PAUSED = 'Пауза';
 export const STATUS_COMPLETED = 'Готово';
 export const STATUS_PENDING_APPROVAL = 'Согласование';

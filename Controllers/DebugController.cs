@@ -107,6 +107,13 @@ public class DebugController : ControllerBase
                 c.Severity,
                 c.Count,
                 sampleIds = c.SampleIds,
+                samples = c.Samples.Select(s => new
+                {
+                    s.Id,
+                    s.Title,
+                    s.File,
+                    s.Note
+                }),
                 c.Hint
             })
         });
@@ -116,7 +123,17 @@ public class DebugController : ControllerBase
     public IActionResult GetConnections()
     {
         var snapshot = _connections.GetSnapshot();
-        var process = System.Diagnostics.Process.GetCurrentProcess();
+        double? workingSetMb = null;
+        try
+        {
+            workingSetMb = Math.Round(
+                System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024.0 / 1024.0,
+                2);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DEBUG] Working set unavailable: {ex.Message}");
+        }
 
         return Ok(new
         {
@@ -133,7 +150,7 @@ public class DebugController : ControllerBase
             memory = new
             {
                 gcHeapMb = Math.Round(GC.GetTotalMemory(false) / 1024.0 / 1024.0, 2),
-                workingSetMb = Math.Round(process.WorkingSet64 / 1024.0 / 1024.0, 2)
+                workingSetMb
             },
             capturedAt = DateTime.UtcNow
         });

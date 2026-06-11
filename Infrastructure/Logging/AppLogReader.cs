@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace ProductionPlanner.Infrastructure.Logging;
@@ -24,7 +25,9 @@ public static class AppLogReader
             return [];
 
         tail = Math.Clamp(tail, 1, 5000);
-        var lines = File.ReadAllLines(filePath);
+        // Не читаем весь app.log в память — на проде файл может быть большим и валить воркер IIS (502).
+        var lineBudget = Math.Min(50_000, Math.Max(tail * 30, 2_000));
+        var lines = ReadLastLines(filePath, lineBudget);
         var entries = ParseLines(lines);
 
         if (levels is { Count: > 0 })
@@ -79,5 +82,72 @@ public static class AppLogReader
 
         Flush();
         return entries;
+    }
+
+    private static List<string> ReadLastLines(string filePath, int maxLines)
+    {
+        if (maxLines <= 0)
+            return [];
+
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return ReadLastLinesCore(filePath, maxLines);
+            }
+            catch (IOException) when (attempt < 2)
+            {
+                Thread.Sleep(25);
+            }
+        }
+    }
+
+    private static List<string> ReadLastLinesCore(string filePath, int maxLines)
+    {
+        using var stream = new FileStream(
+            filePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite);
+
+        if (stream.Length == 0)
+            return [];
+
+        var collected = new List<string>(Math.Min(maxLines, 256));
+        var current = new List<byte>(256);
+        var position = stream.Length;
+
+        while (position > 0 && collected.Count < maxLines)
+        {
+            position--;
+            stream.Seek(position, SeekOrigin.Begin);
+
+            var read = stream.ReadByte();
+            if (read < 0)
+                break;
+
+            var b = (byte)read;
+            if (b == '\n')
+            {
+                if (current.Count == 0)
+                    continue;
+
+                current.Reverse();
+                collected.Add(Encoding.UTF8.GetString([.. current]).TrimEnd('\r'));
+                current.Clear();
+                continue;
+            }
+
+            current.Add(b);
+        }
+
+        if (current.Count > 0 && collected.Count < maxLines)
+        {
+            current.Reverse();
+            collected.Add(Encoding.UTF8.GetString([.. current]).TrimEnd('\r'));
+        }
+
+        collected.Reverse();
+        return collected;
     }
 }

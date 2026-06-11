@@ -83,7 +83,10 @@ export default function TaskTableToolbar({
               tabIndex={-1}
               sx={{ pointerEvents: 'none' }}
             />
-            <ListItemText primary="Готовые всегда снизу" />
+            <ListItemText
+              primary="Готовые всегда снизу"
+              secondary="Сортировка по дедлайну"
+            />
           </MenuItem>
         </Menu>
         <TaskTableColumnSettings

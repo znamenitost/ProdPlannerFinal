@@ -60,6 +60,13 @@ public class DatabaseIntegrityCheckerTests
         Assert.True(report.Checks.First(c => c.Id == "orphan_children").Count > 0);
         Assert.True(report.Checks.First(c => c.Id == "multiple_open_intervals").Count > 0);
         Assert.Contains(orphan.Id, report.Checks.First(c => c.Id == "orphan_children").SampleIds);
+
+        var orphanSample = report.Checks
+            .First(c => c.Id == "orphan_children")
+            .Samples
+            .First(s => s.Id == orphan.Id);
+        Assert.Equal("child.pdf", orphanSample.Title);
+        Assert.Equal("child.pdf", orphanSample.File);
     }
 
     [Fact]

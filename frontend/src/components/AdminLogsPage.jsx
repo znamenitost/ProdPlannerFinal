@@ -213,7 +213,9 @@ export default function AdminLogsPage() {
                 {memory && (
                   <>
                     <Chip label={`Heap: ${memory.gcHeapMb} МБ`} variant="outlined" />
-                    <Chip label={`Working set: ${memory.workingSetMb} МБ`} variant="outlined" />
+                    {memory.workingSetMb != null && (
+                      <Chip label={`Working set: ${memory.workingSetMb} МБ`} variant="outlined" />
+                    )}
                   </>
                 )}
               </Box>
@@ -318,14 +320,44 @@ export default function AdminLogsPage() {
                           {check.hint}
                         </Typography>
                       )}
-                      {check.sampleIds?.length > 0 && (
+                      {check.samples?.length > 0 ? (
+                        <Stack spacing={0.75} sx={{ mt: 0.5 }}>
+                          {check.samples.map((sample) => (
+                            <Typography
+                              key={`${check.id}-${sample.id}-${sample.file}`}
+                              variant="caption"
+                              color="text.secondary"
+                              component="div"
+                              sx={{ lineHeight: 1.5 }}
+                            >
+                              <Box component="span" sx={{ fontFamily: 'monospace', mr: 1 }}>
+                                #{sample.id}
+                              </Box>
+                              <Box component="span" sx={{ fontWeight: 600, color: 'text.primary', mr: 1 }}>
+                                {sample.title}
+                              </Box>
+                              <Box component="span">{sample.file}</Box>
+                              {sample.note && (
+                                <Box component="span" sx={{ display: 'block', mt: 0.25 }}>
+                                  {sample.note}
+                                </Box>
+                              )}
+                            </Typography>
+                          ))}
+                          {check.count > check.samples.length && (
+                            <Typography variant="caption" color="text.secondary">
+                              … ещё {check.count - check.samples.length}
+                            </Typography>
+                          )}
+                        </Stack>
+                      ) : check.sampleIds?.length > 0 ? (
                         <Typography variant="caption" color="text.secondary" component="div">
                           ID: {check.sampleIds.join(', ')}
                           {check.count > check.sampleIds.length
                             ? ` … ещё ${check.count - check.sampleIds.length}`
                             : ''}
                         </Typography>
-                      )}
+                      ) : null}
                     </Box>
                   ))}
                 </Stack>

@@ -60,7 +60,13 @@ public sealed class FileLoggerProvider : ILoggerProvider
 
             lock (Lock)
             {
-                File.AppendAllText(_filePath, line + Environment.NewLine, Encoding.UTF8);
+                using var stream = new FileStream(
+                    _filePath,
+                    FileMode.Append,
+                    FileAccess.Write,
+                    FileShare.ReadWrite);
+                using var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
+                writer.WriteLine(line);
             }
         }
     }

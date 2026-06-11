@@ -41,4 +41,68 @@ public class AppLogReaderTests
                 File.Delete(path);
         }
     }
+
+    [Fact]
+    public void ReadEntries_reads_while_file_is_being_written()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"app-log-lock-{Guid.NewGuid():N}.log");
+        try
+        {
+            File.WriteAllText(path, "[2026-06-09T10:00:00.0000000Z] Warning ProductionPlanner.Program: seed\n");
+
+            using var writer = new FileStream(
+                path,
+                FileMode.Append,
+                FileAccess.Write,
+                FileShare.ReadWrite);
+            using var streamWriter = new StreamWriter(writer) { AutoFlush = true };
+            streamWriter.WriteLine("[2026-06-09T10:01:00.0000000Z] Error ProductionPlanner.Program: locked");
+
+            var entries = AppLogReader.ReadEntries(
+                path,
+                new HashSet<string> { "Warning", "Error" },
+                tail: 10);
+
+            Assert.Equal(2, entries.Count);
+            Assert.Equal("Error", entries[^1].Level);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ReadEntries_reads_tail_without_loading_entire_file()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"app-log-tail-{Guid.NewGuid():N}.log");
+        try
+        {
+            var lines = new List<string>
+            {
+                "[2026-06-09T09:00:00.0000000Z] Information ProductionPlanner.Program: old"
+            };
+            for (var i = 0; i < 500; i++)
+            {
+                lines.Add($"[2026-06-09T10:{i % 60:D2}:00.0000000Z] Warning ProductionPlanner.Program: line-{i}");
+            }
+
+            File.WriteAllLines(path, lines);
+
+            var entries = AppLogReader.ReadEntries(
+                path,
+                new HashSet<string> { "Warning" },
+                tail: 3);
+
+            Assert.Equal(3, entries.Count);
+            Assert.Equal("line-499", entries[^1].Message);
+            Assert.DoesNotContain(entries, e => e.Message == "old");
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
 }

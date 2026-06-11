@@ -21,6 +21,7 @@ import {
   AccessTime
 } from '@mui/icons-material';
 import {
+  ACTION_RESUME,
   STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
   STATUS_PAUSED,
@@ -75,10 +76,10 @@ export default function TaskAdminActionStacks({
 
   const canStart = !isStarted && !isPaused;
   const canPause = isStarted;
+  const canResume = isPaused;
   // «Готово» доступно только после нажатия «Начал» (или из паузы). В инфостатусах сначала
   // нужно их снять через «Начал» (workflow сам подтвердит) — это совпадает со спецификацией.
   const canComplete = isStarted || isPaused;
-  const startAction = isPaused ? onResume : onStart;
 
   const runWorkflow = (lifecycleAction) => async (event) => {
     event.stopPropagation();
@@ -161,16 +162,30 @@ export default function TaskAdminActionStacks({
         {showWorkflowBlock && (
           <>
             <Divider sx={menuDividerSx} />
-            <MenuItem
-              disabled={statusWorkflowDisabled || (!canStart && !isPaused)}
-              sx={workflowItemSx}
-              onClick={runWorkflow(startAction)}
-            >
-              <ListItemIcon>
-                <PlayArrow fontSize="small" color="success" />
-              </ListItemIcon>
-              <ListItemText>{STATUS_IN_PROGRESS}</ListItemText>
-            </MenuItem>
+            {(canStart || blocked) && (
+              <MenuItem
+                disabled={statusWorkflowDisabled}
+                sx={workflowItemSx}
+                onClick={runWorkflow(onStart)}
+              >
+                <ListItemIcon>
+                  <PlayArrow fontSize="small" color="success" />
+                </ListItemIcon>
+                <ListItemText>{STATUS_IN_PROGRESS}</ListItemText>
+              </MenuItem>
+            )}
+            {canResume && (
+              <MenuItem
+                disabled={statusWorkflowDisabled}
+                sx={workflowItemSx}
+                onClick={runWorkflow(onResume)}
+              >
+                <ListItemIcon>
+                  <PlayArrow fontSize="small" color="success" />
+                </ListItemIcon>
+                <ListItemText>{ACTION_RESUME}</ListItemText>
+              </MenuItem>
+            )}
             {canPause && (
               <MenuItem
                 disabled={statusWorkflowDisabled}

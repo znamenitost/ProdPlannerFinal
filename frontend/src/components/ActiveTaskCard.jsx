@@ -25,9 +25,12 @@ import {
 } from '@mui/material';
 import { compactButtonThemeStyles } from '../theme/componentVariants';
 import {
+  ACTION_RESUME,
   isInfoStatus,
   isSequenceBlocked,
   shouldShowActiveTaskStatusChip,
+  STATUS_IN_PROGRESS,
+  STATUS_PAUSED,
   SUPPLY_MODE_INTERNAL
 } from '../constants/taskStatuses';
 import { getTaskBorderColor } from '../utils/taskBorderColor';
@@ -86,7 +89,7 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
   );
   const canComplete = isInProgress || isPaused;
   const primaryAction = isPaused ? 'resume' : isInProgress ? 'pause' : 'start';
-  const primaryLabel = isPaused ? 'Продолжить' : isInProgress ? 'Пауза' : 'Начал';
+  const primaryLabel = isPaused ? ACTION_RESUME : isInProgress ? STATUS_PAUSED : STATUS_IN_PROGRESS;
   const PrimaryIcon = isInProgress ? Pause : PlayArrow;
   const primaryColor = isInProgress ? 'warning' : 'success';
   const primaryBlocked = sequenceBlocked || showInfoStatus;

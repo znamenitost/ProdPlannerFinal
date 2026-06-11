@@ -5,12 +5,19 @@ using ProductionPlanner.Services;
 
 namespace ProductionPlanner.Infrastructure;
 
+public sealed record DbIntegritySample(
+    int Id,
+    string Title,
+    string File,
+    string? Note);
+
 public sealed record DbIntegrityCheck(
     string Id,
     string Title,
     string Severity,
     int Count,
     IReadOnlyList<int> SampleIds,
+    IReadOnlyList<DbIntegritySample> Samples,
     string? Hint);
 
 public sealed record DbIntegrityReport(
@@ -27,17 +34,11 @@ public static class DatabaseIntegrityChecker
         IWorkHoursCalculator workHours,
         CancellationToken cancellationToken = default)
     {
-        var taskIds = await db.ProductionTasks
-            .AsNoTracking()
-            .Select(t => t.Id)
-            .ToListAsync(cancellationToken);
-        var taskIdSet = taskIds.ToHashSet();
-
         var checks = new List<DbIntegrityCheck>
         {
-            await OrphanChildrenAsync(db, taskIdSet, cancellationToken),
+            await OrphanChildrenAsync(db, cancellationToken),
             await SplitParentWithoutChildrenAsync(db, cancellationToken),
-            await OrphanTaskSplitsAsync(db, taskIdSet, cancellationToken),
+            await OrphanTaskSplitsAsync(db, cancellationToken),
             await SplitChildWithoutRecordAsync(db, cancellationToken),
             await MultipleOpenIntervalsAsync(db, cancellationToken),
             await CompletedWithOpenIntervalAsync(db, cancellationToken),
@@ -50,17 +51,18 @@ public static class DatabaseIntegrityChecker
         };
 
         var ok = checks.All(c => c.Count == 0);
-        return new DbIntegrityReport(ok, DateTime.UtcNow, checks);
+        var enriched = await EnrichSamplesAsync(db, checks, cancellationToken);
+        return new DbIntegrityReport(ok, DateTime.UtcNow, enriched);
     }
 
     private static async Task<DbIntegrityCheck> OrphanChildrenAsync(
         ApplicationDbContext db,
-        HashSet<int> taskIdSet,
         CancellationToken cancellationToken)
     {
         var ids = await db.ProductionTasks
             .AsNoTracking()
-            .Where(t => t.ParentRowNumber != null && !taskIdSet.Contains(t.ParentRowNumber.Value))
+            .Where(t => t.ParentRowNumber != null)
+            .Where(t => !db.ProductionTasks.Any(p => p.Id == t.ParentRowNumber!.Value))
             .Select(t => t.Id)
             .ToListAsync(cancellationToken);
 
@@ -106,14 +108,14 @@ public static class DatabaseIntegrityChecker
 
     private static async Task<DbIntegrityCheck> OrphanTaskSplitsAsync(
         ApplicationDbContext db,
-        HashSet<int> taskIdSet,
         CancellationToken cancellationToken)
     {
-        var splits = await db.TaskSplits.AsNoTracking().ToListAsync(cancellationToken);
-        var ids = splits
-            .Where(s => !taskIdSet.Contains(s.ChildTaskId) || !taskIdSet.Contains(s.ParentRowNumber))
+        var ids = await db.TaskSplits
+            .AsNoTracking()
+            .Where(s => !db.ProductionTasks.Any(t => t.Id == s.ChildTaskId)
+                || !db.ProductionTasks.Any(t => t.Id == s.ParentRowNumber))
             .Select(s => s.Id)
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         return Check(
             "orphan_task_splits",
@@ -294,19 +296,32 @@ public static class DatabaseIntegrityChecker
         IWorkHoursCalculator workHours,
         CancellationToken cancellationToken)
     {
-        var tasks = await db.ProductionTasks
-            .AsNoTracking()
-            .Include(t => t.WorkIntervals)
-            .Where(t => t.Status == JobStatus.Completed
-                && !(t.IsSplitTask && t.ParentRowNumber == null))
-            .ToListAsync(cancellationToken);
-
+        const int batchSize = 100;
         var ids = new List<int>();
-        foreach (var task in tasks)
+        var lastId = 0;
+
+        while (true)
         {
-            var actual = CalculateActualHours(task.WorkIntervals, workHours);
-            if (Math.Abs(task.ActualHours - actual) > 0.01)
-                ids.Add(task.Id);
+            var tasks = await db.ProductionTasks
+                .AsNoTracking()
+                .Include(t => t.WorkIntervals)
+                .Where(t => t.Id > lastId)
+                .Where(t => t.Status == JobStatus.Completed
+                    && !(t.IsSplitTask && t.ParentRowNumber == null))
+                .OrderBy(t => t.Id)
+                .Take(batchSize)
+                .ToListAsync(cancellationToken);
+
+            if (tasks.Count == 0)
+                break;
+
+            foreach (var task in tasks)
+            {
+                lastId = task.Id;
+                var actual = CalculateActualHours(task.WorkIntervals, workHours);
+                if (Math.Abs(task.ActualHours - actual) > 0.01)
+                    ids.Add(task.Id);
+            }
         }
 
         return Check(
@@ -343,6 +358,119 @@ public static class DatabaseIntegrityChecker
             severity,
             ids.Count,
             ids.Take(SampleLimit).ToList(),
+            [],
             hint);
     }
+
+    private static async Task<IReadOnlyList<DbIntegrityCheck>> EnrichSamplesAsync(
+        ApplicationDbContext db,
+        IReadOnlyList<DbIntegrityCheck> checks,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<DbIntegrityCheck>(checks.Count);
+        foreach (var check in checks)
+        {
+            if (check.SampleIds.Count == 0)
+            {
+                result.Add(check);
+                continue;
+            }
+
+            var samples = check.Id == "orphan_task_splits"
+                ? await LoadSplitSamplesAsync(db, check.SampleIds, cancellationToken)
+                : await LoadTaskSamplesAsync(db, check.SampleIds, cancellationToken);
+
+            result.Add(check with { Samples = samples });
+        }
+
+        return result;
+    }
+
+    private static async Task<IReadOnlyList<DbIntegritySample>> LoadTaskSamplesAsync(
+        ApplicationDbContext db,
+        IReadOnlyList<int> sampleIds,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.ProductionTasks
+            .AsNoTracking()
+            .Where(t => sampleIds.Contains(t.Id))
+            .Select(t => new TaskLabelRow(t.Id, t.FolderPath, t.FileName))
+            .ToListAsync(cancellationToken);
+
+        var byId = rows.ToDictionary(r => r.Id);
+
+        return sampleIds
+            .Select(id => byId.TryGetValue(id, out var row)
+                ? ToSample(row)
+                : new DbIntegritySample(id, "—", "—", "задача не найдена в БД"))
+            .ToList();
+    }
+
+    private static async Task<IReadOnlyList<DbIntegritySample>> LoadSplitSamplesAsync(
+        ApplicationDbContext db,
+        IReadOnlyList<int> splitIds,
+        CancellationToken cancellationToken)
+    {
+        var splits = await db.TaskSplits
+            .AsNoTracking()
+            .Where(s => splitIds.Contains(s.Id))
+            .Select(s => new { s.Id, s.ParentRowNumber, s.ChildTaskId })
+            .ToListAsync(cancellationToken);
+
+        var bySplitId = splits.ToDictionary(s => s.Id);
+        var taskIds = splits
+            .SelectMany(s => new[] { s.ParentRowNumber, s.ChildTaskId })
+            .Distinct()
+            .ToList();
+
+        var taskRows = taskIds.Count == 0
+            ? []
+            : await db.ProductionTasks
+                .AsNoTracking()
+                .Where(t => taskIds.Contains(t.Id))
+                .Select(t => new TaskLabelRow(t.Id, t.FolderPath, t.FileName))
+                .ToListAsync(cancellationToken);
+
+        var tasksById = taskRows.ToDictionary(r => r.Id);
+
+        return splitIds
+            .Select(splitId =>
+            {
+                if (!bySplitId.TryGetValue(splitId, out var split))
+                    return new DbIntegritySample(splitId, "—", "—", "запись TaskSplits не найдена");
+
+                tasksById.TryGetValue(split.ChildTaskId, out var child);
+                tasksById.TryGetValue(split.ParentRowNumber, out var parent);
+                var row = child ?? parent;
+
+                var note = $"TaskSplits #{splitId}, родитель {split.ParentRowNumber}, дочерняя {split.ChildTaskId}";
+                if (row == null)
+                    return new DbIntegritySample(split.ChildTaskId, "—", "—", note);
+
+                return ToSample(row) with { Note = note };
+            })
+            .ToList();
+    }
+
+    private sealed record TaskLabelRow(int Id, string FolderPath, string FileName);
+
+    private static DbIntegritySample ToSample(TaskLabelRow row) =>
+        new(row.Id, GetTaskDisplayName(row.FolderPath, row.FileName), GetTaskFullPath(row.FolderPath, row.FileName), null);
+
+    private static string GetTaskDisplayName(string folderPath, string fileName)
+    {
+        if (!string.IsNullOrEmpty(folderPath))
+        {
+            var segments = folderPath.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length > 0)
+                return segments[^1];
+        }
+
+        return string.IsNullOrWhiteSpace(fileName) ? "—" : fileName;
+    }
+
+    private static string GetTaskFullPath(string folderPath, string fileName) =>
+        string.IsNullOrEmpty(folderPath)
+            ? (string.IsNullOrWhiteSpace(fileName) ? "—" : fileName)
+            : $"{folderPath}/{fileName}";
 }
