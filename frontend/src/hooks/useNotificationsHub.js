@@ -40,7 +40,12 @@ function shouldRefreshActiveTasks(event) {
 }
 
 function shouldRefreshCalendar(event) {
-  return ['TaskStatusChanged', 'TaskUpdated', 'TaskDeleted'].includes(event.type);
+  return [
+    'TaskStatusChanged',
+    'TaskUpdated',
+    'TaskDeleted',
+    'TaskProgressChanged'
+  ].includes(event.type);
 }
 
 /**
@@ -70,8 +75,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     if (!conn || conn.state !== signalR.HubConnectionState.Connected || !vs) return;
 
     const next = buildViewSubscriptionState(vs);
-    await syncHubViewGroups(conn, prevViewRef.current, next);
-    prevViewRef.current = next;
+    prevViewRef.current = await syncHubViewGroups(conn, prevViewRef.current, next);
   }, []);
 
   useEffect(() => {

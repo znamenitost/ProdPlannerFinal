@@ -27,7 +27,6 @@ namespace ProductionPlanner.Data
         {
             return await _context.ProductionTasks
                 .AsNoTracking()
-                .Include(t => t.WorkIntervals)
                 .Where(t => t.EmployeeName == employeeName
                             && !t.HiddenFromTaskTable
                             && t.Status != JobStatus.Completed
@@ -52,18 +51,17 @@ namespace ProductionPlanner.Data
                     && (!rangeEnd.HasValue || (t.CompletedAt ?? t.UpdatedAt) < rangeEnd.Value));
             }
 
-            var totalTasks = await query.CountAsync(cancellationToken);
-            if (totalTasks == 0)
-            {
-                return new CompletedTasksAggregateStats();
-            }
+            var aggregates = await query
+                .GroupBy(_ => 1)
+                .Select(g => new CompletedTasksAggregateStats
+                {
+                    TotalTasks = g.Count(),
+                    TotalEstimate = g.Sum(t => t.EstimateHours),
+                    TotalActual = g.Sum(t => t.ActualHours)
+                })
+                .FirstOrDefaultAsync(cancellationToken);
 
-            return new CompletedTasksAggregateStats
-            {
-                TotalTasks = totalTasks,
-                TotalEstimate = await query.SumAsync(t => t.EstimateHours, cancellationToken),
-                TotalActual = await query.SumAsync(t => t.ActualHours, cancellationToken)
-            };
+            return aggregates ?? new CompletedTasksAggregateStats();
         }
 
         public async Task<PaginatedResult<ProductionTask>> GetCompletedTasksPaginatedAsync(

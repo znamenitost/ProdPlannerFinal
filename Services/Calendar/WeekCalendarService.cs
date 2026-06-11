@@ -28,21 +28,26 @@ public class WeekCalendarService : IWeekCalendarService
         var weekStart = WeekCalendarDateHelper.ResolveWeekStart(startDate, currentTime);
         var weekEnd = weekStart.AddDays(7);
 
-        var allEmployeeTasks = await _repo.GetEmployeeTasksForCalendarWeekAsync(
+        var tasksTask = _repo.GetEmployeeTasksForCalendarWeekAsync(
             employee,
             weekStart,
             weekEnd,
             cancellationToken);
-        var intervals = await _repo.GetWorkIntervalsForDateRangeAsync(
+        var intervalsTask = _repo.GetWorkIntervalsForDateRangeAsync(
             employee,
             weekStart,
             weekEnd,
             cancellationToken);
-        var lunchIntervals = await _repo.GetLunchIntervalsForDateRangeAsync(
+        var lunchTask = _repo.GetLunchIntervalsForDateRangeAsync(
             employee,
             weekStart,
             weekEnd,
             cancellationToken);
+        await Task.WhenAll(tasksTask, intervalsTask, lunchTask);
+
+        var allEmployeeTasks = await tasksTask;
+        var intervals = await intervalsTask;
+        var lunchIntervals = await lunchTask;
 
         var intervalsByTask = intervals
             .GroupBy(i => i.ProductionTaskId)
@@ -230,7 +235,7 @@ public class WeekCalendarService : IWeekCalendarService
         return timeline;
     }
 
-    private static List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)>
+    private static List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval)>
         CollectIntervalsForDay(
             List<ProductionTask> employeeTasks,
             DateTime dayDate,
@@ -239,7 +244,7 @@ public class WeekCalendarService : IWeekCalendarService
             DateTime dayEndTime,
             DateTime timelineEnd)
     {
-        var intervalsForDay = new List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)>();
+        var intervalsForDay = new List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval)>();
 
         foreach (var task in employeeTasks)
         {
@@ -267,7 +272,8 @@ public class WeekCalendarService : IWeekCalendarService
                 if (startInDay >= endInDay)
                     continue;
 
-                intervalsForDay.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText));
+                var isOpenInterval = !interval.EndTime.HasValue && task.Status != JobStatus.Completed;
+                intervalsForDay.Add((startInDay, endInDay, task.Id, task.TaskDisplayName, task.FolderPath ?? "", task.FileName ?? "", task.Status == JobStatus.Completed, statusText, isOpenInterval));
             }
         }
 
@@ -275,7 +281,7 @@ public class WeekCalendarService : IWeekCalendarService
     }
 
     private static List<CalendarTimelineSegmentDto> BuildWorkTimelineSegments(
-        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervalsForDay,
+        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval)> intervalsForDay,
         IReadOnlyDictionary<int, int> layerByTask,
         IReadOnlyDictionary<int, int> maxDepthByTask)
     {
@@ -302,7 +308,8 @@ public class WeekCalendarService : IWeekCalendarService
                 Completed = iv.completed,
                 StatusText = iv.statusText,
                 Layer = layer,
-                MaxDepth = depth
+                MaxDepth = depth,
+                IsOpenInterval = iv.isOpenInterval
             });
         }
 
@@ -447,7 +454,7 @@ public class WeekCalendarService : IWeekCalendarService
 
     private static List<CalendarTimelineSegmentDto> BuildIdleSegments(
         DateTime day,
-        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText)> intervalsForDay,
+        List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval)> intervalsForDay,
         List<(DateTime start, DateTime end)> lunchIntervals,
         DateTime timelineEnd)
     {

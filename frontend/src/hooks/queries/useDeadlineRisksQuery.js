@@ -1,18 +1,23 @@
-import { useQuery } from '@tanstack/react-query';
-import { getDeadlineRisks } from '../../services/api';
-import { queryKeys } from '../../lib/queryKeys';
+import { useMemo } from 'react';
+import { useClockMinuteTick } from '../../context/ClockContext';
+import { mapActiveTasksToDeadlineRisks } from '../../utils/deadlineRisks';
+import useActiveTasksQuery from './useActiveTasksQuery';
 
-// Уровень риска (warning/critical/overdue) считается относительно текущего времени —
-// пересчитываем каждую минуту, чтобы алармы появлялись вовремя.
-const ONE_MINUTE_MS = 60_000;
-
+/** Риски по дедлайну из кэша активных задач — без отдельного API. */
 export default function useDeadlineRisksQuery(employee) {
-  return useQuery({
-    queryKey: queryKeys.deadlineRisks(employee),
-    queryFn: ({ signal }) => getDeadlineRisks(employee, { signal }),
-    enabled: Boolean(employee),
-    staleTime: ONE_MINUTE_MS,
-    refetchInterval: ONE_MINUTE_MS,
-    refetchOnWindowFocus: true
-  });
+  const tick = useClockMinuteTick(Boolean(employee));
+  const query = useActiveTasksQuery(employee);
+  const tasks = query.data ?? [];
+
+  const data = useMemo(
+    () => mapActiveTasksToDeadlineRisks(tasks, new Date()),
+    [tasks, tick]
+  );
+
+  return {
+    data,
+    isPending: query.isPending,
+    isError: query.isError,
+    isFetching: query.isFetching
+  };
 }

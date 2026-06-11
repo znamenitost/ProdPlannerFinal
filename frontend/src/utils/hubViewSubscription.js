@@ -24,14 +24,20 @@ async function invokeSafe(connection, method, ...args) {
 
 /**
  * Синхронизирует группы table-viewers / calendar-viewers:{имя} с открытой вкладкой.
+ * @returns состояние для следующего вызова (включая lastJoinedCalendarEmployee)
  */
 export async function syncHubViewGroups(connection, previous, next) {
-  if (!connection || connection.state !== signalR.HubConnectionState.Connected) return;
+  if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+    return {
+      ...next,
+      lastJoinedCalendarEmployee: previous?.lastJoinedCalendarEmployee ?? null
+    };
+  }
 
   const wasTable = previous?.activeTab === 1;
   const isTable = next.activeTab === 1;
-  const wasCalendar = previous?.activeTab === 0;
-  const isCalendar = next.activeTab === 0;
+  const prevJoined = previous?.lastJoinedCalendarEmployee ?? null;
+  const nextJoined = next.activeTab === 0 ? next.calendarEmployee : null;
 
   if (wasTable && !isTable) {
     await invokeSafe(connection, 'LeaveTableViewers');
@@ -40,20 +46,17 @@ export async function syncHubViewGroups(connection, previous, next) {
     await invokeSafe(connection, 'JoinTableViewers');
   }
 
-  const prevCalendarEmployee = previous?.calendarEmployee;
-  const nextCalendarEmployee = next.calendarEmployee;
+  if (prevJoined && prevJoined !== nextJoined) {
+    await invokeSafe(connection, 'LeaveCalendarViewers', prevJoined);
+  }
+  if (nextJoined) {
+    await invokeSafe(connection, 'JoinCalendarViewers', nextJoined);
+  }
 
-  if (wasCalendar && prevCalendarEmployee && prevCalendarEmployee !== nextCalendarEmployee) {
-    await invokeSafe(connection, 'LeaveCalendarViewers', prevCalendarEmployee);
-  }
-  if (!wasCalendar && isCalendar && nextCalendarEmployee) {
-    await invokeSafe(connection, 'JoinCalendarViewers', nextCalendarEmployee);
-  } else if (isCalendar && wasCalendar && nextCalendarEmployee && prevCalendarEmployee !== nextCalendarEmployee) {
-    await invokeSafe(connection, 'JoinCalendarViewers', nextCalendarEmployee);
-  }
-  if (wasCalendar && !isCalendar && prevCalendarEmployee) {
-    await invokeSafe(connection, 'LeaveCalendarViewers', prevCalendarEmployee);
-  }
+  return {
+    ...next,
+    lastJoinedCalendarEmployee: nextJoined
+  };
 }
 
 export function buildViewSubscriptionState({ activeTab, employee, userFullName, isAdmin }) {

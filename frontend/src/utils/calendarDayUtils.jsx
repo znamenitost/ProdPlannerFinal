@@ -2,8 +2,8 @@ import React from 'react';
 import { alpha } from '@mui/material/styles';
 import { STATUS_NO_ITEMS, STATUS_PENDING_APPROVAL } from '../constants/taskStatuses';
 import { getTaskStatusLine, getTaskTitleSlashFile } from '../components/TaskTitleTwoLines';
-import { getStatusIcon } from './taskHelpers';
 import { chrome, tokens } from '../theme/paletteTokens';
+import { getStatusIcon } from './taskHelpers';
 
 export const CALENDAR_TOOLTIP_SX = {
   bgcolor: alpha(chrome.tooltipBg, 0.94),
@@ -134,10 +134,39 @@ export function getTimelineSegments(timeline) {
   const segments = timeline.map((segment) => ({
     ...segment,
     start: new Date(segment.start),
-    end: new Date(segment.end)
+    end: new Date(segment.end),
+    isOpenInterval: Boolean(segment.isOpenInterval)
   }));
 
   return segments.sort((a, b) => new Date(a.start) - new Date(b.start));
+}
+
+function getWorkdayEnd(dayDate) {
+  const end = new Date(dayDate);
+  end.setHours(WORKDAY_END_HOUR, 0, 0, 0);
+  return end;
+}
+
+/** Продлевает открытые work-сегменты до «сейчас» и убирает idle, перекрытый работой. */
+export function extendTimelineToNow(segments, dayDate, now = new Date()) {
+  if (!segments?.length || !isSameCalendarDay(dayDate, now)) return segments;
+
+  const workdayEnd = getWorkdayEnd(dayDate);
+  const liveEnd = now > workdayEnd ? workdayEnd : now;
+
+  const extendedWork = segments.map((segment) => {
+    if (segment.type !== 'work' || !segment.isOpenInterval) return segment;
+    if (liveEnd <= segment.end) return segment;
+    return { ...segment, end: liveEnd };
+  });
+
+  const work = extendedWork.filter((s) => s.type === 'work');
+  const withoutOverlappingIdle = extendedWork.filter((segment) => {
+    if (segment.type !== 'idle') return true;
+    return !work.some((w) => w.start < segment.end && w.end > segment.start);
+  });
+
+  return withoutOverlappingIdle.sort((a, b) => a.start - b.start);
 }
 
 export function buildTaskBlocksMap(allDays) {

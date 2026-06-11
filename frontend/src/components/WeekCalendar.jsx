@@ -196,7 +196,6 @@ export default function WeekCalendar({ employee }) {
                 highlightedTaskId={highlightedTaskId}
                 onTaskHover={setHighlightedTaskId}
                 detailedTimeline={viewMode === 'day'}
-                currentTime={weekData.currentTime}
               />
             ))}
           </Box>

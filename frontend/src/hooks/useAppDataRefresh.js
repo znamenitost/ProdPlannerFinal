@@ -13,14 +13,12 @@ export default function useAppDataRefresh(employee) {
   const refreshCalendar = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: queryKeys.weekCalendarAll(employee) });
     queryClient.invalidateQueries({ queryKey: queryKeys.completedAll(employee) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.deadlineRisks(employee) });
     refreshActiveTasks();
   }, [queryClient, employee, refreshActiveTasks]);
 
   const refreshTable = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: queryKeys.taskTableAll() });
-    queryClient.invalidateQueries({ queryKey: queryKeys.deadlineRisks(employee) });
-  }, [queryClient, employee]);
+  }, [queryClient]);
 
   const refreshAll = useCallback(() => {
     refreshCalendar();

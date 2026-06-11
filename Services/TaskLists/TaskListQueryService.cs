@@ -157,7 +157,8 @@ public class TaskListQueryService : ITaskListQueryService
         DateTime now,
         (SupplyMode SupplyMode, int SequenceOrder) splitMetadata = default)
     {
-        var (riskLevel, _, _) = DeadlineRiskEvaluator.Evaluate(task, now, _workHours);
+        var (riskLevel, hoursNeeded, workHoursUntilDeadline) =
+            DeadlineRiskEvaluator.Evaluate(task, now, _workHours);
         var supplyMode = splitMetadata.SupplyMode != default ? splitMetadata.SupplyMode : task.SupplyMode;
         var sequenceOrder = splitMetadata.SequenceOrder;
 
@@ -181,6 +182,8 @@ public class TaskListQueryService : ITaskListQueryService
             StatusText = TaskStatusMapper.ToText(task.Status),
             RowNumber = task.Id,
             RiskLevel = riskLevel,
+            RequiredHours = hoursNeeded,
+            AvailableHoursBeforeDeadline = workHoursUntilDeadline,
             task.RequiresTestBeforeProduction,
             task.TestEstimateHours,
             task.ProductionEstimateHours,

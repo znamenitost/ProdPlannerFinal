@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Box, Tooltip } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { tokens } from '../../theme/paletteTokens';
@@ -59,18 +60,16 @@ export default function TimelineSegments({
   lunchIntervals = [],
   isWorkingDay,
   detailedTimeline = false,
-  dayDate = null,
-  currentTime = null
+  dayDate = null
 }) {
   const range = getTimelineRange(detailedTimeline);
   const trackHeight = detailedTimeline ? 48 : 36;
   const axisBlockHeight = 26;
-  const now = currentTime ? new Date(currentTime) : new Date();
 
   const isToday =
-    detailedTimeline && dayDate && isSameCalendarDay(dayDate, now);
-  useClockMinuteTick(isToday);
-
+    detailedTimeline && dayDate && isSameCalendarDay(dayDate, new Date());
+  const clockTick = useClockMinuteTick(isToday);
+  const now = useMemo(() => new Date(), [clockTick, isToday]);
   const nowLeft = isToday ? getNowMarkerPercent(now, range) : null;
 
   const track = (

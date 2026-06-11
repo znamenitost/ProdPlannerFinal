@@ -49,6 +49,8 @@ public class CalendarTimelineSegmentDto
     public string StatusText { get; set; } = "";
     public int Layer { get; set; }
     public int MaxDepth { get; set; }
+    /// <summary>Интервал без EndTime в БД — на клиенте можно продлевать до «сейчас» между poll.</summary>
+    public bool IsOpenInterval { get; set; }
 }
 
 public class CalendarDeadlineDto

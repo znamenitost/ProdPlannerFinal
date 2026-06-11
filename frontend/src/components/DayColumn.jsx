@@ -1,12 +1,16 @@
+import { useMemo } from 'react';
 import { Card } from '@mui/material';
 import DayHeader from './calendar/DayHeader';
 import PlannedBlocks from './calendar/PlannedBlocks';
 import DeadlineMarkers from './calendar/DeadlineMarkers';
 import TimelineSegments from './calendar/TimelineSegments';
+import { useClockMinuteTick } from '../context/ClockContext';
 import {
   buildTaskBlocksMap,
+  extendTimelineToNow,
   getTaskInfoForDeadline,
   getTimelineSegments,
+  isSameCalendarDay,
   isWorkingWeekday
 } from '../utils/calendarDayUtils';
 
@@ -16,14 +20,18 @@ export default function DayColumn({
   taskBlocksMap: taskBlocksMapProp = null,
   highlightedTaskId,
   onTaskHover,
-  detailedTimeline = false,
-  currentTime = null
+  detailedTimeline = false
 }) {
   const date = new Date(day.date);
   const isWorkingDay = isWorkingWeekday(date);
+  const isToday = isSameCalendarDay(date, new Date());
+  const clockTick = useClockMinuteTick(isToday);
   const taskBlocksMap = taskBlocksMapProp ?? buildTaskBlocksMap(allDays);
 
-  const rawTimelineSegments = getTimelineSegments(day.timeline);
+  const rawTimelineSegments = useMemo(() => {
+    const base = getTimelineSegments(day.timeline);
+    return isToday ? extendTimelineToNow(base, date) : base;
+  }, [day.timeline, date, isToday, clockTick]);
   const workSegments = rawTimelineSegments.filter((s) => s.type === 'work');
   const idleSegments = rawTimelineSegments
     .filter((s) => s.type === 'idle')
@@ -55,7 +63,6 @@ export default function DayColumn({
         isWorkingDay={isWorkingDay}
         detailedTimeline={detailedTimeline}
         dayDate={day.date}
-        currentTime={currentTime}
       />
     </Card>
   );
