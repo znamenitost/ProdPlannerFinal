@@ -25,7 +25,10 @@ import useTaskTableColumnVisibility from '../hooks/taskTable/useTaskTableColumnV
 import { TextLimitProvider } from '../context/TextLimitContext';
 import { STATUS_COMPLETED } from '../constants/taskStatuses';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
-import { PLANNED_TIME_PROGRESS_VISIBLE } from './taskTable/TaskPlannedProgressFooter';
+import { buildTaskTableSearchResult } from '../utils/taskTableSearch';
+import { hasPlannedProgressFooter } from '../utils/taskTablePlannedProgress';
+import useTaskTablePlannedProgressPreference from '../hooks/taskTable/useTaskTablePlannedProgressPreference';
+import useTaskTablePlannedProgressPolling from '../hooks/taskTable/useTaskTablePlannedProgressPolling';
 
 const ROW_GROUP_BASE_HEIGHT = 44;
 const ROW_PROGRESS_HEIGHT = 6;
@@ -61,8 +64,13 @@ function sortRowsWithStableOrder(rows, sortOptions) {
     .map(({ row }) => row);
 }
 
-function hasProgressFooter(row) {
-  return PLANNED_TIME_PROGRESS_VISIBLE && row?.showPlannedTimeProgress === true;
+function filterCompletedRows(rows, hideCompleted) {
+  if (!hideCompleted) return rows;
+  return rows.filter((row) => !isCompletedRow(row));
+}
+
+function hasProgressFooter(row, showPlannedProgressEnabled) {
+  return hasPlannedProgressFooter(row, showPlannedProgressEnabled);
 }
 
 function VirtualPaddingRow({ height, colSpan }) {
@@ -94,17 +102,65 @@ export default function TaskTable({
     selectedEmployeeForHighlight
   });
   const columnSettings = useTaskTableColumnVisibility(currentUser);
-  const [deadlineSort, setDeadlineSort] = useState(true);
+  const plannedProgressPref = useTaskTablePlannedProgressPreference(currentUser);
+  const showPlannedProgress = isAdmin && plannedProgressPref.showPlannedProgress;
+  const [deadlineSort, setDeadlineSort] = useState(false);
   const [completedBottomSort, setCompletedBottomSort] = useState(true);
+  const [hideCompletedSort, setHideCompletedSort] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const sortOptions = useMemo(
     () => ({ deadlineSort, completedBottomSort }),
     [deadlineSort, completedBottomSort]
   );
 
-  const visibleRows = useMemo(
-    () => sortRowsWithStableOrder(table.rows, sortOptions),
-    [table.rows, sortOptions]
+  const compareVisibleRows = useCallback(
+    (a, b) => compareTaskRows(a, b, sortOptions),
+    [sortOptions]
   );
+
+  const searchResult = useMemo(
+    () => buildTaskTableSearchResult(
+      table.rows,
+      table.childrenCache,
+      searchQuery,
+      compareVisibleRows
+    ),
+    [table.rows, table.childrenCache, searchQuery, compareVisibleRows]
+  );
+
+  const visibleRows = useMemo(() => {
+    const rows = searchResult.isActive
+      ? searchResult.rows
+      : sortRowsWithStableOrder(table.rows, sortOptions);
+    return filterCompletedRows(rows, hideCompletedSort);
+  }, [searchResult, table.rows, sortOptions, hideCompletedSort]);
+
+  useTaskTablePlannedProgressPolling({
+    enabled: showPlannedProgress,
+    api: table.api,
+    rows: visibleRows,
+    childrenCache: table.childrenCache,
+    expandedRows: table.expandedRows,
+    autoExpandIds: searchResult.autoExpandIds,
+    selectedEmployeeForHighlight,
+    patchRow: table.patchRow,
+    patchChildInCache: table.patchChildInCache
+  });
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) return undefined;
+
+    const timer = window.setTimeout(() => {
+      table.rows
+        .filter((row) => row.isSplitTask)
+        .forEach((row) => {
+          table.loadChildrenForParent(row.id);
+        });
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, table.rows, table.loadChildrenForParent]);
 
   const tableColSpan = taskTableColumnCount(
     columnSettings.visibility,
@@ -119,7 +175,7 @@ export default function TaskTable({
 
       const children = table.childrenCache.get(row.id) || [];
       const hasChildren = row.isSplitTask || children.length > 0;
-      const parentFooter = hasChildren ? 0 : (hasProgressFooter(row) ? ROW_PROGRESS_HEIGHT : 0);
+      const parentFooter = hasChildren ? 0 : (hasProgressFooter(row, showPlannedProgress) ? ROW_PROGRESS_HEIGHT : 0);
 
       if (!hasChildren || !table.expandedRows.has(row.id)) {
         return ROW_GROUP_BASE_HEIGHT + parentFooter;
@@ -127,13 +183,13 @@ export default function TaskTable({
 
       const childrenHeight = children.reduce(
         (total, child) =>
-          total + ROW_GROUP_BASE_HEIGHT + (hasProgressFooter(child) ? ROW_PROGRESS_HEIGHT : 0),
+          total + ROW_GROUP_BASE_HEIGHT + (hasProgressFooter(child, showPlannedProgress) ? ROW_PROGRESS_HEIGHT : 0),
         0
       );
 
       return ROW_GROUP_BASE_HEIGHT + parentFooter + childrenHeight;
     },
-    [table.childrenCache, table.editingId, table.expandedRows, visibleRows]
+    [table.childrenCache, table.editingId, table.expandedRows, visibleRows, showPlannedProgress]
   );
 
   const shouldVirtualize = visibleRows.length > 30;
@@ -190,11 +246,19 @@ export default function TaskTable({
       : 0;
 
   const renderTaskRow = (parent) => {
-    const children = sortRowsWithStableOrder(
-      table.childrenCache.get(parent.id) || [],
-      sortOptions
+    let children = filterCompletedRows(
+      sortRowsWithStableOrder(
+        table.childrenCache.get(parent.id) || [],
+        sortOptions
+      ),
+      hideCompletedSort
     );
-    const isExpanded = table.expandedRows.has(parent.id);
+    const allowedChildIds = searchResult.childrenFilter?.get(parent.id);
+    if (allowedChildIds) {
+      children = children.filter((child) => allowedChildIds.has(child.id));
+    }
+    const isExpanded = table.expandedRows.has(parent.id)
+      || searchResult.autoExpandIds.has(parent.id);
     return table.editingId === parent.id ? (
       <EditTaskRow
         key={parent.id}
@@ -232,6 +296,7 @@ export default function TaskTable({
         showHoursTypeColumns={table.showHoursTypeColumns}
         columnVisibility={columnSettings.visibility}
         textLimit={columnSettings.textLimit}
+        showPlannedProgress={showPlannedProgress}
       />
     );
   };
@@ -259,6 +324,12 @@ export default function TaskTable({
         onDeadlineSortChange={setDeadlineSort}
         completedBottomSort={completedBottomSort}
         onCompletedBottomSortChange={setCompletedBottomSort}
+        hideCompletedSort={hideCompletedSort}
+        onHideCompletedSortChange={setHideCompletedSort}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        showPlannedProgress={plannedProgressPref.showPlannedProgress}
+        onToggleShowPlannedProgress={plannedProgressPref.toggleShowPlannedProgress}
       />
 
       <TableContainer ref={tableContainerRef}>
@@ -296,6 +367,15 @@ export default function TaskTable({
               </>
             ) : (
               visibleRows.map(renderTaskRow)
+            )}
+            {searchResult.isActive && visibleRows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={tableColSpan} align="center" sx={{ py: 4 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Ничего не найдено по запросу «{searchQuery.trim()}»
+                  </Typography>
+                </TableCell>
+              </TableRow>
             )}
           </TableBody>
         </Table>

@@ -1,3 +1,11 @@
+export function isThroughTestAssignment(entity) {
+  if (!entity) return false;
+  if (entity.requiresTestBeforeProduction === true) return true;
+  const testHours = Number(entity.testEstimateHours) || 0;
+  const productionHours = Number(entity.productionEstimateHours) || 0;
+  return testHours > 0 && productionHours > 0;
+}
+
 export function partsToApi(parts) {
   return parts.map((p, index) => {
     const throughTest = Boolean(p.throughTest);
@@ -54,7 +62,7 @@ export function childrenToModalParts(children, employees, taskTypes) {
     hours: c.estimateHours ?? 0,
     statusText: c.statusText || '',
     started: isChildStarted(c),
-    throughTest: c.requiresTestBeforeProduction ?? false,
+    throughTest: isThroughTestAssignment(c),
     testHours: c.testEstimateHours ?? 0,
     productionHours: c.productionEstimateHours ?? 0,
   }));
@@ -66,7 +74,7 @@ export function apiPartsToModalParts(parts, employees, taskTypes) {
     employeeName: p.employeeName,
     taskTypes: parseTypeToArray(p.taskType),
     hours: p.allocatedHours ?? 0,
-    throughTest: p.requiresTestBeforeProduction ?? false,
+    throughTest: isThroughTestAssignment(p),
     testHours: p.testEstimateHours ?? 0,
     productionHours: p.productionEstimateHours ?? 0,
   }));
@@ -78,7 +86,7 @@ export function taskToModalParts(task, employees, taskTypes) {
     employeeName: task.employeeName || employees[0],
     taskTypes: types,
     hours: task.estimateHours ?? 0,
-    throughTest: task.requiresTestBeforeProduction ?? false,
+    throughTest: isThroughTestAssignment(task),
     testHours: task.testEstimateHours ?? 0,
     productionHours: task.productionEstimateHours ?? 0,
     statusText: task.statusText || '',

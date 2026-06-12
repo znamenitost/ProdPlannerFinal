@@ -38,8 +38,10 @@ public static class PlannedTimeProgressCalculator
         double? estimateHoursOverride = null)
     {
         var estimateHours = estimateHoursOverride ?? task.EstimateHours;
-        return estimateHours > 0
-            && (HasWorkStarted(task.Status, intervals) || task.Status == JobStatus.Completed);
+        if (task.Status == JobStatus.Completed)
+            return false;
+
+        return estimateHours > 0 && HasWorkStarted(task.Status, intervals);
     }
 
     private static bool HasWorkStarted(JobStatus status, IReadOnlyList<WorkInterval> intervals)
@@ -47,7 +49,7 @@ public static class PlannedTimeProgressCalculator
         if (intervals.Count > 0)
             return true;
 
-        return status is JobStatus.InProgress or JobStatus.Paused or JobStatus.Completed;
+        return status is JobStatus.InProgress or JobStatus.Paused;
     }
 
     private static double GetElapsedWorkHours(

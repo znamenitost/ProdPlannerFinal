@@ -2,13 +2,15 @@ import { TableRow, TableCell, LinearProgress } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { COL_ACTIONS } from '../../utils/taskTableStyles';
 
-/** false — полоска скрыта в UI; расчёт и пропсы строк не отключаются. */
-export const PLANNED_TIME_PROGRESS_VISIBLE = false;
-
-export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitParent = false }) {
+export default function TaskPlannedProgressFooter({
+  task,
+  colSpan,
+  hideForSplitParent = false,
+  enabled = false
+}) {
   const show = task.showPlannedTimeProgress ?? false;
 
-  if (hideForSplitParent || !show || !PLANNED_TIME_PROGRESS_VISIBLE) {
+  if (!enabled || hideForSplitParent || !show) {
     return null;
   }
 
@@ -32,14 +34,14 @@ export default function TaskPlannedProgressFooter({ task, colSpan, hideForSplitP
         <LinearProgress
           variant="determinate"
           value={percent}
+          color="success"
           aria-label={`Плановый прогресс ${percent}%`}
           sx={(theme) => ({
             height: 5,
             borderRadius: 0,
-            bgcolor: alpha(theme.palette.primary.main, 0.08),
+            bgcolor: alpha(theme.palette.success.main, 0.12),
             '& .MuiLinearProgress-bar': {
-              borderRadius: 0,
-              bgcolor: alpha(theme.palette.primary.dark, 0.36)
+              borderRadius: 0
             }
           })}
         />

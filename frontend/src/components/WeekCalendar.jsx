@@ -92,14 +92,13 @@ export default function WeekCalendar({ employee }) {
   const start = new Date(weekData.start);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
-  const weekRange = `${start.toLocaleDateString('ru-RU')} - ${end.toLocaleDateString('ru-RU')}`;
+  const weekRange = `${formatCalendarNavDate(start)} - ${formatCalendarNavDate(end)}`;
 
   const headerTitle = viewMode === 'day'
     ? anchorDate.toLocaleDateString('ru-RU', {
       weekday: 'long',
       day: 'numeric',
-      month: 'long',
-      year: 'numeric'
+      month: 'long'
     })
     : weekRange;
 
@@ -203,6 +202,13 @@ export default function WeekCalendar({ employee }) {
       </MotionSwitch>
     </Paper>
   );
+}
+
+function formatCalendarNavDate(date) {
+  return new Date(date).toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long'
+  });
 }
 
 function startOfDay(date) {

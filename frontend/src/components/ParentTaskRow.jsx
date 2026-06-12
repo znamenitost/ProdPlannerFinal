@@ -74,7 +74,8 @@ function ParentTaskRow({
   selectedEmployeeForHighlight,
   showHoursTypeColumns = true,
   columnVisibility,
-  textLimit: limit = 23
+  textLimit: limit = 23,
+  showPlannedProgress = false
 }) {
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
   const lifecycleBusy = pendingLifecycleTaskId != null;
@@ -277,7 +278,7 @@ function ParentTaskRow({
                 lifecycleBusy={lifecycleBusy}
                 onEdit={() => onEdit(task.id)}
                 onDelete={() => onDelete(task.id)}
-                onIntervals={() => onOpenIntervals(task)}
+                onIntervals={hasChildren ? undefined : () => onOpenIntervals(task)}
                 onStart={onStart}
                 onPause={onPause}
                 onResume={onResume}
@@ -306,6 +307,7 @@ function ParentTaskRow({
         task={task}
         colSpan={tableColSpan}
         hideForSplitParent={hasChildren}
+        enabled={showPlannedProgress}
       />
 
       {hasChildren && isExpanded && (childrenTasks || []).map((child, index) => (
@@ -333,6 +335,7 @@ function ParentTaskRow({
           showHoursTypeColumns={showHoursTypeColumns}
           columnVisibility={columnVisibility}
           textLimit={limit}
+          showPlannedProgress={showPlannedProgress}
         />
       ))}
     </Fragment>

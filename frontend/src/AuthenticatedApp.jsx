@@ -38,7 +38,6 @@ import WeekCalendar from './components/WeekCalendar';
 import DeadlineWarnings from './components/DeadlineWarnings';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
-import DebugPanel from './components/DebugPanel';
 import AdminLogsPage from './components/AdminLogsPage';
 import TaskTable from './components/TaskTable';
 import LunchBreakOverlay from './components/LunchBreakOverlay';
@@ -405,10 +404,6 @@ function AuthenticatedAppContent() {
             )}
             {activeTab === 2 && isAdmin && <AdminLogsPage />}
           </MotionSwitch>
-
-          {isAdmin && (
-            <DebugPanel employee={employee} onTimeChange={refreshAll} onRefresh={refreshAll} />
-          )}
         </Container>
       </Box>
 

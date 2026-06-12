@@ -7,6 +7,10 @@ export function getColumnStorageKey(currentUser) {
   return `${TASK_TABLE_COLUMN_STORAGE_PREFIX}.${currentUser.fullName}`;
 }
 
+export function getPlannedProgressStorageKey(currentUser) {
+  return `${getColumnStorageKey(currentUser)}.showPlannedProgress.v1`;
+}
+
 export const TASK_TABLE_DEFAULT_COLUMN_VISIBILITY = {
   task: true,
   file: true,

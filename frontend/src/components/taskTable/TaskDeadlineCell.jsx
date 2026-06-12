@@ -17,13 +17,13 @@ export default function TaskDeadlineCell({ deadline, statusText }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25, gap: 0.125 }}>
-      <Typography variant="body2" sx={{ color, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+      <Typography variant="body2" sx={{ color, fontSize: '0.8125rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
         {date}
       </Typography>
       {time ? (
         <Typography
           variant="caption"
-          sx={{ color, fontSize: '0.75rem', whiteSpace: 'nowrap', opacity: 0.9 }}
+          sx={{ color, fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap', opacity: 0.9 }}
         >
           {time}
         </Typography>

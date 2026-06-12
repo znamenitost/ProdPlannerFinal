@@ -146,18 +146,20 @@ export default function TaskAdminActionStacks({
           </ListItemIcon>
           <ListItemText>Удалить</ListItemText>
         </MenuItem>
-        <MenuItem
-          onClick={(e) => {
-            e.stopPropagation();
-            handleClose();
-            onIntervals?.();
-          }}
-        >
-          <ListItemIcon>
-            <AccessTime fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Интервалы</ListItemText>
-        </MenuItem>
+        {onIntervals && (
+          <MenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              handleClose();
+              onIntervals();
+            }}
+          >
+            <ListItemIcon>
+              <AccessTime fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Интервалы</ListItemText>
+          </MenuItem>
+        )}
 
         {showWorkflowBlock && (
           <>

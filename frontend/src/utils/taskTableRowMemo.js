@@ -37,6 +37,7 @@ export function areParentRowPropsEqual(prev, next) {
   if ((prev.task.workIntervals?.length ?? 0) !== (next.task.workIntervals?.length ?? 0)) return false;
   if (workIntervalsKey(prev.task) !== workIntervalsKey(next.task)) return false;
   if (prev.task.plannedTimeProgress !== next.task.plannedTimeProgress) return false;
+  if (prev.showPlannedProgress !== next.showPlannedProgress) return false;
   if (prev.isExpanded !== next.isExpanded) return false;
   if (pendingLifecycleAffectsRow(
     prev.pendingLifecycleTaskId,
@@ -78,6 +79,8 @@ export function areChildRowPropsEqual(prev, next) {
   if (prev.task.workPhase !== next.task.workPhase) return false;
   if (prev.task.supplyMode !== next.task.supplyMode) return false;
   if (prev.task.sequenceOrder !== next.task.sequenceOrder) return false;
+  if (prev.task.plannedTimeProgress !== next.task.plannedTimeProgress) return false;
+  if (prev.showPlannedProgress !== next.showPlannedProgress) return false;
   if (pendingLifecycleAffectsRow(
     prev.pendingLifecycleTaskId,
     next.pendingLifecycleTaskId,

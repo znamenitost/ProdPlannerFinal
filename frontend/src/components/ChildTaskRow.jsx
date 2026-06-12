@@ -53,7 +53,8 @@ function ChildTaskRow({
   selectedEmployeeForHighlight,
   showHoursTypeColumns = true,
   columnVisibility,
-  textLimit
+  textLimit,
+  showPlannedProgress = false
 }) {
   const supplyMode = getSplitSupplyMode(task, sharedGroupParentTask);
   const isSequentialChild = supplyMode === SUPPLY_MODE_INTERNAL;
@@ -221,7 +222,11 @@ function ChildTaskRow({
         </Box>
       </TableCell>
     </TableRow>
-    <TaskPlannedProgressFooter task={task} colSpan={tableColSpan} />
+    <TaskPlannedProgressFooter
+      task={task}
+      colSpan={tableColSpan}
+      enabled={showPlannedProgress}
+    />
     </>
   );
 }

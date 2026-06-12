@@ -96,7 +96,7 @@ public class TaskTableRowDto
                 parent, progressIntervals, at, phaseEstimate),
             ShowPlannedTimeProgress = !hidePlannedBar
                 && (PlannedTimeProgressCalculator.ShouldShow(parent, progressIntervals, phaseEstimate)
-                    || statusText is "Начал" or "Пауза" or "Готово"),
+                    || statusText is "Начал" or "Пауза"),
             RequiresTestBeforeProduction = parent.RequiresTestBeforeProduction,
             TestEstimateHours = parent.TestEstimateHours,
             ProductionEstimateHours = parent.ProductionEstimateHours,

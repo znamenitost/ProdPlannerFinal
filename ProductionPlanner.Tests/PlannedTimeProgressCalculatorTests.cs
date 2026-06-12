@@ -52,4 +52,18 @@ public class PlannedTimeProgressCalculatorTests
             task, [], new DateTime(2026, 5, 22, 12, 0, 0));
         Assert.Equal(100, percent);
     }
+
+    [Fact]
+    public void ShouldShow_WhenCompleted_ReturnsFalse()
+    {
+        var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.Completed };
+        Assert.False(PlannedTimeProgressCalculator.ShouldShow(task, []));
+    }
+
+    [Fact]
+    public void ShouldShow_WhenInProgress_ReturnsTrue()
+    {
+        var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.InProgress };
+        Assert.True(PlannedTimeProgressCalculator.ShouldShow(task, []));
+    }
 }

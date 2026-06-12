@@ -28,7 +28,10 @@ export default function EditTaskRow({
     employeeName: task.employeeName || '',
     parentRowNumber: task.parentRowNumber,
     statusText: task.statusText || '',
-    isSplitTask: task.isSplitTask
+    isSplitTask: task.isSplitTask,
+    requiresTestBeforeProduction: task.requiresTestBeforeProduction ?? false,
+    testEstimateHours: task.testEstimateHours ?? 0,
+    productionEstimateHours: task.productionEstimateHours ?? 0
   }));
 
   useEffect(() => {
@@ -43,9 +46,26 @@ export default function EditTaskRow({
       employeeName: task.employeeName || '',
       parentRowNumber: task.parentRowNumber,
       statusText: task.statusText || '',
-      isSplitTask: task.isSplitTask
+      isSplitTask: task.isSplitTask,
+      requiresTestBeforeProduction: task.requiresTestBeforeProduction ?? false,
+      testEstimateHours: task.testEstimateHours ?? 0,
+      productionEstimateHours: task.productionEstimateHours ?? 0
     });
-  }, [task.id, task.estimateHours, task.isSplitTask, task.type, task.employeeName, task.deadline, task.folderPath, task.fileName, task.comment, task.statusText]);
+  }, [
+    task.id,
+    task.estimateHours,
+    task.isSplitTask,
+    task.type,
+    task.employeeName,
+    task.deadline,
+    task.folderPath,
+    task.fileName,
+    task.comment,
+    task.statusText,
+    task.requiresTestBeforeProduction,
+    task.testEstimateHours,
+    task.productionEstimateHours
+  ]);
 
   const handleFieldChange = (field, value) => {
     setLocalTask(prev => ({ ...prev, [field]: value }));

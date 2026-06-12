@@ -172,9 +172,6 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
             {showStatusChip && (
               <TaskStatusCell statusText={statusLabel} label={statusLabel} />
             )}
-            {risk && (
-              <Chip icon={risk.icon} label={risk.label} size="small" color={risk.color} sx={{ height: 22, fontSize: '0.7rem' }} />
-            )}
           </Stack>
 
           <Box sx={{ position: 'relative', display: 'inline-flex', maxWidth: '100%' }}>
@@ -247,13 +244,22 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
               flexWrap: 'wrap'
             }}
           >
+            {risk && (
+              <Chip
+                icon={risk.icon}
+                label={risk.label}
+                size="small"
+                color={risk.color}
+                sx={{ height: 22, fontSize: '0.7rem' }}
+              />
+            )}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <AccessTime sx={{ fontSize: 14 }} />
               <Typography variant="caption">{task.estimateHours} ч</Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Event sx={{ fontSize: 14 }} />
-              <Typography variant="caption">
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>
                 {task.deadline
                   ? `${new Date(task.deadline).toLocaleDateString()} ${new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                   : 'Нет дедлайна'}

@@ -59,9 +59,9 @@ namespace ProductionPlanner.Data
                     TotalEstimate = g.Sum(t => t.EstimateHours),
                     TotalActual = g.Sum(t => t.ActualHours)
                 })
-                .FirstOrDefaultAsync(cancellationToken);
+                .ToListAsync(cancellationToken);
 
-            return aggregates ?? new CompletedTasksAggregateStats();
+            return aggregates.FirstOrDefault() ?? new CompletedTasksAggregateStats();
         }
 
         public async Task<PaginatedResult<ProductionTask>> GetCompletedTasksPaginatedAsync(
