@@ -55,7 +55,10 @@ static void HandleRequest(HttpListenerContext ctx)
                 WriteText(ctx, 200, "ok");
                 break;
             case "/open":
-                HandleOpen(ctx);
+                HandleOpen(ctx, IsAllowedPath, "path not allowed");
+                break;
+            case "/open-dev":
+                HandleOpen(ctx, IsAllowedDevPath, "dev path not allowed");
                 break;
             default:
                 WriteText(ctx, 404, "not found");
@@ -68,7 +71,7 @@ static void HandleRequest(HttpListenerContext ctx)
     }
 }
 
-static void HandleOpen(HttpListenerContext ctx)
+static void HandleOpen(HttpListenerContext ctx, Func<string, bool> isAllowed, string deniedMessage)
 {
     var raw = ctx.Request.QueryString["path"];
     if (string.IsNullOrWhiteSpace(raw))
@@ -78,9 +81,9 @@ static void HandleOpen(HttpListenerContext ctx)
     }
 
     var filePath = Uri.UnescapeDataString(raw).Trim();
-    if (!IsAllowedPath(filePath))
+    if (!isAllowed(filePath))
     {
-        WriteText(ctx, 403, "path not allowed");
+        WriteText(ctx, 403, deniedMessage);
         return;
     }
 
@@ -94,7 +97,39 @@ static void HandleOpen(HttpListenerContext ctx)
     WriteText(ctx, 200, "ok");
 }
 
-static bool IsAllowedPath(string path)
+static bool IsAllowedPath(string path) =>
+    IsAllowedUncPath(path);
+
+static bool IsAllowedDevPath(string path)
+{
+    if (path.Contains("..", StringComparison.Ordinal))
+        return false;
+
+    string fullPath;
+    try
+    {
+        fullPath = Path.GetFullPath(path);
+    }
+    catch
+    {
+        return false;
+    }
+
+    if (!fullPath.StartsWith(@"C:\", StringComparison.OrdinalIgnoreCase))
+        return false;
+
+    var fileName = Path.GetFileName(fullPath);
+    if (string.IsNullOrEmpty(fileName))
+        return false;
+
+    var directory = Path.GetDirectoryName(fullPath);
+    if (!string.Equals(directory, @"C:\", StringComparison.OrdinalIgnoreCase))
+        return false;
+
+    return HasSupportedExtension(fileName);
+}
+
+static bool IsAllowedUncPath(string path)
 {
     if (!path.StartsWith(@"\\", StringComparison.Ordinal))
         return false;
@@ -103,6 +138,11 @@ static bool IsAllowedPath(string path)
     if (path.Contains("..", StringComparison.Ordinal))
         return false;
 
+    return HasSupportedExtension(path);
+}
+
+static bool HasSupportedExtension(string path)
+{
     var ext = Path.GetExtension(path);
     return ext.Equals(".cdr", StringComparison.OrdinalIgnoreCase)
         || ext.Equals(".ai", StringComparison.OrdinalIgnoreCase)

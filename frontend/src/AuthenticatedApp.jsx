@@ -43,6 +43,7 @@ import AdminLogsPage from './components/AdminLogsPage';
 import TaskTable from './components/TaskTable';
 import LunchBreakOverlay from './components/LunchBreakOverlay';
 import DeployMaintenanceOverlay from './components/DeployMaintenanceOverlay';
+import DevCdrTestPanel from './components/DevCdrTestPanel';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { UiFeedbackProvider, useUiFeedback } from './context/UiFeedbackContext';
@@ -380,6 +381,8 @@ function AuthenticatedAppContent() {
               </Box>
             </Box>
           </Paper>
+
+          {isWindowsClient && <DevCdrTestPanel />}
 
           <Paper sx={{ mb: 3, borderRadius: 2.5, overflow: 'hidden' }}>
             <Tabs value={activeTab} onChange={handleTabChange} centered variant="fullWidth">

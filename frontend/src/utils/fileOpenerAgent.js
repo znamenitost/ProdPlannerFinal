@@ -3,6 +3,9 @@ import { detectClientPlatform } from './filePathForOpen';
 export const FILE_OPENER_PORT = 17888;
 export const FILE_OPENER_BASE = `http://127.0.0.1:${FILE_OPENER_PORT}`;
 
+/** Временный путь для dev-теста на Windows VM. */
+export const DEV_TEST_CDR_PATH = 'C:\\0.cdr';
+
 const DEFAULT_WINDOWS_HOST = 'MINIMARKER';
 const DEFAULT_SHARE = 'Клиенты';
 
@@ -35,4 +38,11 @@ export async function openFileViaAgent(relativePath) {
   const url = `${FILE_OPENER_BASE}/open?path=${encodeURIComponent(uncPath)}`;
   const response = await fetch(url);
   return response.ok;
+}
+
+export async function openDevFileViaAgent(absolutePath) {
+  const url = `${FILE_OPENER_BASE}/open-dev?path=${encodeURIComponent(absolutePath)}`;
+  const response = await fetch(url);
+  const text = await response.text();
+  return { ok: response.ok, status: response.status, text };
 }
