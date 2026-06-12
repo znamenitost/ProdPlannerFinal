@@ -6,7 +6,9 @@ import {
   Typography,
   Button,
   ToggleButton,
-  ToggleButtonGroup
+  ToggleButtonGroup,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import { ChevronLeft, ChevronRight, CalendarMonth, Today } from '@mui/icons-material';
 import { useUiFeedback } from '../context/UiFeedbackContext';
@@ -18,7 +20,10 @@ import { buildTaskBlocksMap, isSameCalendarDay, toCalendarDayKey } from '../util
 
 export default function WeekCalendar({ employee }) {
   const { showError } = useUiFeedback();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [viewMode, setViewMode] = useState('week');
+  const effectiveViewMode = isMobile ? 'day' : viewMode;
   const [anchorDate, setAnchorDate] = useState(() => startOfDay(new Date()));
   const [highlightedTaskId, setHighlightedTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
@@ -56,7 +61,7 @@ export default function WeekCalendar({ employee }) {
 
   const goPrev = () => {
     setAnchorDate((prev) => {
-      if (viewMode === 'day') {
+      if (effectiveViewMode === 'day') {
         return addWorkdays(prev, -1);
       }
       const next = new Date(prev);
@@ -67,7 +72,7 @@ export default function WeekCalendar({ employee }) {
 
   const goNext = () => {
     setAnchorDate((prev) => {
-      if (viewMode === 'day') {
+      if (effectiveViewMode === 'day') {
         return addWorkdays(prev, 1);
       }
       const next = new Date(prev);
@@ -94,7 +99,7 @@ export default function WeekCalendar({ employee }) {
   end.setDate(start.getDate() + 6);
   const weekRange = `${formatCalendarNavDate(start)} - ${formatCalendarNavDate(end)}`;
 
-  const headerTitle = viewMode === 'day'
+  const headerTitle = effectiveViewMode === 'day'
     ? anchorDate.toLocaleDateString('ru-RU', {
       weekday: 'long',
       day: 'numeric',
@@ -102,11 +107,11 @@ export default function WeekCalendar({ employee }) {
     })
     : weekRange;
 
-  const daysToShow = viewMode === 'day'
+  const daysToShow = effectiveViewMode === 'day'
     ? weekData.days.filter((day) => !isWeekend(day.date) && isSameCalendarDay(day.date, anchorDate))
     : (showWeekend ? weekData.days : weekData.days.filter((_, index) => index < 5));
 
-  const navLabel = viewMode === 'day' ? 'день' : 'неделю';
+  const navLabel = effectiveViewMode === 'day' ? 'день' : 'неделю';
   const isAnchorToday = isSameCalendarDay(anchorDate, currentWorkday);
 
   return (
@@ -128,31 +133,33 @@ export default function WeekCalendar({ employee }) {
           </IconButton>
           <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
             <CalendarMonth color="primary" />
-            <Typography variant="subtitle1" sx={{ textTransform: viewMode === 'day' ? 'capitalize' : 'none' }}>
+            <Typography variant="subtitle1" sx={{ textTransform: effectiveViewMode === 'day' ? 'capitalize' : 'none' }}>
               {headerTitle}
             </Typography>
           </Box>
           <IconButton variant="soft" color="primary" onClick={goNext} aria-label={`Следующая ${navLabel}`}>
             <ChevronRight />
           </IconButton>
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            onChange={handleViewModeChange}
-            size="small"
-            color="primary"
-            aria-label="Режим календаря"
-          >
-            <ToggleButton value="day" aria-label="Один день">
-              1 день
-            </ToggleButton>
-            <ToggleButton value="week" aria-label="Неделя">
-              Неделя
-            </ToggleButton>
-          </ToggleButtonGroup>
+          {!isMobile && (
+            <ToggleButtonGroup
+              value={viewMode}
+              exclusive
+              onChange={handleViewModeChange}
+              size="small"
+              color="primary"
+              aria-label="Режим календаря"
+            >
+              <ToggleButton value="day" aria-label="Один день">
+                1 день
+              </ToggleButton>
+              <ToggleButton value="week" aria-label="Неделя">
+                Неделя
+              </ToggleButton>
+            </ToggleButtonGroup>
+          )}
         </Box>
 
-        {viewMode === 'day' && (
+        {effectiveViewMode === 'day' && (
           <Button
             size="small"
             variant="outlined"
@@ -168,7 +175,7 @@ export default function WeekCalendar({ employee }) {
       </Box>
 
       <MotionSwitch
-        transitionKey={`${viewMode}-${toCalendarDayKey(anchorDate)}-${daysToShow.length}`}
+        transitionKey={`${effectiveViewMode}-${toCalendarDayKey(anchorDate)}-${daysToShow.length}`}
       >
         {daysToShow.length === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
@@ -178,12 +185,12 @@ export default function WeekCalendar({ employee }) {
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: viewMode === 'day'
+              gridTemplateColumns: effectiveViewMode === 'day'
                 ? '1fr'
                 : (showWeekend ? 'repeat(7, 1fr)' : 'repeat(5, 1fr)'),
               gap: 2,
-              maxWidth: viewMode === 'day' ? 720 : 'none',
-              mx: viewMode === 'day' ? 'auto' : 0
+              maxWidth: effectiveViewMode === 'day' ? 720 : 'none',
+              mx: effectiveViewMode === 'day' ? 'auto' : 0
             }}
           >
             {daysToShow.map((day) => (
@@ -194,7 +201,7 @@ export default function WeekCalendar({ employee }) {
                 taskBlocksMap={taskBlocksMap}
                 highlightedTaskId={highlightedTaskId}
                 onTaskHover={setHighlightedTaskId}
-                detailedTimeline={viewMode === 'day'}
+                detailedTimeline={effectiveViewMode === 'day'}
               />
             ))}
           </Box>
