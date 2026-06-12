@@ -69,6 +69,7 @@ else
             .UseSqlite($"Data Source={dbPath}"));
 }
 
+builder.Services.AddProductionPlannerDataProtection();
 builder.Services.AddIdentity<User, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
