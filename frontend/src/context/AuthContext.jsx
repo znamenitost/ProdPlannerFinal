@@ -1,6 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  getUserPreferencesKey,
+  loadUserPreference,
+  saveUserPreference
+} from '../utils/userPreferencesStorage';
 
 const DEFAULT_EMPLOYEE = 'Дима';
+const ADMIN_EMPLOYEE_OPTIONS = ['Дима', 'Яромир', 'Павел'];
 
 const AuthContext = createContext(null);
 
@@ -8,6 +14,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authChecking, setAuthChecking] = useState(true);
   const [employee, setEmployee] = useState(DEFAULT_EMPLOYEE);
+  const loadedAdminEmployeePrefRef = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -40,9 +47,44 @@ export function AuthProvider({ children }) {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    if (!user || user.role !== 'Admin') {
+      loadedAdminEmployeePrefRef.current = false;
+      return;
+    }
+    if (loadedAdminEmployeePrefRef.current) return;
+
+    const stored = loadUserPreference(
+      getUserPreferencesKey(user),
+      'selectedEmployee',
+      DEFAULT_EMPLOYEE
+    );
+    if (ADMIN_EMPLOYEE_OPTIONS.includes(stored)) {
+      setEmployee(stored);
+    }
+    loadedAdminEmployeePrefRef.current = true;
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'Admin') return;
+    if (!loadedAdminEmployeePrefRef.current) return;
+    saveUserPreference(getUserPreferencesKey(user), 'selectedEmployee', employee);
+  }, [user, employee]);
+
   const handleLogin = useCallback((userData) => {
     setUser(userData);
-    if (userData.role !== 'Admin') setEmployee(userData.fullName);
+    loadedAdminEmployeePrefRef.current = false;
+    if (userData.role !== 'Admin') {
+      setEmployee(userData.fullName);
+      return;
+    }
+    const stored = loadUserPreference(
+      getUserPreferencesKey(userData),
+      'selectedEmployee',
+      DEFAULT_EMPLOYEE
+    );
+    setEmployee(ADMIN_EMPLOYEE_OPTIONS.includes(stored) ? stored : DEFAULT_EMPLOYEE);
+    loadedAdminEmployeePrefRef.current = true;
   }, []);
 
   const handleLogout = useCallback(async () => {

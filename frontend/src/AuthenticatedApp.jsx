@@ -49,6 +49,7 @@ import { ClockProvider } from './context/ClockContext';
 import { queryClient } from './lib/queryClient';
 import useActiveTasksRefresh from './hooks/useActiveTasksRefresh';
 import useAuth from './hooks/useAuth';
+import useUserPreference from './hooks/useUserPreference';
 import useNotificationsHub from './hooks/useNotificationsHub';
 import { endLunch, getCurrentLunch, prepareDeploy, startLunch } from './services/api';
 import { avatarDisplayUrl } from './utils/avatarUrl';
@@ -63,7 +64,7 @@ import './App.css';
 function AuthenticatedAppContent() {
   const { user, setUser, employee, setEmployee, handleLogout } = useAuth();
   const { showSuccess, showError, showWarning, confirm } = useUiFeedback();
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useUserPreference(user, 'app.activeTab', 0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [lunchPending, setLunchPending] = useState(false);
   const [currentLunch, setCurrentLunch] = useState(null);

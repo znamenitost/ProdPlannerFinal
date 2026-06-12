@@ -15,6 +15,8 @@ import {
 import { ContentCopy, Refresh, Article, Hub, Storage, Calculate } from '@mui/icons-material';
 import { debugApi } from '../services/api';
 import { useUiFeedback } from '../context/UiFeedbackContext';
+import useAuth from '../hooks/useAuth';
+import useUserPreference from '../hooks/useUserPreference';
 
 const LEVEL_COLORS = {
   Warning: 'warning',
@@ -40,16 +42,21 @@ function formatEntryForCopy(entry) {
 
 export default function AdminLogsPage() {
   const { showSuccess, showError } = useUiFeedback();
-  const [showWarning, setShowWarning] = useState(true);
-  const [includeErrors, setIncludeErrors] = useState(true);
-  const [tail, setTail] = useState(500);
+  const { user } = useAuth();
+  const [showWarning, setShowWarning] = useUserPreference(user, 'adminLogs.showWarning', true);
+  const [includeErrors, setIncludeErrors] = useUserPreference(user, 'adminLogs.includeErrors', true);
+  const [tail, setTail] = useUserPreference(user, 'adminLogs.tail', 500);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [connections, setConnections] = useState(null);
   const [connectionsError, setConnectionsError] = useState('');
   const [connectionsLoading, setConnectionsLoading] = useState(false);
-  const [autoRefreshConnections, setAutoRefreshConnections] = useState(true);
+  const [autoRefreshConnections, setAutoRefreshConnections] = useUserPreference(
+    user,
+    'adminLogs.autoRefreshConnections',
+    true
+  );
   const [integrity, setIntegrity] = useState(null);
   const [integrityError, setIntegrityError] = useState('');
   const [integrityLoading, setIntegrityLoading] = useState(false);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -17,16 +17,35 @@ import DayColumn from './DayColumn';
 import { CalendarLoadingState } from './LoadingState';
 import { MotionSwitch } from './ui/MotionSection';
 import { buildTaskBlocksMap, isSameCalendarDay, toCalendarDayKey } from '../utils/calendarDayUtils';
+import useAuth from '../hooks/useAuth';
+import useUserPreference from '../hooks/useUserPreference';
 
 export default function WeekCalendar({ employee }) {
   const { showError } = useUiFeedback();
+  const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [viewMode, setViewMode] = useState('week');
+  const [viewMode, setViewMode] = useUserPreference(user, 'calendar.viewMode', 'week');
   const effectiveViewMode = isMobile ? 'day' : viewMode;
-  const [anchorDate, setAnchorDate] = useState(() => startOfDay(new Date()));
+  const [anchorDateKey, setAnchorDateKey] = useUserPreference(user, 'calendar.anchorDate', null);
+  const anchorDate = useMemo(() => {
+    if (anchorDateKey) {
+      const parsed = startOfDay(new Date(anchorDateKey));
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+    return startOfDay(new Date());
+  }, [anchorDateKey]);
+  const setAnchorDate = useCallback((updater) => {
+    setAnchorDateKey((prevKey) => {
+      const prev = prevKey ? startOfDay(new Date(prevKey)) : startOfDay(new Date());
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      const day = startOfDay(next);
+      if (Number.isNaN(day.getTime())) return prevKey;
+      return toCalendarDayKey(day);
+    });
+  }, [setAnchorDateKey]);
   const [highlightedTaskId, setHighlightedTaskId] = useState(null);
-  const [showWeekend, setShowWeekend] = useState(false);
+  const [showWeekend] = useState(false);
 
   const weekStart = useMemo(
     () => getMonday(anchorDate),

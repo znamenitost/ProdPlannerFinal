@@ -28,6 +28,8 @@ import {
 import { sectionTitleRowSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import useActiveTasksQuery from '../hooks/queries/useActiveTasksQuery';
+import useAuth from '../hooks/useAuth';
+import useUserPreference from '../hooks/useUserPreference';
 import { openFileOnClient } from '../utils/openFileOnClient';
 import { normalizePathForOpen } from '../utils/filePathForOpen';
 import EmptyState from './ui/EmptyState';
@@ -58,10 +60,15 @@ export default function ActiveTasksList({
   employee = ''
 }) {
   const { showError, showWarning, confirm } = useUiFeedback();
+  const { user } = useAuth();
   const { data: tasks = [] } = useActiveTasksQuery(employee, Boolean(employee));
   const [pendingTaskId, setPendingTaskId] = useState(null);
   const pendingTaskIdRef = useRef(null);
-  const [blockedBottomSort, setBlockedBottomSort] = useState(true);
+  const [blockedBottomSort, setBlockedBottomSort] = useUserPreference(
+    user,
+    'activeTasks.blockedBottomSort',
+    true
+  );
   const [sortAnchorEl, setSortAnchorEl] = useState(null);
   const sortMenuOpen = Boolean(sortAnchorEl);
 

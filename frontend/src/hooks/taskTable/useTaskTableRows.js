@@ -2,14 +2,17 @@ import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import useTaskTableQuery from '../queries/useTaskTableQuery';
 import { queryKeys } from '../../lib/queryKeys';
+import useAuth from '../useAuth';
+import useUserPreference from '../useUserPreference';
 
 export default function useTaskTableRows(api, { selectedEmployeeForHighlight, onCalendarRefresh }) {
   const queryClient = useQueryClient();
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(50);
+  const { user } = useAuth();
+  const [page, setPage] = useUserPreference(user, 'taskTable.page', 0);
+  const [rowsPerPage, setRowsPerPage] = useUserPreference(user, 'taskTable.rowsPerPage', 50);
   const [editingId, setEditingId] = useState(null);
   const [newRow, setNewRow] = useState(null);
-  const [highlightMyTasks, setHighlightMyTasks] = useState(false);
+  const [highlightMyTasks, setHighlightMyTasks] = useUserPreference(user, 'taskTable.highlightMyTasks', false);
 
   const employeeFilter = selectedEmployeeForHighlight || '';
 
@@ -55,7 +58,10 @@ export default function useTaskTableRows(api, { selectedEmployeeForHighlight, on
     [queryClient]
   );
 
-  const toggleHighlight = () => setHighlightMyTasks((prev) => !prev);
+  const toggleHighlight = useCallback(
+    () => setHighlightMyTasks((prev) => !prev),
+    [setHighlightMyTasks]
+  );
   const handleChangePage = (_event, newPage) => setPage(newPage);
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));

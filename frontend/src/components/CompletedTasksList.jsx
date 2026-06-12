@@ -41,6 +41,8 @@ import { sectionTitleRowSx } from '../theme/surfaces';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import EmptyState from './ui/EmptyState';
 import TaskTitleTwoLines from './TaskTitleTwoLines';
+import useAuth from '../hooks/useAuth';
+import useUserPreference from '../hooks/useUserPreference';
 
 const STATS_PERIOD_OPTIONS = [
   { value: 'week', label: 'За неделю' },
@@ -50,9 +52,10 @@ const STATS_PERIOD_OPTIONS = [
 
 export default function CompletedTasksList({ employee }) {
   const { showError } = useUiFeedback();
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
-  const [statsPeriod, setStatsPeriod] = useState('week');
+  const { user } = useAuth();
+  const [page, setPage] = useUserPreference(user, 'completedTasks.page', 0);
+  const [rowsPerPage, setRowsPerPage] = useUserPreference(user, 'completedTasks.rowsPerPage', 25);
+  const [statsPeriod, setStatsPeriod] = useUserPreference(user, 'completedTasks.statsPeriod', 'week');
   const [periodAnchorEl, setPeriodAnchorEl] = useState(null);
 
   const { data, isError } = useCompletedTasksQuery(employee, page, rowsPerPage, statsPeriod);

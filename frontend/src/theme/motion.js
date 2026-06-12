@@ -1,5 +1,3 @@
-import { alpha } from '@mui/material/styles';
-
 /**
  * Единая точка для анимаций MUI: theme.transitions + готовые sx.
  */
@@ -23,25 +21,7 @@ export function growTimeout(theme) {
   return theme.transitions.duration.enteringScreen;
 }
 
-/** Resolved panel hover for `createTheme` component variants. */
-export function panelHoverThemeStyles(theme) {
-  return {
-    transition: createMuiTransition(theme, ['box-shadow', 'transform', 'border-color']),
-    '@media (prefers-reduced-motion: reduce)': {
-      transition: createMuiTransition(theme, ['box-shadow', 'border-color'])
-    },
-    '&:hover': {
-      boxShadow: `0 8px 28px ${alpha(theme.palette.primary.main, 0.12)}`,
-      borderColor: alpha(theme.palette.primary.main, 0.28),
-      transform: 'translateY(-2px)',
-      '@media (prefers-reduced-motion: reduce)': {
-        transform: 'none'
-      }
-    }
-  };
-}
-
-/** Section `Paper` (padding + hover); used by `MuiPaper` variant `section`. */
+/** Section `Paper`; used by `MuiPaper` variant `section`. */
 export function sectionPaperThemeStyles(theme) {
   return {
     padding: theme.spacing(2),
@@ -49,8 +29,7 @@ export function sectionPaperThemeStyles(theme) {
       padding: theme.spacing(3)
     },
     borderRadius: theme.spacing(2.5),
-    backgroundColor: theme.palette.background.paper,
-    ...panelHoverThemeStyles(theme)
+    backgroundColor: theme.palette.background.paper
   };
 }
 
