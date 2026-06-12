@@ -17,6 +17,11 @@ if (args.Length > 0 && args[0].Equals("apply-migrations", StringComparison.Ordin
     Environment.Exit(await SchemaMigrationCli.RunAsync(args));
 }
 
+if (args.Length > 0 && args[0].Equals("generate-app-offline", StringComparison.OrdinalIgnoreCase))
+{
+    Environment.Exit(AppOfflineCli.Run(args));
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 if (builder.Environment.IsProduction())

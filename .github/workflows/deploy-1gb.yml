@@ -205,7 +205,7 @@ jobs:
           FTP_SERVER: ${{ steps.ftp.outputs.server }}
           FTP_DIR: ${{ steps.ftp.outputs.server_dir }}
         run: |
-          echo '<!DOCTYPE html><html><body><p>Обновление приложения…</p></body></html>' > app_offline.htm
+          dotnet run --project ProductionPlanner.csproj -c Release --no-launch-profile -- generate-app-offline --wwwroot ./publish/wwwroot --output app_offline.htm
           lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }}; cd '${{ steps.ftp.outputs.server_dir }}'; put app_offline.htm; bye"
           echo "Ждём остановку пула IIS (30 с)…"
           sleep 30

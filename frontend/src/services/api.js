@@ -267,6 +267,17 @@ export async function endLunch(employee) {
   await throwIfNotOk(res, 'Не удалось завершить обед');
 }
 
+export async function prepareDeploy() {
+  const res = await fetch(`${API_BASE}/deploy/prepare`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  await throwIfNotOk(res, 'Не удалось включить режим обновления');
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
 // Эндпоинты dev-панели (роль Admin). Мок-время и интервалы — на проде тоже.
 async function debugFetch(url, init = {}) {
   const res = await fetch(`${API_BASE}/debug${url}`, {

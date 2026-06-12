@@ -21,7 +21,7 @@ import {
 } from '@mui/material';
 import {
   Today,
-  RestartAlt,
+  SystemUpdateAlt,
   TableChart,
   CalendarMonth,
   Article,
@@ -41,6 +41,7 @@ import CompletedTasksList from './components/CompletedTasksList';
 import AdminLogsPage from './components/AdminLogsPage';
 import TaskTable from './components/TaskTable';
 import LunchBreakOverlay from './components/LunchBreakOverlay';
+import DeployMaintenanceOverlay from './components/DeployMaintenanceOverlay';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { UiFeedbackProvider, useUiFeedback } from './context/UiFeedbackContext';
@@ -49,7 +50,7 @@ import { queryClient } from './lib/queryClient';
 import useActiveTasksRefresh from './hooks/useActiveTasksRefresh';
 import useAuth from './hooks/useAuth';
 import useNotificationsHub from './hooks/useNotificationsHub';
-import { endLunch, getCurrentLunch, startLunch } from './services/api';
+import { endLunch, getCurrentLunch, prepareDeploy, startLunch } from './services/api';
 import { avatarDisplayUrl } from './utils/avatarUrl';
 import { pageShellSx } from './theme/surfaces';
 import { MotionSwitch } from './components/ui/MotionSection';
@@ -61,11 +62,12 @@ import './App.css';
 
 function AuthenticatedAppContent() {
   const { user, setUser, employee, setEmployee, handleLogout } = useAuth();
-  const { showSuccess, showError, showWarning, showInfo, confirm, promptInput } = useUiFeedback();
+  const { showSuccess, showError, showWarning, confirm } = useUiFeedback();
   const [activeTab, setActiveTab] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [lunchPending, setLunchPending] = useState(false);
   const [currentLunch, setCurrentLunch] = useState(null);
+  const [deployMaintenanceActive, setDeployMaintenanceActive] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [avatarKey, setAvatarKey] = useState(Date.now());
   const fileInputRef = useRef(null);
@@ -269,47 +271,42 @@ function AuthenticatedAppContent() {
     }
   };
 
-  const handleReset = async () => {
+  const handleEnterDeploy = async () => {
     const confirmed = await confirm({
-      title: 'Сброс базы данных',
-      message: 'Очистить всю базу данных? Это действие необратимо.',
-      confirmLabel: 'Очистить',
-      confirmColor: 'error',
+      title: 'Уйти в деплой',
+      message: 'Приложение остановится для обновления. Все пользователи увидят экран «Приложение обновляется». После деплоя сайт запустится автоматически.',
+      confirmLabel: 'Уйти в деплой',
+      confirmColor: 'warning',
     });
     if (!confirmed) return;
 
-    const password = await promptInput({
-      title: 'Пароль сброса базы данных',
-      message: 'Введите пароль администратора для необратимого сброса базы.',
-      inputLabel: 'Пароль',
-      inputType: 'password',
-      inputRequired: true,
-      confirmLabel: 'Сбросить базу',
-      confirmColor: 'error',
-    });
-    if (!password) return;
-
-    const resetPassword = password.trim();
+    setDeployMaintenanceActive(true);
     try {
-      const response = await fetch('/api/debug/reset-db', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Reset-Db-Password': resetPassword,
-        },
-        body: JSON.stringify({ password: resetPassword }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || `HTTP ${response.status}`);
-      }
-      refreshAll();
-      showSuccess('База данных очищена');
+      await prepareDeploy();
     } catch (err) {
-      showError(err.message || 'Не удалось сбросить базу данных');
+      setDeployMaintenanceActive(false);
+      showError(err.message || 'Не удалось включить режим обновления');
     }
   };
+
+  useEffect(() => {
+    if (!deployMaintenanceActive) return undefined;
+
+    const pollForRestart = () => {
+      fetch('/', { cache: 'no-store', credentials: 'same-origin' })
+        .then((response) => response.text())
+        .then((html) => {
+          if (html.includes('id="root"')) {
+            window.location.reload();
+          }
+        })
+        .catch(() => {});
+    };
+
+    const timer = window.setInterval(pollForRestart, 5000);
+    pollForRestart();
+    return () => window.clearInterval(timer);
+  }, [deployMaintenanceActive]);
 
   const handleTabChange = (_event, newValue) => setActiveTab(newValue);
   const isAdmin = user?.role === 'Admin';
@@ -347,7 +344,16 @@ function AuthenticatedAppContent() {
                 )}
                 {isAdmin && <Divider orientation="vertical" flexItem sx={{ height: 30 }} />}
                 {isAdmin && (
-                  <Button variant="outlined" startIcon={<RestartAlt />} onClick={handleReset} color="error" size="medium">Сброс БД</Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<SystemUpdateAlt />}
+                    onClick={handleEnterDeploy}
+                    color="warning"
+                    size="medium"
+                    disabled={deployMaintenanceActive}
+                  >
+                    Уйти в деплой
+                  </Button>
                 )}
                 <IconButton onClick={handleOpenUserMenu} aria-label="Меню пользователя" sx={{ p: 0 }}>
                   <Avatar
@@ -466,7 +472,9 @@ function AuthenticatedAppContent() {
         onChange={handleAvatarUpload}
       />
 
-      {isOnLunchBreak && (
+      {deployMaintenanceActive && <DeployMaintenanceOverlay />}
+
+      {isOnLunchBreak && !deployMaintenanceActive && (
         <LunchBreakOverlay
           user={user}
           avatarUrl={avatarUrl}
