@@ -33,12 +33,40 @@ import {
   TASK_EXECUTION_PARALLEL,
   TASK_EXECUTION_SEQUENTIAL
 } from '../constants/taskStatuses';
+import useAuth from '../hooks/useAuth';
+import useUserPreference from '../hooks/useUserPreference';
+import { getAssignmentLoad } from '../services/api';
+import { applyAutoAssignToParts, partTotalHours } from '../utils/autoAssignSplitParts';
 
-function partTotalHours(part) {
-  if (part.throughTest) {
-    return (parseFloat(part.testHours) || 0) + (parseFloat(part.productionHours) || 0);
+function buildInitialParts({ initialParts, isDraft, employees }) {
+  const defaultPart = {
+    employeeName: employees[0],
+    taskTypes: [],
+    hours: 0,
+    throughTest: false,
+    testHours: 0,
+    productionHours: 0,
+  };
+
+  if (initialParts?.length) {
+    return initialParts.map((p) => ({
+      childTaskId: p.childTaskId,
+      employeeName: p.employeeName,
+      taskTypes: p.taskTypes?.length ? p.taskTypes : [],
+      hours: p.hours ?? 0,
+      statusText: p.statusText || '',
+      started: p.started ?? false,
+      throughTest: p.throughTest ?? false,
+      testHours: p.testHours ?? 0,
+      productionHours: p.productionHours ?? 0,
+    }));
   }
-  return parseFloat(part.hours) || 0;
+
+  if (isDraft) {
+    return [{ ...defaultPart, hours: 0 }];
+  }
+
+  return [defaultPart];
 }
 
 export default function SplitTaskModal({
@@ -53,10 +81,18 @@ export default function SplitTaskModal({
   onSuccess,
   onDraftApply
 }) {
+  const { user } = useAuth();
+  const [autoAssignEnabled, setAutoAssignEnabled] = useUserPreference(
+    user,
+    'splitModal.autoAssign',
+    true
+  );
   const [parts, setParts] = useState([]);
   const [executionMode, setExecutionMode] = useState(TASK_EXECUTION_PARALLEL);
   const [error, setError] = useState('');
   const [removeWarning, setRemoveWarning] = useState('');
+  const [autoAssignWarning, setAutoAssignWarning] = useState('');
+  const [loadSummary, setLoadSummary] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
@@ -66,43 +102,52 @@ export default function SplitTaskModal({
   const isSequential = executionMode === TASK_EXECUTION_SEQUENTIAL;
   const showExecutionModePicker = isDraft || (isEdit && parts.length >= 2);
   const hasThroughTestPart = parts.some((p) => p.throughTest);
+  const canAutoAssign = employees.length >= 2;
+
+  const applyAutoAssign = async (currentParts) => {
+    if (!autoAssignEnabled || !canAutoAssign) return currentParts;
+
+    const { taskCounts } = await getAssignmentLoad(employees);
+    setLoadSummary(taskCounts);
+    return applyAutoAssignToParts(currentParts, {
+      employees,
+      baseTaskCounts: taskCounts,
+      isEdit
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
 
     setExecutionMode(taskExecutionMode || TASK_EXECUTION_PARALLEL);
 
-    const defaultPart = {
-      employeeName: employees[0],
-      taskTypes: [],
-      hours: 0,
-      throughTest: false,
-      testHours: 0,
-      productionHours: 0,
-    };
-
-    if (initialParts?.length) {
-      setParts(initialParts.map(p => ({
-        childTaskId: p.childTaskId,
-        employeeName: p.employeeName,
-        taskTypes: p.taskTypes?.length ? p.taskTypes : [],
-        hours: p.hours ?? 0,
-        statusText: p.statusText || '',
-        started: p.started ?? false,
-        throughTest: p.throughTest ?? false,
-        testHours: p.testHours ?? 0,
-        productionHours: p.productionHours ?? 0,
-      })));
-    } else if (isDraft) {
-      setParts([{ ...defaultPart, hours: 0 }]);
-    } else {
-      setParts([defaultPart]);
-    }
+    const nextParts = buildInitialParts({ initialParts, isDraft, employees });
+    setParts(nextParts);
     setError('');
     setRemoveWarning('');
+    setAutoAssignWarning('');
+    setLoadSummary(null);
     setSubmitting(false);
     submittingRef.current = false;
-  }, [open, task, initialParts, mode, employees, taskTypes, isDraft, taskExecutionMode]);
+
+    if (!autoAssignEnabled || !canAutoAssign) return undefined;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const assigned = await applyAutoAssign(nextParts);
+        if (!cancelled) setParts(assigned);
+      } catch {
+        if (!cancelled) {
+          setAutoAssignWarning('Не удалось загрузить загрузку сотрудников для авто-выбора');
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, task, initialParts, mode, employees, taskTypes, isDraft, taskExecutionMode, autoAssignEnabled, canAutoAssign, isEdit]);
 
   const revalidateHours = (newParts) => {
     const sum = newParts.reduce((acc, p) => acc + partTotalHours(p), 0);
@@ -130,8 +175,42 @@ export default function SplitTaskModal({
 
   const addPart = () => {
     const next = [...parts, createBlankPart()];
-    setParts(next);
-    revalidateHours(next);
+    if (!autoAssignEnabled || !canAutoAssign) {
+      setParts(next);
+      revalidateHours(next);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const assigned = await applyAutoAssign(next);
+        setParts(assigned);
+        revalidateHours(assigned);
+        setAutoAssignWarning('');
+      } catch {
+        setParts(next);
+        revalidateHours(next);
+        setAutoAssignWarning('Не удалось обновить авто-выбор');
+      }
+    })();
+  };
+
+  const handleAutoAssignChange = async (event) => {
+    const checked = event.target.checked;
+    setAutoAssignEnabled(checked);
+    if (!checked) {
+      setAutoAssignWarning('');
+      return;
+    }
+    if (!canAutoAssign) return;
+
+    try {
+      const assigned = await applyAutoAssign(parts);
+      setParts(assigned);
+      setAutoAssignWarning('');
+    } catch {
+      setAutoAssignWarning('Не удалось загрузить загрузку сотрудников для авто-выбора');
+    }
   };
 
   const removePart = (index) => {
@@ -304,10 +383,34 @@ export default function SplitTaskModal({
             {removeWarning}
           </Alert>
         )}
+        {autoAssignWarning && (
+          <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setAutoAssignWarning('')}>
+            {autoAssignWarning}
+          </Alert>
+        )}
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
+        )}
+
+        {canAutoAssign && (
+          <Box sx={{ mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={autoAssignEnabled}
+                  onChange={handleAutoAssignChange}
+                />
+              }
+              label="Авто-выбор сотрудников"
+            />
+            {autoAssignEnabled && loadSummary && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                Активные задачи: {employees.map((emp) => `${emp}: ${loadSummary[emp] ?? 0}`).join(' · ')}
+              </Typography>
+            )}
+          </Box>
         )}
 
         {showExecutionModePicker && (

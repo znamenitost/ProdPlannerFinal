@@ -26,6 +26,7 @@ public static class WebApplicationExtensions
         services.AddScoped<INotificationInboxService, NotificationInboxService>();
         services.AddScoped<ITaskTableService, TaskTableService>();
         services.AddScoped<ITaskListQueryService, TaskListQueryService>();
+        services.AddScoped<IEmployeeAssignmentLoadService, EmployeeAssignmentLoadService>();
         services.AddScoped<IWeekCalendarService, WeekCalendarService>();
         services.AddScoped<IUserProvisioningService, UserProvisioningService>();
         services.AddMemoryCache();

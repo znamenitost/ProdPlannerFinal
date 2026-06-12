@@ -73,6 +73,13 @@ jobs:
           sed -i "s|</head>|  <!-- deploy-sha:${{ github.sha }} bundle:$JS --></head>|" publish/wwwroot/index.html
           # logs/ и App_Data/ не включаем в FTP — на сервере 550 при перезаписи занятых папок
 
+      - name: Build Windows file opener agent
+        run: |
+          chmod +x scripts/build-file-opener.sh
+          scripts/build-file-opener.sh
+          mkdir -p publish/wwwroot/downloads
+          cp tools/ProductionPlanner.FileOpener/releases/ProductionPlanner-FileOpener-win-x64.zip publish/wwwroot/downloads/
+
       - name: Configure PostgreSQL connection for production
         env:
           POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}

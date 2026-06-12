@@ -160,7 +160,7 @@ export default function useTaskTableApi() {
     if (!relativePath || relativePath === '/') {
       throw new Error('Путь к файлу не указан');
     }
-    const result = openFileOnClient(relativePath);
+    const result = await openFileOnClient(relativePath);
     if (!result.ok) {
       throw new Error('Не удалось открыть файл');
     }

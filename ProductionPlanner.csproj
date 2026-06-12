@@ -15,6 +15,9 @@
     <Compile Remove="ProductionPlanner.Tests/**" />
     <Content Remove="ProductionPlanner.Tests/**" />
     <None Remove="ProductionPlanner.Tests/**" />
+    <Compile Remove="tools/**" />
+    <Content Remove="tools/**" />
+    <None Remove="tools/**" />
   </ItemGroup>
 
   <ItemGroup>

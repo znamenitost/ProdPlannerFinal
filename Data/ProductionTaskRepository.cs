@@ -25,9 +25,19 @@ namespace ProductionPlanner.Data
             string employeeName,
             CancellationToken cancellationToken = default)
         {
+            return await GetActiveTasksForEmployeesAsync([employeeName], cancellationToken);
+        }
+
+        public async Task<List<ProductionTask>> GetActiveTasksForEmployeesAsync(
+            IReadOnlyList<string> employeeNames,
+            CancellationToken cancellationToken = default)
+        {
+            if (employeeNames.Count == 0)
+                return [];
+
             return await _context.ProductionTasks
                 .AsNoTracking()
-                .Where(t => t.EmployeeName == employeeName
+                .Where(t => employeeNames.Contains(t.EmployeeName)
                             && !t.HiddenFromTaskTable
                             && t.Status != JobStatus.Completed
                             && !(t.IsSplitTask && t.ParentRowNumber == null))

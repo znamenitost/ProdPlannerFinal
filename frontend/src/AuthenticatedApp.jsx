@@ -32,6 +32,7 @@ import {
   Delete,
   Restaurant,
   TaskAlt,
+  Download,
 } from '@mui/icons-material';
 import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
@@ -53,6 +54,7 @@ import useUserPreference from './hooks/useUserPreference';
 import useNotificationsHub from './hooks/useNotificationsHub';
 import { endLunch, getCurrentLunch, prepareDeploy, startLunch } from './services/api';
 import { avatarDisplayUrl } from './utils/avatarUrl';
+import { detectClientPlatform } from './utils/filePathForOpen';
 import { pageShellSx } from './theme/surfaces';
 import { MotionSwitch } from './components/ui/MotionSection';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -170,6 +172,11 @@ function AuthenticatedAppContent() {
     requestAnimationFrame(() => {
       fileInputRef.current?.click();
     });
+  };
+
+  const handleDownloadFileOpener = () => {
+    handleCloseUserMenu();
+    window.location.href = '/api/files/download/windows-agent';
   };
 
   const handleAvatarUpload = async (event) => {
@@ -311,6 +318,7 @@ function AuthenticatedAppContent() {
 
   const handleTabChange = (_event, newValue) => setActiveTab(newValue);
   const isAdmin = user?.role === 'Admin';
+  const isWindowsClient = detectClientPlatform() === 'Win32';
   const isOnLunchBreak = Boolean(currentLunch);
   const avatarUrl = user?.avatarUrl && user?.id
     ? avatarDisplayUrl(user.id, { size: 128, cacheBust: avatarKey })
@@ -447,7 +455,16 @@ function AuthenticatedAppContent() {
             <ListItemText>Обед</ListItemText>
           </MenuItem>
         )}
-        <Divider />
+        {isWindowsClient && (
+          <MenuItem onClick={handleDownloadFileOpener}>
+            <ListItemIcon><Download fontSize="small" color="primary" /></ListItemIcon>
+            <ListItemText
+              primary="Скачать агент"
+              secondary="Открытие файлов без netopen"
+            />
+          </MenuItem>
+        )}
+        {isWindowsClient && <Divider />}
         <MenuItem onClick={handleFileSelect} disabled={uploadingAvatar}>
           <ListItemIcon><CloudUpload fontSize="small" /></ListItemIcon>
           <ListItemText>Загрузить фото</ListItemText>

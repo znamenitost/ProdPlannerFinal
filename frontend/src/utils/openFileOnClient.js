@@ -1,4 +1,5 @@
 import { detectClientPlatform } from './filePathForOpen';
+import { openFileViaAgent } from './fileOpenerAgent';
 
 function buildLaunchUrl(relativePath) {
   const params = new URLSearchParams({
@@ -29,13 +30,24 @@ function triggerLaunchViaWindow(launchUrl) {
   return true;
 }
 
-export function openFileOnClient(relativePath) {
+export async function openFileOnClient(relativePath) {
   if (!relativePath || relativePath === '/') {
     return { ok: false, reason: 'no-path' };
   }
 
-  const launchUrl = buildLaunchUrl(relativePath);
   const platform = detectClientPlatform();
+  if (platform === 'Win32') {
+    try {
+      const openedViaAgent = await openFileViaAgent(relativePath);
+      if (openedViaAgent) {
+        return { ok: true, method: 'agent' };
+      }
+    } catch {
+      // fallback to netopen below
+    }
+  }
+
+  const launchUrl = buildLaunchUrl(relativePath);
   const ok = platform === 'mac'
     ? triggerLaunchViaWindow(launchUrl)
     : triggerLaunchOnWindows(launchUrl);

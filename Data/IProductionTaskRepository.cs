@@ -5,6 +5,9 @@ namespace ProductionPlanner.Data
     public interface IProductionTaskRepository
     {
         Task<List<ProductionTask>> GetActiveTasksAsync(string employeeName, CancellationToken cancellationToken = default);
+        Task<List<ProductionTask>> GetActiveTasksForEmployeesAsync(
+            IReadOnlyList<string> employeeNames,
+            CancellationToken cancellationToken = default);
         Task<CompletedTasksAggregateStats> GetCompletedTasksStatsAsync(
             string employeeName,
             DateTime? completedFrom = null,

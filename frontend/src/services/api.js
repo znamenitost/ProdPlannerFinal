@@ -15,6 +15,21 @@ async function throwIfNotOk(res, fallbackMessage) {
   throw new Error(message);
 }
 
+// Число активных незаблокированных задач по сотрудникам (авто-выбор в модалке назначений)
+export async function getAssignmentLoad(employees, options = {}) {
+  const list = Array.isArray(employees) ? employees.join(',') : employees;
+  const res = await fetch(
+    `${API_BASE}/tasks/assignment-load?employees=${encodeURIComponent(list)}`,
+    {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      signal: options.signal
+    }
+  );
+  await throwIfNotOk(res, 'Ошибка загрузки загрузки сотрудников');
+  return res.json();
+}
+
 // Получить активные задачи сотрудника
 export async function getActiveTasks(employee, options = {}) {
   const res = await fetch(`${API_BASE}/tasks/active?employee=${encodeURIComponent(employee)}`, {

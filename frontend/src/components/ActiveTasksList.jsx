@@ -138,7 +138,7 @@ export default function ActiveTasksList({
     }
   }, [confirm, employee, onUpdate, setPendingTask, showError]);
 
-  const openFile = useCallback((filePath) => {
+  const openFile = useCallback(async (filePath) => {
     if (!filePath) {
       showWarning('Путь к файлу не указан');
       return;
@@ -146,7 +146,7 @@ export default function ActiveTasksList({
     const parts = String(filePath).replace(/\\/g, '/').split('/');
     const fileName = parts.pop() || '';
     const folderPath = parts.join('/');
-    const result = openFileOnClient(normalizePathForOpen(folderPath, fileName));
+    const result = await openFileOnClient(normalizePathForOpen(folderPath, fileName));
     if (!result.ok) showError('Не удалось открыть файл');
   }, [showError, showWarning]);
 

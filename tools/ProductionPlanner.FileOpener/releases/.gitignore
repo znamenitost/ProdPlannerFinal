@@ -1,0 +1,2 @@
+# Собранный ZIP не коммитится — создаётся scripts/build-file-opener.sh или CI.
+*.zip

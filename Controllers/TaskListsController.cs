@@ -13,15 +13,18 @@ namespace ProductionPlanner.Controllers;
 public class TaskListsController : ControllerBase
 {
     private readonly ITaskListQueryService _taskLists;
+    private readonly IEmployeeAssignmentLoadService _assignmentLoad;
     private readonly IAppTimeService _timeService;
     private readonly UserManager<User> _userManager;
 
     public TaskListsController(
         ITaskListQueryService taskLists,
+        IEmployeeAssignmentLoadService assignmentLoad,
         IAppTimeService timeService,
         UserManager<User> userManager)
     {
         _taskLists = taskLists;
+        _assignmentLoad = assignmentLoad;
         _timeService = timeService;
         _userManager = userManager;
     }
@@ -85,6 +88,31 @@ public class TaskListsController : ControllerBase
 
         var risks = await _taskLists.GetDeadlineRisksAsync(employee, _timeService.Now, cancellationToken);
         return Ok(risks);
+    }
+
+    /// <summary>
+    /// Число активных незаблокированных задач по сотрудникам (для авто-выбора в модалке назначений).
+    /// </summary>
+    [HttpGet("assignment-load")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAssignmentLoad(
+        [FromQuery] string employees,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(employees))
+            return BadRequest(new { error = "employees query is required" });
+
+        var names = employees
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (names.Count == 0)
+            return BadRequest(new { error = "employees query is required" });
+
+        var counts = await _assignmentLoad.GetActiveTaskCountsAsync(names, cancellationToken);
+        return Ok(new { taskCounts = counts });
     }
 
     [HttpGet("queue-overloads")]

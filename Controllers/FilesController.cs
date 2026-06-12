@@ -11,11 +11,47 @@ namespace ProductionPlanner.Controllers
     [Authorize]
     public class FilesController : ControllerBase
     {
-        private readonly IConfiguration _configuration;
+        private const string WindowsAgentZipName = "ProductionPlanner-FileOpener-win-x64.zip";
 
-        public FilesController(IConfiguration configuration)
+        private readonly IConfiguration _configuration;
+        private readonly IWebHostEnvironment _environment;
+
+        public FilesController(IConfiguration configuration, IWebHostEnvironment environment)
         {
             _configuration = configuration;
+            _environment = environment;
+        }
+
+        [HttpGet("download/windows-agent")]
+        public IActionResult DownloadWindowsAgent()
+        {
+            var zipPath = ResolveWindowsAgentZipPath();
+            if (zipPath == null || !System.IO.File.Exists(zipPath))
+            {
+                return NotFound(new
+                {
+                    message = "Агент для Windows пока не собран на сервере. Обратитесь к администратору."
+                });
+            }
+
+            return PhysicalFile(zipPath, "application/zip", WindowsAgentZipName);
+        }
+
+        [HttpGet("agent-info")]
+        public IActionResult GetAgentInfo()
+        {
+            var shareName = _configuration["FileOpen:ShareName"] ?? "Клиенты";
+            var windowsHost = FilePathNormalizer.GetWindowsServerHost(_configuration["FileOpen:WindowsHost"]);
+            var port = _configuration.GetValue("FileOpen:MacOpenerPort", 17888);
+
+            return Ok(new
+            {
+                port,
+                windowsHost,
+                shareName,
+                agentBaseUrl = $"http://127.0.0.1:{port}",
+                downloadUrl = "/api/files/download/windows-agent"
+            });
         }
 
         [HttpGet("launch")]
@@ -43,15 +79,32 @@ namespace ProductionPlanner.Controllers
                 return BadRequest(new { message = error });
 
             var shareName = _configuration["FileOpen:ShareName"] ?? "Клиенты";
+            var windowsHost = FilePathNormalizer.GetWindowsServerHost(_configuration["FileOpen:WindowsHost"]);
+            var windowsShareName = _configuration["FileOpen:WindowsShareName"] ?? shareName;
             var correctedPath = FilePathNormalizer.NormalizeRelativePath(request.FilePath, shareName);
+            var uncPath = FilePathNormalizer.BuildWindowsUncPath(windowsHost, windowsShareName, correctedPath);
+            var port = _configuration.GetValue("FileOpen:MacOpenerPort", 17888);
 
             return Ok(new
             {
                 message = "Ссылка на файл сформирована",
                 openUrl,
                 relativePath = correctedPath,
+                uncPath,
+                agentOpenUrl = $"http://127.0.0.1:{port}/open?path={Uri.EscapeDataString(uncPath)}",
                 launchUrl = $"/api/files/launch?path={Uri.EscapeDataString(request.FilePath)}&clientPlatform={Uri.EscapeDataString(request.ClientPlatform ?? "")}"
             });
+        }
+
+        private string? ResolveWindowsAgentZipPath()
+        {
+            var candidates = new[]
+            {
+                Path.Combine(_environment.WebRootPath ?? "", "downloads", WindowsAgentZipName),
+                Path.Combine(_environment.ContentRootPath, "tools", "ProductionPlanner.FileOpener", "releases", WindowsAgentZipName)
+            };
+
+            return candidates.FirstOrDefault(System.IO.File.Exists);
         }
 
         private bool TryBuildOpenUrl(string filePath, string? clientPlatform, out string openUrl, out string error)
