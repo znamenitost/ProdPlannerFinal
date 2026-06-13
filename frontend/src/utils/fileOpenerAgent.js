@@ -3,8 +3,8 @@ import { detectClientPlatform } from './filePathForOpen';
 export const FILE_OPENER_PORT = 17888;
 export const FILE_OPENER_BASE = `http://127.0.0.1:${FILE_OPENER_PORT}`;
 
-/** Временный путь для dev-теста на Windows VM. */
-export const DEV_TEST_CDR_PATH = 'C:\\0.cdr';
+/** Временный путь для dev-теста на Windows VM. String.raw — иначе \0 в исходнике даёт NUL-символ. */
+export const DEV_TEST_CDR_PATH = String.raw`C:\0.cdr`;
 
 const DEFAULT_WINDOWS_HOST = 'MINIMARKER';
 const DEFAULT_SHARE = 'Клиенты';
@@ -28,6 +28,23 @@ export async function isFileOpenerAgentRunning(timeoutMs = 800) {
     });
     window.clearTimeout(timer);
     return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Есть ли в агенте эндпоинт /open-dev (без path вернёт 400, не 404). */
+export async function isFileOpenerDevOpenSupported(timeoutMs = 800) {
+  if (detectClientPlatform() !== 'Win32') return false;
+  try {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    const response = await fetch(`${FILE_OPENER_BASE}/open-dev`, {
+      signal: controller.signal
+    });
+    window.clearTimeout(timer);
+    const text = await response.text();
+    return response.status === 400 && text === 'missing path';
   } catch {
     return false;
   }

@@ -3,11 +3,18 @@ import { Alert, Box, Button, Paper, Typography } from '@mui/material';
 import { Image, OpenInNew } from '@mui/icons-material';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import { extractCdrPreview } from '../utils/cdrPreview';
-import { DEV_TEST_CDR_PATH, isFileOpenerAgentRunning, openDevFileViaAgent } from '../utils/fileOpenerAgent';
+import {
+  DEV_TEST_CDR_PATH,
+  FILE_OPENER_BASE,
+  isFileOpenerAgentRunning,
+  isFileOpenerDevOpenSupported,
+  openDevFileViaAgent
+} from '../utils/fileOpenerAgent';
 
 export default function DevCdrTestPanel() {
   const { showSuccess, showError } = useUiFeedback();
   const [agentOk, setAgentOk] = useState(null);
+  const [devOpenOk, setDevOpenOk] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewInfo, setPreviewInfo] = useState('');
   const [opening, setOpening] = useState(false);
@@ -15,7 +22,14 @@ export default function DevCdrTestPanel() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    isFileOpenerAgentRunning().then(setAgentOk);
+    isFileOpenerAgentRunning().then((ok) => {
+      setAgentOk(ok);
+      if (ok) {
+        isFileOpenerDevOpenSupported().then(setDevOpenOk);
+      } else {
+        setDevOpenOk(false);
+      }
+    });
   }, []);
 
   useEffect(() => () => {
@@ -32,7 +46,13 @@ export default function DevCdrTestPanel() {
         showSuccess(`Открыт ${DEV_TEST_CDR_PATH}`);
         return;
       }
-      showError(result.text || `Ошибка ${result.status}`);
+      if (result.text === 'not found') {
+        showError(
+          `Агент старый: нет /open-dev. Скачайте новый ZIP из меню приложения и запустите install.bat. Путь: ${DEV_TEST_CDR_PATH}`
+        );
+        return;
+      }
+      showError(`${result.text || `Ошибка ${result.status}`} (путь: ${DEV_TEST_CDR_PATH})`);
     } catch {
       showError('Агент не отвечает. Запустите install.bat и проверьте health.');
     } finally {
@@ -85,7 +105,7 @@ export default function DevCdrTestPanel() {
       }}
     >
       <Typography variant="subtitle2" color="warning.main" gutterBottom>
-        DEV: тест C:\0.cdr (удалить потом)
+        DEV: тест {DEV_TEST_CDR_PATH} (удалить потом)
       </Typography>
 
       {agentOk === false && (
@@ -93,9 +113,14 @@ export default function DevCdrTestPanel() {
           Агент не отвечает на 127.0.0.1:17888 — запустите install.bat и проверьте health.
         </Alert>
       )}
-      {agentOk === true && (
+      {agentOk === true && devOpenOk === true && (
         <Alert severity="success" sx={{ mb: 2 }}>
-          Агент работает (health ok).
+          Агент работает, /open-dev доступен.
+        </Alert>
+      )}
+      {agentOk === true && devOpenOk === false && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Агент запущен, но это старая версия без /open-dev. Скачайте ZIP и переустановите через install.bat.
         </Alert>
       )}
 
@@ -106,7 +131,7 @@ export default function DevCdrTestPanel() {
           onClick={handleOpen}
           disabled={opening}
         >
-          Открыть C:\0.cdr
+          Открыть {DEV_TEST_CDR_PATH}
         </Button>
         <Button
           variant="outlined"
@@ -119,7 +144,8 @@ export default function DevCdrTestPanel() {
       </Box>
 
       <Typography variant="caption" color="text.secondary" display="block">
-        «Открыть» — через агент /open-dev. «Превью» — выберите .cdr в диалоге (например C:\0.cdr).
+        «Открыть» — {FILE_OPENER_BASE}/open-dev?path=… (в URL двоеточие кодируется как %3A — это нормально, путь {DEV_TEST_CDR_PATH}).
+        «Превью» — выберите .cdr в диалоге.
       </Typography>
 
       <input
