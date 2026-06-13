@@ -163,7 +163,7 @@ export default function DevCdrTestPanel() {
           variant="outlined"
           startIcon={<Image />}
           onClick={handleAgentPreview}
-          disabled={previewPending || devReadOk === false}
+          disabled={previewPending}
         >
           Превью через агент
         </Button>
