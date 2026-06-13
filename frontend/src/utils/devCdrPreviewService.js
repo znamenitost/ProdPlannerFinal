@@ -14,16 +14,9 @@ async function previewFromBytes(bytes, taskId, path) {
   }
   const preview = { url: result.url, method: result.method, path };
   if (taskId) {
-    setTaskCdrPreview(taskId, preview);
+    return setTaskCdrPreview(taskId, preview);
   }
   return preview;
-}
-
-/** То же, что «Превью через обзор» в DEV-панели. */
-export async function previewFromCdrFile(file, taskId, path) {
-  if (!file) return null;
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  return previewFromBytes(bytes, taskId, path);
 }
 
 async function tryAgentPreview(taskId, folderPath, fileName) {
@@ -37,7 +30,7 @@ async function tryAgentPreview(taskId, folderPath, fileName) {
   }
 }
 
-/** После сохранения задачи: агент читает .cdr и кладёт превью в кэш. */
+/** При сохранении задачи: агент читает .cdr, превью сохраняется в localStorage. */
 export async function buildTaskCdrPreview(taskId, folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return null;
   const preview = await tryAgentPreview(taskId, folderPath, fileName);
@@ -48,25 +41,25 @@ export async function buildTaskCdrPreview(taskId, folderPath, fileName) {
 }
 
 /**
- * Кэш → (тихо) агент → иначе выбор файла как в обзоре.
- * @returns {{ preview: object|null, needsPick: boolean, path: string|null }}
+ * ПКМ: сохранённое превью → (тихо) пересобрать через агент.
+ * @returns {{ preview: object|null, path: string|null }}
  */
 export async function loadTaskCdrPreview(task) {
   if (!DEV_CDR_PREVIEW_ENABLED || !task?.id) {
-    return { preview: null, needsPick: false, path: null };
+    return { preview: null, path: null };
   }
 
   const path = resolveCdrPreviewPath(task.folderPath, task.fileName);
   const cached = getTaskCdrPreview(task.id) || (path ? getPathCdrPreview(path) : null);
   if (cached) {
-    setTaskCdrPreview(task.id, cached);
-    return { preview: cached, needsPick: false, path: cached.path || path };
+    await setTaskCdrPreview(task.id, cached);
+    return { preview: cached, path: cached.path || path };
   }
 
   const fromAgent = await tryAgentPreview(task.id, task.folderPath, task.fileName);
   if (fromAgent) {
-    return { preview: fromAgent, needsPick: false, path: fromAgent.path || path };
+    return { preview: fromAgent, path: fromAgent.path || path };
   }
 
-  return { preview: null, needsPick: true, path };
+  return { preview: null, path };
 }

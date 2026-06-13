@@ -437,10 +437,8 @@ export default function TaskTable({
               : '')
           }
           previewError={table.cdrPreviewData?.error}
-          needsPick={table.cdrPreviewNeedsPick}
           pending={table.cdrPreviewPending}
           onClose={table.handleCloseCdrPreview}
-          onFilePicked={table.handleCdrFilePicked}
         />
       )}
       <TaskIntervalsDialog
