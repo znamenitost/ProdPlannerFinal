@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "mac-opener": "node scripts/mac-local-opener.mjs",
-    "build-file-opener": "bash scripts/build-file-opener.sh"
+    "build-file-opener": "bash scripts/build-file-opener.sh",
+    "build-cdr-preview-shell": "bash scripts/build-cdr-preview-shell.sh"
   }
 }
