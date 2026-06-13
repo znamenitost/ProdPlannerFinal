@@ -20,7 +20,7 @@ import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
 import CdrPreviewDialog from './CdrPreviewDialog';
 import TaskIntervalsDialog from './taskTable/TaskIntervalsDialog';
-import { DEV_CDR_PREVIEW_ENABLED } from '../utils/devCdrPreviewConfig';
+import { DEV_CDR_PREVIEW_ENABLED, formatDevTaskFilePath } from '../utils/devCdrPreviewConfig';
 import PlanningWarningsBanner from './PlanningWarningsBanner';
 import useTaskTableController from '../hooks/taskTable/useTaskTableController';
 import useTaskTableColumnVisibility from '../hooks/taskTable/useTaskTableColumnVisibility';
@@ -423,16 +423,24 @@ export default function TaskTable({
         <CdrPreviewDialog
           open={table.cdrPreviewOpen}
           taskTitle={
-            table.cdrPreviewTask
-              ? `${table.cdrPreviewTask.folderPath || ''} / ${table.cdrPreviewTask.fileName || ''}`
-              : ''
+            table.cdrPreviewTask?.title
+            || table.cdrPreviewTask?.heading
+            || table.cdrPreviewTask?.fileName
+            || ''
           }
           previewUrl={table.cdrPreviewData?.url}
           previewInfo={table.cdrPreviewData?.method}
-          previewPath={table.cdrPreviewData?.path}
+          previewPath={
+            table.cdrPreviewData?.path
+            || (table.cdrPreviewTask
+              ? formatDevTaskFilePath(table.cdrPreviewTask.folderPath, table.cdrPreviewTask.fileName)
+              : '')
+          }
           previewError={table.cdrPreviewData?.error}
+          needsPick={table.cdrPreviewNeedsPick}
           pending={table.cdrPreviewPending}
           onClose={table.handleCloseCdrPreview}
+          onFilePicked={table.handleCdrFilePicked}
         />
       )}
       <TaskIntervalsDialog

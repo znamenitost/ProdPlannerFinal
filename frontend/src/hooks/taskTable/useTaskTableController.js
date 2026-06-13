@@ -9,8 +9,8 @@ import useTaskTableModals from './useTaskTableModals';
 import usePlanningWarnings from './usePlanningWarnings';
 import { shouldShowHoursTypeColumns } from '../../utils/taskTableColumns';
 import { handleTaskTableHubEvent } from '../../utils/taskTableHubHandler';
-import { DEV_CDR_PREVIEW_ENABLED } from '../../utils/devCdrPreviewConfig';
-import { ensureTaskCdrPreview } from '../../utils/devCdrPreviewService';
+import { DEV_CDR_PREVIEW_ENABLED, formatDevTaskFilePath } from '../../utils/devCdrPreviewConfig';
+import { loadTaskCdrPreview, previewFromCdrFile } from '../../utils/devCdrPreviewService';
 
 export default function useTaskTableController({
   onCalendarRefresh,
@@ -32,6 +32,7 @@ export default function useTaskTableController({
   const [cdrPreviewOpen, setCdrPreviewOpen] = useState(false);
   const [cdrPreviewTask, setCdrPreviewTask] = useState(null);
   const [cdrPreviewData, setCdrPreviewData] = useState(null);
+  const [cdrPreviewNeedsPick, setCdrPreviewNeedsPick] = useState(false);
   const [cdrPreviewPending, setCdrPreviewPending] = useState(false);
 
   const rowsState = useTaskTableRows(api, {
@@ -112,31 +113,60 @@ export default function useTaskTableController({
   const handleShowCdrPreview = useCallback(async (task) => {
     if (!DEV_CDR_PREVIEW_ENABLED) return;
 
+    const path = formatDevTaskFilePath(task.folderPath, task.fileName);
+
     setCdrPreviewTask(task);
     setCdrPreviewOpen(true);
     setCdrPreviewPending(true);
     setCdrPreviewData(null);
+    setCdrPreviewNeedsPick(false);
 
     try {
-      const preview = await ensureTaskCdrPreview(task);
-      setCdrPreviewData(preview);
+      const { preview, needsPick } = await loadTaskCdrPreview(task);
+      if (preview) {
+        setCdrPreviewData({ ...preview, path: preview.path || path });
+      } else if (needsPick) {
+        setCdrPreviewNeedsPick(true);
+        setCdrPreviewData({ path });
+      } else {
+        setCdrPreviewData({ error: 'Превью не найдено', path });
+      }
     } catch (err) {
       setCdrPreviewData({
         error: err?.message || 'Не удалось построить превью .cdr',
-        path: task.folderPath && task.fileName
-          ? `${task.folderPath}/${task.fileName}`
-          : ''
+        path
       });
     } finally {
       setCdrPreviewPending(false);
     }
-  }, [showError]);
+  }, []);
+
+  const handleCdrFilePicked = useCallback(async (file) => {
+    if (!cdrPreviewTask) return;
+
+    const path = formatDevTaskFilePath(cdrPreviewTask.folderPath, cdrPreviewTask.fileName);
+    setCdrPreviewPending(true);
+    setCdrPreviewNeedsPick(false);
+
+    try {
+      const preview = await previewFromCdrFile(file, cdrPreviewTask.id, path);
+      setCdrPreviewData({ ...preview, path });
+    } catch (err) {
+      setCdrPreviewData({
+        error: err?.message || 'Не удалось построить превью .cdr',
+        path
+      });
+    } finally {
+      setCdrPreviewPending(false);
+    }
+  }, [cdrPreviewTask]);
 
   const handleCloseCdrPreview = useCallback(() => {
     if (cdrPreviewPending) return;
     setCdrPreviewOpen(false);
     setCdrPreviewTask(null);
     setCdrPreviewData(null);
+    setCdrPreviewNeedsPick(false);
   }, [cdrPreviewPending]);
 
   const modals = useTaskTableModals({
@@ -210,10 +240,12 @@ export default function useTaskTableController({
     ...modals,
     handleOpenFile,
     handleShowCdrPreview,
+    handleCdrFilePicked,
     handleCloseCdrPreview,
     cdrPreviewOpen,
     cdrPreviewTask,
     cdrPreviewData,
+    cdrPreviewNeedsPick,
     cdrPreviewPending,
     intervalsDialogOpen,
     intervalsPending,

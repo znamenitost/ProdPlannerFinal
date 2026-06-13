@@ -37,8 +37,12 @@ export function buildDevLocalFullPath(folderPath, fileName) {
   return combined.replace(/\\{2,}/g, '\\');
 }
 
-/** Путь для чтения превью: локальный диск из задачи или запасной DEV_CDR_PREVIEW_PATH. */
 export function resolveCdrPreviewPath(folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED) return null;
   return buildDevLocalFullPath(folderPath, fileName) || DEV_CDR_PREVIEW_PATH;
+}
+
+/** Путь для отображения: C:\0.cdr */
+export function formatDevTaskFilePath(folderPath, fileName) {
+  return resolveCdrPreviewPath(folderPath, fileName) || DEV_CDR_PREVIEW_PATH;
 }

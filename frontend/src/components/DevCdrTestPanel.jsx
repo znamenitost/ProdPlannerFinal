@@ -8,7 +8,6 @@ import {
   FILE_OPENER_BASE,
   isFileOpenerAgentRunning,
   isFileOpenerDevOpenSupported,
-  isFileOpenerDevReadSupported,
   openDevFileViaAgent,
   readDevCdrViaAgent
 } from '../utils/fileOpenerAgent';
@@ -17,7 +16,6 @@ export default function DevCdrTestPanel() {
   const { showSuccess, showError } = useUiFeedback();
   const [agentOk, setAgentOk] = useState(null);
   const [devOpenOk, setDevOpenOk] = useState(null);
-  const [devReadOk, setDevReadOk] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewInfo, setPreviewInfo] = useState('');
   const [opening, setOpening] = useState(false);
@@ -28,16 +26,9 @@ export default function DevCdrTestPanel() {
     isFileOpenerAgentRunning().then((ok) => {
       setAgentOk(ok);
       if (ok) {
-        Promise.all([
-          isFileOpenerDevOpenSupported(),
-          isFileOpenerDevReadSupported()
-        ]).then(([openOk, readOk]) => {
-          setDevOpenOk(openOk);
-          setDevReadOk(readOk);
-        });
+        isFileOpenerDevOpenSupported().then(setDevOpenOk);
       } else {
         setDevOpenOk(false);
-        setDevReadOk(false);
       }
     });
   }, []);
@@ -148,14 +139,9 @@ export default function DevCdrTestPanel() {
           Агент не отвечает на 127.0.0.1:17888 — запустите install.bat и проверьте health.
         </Alert>
       )}
-      {agentOk === true && devOpenOk === true && devReadOk === true && (
+      {agentOk === true && devOpenOk === true && (
         <Alert severity="success" sx={{ mb: 2 }}>
-          Агент работает: открытие и чтение для превью.
-        </Alert>
-      )}
-      {agentOk === true && devOpenOk === true && devReadOk === false && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          Агент открывает файлы, но не умеет читать для превью. Меню → Скачать агент → install.bat.
+          Агент работает: открытие файлов доступно.
         </Alert>
       )}
       {agentOk === true && devOpenOk === false && (

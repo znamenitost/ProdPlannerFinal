@@ -1,13 +1,32 @@
-const cache = new Map();
+const byTaskId = new Map();
+const byPath = new Map();
+
+function revokePreview(preview) {
+  if (preview?.url?.startsWith('blob:')) {
+    URL.revokeObjectURL(preview.url);
+  }
+}
 
 export function setTaskCdrPreview(taskId, preview) {
-  const prev = cache.get(taskId);
-  if (prev?.url?.startsWith('blob:')) {
-    URL.revokeObjectURL(prev.url);
+  revokePreview(byTaskId.get(taskId));
+  byTaskId.set(taskId, preview);
+  if (preview?.path) {
+    setPathCdrPreview(preview.path, preview);
   }
-  cache.set(taskId, preview);
 }
 
 export function getTaskCdrPreview(taskId) {
-  return cache.get(taskId) ?? null;
+  return byTaskId.get(taskId) ?? null;
+}
+
+export function setPathCdrPreview(path, preview) {
+  const key = String(path || '').toLowerCase();
+  if (!key) return;
+  revokePreview(byPath.get(key));
+  byPath.set(key, preview);
+}
+
+export function getPathCdrPreview(path) {
+  const key = String(path || '').toLowerCase();
+  return key ? byPath.get(key) ?? null : null;
 }
