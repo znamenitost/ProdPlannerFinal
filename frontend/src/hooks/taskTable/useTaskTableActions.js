@@ -193,7 +193,7 @@ export default function useTaskTableActions({
       await refresh();
       if (DEV_CDR_PREVIEW_ENABLED && created?.id) {
         try {
-          await buildTaskCdrPreview(created.id, newRow.folderPath, newRow.fileName);
+          await buildTaskCdrPreview(created.id, created.folderPath, created.fileName);
         } catch (previewErr) {
           showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
         }

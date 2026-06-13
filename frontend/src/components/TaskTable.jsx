@@ -430,6 +430,7 @@ export default function TaskTable({
           previewUrl={table.cdrPreviewData?.url}
           previewInfo={table.cdrPreviewData?.method}
           previewPath={table.cdrPreviewData?.path}
+          previewError={table.cdrPreviewData?.error}
           pending={table.cdrPreviewPending}
           onClose={table.handleCloseCdrPreview}
         />

@@ -121,9 +121,12 @@ export default function useTaskTableController({
       const preview = await ensureTaskCdrPreview(task);
       setCdrPreviewData(preview);
     } catch (err) {
-      showError(err?.message || 'Не удалось построить превью .cdr');
-      setCdrPreviewOpen(false);
-      setCdrPreviewTask(null);
+      setCdrPreviewData({
+        error: err?.message || 'Не удалось построить превью .cdr',
+        path: task.folderPath && task.fileName
+          ? `${task.folderPath}/${task.fileName}`
+          : ''
+      });
     } finally {
       setCdrPreviewPending(false);
     }

@@ -7,6 +7,7 @@ export default function CdrPreviewDialog({
   previewUrl,
   previewInfo = '',
   previewPath = '',
+  previewError = '',
   pending = false,
   onClose
 }) {
@@ -31,6 +32,10 @@ export default function CdrPreviewDialog({
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
             <CircularProgress size={32} />
           </Box>
+        ) : previewError ? (
+          <Typography color="error" sx={{ whiteSpace: 'pre-wrap' }}>
+            {previewError}
+          </Typography>
         ) : previewUrl ? (
           <Box>
             {previewInfo ? (

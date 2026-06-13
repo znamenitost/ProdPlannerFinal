@@ -16,23 +16,24 @@ export function getDevCdrDefaultFileName() {
 /** Путь вида C:/ + 0.cdr (или C:\temp\file.cdr) — локальный диск, не MINIMARKER. */
 export function isDevLocalWindowsPath(folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED) return false;
-  const folder = String(folderPath || '').trim();
+  const folder = String(folderPath || '').trim().replace(/\\/g, '/');
   const file = String(fileName || '').trim();
   if (!folder || !file) return false;
-  return /^[A-Za-z]:[\\/]/.test(folder.replace(/\\/g, '/'));
+  return /^[A-Za-z]:(\/|$)/.test(folder);
 }
 
 /** Собирает полный путь Windows: C:/ + 0.cdr → C:\0.cdr */
 export function buildDevLocalFullPath(folderPath, fileName) {
   if (!isDevLocalWindowsPath(folderPath, fileName)) return null;
 
-  const folder = String(folderPath || '').trim().replace(/\//g, '\\');
+  const normalizedFolder = String(folderPath || '').trim().replace(/\//g, '\\');
   const file = String(fileName || '').trim().replace(/^\\+/, '');
-  if (/^[A-Za-z]:\\?$/i.test(folder)) {
-    const drive = folder.slice(0, 2);
-    return `${drive}\\${file}`;
+  if (/^[A-Za-z]:\\?$/i.test(normalizedFolder)) {
+    return `${normalizedFolder.slice(0, 2)}\\${file}`;
   }
-  const combined = folder.endsWith('\\') ? `${folder}${file}` : `${folder}\\${file}`;
+  const combined = normalizedFolder.endsWith('\\')
+    ? `${normalizedFolder}${file}`
+    : `${normalizedFolder}\\${file}`;
   return combined.replace(/\\{2,}/g, '\\');
 }
 

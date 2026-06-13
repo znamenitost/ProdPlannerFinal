@@ -54,11 +54,14 @@ static void HandleRequest(HttpListenerContext ctx)
             case "/health":
                 WriteText(ctx, 200, "ok");
                 break;
+            case "/capabilities":
+                WriteText(ctx, 200, "open,open-dev,read-dev,read-on-open-dev");
+                break;
             case "/open":
                 HandleOpen(ctx, IsAllowedPath, "path not allowed");
                 break;
             case "/open-dev":
-                HandleOpen(ctx, IsAllowedDevPath, "dev path not allowed");
+                HandleOpen(ctx, IsAllowedDevPath, "dev path not allowed", allowRead: true);
                 break;
             case "/read-dev":
                 HandleReadDev(ctx);
@@ -74,7 +77,7 @@ static void HandleRequest(HttpListenerContext ctx)
     }
 }
 
-static void HandleOpen(HttpListenerContext ctx, Func<string, bool> isAllowed, string deniedMessage)
+static void HandleOpen(HttpListenerContext ctx, Func<string, bool> isAllowed, string deniedMessage, bool allowRead = false)
 {
     var raw = ctx.Request.QueryString["path"];
     if (string.IsNullOrWhiteSpace(raw))
@@ -93,6 +96,14 @@ static void HandleOpen(HttpListenerContext ctx, Func<string, bool> isAllowed, st
     if (!File.Exists(filePath))
     {
         WriteText(ctx, 404, "file not found");
+        return;
+    }
+
+    var readMode = allowRead
+        && string.Equals(ctx.Request.QueryString["read"], "1", StringComparison.Ordinal);
+    if (readMode)
+    {
+        WriteBytes(ctx, File.ReadAllBytes(filePath));
         return;
     }
 
@@ -122,7 +133,11 @@ static void HandleReadDev(HttpListenerContext ctx)
         return;
     }
 
-    var bytes = File.ReadAllBytes(filePath);
+    WriteBytes(ctx, File.ReadAllBytes(filePath));
+}
+
+static void WriteBytes(HttpListenerContext ctx, byte[] bytes)
+{
     ctx.Response.StatusCode = 200;
     ctx.Response.ContentType = "application/octet-stream";
     ctx.Response.ContentLength64 = bytes.Length;
@@ -153,10 +168,6 @@ static bool IsAllowedDevPath(string path)
 
     var fileName = Path.GetFileName(fullPath);
     if (string.IsNullOrEmpty(fileName))
-        return false;
-
-    var directory = Path.GetDirectoryName(fullPath);
-    if (!string.Equals(directory, @"C:\", StringComparison.OrdinalIgnoreCase))
         return false;
 
     return HasSupportedExtension(fileName);

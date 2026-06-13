@@ -64,12 +64,77 @@ export async function openDevFileViaAgent(absolutePath) {
   return { ok: response.ok, status: response.status, text };
 }
 
-export async function readDevCdrViaAgent(absolutePath) {
-  const url = `${FILE_OPENER_BASE}/read-dev?path=${encodeURIComponent(absolutePath)}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(text || `Не удалось прочитать файл (${response.status})`);
+let cachedCapabilities = null;
+
+async function fetchFileOpenerCapabilities(timeoutMs = 800) {
+  if (cachedCapabilities) return cachedCapabilities;
+  if (detectClientPlatform() !== 'Win32') return [];
+
+  try {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    const response = await fetch(`${FILE_OPENER_BASE}/capabilities`, {
+      signal: controller.signal
+    });
+    window.clearTimeout(timer);
+    if (!response.ok) {
+      cachedCapabilities = [];
+      return cachedCapabilities;
+    }
+    const text = await response.text();
+    cachedCapabilities = text.split(',').map((part) => part.trim()).filter(Boolean);
+    return cachedCapabilities;
+  } catch {
+    cachedCapabilities = [];
+    return cachedCapabilities;
   }
-  return new Uint8Array(await response.arrayBuffer());
+}
+
+/** Чтение байтов .cdr через агент (без запуска Corel). */
+export async function readDevCdrViaAgent(absolutePath) {
+  const caps = await fetchFileOpenerCapabilities();
+  const encodedPath = encodeURIComponent(absolutePath);
+  const urls = [];
+
+  if (caps.includes('read-on-open-dev')) {
+    urls.push(`${FILE_OPENER_BASE}/open-dev?read=1&path=${encodedPath}`);
+  }
+  if (caps.includes('read-dev')) {
+    urls.push(`${FILE_OPENER_BASE}/read-dev?path=${encodedPath}`);
+  }
+
+  if (urls.length === 0) {
+    throw new Error(
+      'Агент устарел: нет чтения для превью. Меню → Скачать агент → install.bat (от администратора).'
+    );
+  }
+
+  let lastError = 'Не удалось прочитать файл';
+  for (const url of urls) {
+    try {
+      const response = await fetch(url);
+      const contentType = response.headers.get('content-type') || '';
+      if (!response.ok) {
+        const text = (await response.text().catch(() => '')).trim();
+        lastError = text || `HTTP ${response.status}`;
+        continue;
+      }
+      if (!contentType.includes('octet-stream')) {
+        lastError = 'Агент не вернул файл — обновите через install.bat';
+        continue;
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.length > 0) return bytes;
+      lastError = 'Пустой ответ агента';
+    } catch (err) {
+      lastError = err?.message || lastError;
+    }
+  }
+
+  throw new Error(lastError);
+}
+
+export async function isFileOpenerDevReadSupported(timeoutMs = 800) {
+  const caps = await fetchFileOpenerCapabilities(timeoutMs);
+  return caps.includes('read-on-open-dev') || caps.includes('read-dev');
 }
