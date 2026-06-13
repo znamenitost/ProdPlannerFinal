@@ -1,22 +1,18 @@
 import { getDevAgentAbsolutePath, DEV_CDR_PREVIEW_ENABLED } from './devCdrPreviewConfig';
 import { readDevCdrViaAgent } from './fileOpenerAgent';
 import { extractCdrPreview } from './cdrPreview';
-import {
-  getPathCdrPreview,
-  getTaskCdrPreview,
-  setTaskCdrPreview
-} from './cdrPreviewCache';
+import { fetchTaskCdrPreview, persistTaskCdrPreview } from './cdrPreviewApi';
 
 async function previewFromBytes(bytes, taskId, path) {
   const result = await extractCdrPreview(bytes);
   if (!result.ok) {
     throw new Error(result.error);
   }
+
   const preview = { url: result.url, method: result.method, path };
-  if (taskId) {
-    return setTaskCdrPreview(taskId, preview);
-  }
-  return preview;
+  if (!taskId) return preview;
+
+  return persistTaskCdrPreview(taskId, preview);
 }
 
 async function tryAgentPreview(taskId, folderPath, fileName) {
@@ -30,20 +26,22 @@ async function tryAgentPreview(taskId, folderPath, fileName) {
   }
 }
 
-/** При сохранении задачи: агент читает .cdr, превью сохраняется в localStorage. */
+/** При сохранении задачи: агент читает .cdr, превью сохраняется в БД. */
 export async function buildTaskCdrPreview(taskId, folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return null;
+  if (!getDevAgentAbsolutePath(folderPath, fileName)) return null;
+
   const preview = await tryAgentPreview(taskId, folderPath, fileName);
   if (!preview) {
     throw new Error(
-      'Не удалось прочитать .cdr для превью. Проверьте агент: /read-dev или /open-dev?read=1 на C:\\0.cdr'
+      'Не удалось прочитать .cdr для превью. Проверьте агент и доступ к \\\\MINIMARKER\\Клиенты\\...'
     );
   }
   return preview;
 }
 
 /**
- * ПКМ: сохранённое превью → (тихо) пересобрать через агент.
+ * ПКМ: превью из БД → при необходимости пересобрать через агент.
  * @returns {{ preview: object|null, path: string|null }}
  */
 export async function loadTaskCdrPreview(task) {
@@ -52,10 +50,17 @@ export async function loadTaskCdrPreview(task) {
   }
 
   const path = getDevAgentAbsolutePath(task.folderPath, task.fileName);
-  const cached = getTaskCdrPreview(task.id) || (path ? getPathCdrPreview(path) : null);
-  if (cached) {
-    await setTaskCdrPreview(task.id, cached);
-    return { preview: cached, path: cached.path || path };
+  if (!path) {
+    return { preview: null, path: null };
+  }
+
+  try {
+    const stored = await fetchTaskCdrPreview(task.id);
+    if (stored && (!stored.sourceKey || stored.sourceKey === path)) {
+      return { preview: stored, path: stored.path || path };
+    }
+  } catch {
+    // fallback to agent below
   }
 
   const fromAgent = await tryAgentPreview(task.id, task.folderPath, task.fileName);

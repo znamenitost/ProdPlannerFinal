@@ -58,6 +58,7 @@ namespace ProductionPlanner.Data
         public DbSet<EmployeeStat> EmployeeStats { get; set; }
         public DbSet<TaskSplit> TaskSplits { get; set; }
         public DbSet<UserNotification> UserNotifications { get; set; }
+        public DbSet<TaskCdrPreview> TaskCdrPreviews { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -83,6 +84,16 @@ namespace ProductionPlanner.Data
 
             modelBuilder.Entity<ProductionTask>()
                 .HasIndex(t => new { t.EmployeeName, t.CompletedAt });
+
+            modelBuilder.Entity<TaskCdrPreview>(entity =>
+            {
+                entity.ToTable("TaskCdrPreviews");
+                entity.Property(p => p.Data).HasColumnType("bytea");
+                entity.HasOne(p => p.Task)
+                    .WithOne()
+                    .HasForeignKey<TaskCdrPreview>(p => p.TaskId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
             modelBuilder.Entity<WorkInterval>()
                 .HasIndex(i => new { i.ProductionTaskId, i.StartTime });

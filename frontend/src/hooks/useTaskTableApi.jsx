@@ -1,11 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { openFileOnClient } from '../utils/openFileOnClient';
-import { normalizePathForOpen, detectClientPlatform } from '../utils/filePathForOpen';
-import {
-  DEV_CDR_PREVIEW_ENABLED,
-  getDevAgentAbsolutePath
-} from '../utils/devCdrPreviewConfig';
-import { openDevFileViaAgent } from '../utils/fileOpenerAgent';
+import { normalizePathForOpen } from '../utils/filePathForOpen';
 
 export default function useTaskTableApi() {
   const handleResponse = useCallback(async (response) => {
@@ -164,15 +159,6 @@ export default function useTaskTableApi() {
   }, [handleResponse, lifecycleUrl]);
 
   const openFile = useCallback(async (row) => {
-    if (DEV_CDR_PREVIEW_ENABLED && detectClientPlatform() === 'Win32') {
-      const devPath = getDevAgentAbsolutePath(row.folderPath, row.fileName);
-      if (devPath) {
-        const result = await openDevFileViaAgent(devPath);
-        if (result.ok) return;
-        throw new Error(result.text || 'Не удалось открыть файл через open-dev');
-      }
-    }
-
     const relativePath = normalizePathForOpen(row.folderPath, row.fileName);
     if (!relativePath || relativePath === '/') {
       throw new Error('Путь к файлу не указан');

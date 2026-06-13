@@ -1,6 +1,5 @@
 import { detectClientPlatform } from './filePathForOpen';
-import { openFileViaAgent, openDevFileViaAgent } from './fileOpenerAgent';
-import { getDevAgentAbsolutePath, DEV_CDR_PREVIEW_ENABLED } from './devCdrPreviewConfig';
+import { openFileViaAgent } from './fileOpenerAgent';
 
 function buildLaunchUrl(relativePath) {
   const params = new URLSearchParams({
@@ -37,21 +36,6 @@ export async function openFileOnClient(relativePath, options = {}) {
   }
 
   const platform = detectClientPlatform();
-
-  if (DEV_CDR_PREVIEW_ENABLED && platform === 'Win32') {
-    const devPath = getDevAgentAbsolutePath(options.folderPath, options.fileName);
-    if (devPath) {
-      try {
-        const result = await openDevFileViaAgent(devPath);
-        if (result.ok) {
-          return { ok: true, method: 'agent-dev' };
-        }
-        return { ok: false, reason: result.text || 'open-dev-failed' };
-      } catch (err) {
-        return { ok: false, reason: err?.message || 'open-dev-failed' };
-      }
-    }
-  }
 
   if (platform === 'Win32') {
     try {

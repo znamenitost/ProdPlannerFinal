@@ -61,7 +61,7 @@ static void HandleRequest(HttpListenerContext ctx)
                 HandleOpen(ctx, IsAllowedPath, "path not allowed");
                 break;
             case "/open-dev":
-                HandleOpen(ctx, IsAllowedDevPath, "dev path not allowed", allowRead: true);
+                HandleOpen(ctx, IsAllowedDevPath, "dev path not allowed", allowRead: true, readAllowed: IsAllowedReadPath);
                 break;
             case "/read-dev":
                 HandleReadDev(ctx);
@@ -77,7 +77,12 @@ static void HandleRequest(HttpListenerContext ctx)
     }
 }
 
-static void HandleOpen(HttpListenerContext ctx, Func<string, bool> isAllowed, string deniedMessage, bool allowRead = false)
+static void HandleOpen(
+    HttpListenerContext ctx,
+    Func<string, bool> isAllowed,
+    string deniedMessage,
+    bool allowRead = false,
+    Func<string, bool>? readAllowed = null)
 {
     var raw = ctx.Request.QueryString["path"];
     if (string.IsNullOrWhiteSpace(raw))
@@ -87,7 +92,10 @@ static void HandleOpen(HttpListenerContext ctx, Func<string, bool> isAllowed, st
     }
 
     var filePath = Uri.UnescapeDataString(raw).Trim();
-    if (!isAllowed(filePath))
+    var readMode = allowRead
+        && string.Equals(ctx.Request.QueryString["read"], "1", StringComparison.Ordinal);
+    var allowed = readMode ? (readAllowed ?? isAllowed)(filePath) : isAllowed(filePath);
+    if (!allowed)
     {
         WriteText(ctx, 403, deniedMessage);
         return;
@@ -99,8 +107,6 @@ static void HandleOpen(HttpListenerContext ctx, Func<string, bool> isAllowed, st
         return;
     }
 
-    var readMode = allowRead
-        && string.Equals(ctx.Request.QueryString["read"], "1", StringComparison.Ordinal);
     if (readMode)
     {
         WriteBytes(ctx, File.ReadAllBytes(filePath));
@@ -121,9 +127,9 @@ static void HandleReadDev(HttpListenerContext ctx)
     }
 
     var filePath = Uri.UnescapeDataString(raw).Trim();
-    if (!IsAllowedDevPath(filePath))
+    if (!IsAllowedReadPath(filePath))
     {
-        WriteText(ctx, 403, "dev path not allowed");
+        WriteText(ctx, 403, "read path not allowed");
         return;
     }
 
@@ -147,6 +153,9 @@ static void WriteBytes(HttpListenerContext ctx, byte[] bytes)
 
 static bool IsAllowedPath(string path) =>
     IsAllowedUncPath(path);
+
+static bool IsAllowedReadPath(string path) =>
+    IsAllowedUncPath(path) || IsAllowedDevPath(path);
 
 static bool IsAllowedDevPath(string path)
 {

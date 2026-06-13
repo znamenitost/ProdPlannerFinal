@@ -6,6 +6,7 @@ using ProductionPlanner.Services;
 using ProductionPlanner.Services.Auth;
 using ProductionPlanner.Services.Calendar;
 using ProductionPlanner.Services.TaskLists;
+using ProductionPlanner.Services.TaskCdrPreview;
 using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Infrastructure;
@@ -25,6 +26,7 @@ public static class WebApplicationExtensions
         services.AddScoped<ITaskNotificationService, TaskNotificationService>();
         services.AddScoped<INotificationInboxService, NotificationInboxService>();
         services.AddScoped<ITaskTableService, TaskTableService>();
+        services.AddScoped<ITaskCdrPreviewService, TaskCdrPreviewService>();
         services.AddScoped<ITaskListQueryService, TaskListQueryService>();
         services.AddScoped<IEmployeeAssignmentLoadService, EmployeeAssignmentLoadService>();
         services.AddScoped<IWeekCalendarService, WeekCalendarService>();
