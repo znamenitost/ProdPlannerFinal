@@ -16,14 +16,19 @@ export function getDevCdrDefaultFileName() {
 /** Нормализует папку: C:/, латинская C, убирает лишнее. */
 export function normalizeDevFolderPath(folderPath) {
   let folder = String(folderPath || '').trim().replace(/\\/g, '/');
-  // Частая опечатка: кириллическая «С» вместо латинской C
   if (/^[Сс]\//.test(folder) || /^[Сс]:/.test(folder)) {
     folder = `C${folder.slice(1)}`;
   }
   return folder;
 }
 
-/** Путь вида C:/ + 0.cdr (или C:\temp\file.cdr) — локальный диск, не MINIMARKER. */
+function isDevDefaultTestFile(folderPath, fileName) {
+  const folder = normalizeDevFolderPath(folderPath);
+  const file = String(fileName || '').trim();
+  return (folder === 'C:/' || folder === 'C:') && file === '0.cdr';
+}
+
+/** Путь вида C:/ + 0.cdr — локальный диск, не MINIMARKER. */
 export function isDevLocalWindowsPath(folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED) return false;
   const folder = normalizeDevFolderPath(folderPath);
@@ -39,7 +44,6 @@ export function buildDevLocalFullPath(folderPath, fileName) {
   const folder = normalizeDevFolderPath(folderPath);
   const file = String(fileName || '').trim().replace(/^\\+/, '');
   if (!file) return null;
-
   if (!/^[A-Za-z]:(\/|$)/.test(folder)) return null;
 
   const normalizedFolder = folder.replace(/\//g, '\\');
@@ -52,12 +56,22 @@ export function buildDevLocalFullPath(folderPath, fileName) {
   return combined.replace(/\\{2,}/g, '\\');
 }
 
-export function resolveCdrPreviewPath(folderPath, fileName) {
+/**
+ * Единый абсолютный путь для open-dev и read-dev.
+ * Таблица (C:/ + 0.cdr) → тот же C:\0.cdr, что в DEV-панели.
+ */
+export function getDevAgentAbsolutePath(folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED) return null;
-  return buildDevLocalFullPath(folderPath, fileName) || DEV_CDR_PREVIEW_PATH;
+  const built = buildDevLocalFullPath(folderPath, fileName);
+  if (built) return built;
+  if (isDevDefaultTestFile(folderPath, fileName)) return DEV_CDR_PREVIEW_PATH;
+  return null;
 }
 
-/** Путь для отображения: C:\0.cdr */
+export function resolveCdrPreviewPath(folderPath, fileName) {
+  return getDevAgentAbsolutePath(folderPath, fileName);
+}
+
 export function formatDevTaskFilePath(folderPath, fileName) {
-  return resolveCdrPreviewPath(folderPath, fileName) || DEV_CDR_PREVIEW_PATH;
+  return getDevAgentAbsolutePath(folderPath, fileName) || DEV_CDR_PREVIEW_PATH;
 }

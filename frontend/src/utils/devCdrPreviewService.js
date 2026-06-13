@@ -1,4 +1,4 @@
-import { resolveCdrPreviewPath, DEV_CDR_PREVIEW_ENABLED } from './devCdrPreviewConfig';
+import { getDevAgentAbsolutePath, DEV_CDR_PREVIEW_ENABLED } from './devCdrPreviewConfig';
 import { readDevCdrViaAgent } from './fileOpenerAgent';
 import { extractCdrPreview } from './cdrPreview';
 import {
@@ -20,7 +20,7 @@ async function previewFromBytes(bytes, taskId, path) {
 }
 
 async function tryAgentPreview(taskId, folderPath, fileName) {
-  const path = resolveCdrPreviewPath(folderPath, fileName);
+  const path = getDevAgentAbsolutePath(folderPath, fileName);
   if (!path) return null;
   try {
     const bytes = await readDevCdrViaAgent(path);
@@ -49,7 +49,7 @@ export async function loadTaskCdrPreview(task) {
     return { preview: null, path: null };
   }
 
-  const path = resolveCdrPreviewPath(task.folderPath, task.fileName);
+  const path = getDevAgentAbsolutePath(task.folderPath, task.fileName);
   const cached = getTaskCdrPreview(task.id) || (path ? getPathCdrPreview(path) : null);
   if (cached) {
     await setTaskCdrPreview(task.id, cached);

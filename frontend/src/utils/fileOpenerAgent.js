@@ -64,34 +64,23 @@ export async function openDevFileViaAgent(absolutePath) {
   return { ok: response.ok, status: response.status, text };
 }
 
-/** Чтение байтов .cdr — только read-dev / open-dev?read=1 (без открытия Corel). */
+/** Чтение байтов .cdr — только /read-dev (без open-dev, чтобы не открывать Corel). */
 export async function readDevCdrViaAgent(absolutePath) {
-  const encodedPath = encodeURIComponent(absolutePath);
-  const urls = [
-    `${FILE_OPENER_BASE}/open-dev?read=1&path=${encodedPath}`,
-    `${FILE_OPENER_BASE}/read-dev?path=${encodedPath}`
-  ];
+  const url = `${FILE_OPENER_BASE}/read-dev?path=${encodeURIComponent(absolutePath)}`;
+  const response = await fetch(url);
+  const contentType = response.headers.get('content-type') || '';
 
-  let lastError = 'Не удалось прочитать файл';
-  for (const url of urls) {
-    try {
-      const response = await fetch(url);
-      const contentType = response.headers.get('content-type') || '';
-      if (!response.ok) {
-        lastError = (await response.text().catch(() => '')).trim() || `HTTP ${response.status}`;
-        continue;
-      }
-      // Старый агент без read=1 отвечает text/plain «ok» и открывает файл — не принимаем.
-      if (!contentType.includes('octet-stream')) {
-        lastError = 'Агент не вернул файл (нужен read-dev или open-dev?read=1)';
-        continue;
-      }
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.length > 0) return bytes;
-    } catch (err) {
-      lastError = err?.message || lastError;
-    }
+  if (!response.ok) {
+    const text = (await response.text().catch(() => '')).trim();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+  if (!contentType.includes('octet-stream')) {
+    throw new Error('Агент не вернул файл (нужен эндпоинт /read-dev)');
   }
 
-  throw new Error(lastError);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new Error('Пустой ответ агента');
+  }
+  return bytes;
 }
