@@ -12,6 +12,7 @@ namespace ProductionPlanner.Controllers
     public class FilesController : ControllerBase
     {
         private const string WindowsAgentZipName = "ProductionPlanner-FileOpener-win-x64.zip";
+        private const string CdrPreviewShellZipName = "CdrPreviewShell-win-x64.zip";
 
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
@@ -37,6 +38,21 @@ namespace ProductionPlanner.Controllers
             return PhysicalFile(zipPath, "application/zip", WindowsAgentZipName);
         }
 
+        [HttpGet("download/cdr-preview-shell")]
+        public IActionResult DownloadCdrPreviewShell()
+        {
+            var zipPath = ResolveCdrPreviewShellZipPath();
+            if (zipPath == null || !System.IO.File.Exists(zipPath))
+            {
+                return NotFound(new
+                {
+                    message = "Превью .cdr для Проводника пока не собрано на сервере. Обратитесь к администратору."
+                });
+            }
+
+            return PhysicalFile(zipPath, "application/zip", CdrPreviewShellZipName);
+        }
+
         [HttpGet("agent-info")]
         public IActionResult GetAgentInfo()
         {
@@ -50,7 +66,8 @@ namespace ProductionPlanner.Controllers
                 windowsHost,
                 shareName,
                 agentBaseUrl = $"http://127.0.0.1:{port}",
-                downloadUrl = "/api/files/download/windows-agent"
+                downloadUrl = "/api/files/download/windows-agent",
+                cdrPreviewShellDownloadUrl = "/api/files/download/cdr-preview-shell"
             });
         }
 
@@ -102,6 +119,17 @@ namespace ProductionPlanner.Controllers
             {
                 Path.Combine(_environment.WebRootPath ?? "", "downloads", WindowsAgentZipName),
                 Path.Combine(_environment.ContentRootPath, "tools", "ProductionPlanner.FileOpener", "releases", WindowsAgentZipName)
+            };
+
+            return candidates.FirstOrDefault(System.IO.File.Exists);
+        }
+
+        private string? ResolveCdrPreviewShellZipPath()
+        {
+            var candidates = new[]
+            {
+                Path.Combine(_environment.WebRootPath ?? "", "downloads", CdrPreviewShellZipName),
+                Path.Combine(_environment.ContentRootPath, "tools", "CdrPreviewShell", "releases", CdrPreviewShellZipName)
             };
 
             return candidates.FirstOrDefault(System.IO.File.Exists);

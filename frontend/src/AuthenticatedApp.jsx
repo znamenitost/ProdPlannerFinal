@@ -180,6 +180,11 @@ function AuthenticatedAppContent() {
     window.location.href = '/api/files/download/windows-agent';
   };
 
+  const handleDownloadCdrPreviewShell = () => {
+    handleCloseUserMenu();
+    window.location.href = '/api/files/download/cdr-preview-shell';
+  };
+
   const handleAvatarUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -464,6 +469,15 @@ function AuthenticatedAppContent() {
             <ListItemText
               primary="Скачать агент"
               secondary="Открытие файлов без netopen"
+            />
+          </MenuItem>
+        )}
+        {isWindowsClient && (
+          <MenuItem onClick={handleDownloadCdrPreviewShell}>
+            <ListItemIcon><Download fontSize="small" color="secondary" /></ListItemIcon>
+            <ListItemText
+              primary="Скачать превью .cdr"
+              secondary="Панель предпросмотра в Проводнике"
             />
           </MenuItem>
         )}

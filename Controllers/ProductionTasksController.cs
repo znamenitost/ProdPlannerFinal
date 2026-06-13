@@ -225,6 +225,11 @@ public class ProductionTasksController : ControllerBase
         }
     }
 
+    [HttpPost("table/row/{id}/delete")]
+    [Authorize(Roles = "Admin")]
+    public Task<IActionResult> DeleteTableRowPost(int id, CancellationToken cancellationToken = default) =>
+        DeleteTableRow(id, cancellationToken);
+
     [HttpGet("table/row/{id}/intervals")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetTableRowIntervals(

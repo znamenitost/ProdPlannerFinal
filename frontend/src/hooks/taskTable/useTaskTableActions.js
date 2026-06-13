@@ -193,7 +193,7 @@ export default function useTaskTableActions({
       await refresh();
       if (DEV_CDR_PREVIEW_ENABLED && created?.id) {
         try {
-          await buildTaskCdrPreview(created.id);
+          await buildTaskCdrPreview(created.id, newRow.folderPath, newRow.fileName);
         } catch (previewErr) {
           showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
         }
@@ -350,6 +350,8 @@ export default function useTaskTableActions({
     try {
       await api.deleteRow(id);
       removeRow(id);
+      invalidateChildCache(id);
+      await refresh();
       onCalendarRefresh?.();
     } catch (err) {
       console.error(err);
@@ -357,7 +359,7 @@ export default function useTaskTableActions({
     } finally {
       deletingRowIdRef.current = null;
     }
-  }, [api, removeRow, onCalendarRefresh, confirm, showError]);
+  }, [api, removeRow, refresh, invalidateChildCache, onCalendarRefresh, confirm, showError]);
 
   const handleAddNewRow = useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);

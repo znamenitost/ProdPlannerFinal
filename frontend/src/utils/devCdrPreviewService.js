@@ -3,10 +3,10 @@ import { readDevCdrViaAgent } from './fileOpenerAgent';
 import { extractCdrPreview } from './cdrPreview';
 import { getTaskCdrPreview, setTaskCdrPreview } from './cdrPreviewCache';
 
-export async function buildTaskCdrPreview(taskId) {
+export async function buildTaskCdrPreview(taskId, folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return null;
 
-  const path = resolveCdrPreviewPath();
+  const path = resolveCdrPreviewPath(folderPath, fileName);
   if (!path) return null;
 
   const bytes = await readDevCdrViaAgent(path);
@@ -24,5 +24,5 @@ export async function ensureTaskCdrPreview(task) {
   if (!task?.id) return null;
   const cached = getTaskCdrPreview(task.id);
   if (cached) return cached;
-  return buildTaskCdrPreview(task.id);
+  return buildTaskCdrPreview(task.id, task.folderPath, task.fileName);
 }

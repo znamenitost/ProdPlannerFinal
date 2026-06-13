@@ -123,9 +123,12 @@ export default function useTaskTableApi() {
   }, [handleResponse]);
 
   const deleteRow = useCallback(async (id) => {
-    const response = await fetch(`/api/tasks/table/row/${id}`, { method: 'DELETE' });
-    if (!response.ok) throw new Error('Ошибка удаления');
-  }, []);
+    let response = await fetch(`/api/tasks/table/row/${id}`, { method: 'DELETE' });
+    if (response.status === 405) {
+      response = await fetch(`/api/tasks/table/row/${id}/delete`, { method: 'POST' });
+    }
+    await handleResponse(response);
+  }, [handleResponse]);
 
   const lifecycleUrl = useCallback((rowId, action, selectedEmployee = '') => {
     let url = `/api/tasks/${rowId}/${action}`;
@@ -160,9 +163,12 @@ export default function useTaskTableApi() {
     if (!relativePath || relativePath === '/') {
       throw new Error('Путь к файлу не указан');
     }
-    const result = await openFileOnClient(relativePath);
+    const result = await openFileOnClient(relativePath, {
+      folderPath: row.folderPath,
+      fileName: row.fileName
+    });
     if (!result.ok) {
-      throw new Error('Не удалось открыть файл');
+      throw new Error(result.reason || 'Не удалось открыть файл');
     }
   }, []);
 

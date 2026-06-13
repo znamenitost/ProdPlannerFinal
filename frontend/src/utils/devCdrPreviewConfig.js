@@ -13,8 +13,31 @@ export function getDevCdrDefaultFileName() {
   return DEV_CDR_PREVIEW_ENABLED ? '0.cdr' : '';
 }
 
-/** Путь для чтения превью: пока dev-режим — всегда локальный C:\0.cdr. */
-export function resolveCdrPreviewPath() {
+/** Путь вида C:/ + 0.cdr (или C:\temp\file.cdr) — локальный диск, не MINIMARKER. */
+export function isDevLocalWindowsPath(folderPath, fileName) {
+  if (!DEV_CDR_PREVIEW_ENABLED) return false;
+  const folder = String(folderPath || '').trim();
+  const file = String(fileName || '').trim();
+  if (!folder || !file) return false;
+  return /^[A-Za-z]:[\\/]/.test(folder.replace(/\\/g, '/'));
+}
+
+/** Собирает полный путь Windows: C:/ + 0.cdr → C:\0.cdr */
+export function buildDevLocalFullPath(folderPath, fileName) {
+  if (!isDevLocalWindowsPath(folderPath, fileName)) return null;
+
+  const folder = String(folderPath || '').trim().replace(/\//g, '\\');
+  const file = String(fileName || '').trim().replace(/^\\+/, '');
+  if (/^[A-Za-z]:\\?$/i.test(folder)) {
+    const drive = folder.slice(0, 2);
+    return `${drive}\\${file}`;
+  }
+  const combined = folder.endsWith('\\') ? `${folder}${file}` : `${folder}\\${file}`;
+  return combined.replace(/\\{2,}/g, '\\');
+}
+
+/** Путь для чтения превью: локальный диск из задачи или запасной DEV_CDR_PREVIEW_PATH. */
+export function resolveCdrPreviewPath(folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED) return null;
-  return DEV_CDR_PREVIEW_PATH;
+  return buildDevLocalFullPath(folderPath, fileName) || DEV_CDR_PREVIEW_PATH;
 }
