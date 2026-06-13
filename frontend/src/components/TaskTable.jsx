@@ -18,7 +18,9 @@ import EditTaskRow from './EditTaskRow';
 import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
+import CdrPreviewDialog from './CdrPreviewDialog';
 import TaskIntervalsDialog from './taskTable/TaskIntervalsDialog';
+import { DEV_CDR_PREVIEW_ENABLED } from '../utils/devCdrPreviewConfig';
 import PlanningWarningsBanner from './PlanningWarningsBanner';
 import useTaskTableController from '../hooks/taskTable/useTaskTableController';
 import useTaskTableColumnVisibility from '../hooks/taskTable/useTaskTableColumnVisibility';
@@ -287,6 +289,7 @@ export default function TaskTable({
         isExpanded={isExpanded}
         onToggleExpand={table.toggleExpand}
         onOpenFile={table.handleOpenFile}
+        onShowCdrPreview={DEV_CDR_PREVIEW_ENABLED ? table.handleShowCdrPreview : undefined}
         onStart={table.handleStartTask}
         onPause={table.handlePauseTask}
         onResume={table.handleResumeTask}
@@ -416,6 +419,21 @@ export default function TaskTable({
         onSave={table.handleSaveComment}
         onClose={() => table.setCommentDialogOpen(false)}
       />
+      {DEV_CDR_PREVIEW_ENABLED && (
+        <CdrPreviewDialog
+          open={table.cdrPreviewOpen}
+          taskTitle={
+            table.cdrPreviewTask
+              ? `${table.cdrPreviewTask.folderPath || ''} / ${table.cdrPreviewTask.fileName || ''}`
+              : ''
+          }
+          previewUrl={table.cdrPreviewData?.url}
+          previewInfo={table.cdrPreviewData?.method}
+          previewPath={table.cdrPreviewData?.path}
+          pending={table.cdrPreviewPending}
+          onClose={table.handleCloseCdrPreview}
+        />
+      )}
       <TaskIntervalsDialog
         open={table.intervalsDialogOpen}
         taskTitle={table.intervalsTask ? `${table.intervalsTask.folderPath || ''} / ${table.intervalsTask.fileName || ''}` : ''}

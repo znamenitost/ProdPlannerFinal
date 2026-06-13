@@ -9,6 +9,12 @@ import {
   TASK_EXECUTION_SEQUENTIAL
 } from '../../constants/taskStatuses';
 import { unwrapTaskSaveResponse } from '../../utils/showPlanningWarnings';
+import { DEV_CDR_PREVIEW_ENABLED } from '../../utils/devCdrPreviewConfig';
+import {
+  getDevCdrDefaultFolderPath,
+  getDevCdrDefaultFileName
+} from '../../utils/devCdrPreviewConfig';
+import { buildTaskCdrPreview } from '../../utils/devCdrPreviewService';
 
 export default function useTaskTableActions({
   api,
@@ -185,6 +191,13 @@ export default function useTaskTableActions({
       applyPlanningWarnings(planningWarnings);
       setNewRow(null);
       await refresh();
+      if (DEV_CDR_PREVIEW_ENABLED && created?.id) {
+        try {
+          await buildTaskCdrPreview(created.id);
+        } catch (previewErr) {
+          showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
+        }
+      }
       if (newRow.isSharedTask && created?.id) {
         await loadChildrenForParent(created.id);
         expandParent(created.id);
@@ -349,8 +362,8 @@ export default function useTaskTableActions({
   const handleAddNewRow = useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
     setNewRow({
-      folderPath: '',
-      fileName: '',
+      folderPath: getDevCdrDefaultFolderPath(),
+      fileName: getDevCdrDefaultFileName(),
       comment: '',
       deadline: combineDateTime(today, DEFAULT_TIME),
       estimateHours: '',

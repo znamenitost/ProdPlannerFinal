@@ -63,3 +63,13 @@ export async function openDevFileViaAgent(absolutePath) {
   const text = await response.text();
   return { ok: response.ok, status: response.status, text };
 }
+
+export async function readDevCdrViaAgent(absolutePath) {
+  const url = `${FILE_OPENER_BASE}/read-dev?path=${encodeURIComponent(absolutePath)}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(text || `Не удалось прочитать файл (${response.status})`);
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}

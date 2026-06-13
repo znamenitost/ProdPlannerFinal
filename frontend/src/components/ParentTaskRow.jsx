@@ -56,6 +56,7 @@ function ParentTaskRow({
   isExpanded,
   onToggleExpand,
   onOpenFile,
+  onShowCdrPreview,
   onStart,
   onPause,
   onResume,
@@ -163,7 +164,14 @@ function ParentTaskRow({
 
   return (
     <Fragment>
-      <TableRow sx={(theme) => getRowStyle(theme)}>
+      <TableRow
+        sx={(theme) => getRowStyle(theme)}
+        onContextMenu={(event) => {
+          if (!onShowCdrPreview) return;
+          event.preventDefault();
+          onShowCdrPreview(task);
+        }}
+      >
         {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}
         <TableCell sx={COL_ICON}>
           <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', width: '100%' }}>

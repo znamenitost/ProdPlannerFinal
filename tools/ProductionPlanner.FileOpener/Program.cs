@@ -60,6 +60,9 @@ static void HandleRequest(HttpListenerContext ctx)
             case "/open-dev":
                 HandleOpen(ctx, IsAllowedDevPath, "dev path not allowed");
                 break;
+            case "/read-dev":
+                HandleReadDev(ctx);
+                break;
             default:
                 WriteText(ctx, 404, "not found");
                 break;
@@ -95,6 +98,36 @@ static void HandleOpen(HttpListenerContext ctx, Func<string, bool> isAllowed, st
 
     Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
     WriteText(ctx, 200, "ok");
+}
+
+static void HandleReadDev(HttpListenerContext ctx)
+{
+    var raw = ctx.Request.QueryString["path"];
+    if (string.IsNullOrWhiteSpace(raw))
+    {
+        WriteText(ctx, 400, "missing path");
+        return;
+    }
+
+    var filePath = Uri.UnescapeDataString(raw).Trim();
+    if (!IsAllowedDevPath(filePath))
+    {
+        WriteText(ctx, 403, "dev path not allowed");
+        return;
+    }
+
+    if (!File.Exists(filePath))
+    {
+        WriteText(ctx, 404, "file not found");
+        return;
+    }
+
+    var bytes = File.ReadAllBytes(filePath);
+    ctx.Response.StatusCode = 200;
+    ctx.Response.ContentType = "application/octet-stream";
+    ctx.Response.ContentLength64 = bytes.Length;
+    ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
+    ctx.Response.Close();
 }
 
 static bool IsAllowedPath(string path) =>

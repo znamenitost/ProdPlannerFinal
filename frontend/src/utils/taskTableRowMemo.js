@@ -55,6 +55,7 @@ export function areParentRowPropsEqual(prev, next) {
   return (
     prev.onToggleExpand === next.onToggleExpand &&
     prev.onOpenFile === next.onOpenFile &&
+    prev.onShowCdrPreview === next.onShowCdrPreview &&
     prev.onStart === next.onStart &&
     prev.onPause === next.onPause &&
     prev.onResume === next.onResume &&

@@ -9,6 +9,8 @@ import useTaskTableModals from './useTaskTableModals';
 import usePlanningWarnings from './usePlanningWarnings';
 import { shouldShowHoursTypeColumns } from '../../utils/taskTableColumns';
 import { handleTaskTableHubEvent } from '../../utils/taskTableHubHandler';
+import { DEV_CDR_PREVIEW_ENABLED } from '../../utils/devCdrPreviewConfig';
+import { ensureTaskCdrPreview } from '../../utils/devCdrPreviewService';
 
 export default function useTaskTableController({
   onCalendarRefresh,
@@ -27,6 +29,10 @@ export default function useTaskTableController({
   const [intervalsTask, setIntervalsTask] = useState(null);
   const [intervalsRows, setIntervalsRows] = useState([]);
   const intervalsSavingRef = useRef(false);
+  const [cdrPreviewOpen, setCdrPreviewOpen] = useState(false);
+  const [cdrPreviewTask, setCdrPreviewTask] = useState(null);
+  const [cdrPreviewData, setCdrPreviewData] = useState(null);
+  const [cdrPreviewPending, setCdrPreviewPending] = useState(false);
 
   const rowsState = useTaskTableRows(api, {
     selectedEmployeeForHighlight,
@@ -103,6 +109,33 @@ export default function useTaskTableController({
     }
   }, [api, showError]);
 
+  const handleShowCdrPreview = useCallback(async (task) => {
+    if (!DEV_CDR_PREVIEW_ENABLED) return;
+
+    setCdrPreviewTask(task);
+    setCdrPreviewOpen(true);
+    setCdrPreviewPending(true);
+    setCdrPreviewData(null);
+
+    try {
+      const preview = await ensureTaskCdrPreview(task);
+      setCdrPreviewData(preview);
+    } catch (err) {
+      showError(err?.message || 'Не удалось построить превью .cdr');
+      setCdrPreviewOpen(false);
+      setCdrPreviewTask(null);
+    } finally {
+      setCdrPreviewPending(false);
+    }
+  }, [showError]);
+
+  const handleCloseCdrPreview = useCallback(() => {
+    if (cdrPreviewPending) return;
+    setCdrPreviewOpen(false);
+    setCdrPreviewTask(null);
+    setCdrPreviewData(null);
+  }, [cdrPreviewPending]);
+
   const modals = useTaskTableModals({
     api,
     handleOpenFile,
@@ -173,6 +206,12 @@ export default function useTaskTableController({
     ...actions,
     ...modals,
     handleOpenFile,
+    handleShowCdrPreview,
+    handleCloseCdrPreview,
+    cdrPreviewOpen,
+    cdrPreviewTask,
+    cdrPreviewData,
+    cdrPreviewPending,
     intervalsDialogOpen,
     intervalsPending,
     intervalsTask,
