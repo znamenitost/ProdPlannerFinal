@@ -37,6 +37,16 @@ async function tryAgentPreview(taskId, folderPath, fileName) {
   }
 }
 
+/** После сохранения задачи: агент читает .cdr и кладёт превью в кэш. */
+export async function buildTaskCdrPreview(taskId, folderPath, fileName) {
+  if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return null;
+  const preview = await tryAgentPreview(taskId, folderPath, fileName);
+  if (!preview) {
+    throw new Error('Не удалось прочитать .cdr для превью');
+  }
+  return preview;
+}
+
 /**
  * Кэш → (тихо) агент → иначе выбор файла как в обзоре.
  * @returns {{ preview: object|null, needsPick: boolean, path: string|null }}

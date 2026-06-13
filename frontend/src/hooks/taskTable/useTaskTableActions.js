@@ -9,10 +9,12 @@ import {
   TASK_EXECUTION_SEQUENTIAL
 } from '../../constants/taskStatuses';
 import { unwrapTaskSaveResponse } from '../../utils/showPlanningWarnings';
+import { DEV_CDR_PREVIEW_ENABLED } from '../../utils/devCdrPreviewConfig';
 import {
   getDevCdrDefaultFolderPath,
   getDevCdrDefaultFileName
 } from '../../utils/devCdrPreviewConfig';
+import { buildTaskCdrPreview } from '../../utils/devCdrPreviewService';
 
 export default function useTaskTableActions({
   api,
@@ -189,6 +191,13 @@ export default function useTaskTableActions({
       applyPlanningWarnings(planningWarnings);
       setNewRow(null);
       await refresh();
+      if (DEV_CDR_PREVIEW_ENABLED && created?.id) {
+        try {
+          await buildTaskCdrPreview(created.id, created.folderPath, created.fileName);
+        } catch (previewErr) {
+          showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
+        }
+      }
       if (newRow.isSharedTask && created?.id) {
         await loadChildrenForParent(created.id);
         expandParent(created.id);
@@ -230,6 +239,13 @@ export default function useTaskTableActions({
       applyPlanningWarnings(planningWarnings);
       setEditingId(null);
       await syncRowFromServer(row);
+      if (DEV_CDR_PREVIEW_ENABLED) {
+        try {
+          await buildTaskCdrPreview(row.id, row.folderPath, row.fileName);
+        } catch (previewErr) {
+          showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
+        }
+      }
     } catch (err) {
       console.error('Ошибка обновления:', err);
       showError('Ошибка обновления задачи');
