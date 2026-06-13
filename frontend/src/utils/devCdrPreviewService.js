@@ -35,7 +35,9 @@ export async function buildTaskCdrPreview(taskId, folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return null;
   const preview = await tryAgentPreview(taskId, folderPath, fileName);
   if (!preview) {
-    throw new Error('Не удалось прочитать .cdr для превью');
+    throw new Error(
+      'Не удалось прочитать .cdr для превью. Проверьте агент: /read-dev или /open-dev?read=1 на C:\\0.cdr'
+    );
   }
   return preview;
 }

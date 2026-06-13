@@ -64,23 +64,66 @@ export async function openDevFileViaAgent(absolutePath) {
   return { ok: response.ok, status: response.status, text };
 }
 
-/** Чтение байтов .cdr — только /read-dev (без open-dev, чтобы не открывать Corel). */
+/** Чтение байтов .cdr: read-dev → open-dev?read=1 (только octet-stream, без открытия Corel). */
 export async function readDevCdrViaAgent(absolutePath) {
-  const url = `${FILE_OPENER_BASE}/read-dev?path=${encodeURIComponent(absolutePath)}`;
-  const response = await fetch(url);
-  const contentType = response.headers.get('content-type') || '';
+  const encodedPath = encodeURIComponent(absolutePath);
+  const urls = [
+    `${FILE_OPENER_BASE}/read-dev?path=${encodedPath}`,
+    `${FILE_OPENER_BASE}/open-dev?read=1&path=${encodedPath}`
+  ];
 
-  if (!response.ok) {
-    const text = (await response.text().catch(() => '')).trim();
-    throw new Error(text || `HTTP ${response.status}`);
-  }
-  if (!contentType.includes('octet-stream')) {
-    throw new Error('Агент не вернул файл (нужен эндпоинт /read-dev)');
+  let lastError = 'Не удалось прочитать файл';
+  for (const url of urls) {
+    try {
+      const response = await fetch(url);
+      const contentType = response.headers.get('content-type') || '';
+
+      if (!response.ok) {
+        const text = (await response.text().catch(() => '')).trim();
+        lastError = text || `HTTP ${response.status}`;
+        continue;
+      }
+      if (!contentType.includes('octet-stream')) {
+        const text = (await response.text().catch(() => '')).trim();
+        lastError = text === 'ok'
+          ? 'Агент открыл файл вместо чтения — переустановите из меню приложения'
+          : (text || 'Агент не вернул файл');
+        continue;
+      }
+
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.length > 0) return bytes;
+      lastError = 'Пустой ответ агента';
+    } catch (err) {
+      lastError = err?.message || lastError;
+    }
   }
 
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.length === 0) {
-    throw new Error('Пустой ответ агента');
+  throw new Error(lastError);
+}
+
+/** Есть ли чтение для превью (read-dev или open-dev?read=1). */
+export async function isFileOpenerDevReadSupported(timeoutMs = 1200) {
+  if (detectClientPlatform() !== 'Win32') return false;
+  const probePath = encodeURIComponent(DEV_TEST_CDR_PATH);
+  const urls = [
+    `${FILE_OPENER_BASE}/read-dev?path=${probePath}`,
+    `${FILE_OPENER_BASE}/open-dev?read=1&path=${probePath}`
+  ];
+
+  for (const url of urls) {
+    try {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+      const response = await fetch(url, { signal: controller.signal });
+      window.clearTimeout(timer);
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && contentType.includes('octet-stream')) {
+        return true;
+      }
+    } catch {
+      // try next
+    }
   }
-  return bytes;
+  return false;
 }
