@@ -3,9 +3,6 @@ import { detectClientPlatform } from './filePathForOpen';
 export const FILE_OPENER_PORT = 17888;
 export const FILE_OPENER_BASE = `http://127.0.0.1:${FILE_OPENER_PORT}`;
 
-/** Временный путь для dev-теста на Windows VM. String.raw — иначе \0 в исходнике даёт NUL-символ. */
-export const DEV_TEST_CDR_PATH = String.raw`C:\0.cdr`;
-
 const DEFAULT_WINDOWS_HOST = 'MINIMARKER';
 const DEFAULT_SHARE = 'Клиенты';
 
@@ -33,35 +30,11 @@ export async function isFileOpenerAgentRunning(timeoutMs = 800) {
   }
 }
 
-/** Есть ли в агенте эндпоинт /open-dev (без path вернёт 400, не 404). */
-export async function isFileOpenerDevOpenSupported(timeoutMs = 800) {
-  if (detectClientPlatform() !== 'Win32') return false;
-  try {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-    const response = await fetch(`${FILE_OPENER_BASE}/open-dev`, {
-      signal: controller.signal
-    });
-    window.clearTimeout(timer);
-    const text = await response.text();
-    return response.status === 400 && text === 'missing path';
-  } catch {
-    return false;
-  }
-}
-
 export async function openFileViaAgent(relativePath) {
   const uncPath = buildWindowsUncPath(relativePath);
   const url = `${FILE_OPENER_BASE}/open?path=${encodeURIComponent(uncPath)}`;
   const response = await fetch(url);
   return response.ok;
-}
-
-export async function openDevFileViaAgent(absolutePath) {
-  const url = `${FILE_OPENER_BASE}/open-dev?path=${encodeURIComponent(absolutePath)}`;
-  const response = await fetch(url);
-  const text = await response.text();
-  return { ok: response.ok, status: response.status, text };
 }
 
 /** Чтение байтов .cdr: read-dev → open-dev?read=1 (только octet-stream, без открытия Corel). */
@@ -100,30 +73,4 @@ export async function readDevCdrViaAgent(absolutePath) {
   }
 
   throw new Error(lastError);
-}
-
-/** Есть ли чтение для превью (read-dev или open-dev?read=1). */
-export async function isFileOpenerDevReadSupported(timeoutMs = 1200) {
-  if (detectClientPlatform() !== 'Win32') return false;
-  const probePath = encodeURIComponent(DEV_TEST_CDR_PATH);
-  const urls = [
-    `${FILE_OPENER_BASE}/read-dev?path=${probePath}`,
-    `${FILE_OPENER_BASE}/open-dev?read=1&path=${probePath}`
-  ];
-
-  for (const url of urls) {
-    try {
-      const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-      const response = await fetch(url, { signal: controller.signal });
-      window.clearTimeout(timer);
-      const contentType = response.headers.get('content-type') || '';
-      if (response.ok && contentType.includes('octet-stream')) {
-        return true;
-      }
-    } catch {
-      // try next
-    }
-  }
-  return false;
 }
