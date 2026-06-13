@@ -64,12 +64,12 @@ export async function openDevFileViaAgent(absolutePath) {
   return { ok: response.ok, status: response.status, text };
 }
 
-/** Чтение байтов .cdr (тот же путь, что для open-dev). Без capabilities. */
+/** Чтение байтов .cdr — только read-dev / open-dev?read=1 (без открытия Corel). */
 export async function readDevCdrViaAgent(absolutePath) {
   const encodedPath = encodeURIComponent(absolutePath);
   const urls = [
-    `${FILE_OPENER_BASE}/read-dev?path=${encodedPath}`,
-    `${FILE_OPENER_BASE}/open-dev?read=1&path=${encodedPath}`
+    `${FILE_OPENER_BASE}/open-dev?read=1&path=${encodedPath}`,
+    `${FILE_OPENER_BASE}/read-dev?path=${encodedPath}`
   ];
 
   let lastError = 'Не удалось прочитать файл';
@@ -81,8 +81,9 @@ export async function readDevCdrViaAgent(absolutePath) {
         lastError = (await response.text().catch(() => '')).trim() || `HTTP ${response.status}`;
         continue;
       }
+      // Старый агент без read=1 отвечает text/plain «ok» и открывает файл — не принимаем.
       if (!contentType.includes('octet-stream')) {
-        lastError = 'Агент не вернул файл';
+        lastError = 'Агент не вернул файл (нужен read-dev или open-dev?read=1)';
         continue;
       }
       const bytes = new Uint8Array(await response.arrayBuffer());

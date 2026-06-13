@@ -13,10 +13,20 @@ export function getDevCdrDefaultFileName() {
   return DEV_CDR_PREVIEW_ENABLED ? '0.cdr' : '';
 }
 
+/** Нормализует папку: C:/, латинская C, убирает лишнее. */
+export function normalizeDevFolderPath(folderPath) {
+  let folder = String(folderPath || '').trim().replace(/\\/g, '/');
+  // Частая опечатка: кириллическая «С» вместо латинской C
+  if (/^[Сс]\//.test(folder) || /^[Сс]:/.test(folder)) {
+    folder = `C${folder.slice(1)}`;
+  }
+  return folder;
+}
+
 /** Путь вида C:/ + 0.cdr (или C:\temp\file.cdr) — локальный диск, не MINIMARKER. */
 export function isDevLocalWindowsPath(folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED) return false;
-  const folder = String(folderPath || '').trim().replace(/\\/g, '/');
+  const folder = normalizeDevFolderPath(folderPath);
   const file = String(fileName || '').trim();
   if (!folder || !file) return false;
   return /^[A-Za-z]:(\/|$)/.test(folder);
@@ -24,10 +34,15 @@ export function isDevLocalWindowsPath(folderPath, fileName) {
 
 /** Собирает полный путь Windows: C:/ + 0.cdr → C:\0.cdr */
 export function buildDevLocalFullPath(folderPath, fileName) {
-  if (!isDevLocalWindowsPath(folderPath, fileName)) return null;
+  if (!DEV_CDR_PREVIEW_ENABLED) return null;
 
-  const normalizedFolder = String(folderPath || '').trim().replace(/\//g, '\\');
+  const folder = normalizeDevFolderPath(folderPath);
   const file = String(fileName || '').trim().replace(/^\\+/, '');
+  if (!file) return null;
+
+  if (!/^[A-Za-z]:(\/|$)/.test(folder)) return null;
+
+  const normalizedFolder = folder.replace(/\//g, '\\');
   if (/^[A-Za-z]:\\?$/i.test(normalizedFolder)) {
     return `${normalizedFolder.slice(0, 2)}\\${file}`;
   }

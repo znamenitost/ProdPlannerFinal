@@ -125,7 +125,7 @@ export default function useTaskTableController({
         setCdrPreviewData({ ...preview, path: preview.path || path });
       } else {
         setCdrPreviewData({
-          error: 'Превью не найдено. Сохраните задачу — превью строится при сохранении.',
+          error: 'Превью не найдено. Сохраните задачу ещё раз (превью строится при сохранении).',
           path
         });
       }

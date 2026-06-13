@@ -189,15 +189,19 @@ export default function useTaskTableActions({
       const raw = await api.createRow(payload);
       const { task: created, planningWarnings } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
-      setNewRow(null);
-      await refresh();
       if (DEV_CDR_PREVIEW_ENABLED && created?.id) {
         try {
-          await buildTaskCdrPreview(created.id, created.folderPath, created.fileName);
+          await buildTaskCdrPreview(
+            created.id,
+            created.folderPath || payload.folderPath,
+            created.fileName || payload.fileName
+          );
         } catch (previewErr) {
           showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
         }
       }
+      setNewRow(null);
+      await refresh();
       if (newRow.isSharedTask && created?.id) {
         await loadChildrenForParent(created.id);
         expandParent(created.id);
