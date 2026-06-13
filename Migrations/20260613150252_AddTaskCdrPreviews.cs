@@ -33,20 +33,15 @@ namespace ProductionPlanner.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
-            migrationBuilder.CreateIndex(
-                name: "IX_WorkIntervals_StartTime_EndTime",
-                table: "WorkIntervals",
-                columns: new[] { "StartTime", "EndTime" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Users_FullName",
-                table: "Users",
-                column: "FullName");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ProductionTasks_EmployeeName_CompletedAt",
-                table: "ProductionTasks",
-                columns: new[] { "EmployeeName", "CompletedAt" });
+            // Индексы могут уже существовать из PostgresSchemaMigrator.ApplyPhase2PerformanceIndexesPatchAsync
+            migrationBuilder.Sql("""
+                CREATE INDEX IF NOT EXISTS "IX_WorkIntervals_StartTime_EndTime"
+                    ON "WorkIntervals" ("StartTime", "EndTime");
+                CREATE INDEX IF NOT EXISTS "IX_Users_FullName"
+                    ON "Users" ("FullName");
+                CREATE INDEX IF NOT EXISTS "IX_ProductionTasks_EmployeeName_CompletedAt"
+                    ON "ProductionTasks" ("EmployeeName", "CompletedAt");
+                """);
 
             migrationBuilder.CreateIndex(
                 name: "IX_TaskCdrPreviews_UpdatedAt",
@@ -60,17 +55,11 @@ namespace ProductionPlanner.Migrations
             migrationBuilder.DropTable(
                 name: "TaskCdrPreviews");
 
-            migrationBuilder.DropIndex(
-                name: "IX_WorkIntervals_StartTime_EndTime",
-                table: "WorkIntervals");
-
-            migrationBuilder.DropIndex(
-                name: "IX_Users_FullName",
-                table: "Users");
-
-            migrationBuilder.DropIndex(
-                name: "IX_ProductionTasks_EmployeeName_CompletedAt",
-                table: "ProductionTasks");
+            migrationBuilder.Sql("""
+                DROP INDEX IF EXISTS "IX_WorkIntervals_StartTime_EndTime";
+                DROP INDEX IF EXISTS "IX_Users_FullName";
+                DROP INDEX IF EXISTS "IX_ProductionTasks_EmployeeName_CompletedAt";
+                """);
         }
     }
 }
