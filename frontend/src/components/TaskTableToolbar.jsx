@@ -15,6 +15,7 @@ import { Add, Lightbulb, LinearScale, Sort, TableChart } from '@mui/icons-materi
 import { sectionHeaderSx, sectionTitleRowSx } from '../theme/surfaces';
 import TaskTableColumnSettings from './taskTable/TaskTableColumnSettings';
 import ExpandableSearchField from './taskTable/ExpandableSearchField';
+import DevCdrTestPreviewButton from './DevCdrTestPreviewButton';
 
 export default function TaskTableToolbar({
   isAdmin,
@@ -56,6 +57,7 @@ export default function TaskTableToolbar({
       </Box>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <ExpandableSearchField value={searchQuery} onChange={onSearchQueryChange} />
+        <DevCdrTestPreviewButton />
         <Tooltip title={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}>
           <IconButton
             variant="soft"
