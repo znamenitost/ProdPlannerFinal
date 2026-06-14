@@ -28,6 +28,7 @@ import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
 import LazyTooltip from './common/LazyTooltip';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
+import TaskFileNameCell from './taskTable/TaskFileNameCell';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import { alpha } from '@mui/material/styles';
@@ -230,17 +231,7 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>
-          {needsTooltip(task.fileName, limit) ? (
-            <LazyTooltip title={task.fileName} arrow>
-              <Typography variant="body2" sx={cellDisplayTextSx}>
-                {truncateText(task.fileName, limit)}
-              </Typography>
-            </LazyTooltip>
-          ) : (
-            <Typography variant="body2" sx={cellDisplayTextSx}>
-              {task.fileName || '—'}
-            </Typography>
-          )}
+          <TaskFileNameCell fileName={task.fileName} task={task} textLimit={limit} />
         </TableCell>
 
         <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>

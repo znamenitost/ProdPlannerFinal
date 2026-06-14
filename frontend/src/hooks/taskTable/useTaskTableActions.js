@@ -14,8 +14,34 @@ import {
   getDevCdrDefaultFolderPath,
   getDevCdrDefaultFileName
 } from '../../utils/devCdrPreviewConfig';
-import { buildTaskCdrPreview } from '../../utils/devCdrPreviewService';
-import { getCdrPathValidationError } from '../../utils/cdrPreviewErrors';
+import { verifyTaskCdrFileAfterSave } from '../../utils/devCdrPreviewService';
+
+async function applyPostSaveFileStatus({
+  taskId,
+  folderPath,
+  fileName,
+  showWarning
+}) {
+  if (!DEV_CDR_PREVIEW_ENABLED || !taskId) {
+    return { fileFound: false, hasCdrPreview: false, warning: null };
+  }
+
+  const status = await verifyTaskCdrFileAfterSave(taskId, folderPath, fileName);
+
+  if (status.warning) {
+    showWarning(status.warning);
+  }
+
+  return status;
+}
+
+function patchTaskFileFoundStatus(taskId, status, patchRow) {
+  if (!taskId || !status?.fileFound) return;
+  patchRow(taskId, {
+    fileFoundOnline: true,
+    ...(status.hasCdrPreview ? { hasCdrPreview: true } : {})
+  });
+}
 
 export default function useTaskTableActions({
   api,
@@ -67,7 +93,13 @@ export default function useTaskTableActions({
         patchRow(parentId, parentDto);
       } else {
         const updated = await api.fetchTableRow(row.id, employee);
-        patchRow(row.id, updated);
+        patchRow(row.id, {
+          ...updated,
+          fileFoundOnline: updated.hasCdrPreview
+            || (row.fileFoundOnline
+              && row.folderPath === updated.folderPath
+              && row.fileName === updated.fileName)
+        });
       }
     } catch (err) {
       if (!isNotFound(err)) throw err;
@@ -190,22 +222,20 @@ export default function useTaskTableActions({
       const raw = await api.createRow(payload);
       const { task: created, planningWarnings } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
-      if (DEV_CDR_PREVIEW_ENABLED && created?.id) {
-        const folderPath = created.folderPath || payload.folderPath;
-        const fileName = created.fileName || payload.fileName;
-        const pathIssue = getCdrPathValidationError(folderPath, fileName);
-        if (pathIssue) {
-          showWarning(pathIssue);
-        } else {
-          try {
-            await buildTaskCdrPreview(created.id, folderPath, fileName);
-          } catch (previewErr) {
-            showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
-          }
-        }
+      let fileStatus = null;
+      if (created?.id) {
+        fileStatus = await applyPostSaveFileStatus({
+          taskId: created.id,
+          folderPath: created.folderPath || payload.folderPath,
+          fileName: created.fileName || payload.fileName,
+          showWarning
+        });
       }
       setNewRow(null);
       await refresh();
+      if (created?.id) {
+        patchTaskFileFoundStatus(created.id, fileStatus, patchRow);
+      }
       if (newRow.isSharedTask && created?.id) {
         await loadChildrenForParent(created.id);
         expandParent(created.id);
@@ -225,7 +255,8 @@ export default function useTaskTableActions({
     loadChildrenForParent,
     showError,
     showWarning,
-    applyPlanningWarnings
+    applyPlanningWarnings,
+    patchRow
   ]);
 
   const handleUpdateRow = useCallback(async (row) => {
@@ -246,26 +277,24 @@ export default function useTaskTableActions({
       const { planningWarnings } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
       setEditingId(null);
-      await syncRowFromServer(row);
+      let fileStatus = null;
       if (DEV_CDR_PREVIEW_ENABLED) {
-        const pathIssue = getCdrPathValidationError(row.folderPath, row.fileName);
-        if (pathIssue) {
-          showWarning(pathIssue);
-        } else {
-          try {
-            await buildTaskCdrPreview(row.id, row.folderPath, row.fileName);
-          } catch (previewErr) {
-            showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
-          }
-        }
+        fileStatus = await applyPostSaveFileStatus({
+          taskId: row.id,
+          folderPath: row.folderPath,
+          fileName: row.fileName,
+          showWarning
+        });
       }
+      await syncRowFromServer(row);
+      patchTaskFileFoundStatus(row.id, fileStatus, patchRow);
     } catch (err) {
       console.error('Ошибка обновления:', err);
       showError('Ошибка обновления задачи');
     } finally {
       savingRowIdRef.current = null;
     }
-  }, [api, syncRowFromServer, setEditingId, showError, showWarning, applyPlanningWarnings]);
+  }, [api, syncRowFromServer, setEditingId, showError, showWarning, applyPlanningWarnings, patchRow]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
     if (pendingLifecycleTaskIdRef.current != null) return;

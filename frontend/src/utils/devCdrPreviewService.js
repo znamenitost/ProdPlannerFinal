@@ -43,6 +43,50 @@ async function readAndPreviewCdr(taskId, folderPath, fileName) {
   }
 }
 
+/** Проверка: агент прочитал .cdr с диска (без построения превью). */
+export async function isTaskCdrFileReadable(folderPath, fileName) {
+  if (!DEV_CDR_PREVIEW_ENABLED) return false;
+
+  const pathError = getCdrPathValidationError(folderPath, fileName);
+  if (pathError) return false;
+
+  const agentUnavailable = await getLocalAgentUnavailableMessage();
+  if (agentUnavailable) return false;
+
+  const path = getDevAgentAbsolutePath(folderPath, fileName);
+  try {
+    const bytes = await readDevCdrViaAgent(path);
+    return bytes?.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** @returns {{ fileFound: boolean, hasCdrPreview: boolean, warning: string|null }} */
+export async function verifyTaskCdrFileAfterSave(taskId, folderPath, fileName) {
+  const pathIssue = getCdrPathValidationError(folderPath, fileName);
+  if (pathIssue) {
+    return { fileFound: false, hasCdrPreview: false, warning: pathIssue };
+  }
+
+  try {
+    const preview = await buildTaskCdrPreview(taskId, folderPath, fileName);
+    if (preview) {
+      return { fileFound: true, hasCdrPreview: true, warning: null };
+    }
+  } catch (previewErr) {
+    const readable = await isTaskCdrFileReadable(folderPath, fileName);
+    return {
+      fileFound: readable,
+      hasCdrPreview: false,
+      warning: previewErr?.message || 'Не удалось построить превью .cdr'
+    };
+  }
+
+  const readable = await isTaskCdrFileReadable(folderPath, fileName);
+  return { fileFound: readable, hasCdrPreview: false, warning: null };
+}
+
 /** При сохранении задачи: агент читает .cdr, превью сохраняется в БД. */
 export async function buildTaskCdrPreview(taskId, folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return null;
