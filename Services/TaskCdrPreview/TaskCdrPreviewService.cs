@@ -126,7 +126,7 @@ public class TaskCdrPreviewService : ITaskCdrPreviewService
 
         var ids = await _db.TaskCdrPreviews
             .AsNoTracking()
-            .Where(p => taskIds.Contains(p.TaskId) && p.Data.Length > 0)
+            .Where(p => taskIds.Contains(p.TaskId) && p.ByteSize > 0)
             .Select(p => p.TaskId)
             .ToListAsync(cancellationToken);
 
