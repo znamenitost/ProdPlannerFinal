@@ -24,7 +24,6 @@ import {
   SystemUpdateAlt,
   TableChart,
   CalendarMonth,
-  Article,
   Logout,
   Person,
   AdminPanelSettings,
@@ -39,7 +38,6 @@ import WeekCalendar from './components/WeekCalendar';
 import DeadlineWarnings from './components/DeadlineWarnings';
 import ActiveTasksList from './components/ActiveTasksList';
 import CompletedTasksList from './components/CompletedTasksList';
-import AdminLogsPage from './components/AdminLogsPage';
 import TaskTable from './components/TaskTable';
 import LunchBreakOverlay from './components/LunchBreakOverlay';
 import DeployMaintenanceOverlay from './components/DeployMaintenanceOverlay';
@@ -67,6 +65,10 @@ function AuthenticatedAppContent() {
   const { user, setUser, employee, setEmployee, handleLogout } = useAuth();
   const { showSuccess, showError, showWarning, confirm } = useUiFeedback();
   const [activeTab, setActiveTab] = useUserPreference(user, 'app.activeTab', 0);
+
+  useEffect(() => {
+    if (activeTab > 1) setActiveTab(0);
+  }, [activeTab, setActiveTab]);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [lunchPending, setLunchPending] = useState(false);
   const [currentLunch, setCurrentLunch] = useState(null);
@@ -385,9 +387,6 @@ function AuthenticatedAppContent() {
             <Tabs value={activeTab} onChange={handleTabChange} centered variant="fullWidth">
               <Tab icon={<CalendarMonth />} iconPosition="start" label="Календарь" />
               <Tab icon={<TableChart />} iconPosition="start" label="Таблица задач" />
-              {isAdmin && (
-                <Tab icon={<Article />} iconPosition="start" label="Журнал" />
-              )}
             </Tabs>
           </Paper>
 
@@ -417,7 +416,6 @@ function AuthenticatedAppContent() {
                 selectedEmployeeForHighlight={employee}
               />
             )}
-            {activeTab === 2 && isAdmin && <AdminLogsPage />}
           </MotionSwitch>
         </Container>
       </Box>
