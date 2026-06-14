@@ -42,6 +42,19 @@ export function ensureClientLetterPrefix(relativePath, folderPathHint = '') {
   return `${letter}/${parts.join('/')}`;
 }
 
+/** Как на бэкенде (FilePathNormalizer): .cdr, .ai, .pdf, .eps — иначе дописываем .cdr. */
+export function hasSupportedOpenExtension(fileName) {
+  const name = String(fileName || '').split('[')[0].trim();
+  return /\.(cdr|ai|pdf|eps)$/i.test(name);
+}
+
+export function ensureSupportedFileExtension(fileName) {
+  const clean = String(fileName || '').split('[')[0].trim();
+  if (!clean) return '';
+  if (hasSupportedOpenExtension(clean)) return clean;
+  return `${clean}.cdr`;
+}
+
 export function normalizePathForOpen(folderPath, fileName, shareName = DEFAULT_SHARE) {
   let raw = `${folderPath || ''}/${fileName || ''}`.replace(/\\/g, '/');
   while (raw.includes('//')) raw = raw.replace('//', '/');
@@ -54,7 +67,13 @@ export function normalizePathForOpen(folderPath, fileName, shareName = DEFAULT_S
   const trimmed = raw.replace(/^\/+/, '').replace(/\/+$/, '');
   if (!trimmed) return '';
 
-  return ensureClientLetterPrefix(trimmed, stripShareRelativeFolder(folderPath, shareName));
+  const parts = trimmed.split('/').filter(Boolean);
+  if (parts.length === 0) return '';
+
+  parts[parts.length - 1] = ensureSupportedFileExtension(parts[parts.length - 1]);
+  const withExtension = parts.join('/');
+
+  return ensureClientLetterPrefix(withExtension, stripShareRelativeFolder(folderPath, shareName));
 }
 
 export function detectClientPlatform() {

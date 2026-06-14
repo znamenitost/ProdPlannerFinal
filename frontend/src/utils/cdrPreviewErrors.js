@@ -13,15 +13,16 @@ const AGENT_ERROR_MESSAGES = {
 export function getCdrPathValidationError(folderPath, fileName) {
   const file = String(fileName || '').trim();
   if (!file) {
-    return 'Укажите имя файла с расширением .cdr для построения превью';
-  }
-  if (!/\.cdr$/i.test(file)) {
-    return `Превью строится только для .cdr — указан файл «${file}»`;
+    return 'Укажите имя файла для построения превью';
   }
 
   const relative = normalizePathForOpen(folderPath, fileName);
   if (!relative) {
     return 'Не удалось определить путь к файлу. Проверьте папку и имя файла';
+  }
+
+  if (!/\.cdr$/i.test(relative.split('/').pop() || '')) {
+    return `Превью строится только для .cdr — указан файл «${file}»`;
   }
 
   return null;

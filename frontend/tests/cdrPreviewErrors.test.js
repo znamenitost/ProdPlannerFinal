@@ -7,11 +7,15 @@ import {
 } from '../src/utils/cdrPreviewErrors.js';
 
 describe('cdrPreviewErrors', () => {
-  it('requires .cdr file name', () => {
+  it('requires file name', () => {
     assert.equal(
       getCdrPathValidationError('Клиент/2024', ''),
-      'Укажите имя файла с расширением .cdr для построения превью'
+      'Укажите имя файла для построения превью'
     );
+  });
+
+  it('appends .cdr when extension is missing', () => {
+    assert.equal(getCdrPathValidationError('Федерация Бодибилдинга', '11,06,26 тт'), null);
   });
 
   it('rejects non-cdr extension', () => {

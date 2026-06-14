@@ -46,4 +46,17 @@ describe('filePathForOpen', () => {
     const result = normalizePathForOpen('Федерация Бодибилдинга', 'макет.cdr');
     assert.equal(result, 'Ф/Федерация Бодибилдинга/макет.cdr');
   });
+
+  it('appends .cdr when file name has no extension', () => {
+    const result = normalizePathForOpen(
+      'C:\\Users\\пк\\Yandex.Disk\\Клиенты\\Ф\\Федерация Бодибилдинга',
+      '11,06,26 тт'
+    );
+    assert.equal(result, 'Ф/Федерация Бодибилдинга/11,06,26 тт.cdr');
+  });
+
+  it('keeps .ai extension without appending .cdr', () => {
+    const result = normalizePathForOpen('Федерация Бодибилдинга', 'макет.ai');
+    assert.equal(result, 'Ф/Федерация Бодибилдинга/макет.ai');
+  });
 });

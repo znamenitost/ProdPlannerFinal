@@ -13,11 +13,11 @@ export function getDevCdrDefaultFileName() {
 
 /** UNC-путь для чтения .cdr через агент: \\MINIMARKER\Клиенты\... */
 export function getDevAgentAbsolutePath(folderPath, fileName) {
-  const file = String(fileName || '').trim();
-  if (!file || !/\.cdr$/i.test(file)) return null;
-
   const relative = normalizePathForOpen(folderPath, fileName);
   if (!relative) return null;
+
+  const baseName = relative.split('/').pop() || '';
+  if (!/\.cdr$/i.test(baseName)) return null;
 
   return buildWindowsUncPath(relative);
 }
