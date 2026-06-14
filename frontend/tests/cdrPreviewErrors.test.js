@@ -3,14 +3,19 @@ import assert from 'node:assert/strict';
 import {
   formatCdrPreviewPersistError,
   formatCdrPreviewReadError,
-  getCdrPathValidationError
+  getCdrPathValidationError,
+  getTaskFilePathHint
 } from '../src/utils/cdrPreviewErrors.js';
 
 describe('cdrPreviewErrors', () => {
   it('requires file name', () => {
     assert.equal(
+      getTaskFilePathHint('Клиент/2024', ''),
+      'Укажите имя файла для открытия и превью'
+    );
+    assert.equal(
       getCdrPathValidationError('Клиент/2024', ''),
-      'Укажите имя файла для построения превью'
+      'Укажите имя файла для открытия и превью'
     );
   });
 

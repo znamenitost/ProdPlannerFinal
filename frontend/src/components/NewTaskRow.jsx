@@ -22,6 +22,7 @@ import {
   TASK_TABLE_TEXT_FIELD_PROPS
 } from '../utils/taskTableStyles';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
+import TaskFilePathHint from './TaskFilePathHint';
 
 export default function NewTaskRow({
   newRow,
@@ -72,6 +73,7 @@ export default function NewTaskRow({
           value={newRow.fileName || ''}
           onChange={(e) => setNewRow({ ...newRow, fileName: e.target.value })}
         />
+        <TaskFilePathHint folderPath={newRow.folderPath} fileName={newRow.fileName} />
       </TableCell>
 
       <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>

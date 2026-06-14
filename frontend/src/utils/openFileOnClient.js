@@ -1,6 +1,5 @@
 import { detectClientPlatform } from './filePathForOpen';
 import { openFileViaAgent } from './fileOpenerAgent';
-import { formatFileOpenError } from './cdrPreviewErrors';
 
 function buildLaunchUrl(relativePath) {
   const params = new URLSearchParams({
@@ -44,14 +43,8 @@ export async function openFileOnClient(relativePath, options = {}) {
       if (agentResult.ok) {
         return { ok: true, method: 'agent' };
       }
-      if (agentResult.error) {
-        return {
-          ok: false,
-          reason: formatFileOpenError(agentResult.error, agentResult.uncPath)
-        };
-      }
     } catch {
-      // fallback to netopen below
+      // агент недоступен — fallback на netopen ниже
     }
   }
 

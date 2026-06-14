@@ -9,18 +9,28 @@ const AGENT_ERROR_MESSAGES = {
   'not found': 'Запрос к агенту не найден',
 };
 
-/** @returns {string|null} Текст ошибки или null, если путь к .cdr корректен. */
-export function getCdrPathValidationError(folderPath, fileName) {
+/** Подсказка по колонкам «задача» + «файл»; null если путь к открытию собрать можно. */
+export function getTaskFilePathHint(folderPath, fileName) {
   const file = String(fileName || '').trim();
   if (!file) {
-    return 'Укажите имя файла для построения превью';
+    return 'Укажите имя файла для открытия и превью';
   }
 
   const relative = normalizePathForOpen(folderPath, fileName);
   if (!relative) {
-    return 'Не удалось определить путь к файлу. Проверьте папку и имя файла';
+    return 'Не удалось определить путь. Проверьте папку и имя файла';
   }
 
+  return null;
+}
+
+/** @returns {string|null} Текст ошибки или null, если путь к .cdr корректен. */
+export function getCdrPathValidationError(folderPath, fileName) {
+  const hint = getTaskFilePathHint(folderPath, fileName);
+  if (hint) return hint;
+
+  const file = String(fileName || '').trim();
+  const relative = normalizePathForOpen(folderPath, fileName);
   if (!/\.cdr$/i.test(relative.split('/').pop() || '')) {
     return `Превью строится только для .cdr — указан файл «${file}»`;
   }

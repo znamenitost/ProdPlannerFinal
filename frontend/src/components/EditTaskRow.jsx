@@ -6,6 +6,7 @@ import { draftRowSx } from '../theme/surfaces';
 import { TASK_TABLE_TEXT_FIELD_PROPS } from '../utils/taskTableStyles';
 import { columnCellSx } from '../utils/taskTableColumns';
 import { COLLAPSED_COLUMN_SX } from '../utils/taskTableColumns';
+import TaskFilePathHint from './TaskFilePathHint';
 
 export default function EditTaskRow({
   task,
@@ -97,6 +98,7 @@ export default function EditTaskRow({
           onChange={(e) => handleFieldChange('fileName', e.target.value)}
           placeholder="Имя файла"
         />
+        <TaskFilePathHint folderPath={localTask.folderPath} fileName={localTask.fileName} />
       </TableCell>
 
       <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, { width: '12%' })}>

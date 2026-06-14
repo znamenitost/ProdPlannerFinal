@@ -27,9 +27,7 @@ async function previewFromBytes(bytes, taskId, path) {
 
 async function readAndPreviewCdr(taskId, folderPath, fileName) {
   const pathError = getCdrPathValidationError(folderPath, fileName);
-  if (pathError) {
-    throw new Error(pathError);
-  }
+  if (pathError) return null;
 
   const path = getDevAgentAbsolutePath(folderPath, fileName);
   try {

@@ -15,6 +15,7 @@ import {
   getDevCdrDefaultFileName
 } from '../../utils/devCdrPreviewConfig';
 import { buildTaskCdrPreview } from '../../utils/devCdrPreviewService';
+import { getCdrPathValidationError } from '../../utils/cdrPreviewErrors';
 
 export default function useTaskTableActions({
   api,
@@ -190,14 +191,17 @@ export default function useTaskTableActions({
       const { task: created, planningWarnings } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
       if (DEV_CDR_PREVIEW_ENABLED && created?.id) {
-        try {
-          await buildTaskCdrPreview(
-            created.id,
-            created.folderPath || payload.folderPath,
-            created.fileName || payload.fileName
-          );
-        } catch (previewErr) {
-          showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
+        const folderPath = created.folderPath || payload.folderPath;
+        const fileName = created.fileName || payload.fileName;
+        const pathIssue = getCdrPathValidationError(folderPath, fileName);
+        if (pathIssue) {
+          showWarning(pathIssue);
+        } else {
+          try {
+            await buildTaskCdrPreview(created.id, folderPath, fileName);
+          } catch (previewErr) {
+            showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
+          }
         }
       }
       setNewRow(null);
@@ -244,10 +248,15 @@ export default function useTaskTableActions({
       setEditingId(null);
       await syncRowFromServer(row);
       if (DEV_CDR_PREVIEW_ENABLED) {
-        try {
-          await buildTaskCdrPreview(row.id, row.folderPath, row.fileName);
-        } catch (previewErr) {
-          showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
+        const pathIssue = getCdrPathValidationError(row.folderPath, row.fileName);
+        if (pathIssue) {
+          showWarning(pathIssue);
+        } else {
+          try {
+            await buildTaskCdrPreview(row.id, row.folderPath, row.fileName);
+          } catch (previewErr) {
+            showWarning(previewErr?.message || 'Не удалось построить превью .cdr');
+          }
         }
       }
     } catch (err) {
