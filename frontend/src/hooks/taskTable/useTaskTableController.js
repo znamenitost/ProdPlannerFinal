@@ -10,6 +10,8 @@ import usePlanningWarnings from './usePlanningWarnings';
 import { shouldShowHoursTypeColumns } from '../../utils/taskTableColumns';
 import { handleTaskTableHubEvent } from '../../utils/taskTableHubHandler';
 import { DEV_CDR_PREVIEW_ENABLED, formatDevTaskFilePath } from '../../utils/devCdrPreviewConfig';
+import { detectClientPlatform } from '../../utils/filePathForOpen';
+import { reserveLaunchWindow } from '../../utils/openFileOnClient';
 import { loadTaskCdrPreview } from '../../utils/devCdrPreviewService';
 import { getCdrPathValidationError } from '../../utils/cdrPreviewErrors';
 import { cdrPreviewCacheKey } from '../../utils/cdrPreviewRowHandlers';
@@ -175,12 +177,11 @@ export default function useTaskTableController({
     return promise;
   }, []);
 
-  const handleOpenFile = useCallback(async (row) => {
-    try {
-      await api.openFile(row);
-    } catch (err) {
+  const handleOpenFile = useCallback((row) => {
+    const launchWindow = reserveLaunchWindow(detectClientPlatform());
+    void api.openFile(row, { launchWindow }).catch((err) => {
       showError(err.message || 'Не удалось открыть файл');
-    }
+    });
   }, [api, showError]);
 
   const handleCloseCdrPreview = useCallback(() => {

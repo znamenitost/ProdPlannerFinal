@@ -62,6 +62,31 @@ export function isAgentUnavailableWarning(message) {
   return false;
 }
 
+/** Агент ответил, но файл/папка на UNC недоступны (404, off VPN и т.п.). */
+export function isFileNotFoundAgentError(message) {
+  const lower = String(message || '').trim().toLowerCase();
+  if (lower === 'file not found') return true;
+  if (lower === 'http 404') return true;
+  return false;
+}
+
+/** Сообщение, когда и агент, и netopen не смогли открыть файл. */
+export function formatOpenFileCombinedError(agentMessage, filePath = '', launchReason = '') {
+  const agentPart = agentMessage
+    ? formatFileOpenError(agentMessage, filePath)
+    : '';
+  const launchPart = String(launchReason || '').trim()
+    || 'Не удалось запустить netopen. Проверьте, что обработчик netopen установлен, или подключитесь к локальной сети.';
+
+  if (agentPart && isFileNotFoundAgentError(agentMessage)) {
+    return `${agentPart}\n\nТакже не удалось открыть через netopen: ${launchPart}`;
+  }
+  if (agentPart) {
+    return `${agentPart}\n\n${launchPart}`;
+  }
+  return launchPart;
+}
+
 /** Человекочитаемая ошибка открытия файла через локальный агент. */
 export function formatFileOpenError(rawMessage, filePath = '') {
   return formatCdrPreviewReadError(rawMessage, filePath);

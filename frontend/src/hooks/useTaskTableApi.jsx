@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { openFileOnClient } from '../utils/openFileOnClient';
-import { normalizePathForOpen } from '../utils/filePathForOpen';
+import { normalizePathForOpen, detectClientPlatform } from '../utils/filePathForOpen';
 
 export default function useTaskTableApi() {
   const handleResponse = useCallback(async (response) => {
@@ -158,15 +158,12 @@ export default function useTaskTableApi() {
     return await handleResponse(response);
   }, [handleResponse, lifecycleUrl]);
 
-  const openFile = useCallback(async (row) => {
+  const openFile = useCallback(async (row, options = {}) => {
     const relativePath = normalizePathForOpen(row.folderPath, row.fileName);
     if (!relativePath || relativePath === '/') {
       throw new Error('Путь к файлу не указан');
     }
-    const result = await openFileOnClient(relativePath, {
-      folderPath: row.folderPath,
-      fileName: row.fileName
-    });
+    const result = await openFileOnClient(relativePath, options);
     if (!result.ok) {
       throw new Error(result.reason || 'Не удалось открыть файл');
     }

@@ -5,7 +5,8 @@ import {
   formatCdrPreviewReadError,
   getCdrPathValidationError,
   getTaskFilePathHint,
-  isAgentUnavailableWarning
+  isAgentUnavailableWarning,
+  isFileNotFoundAgentError
 } from '../src/utils/cdrPreviewErrors.js';
 
 describe('cdrPreviewErrors', () => {
@@ -51,6 +52,11 @@ describe('cdrPreviewErrors', () => {
   it('does not treat file-not-found as agent warning', () => {
     const message = formatCdrPreviewReadError('file not found', '\\\\MINIMARKER\\Клиенты\\test.cdr');
     assert.equal(isAgentUnavailableWarning(message), false);
+  });
+
+  it('detects agent file-not-found helper', () => {
+    assert.equal(isFileNotFoundAgentError('file not found'), true);
+    assert.equal(isFileNotFoundAgentError('HTTP 404'), true);
   });
 
   it('maps HTTP 404', () => {

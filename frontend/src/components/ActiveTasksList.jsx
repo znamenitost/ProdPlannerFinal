@@ -30,8 +30,8 @@ import { useUiFeedback } from '../context/UiFeedbackContext';
 import useActiveTasksQuery from '../hooks/queries/useActiveTasksQuery';
 import useAuth from '../hooks/useAuth';
 import useUserPreference from '../hooks/useUserPreference';
-import { openFileOnClient } from '../utils/openFileOnClient';
-import { normalizePathForOpen } from '../utils/filePathForOpen';
+import { openFileOnClient, reserveLaunchWindow } from '../utils/openFileOnClient';
+import { normalizePathForOpen, detectClientPlatform } from '../utils/filePathForOpen';
 import EmptyState from './ui/EmptyState';
 import { Assignment } from '@mui/icons-material';
 import { getTaskStatusLine } from './TaskTitleTwoLines';
@@ -138,7 +138,7 @@ export default function ActiveTasksList({
     }
   }, [confirm, employee, onUpdate, setPendingTask, showError]);
 
-  const openFile = useCallback(async (filePath) => {
+  const openFile = useCallback((filePath) => {
     if (!filePath) {
       showWarning('Путь к файлу не указан');
       return;
@@ -146,10 +146,13 @@ export default function ActiveTasksList({
     const parts = String(filePath).replace(/\\/g, '/').split('/');
     const fileName = parts.pop() || '';
     const folderPath = parts.join('/');
-    const result = await openFileOnClient(normalizePathForOpen(folderPath, fileName));
-    if (!result.ok) {
-      showError(result.reason || 'Не удалось открыть файл');
-    }
+    const launchWindow = reserveLaunchWindow(detectClientPlatform());
+    void openFileOnClient(normalizePathForOpen(folderPath, fileName), { launchWindow })
+      .then((result) => {
+        if (!result.ok) {
+          showError(result.reason || 'Не удалось открыть файл');
+        }
+      });
   }, [showError, showWarning]);
 
   const sortControls = (
