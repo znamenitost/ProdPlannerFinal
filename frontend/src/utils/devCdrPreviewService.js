@@ -91,7 +91,7 @@ export async function buildTaskCdrPreview(taskId, folderPath, fileName) {
 }
 
 /**
- * ПКМ: только превью из БД. Без агента и без сетевых запросов, если превью нет.
+ * ПКМ: превью из БД. Без запроса при неверном пути; 204/пусто — без ошибок в консоли.
  * @returns {{ preview: object|null, path: string|null, error: string|null }}
  */
 export async function loadTaskCdrPreview(task) {
@@ -100,10 +100,6 @@ export async function loadTaskCdrPreview(task) {
   }
 
   const path = getDevAgentAbsolutePath(task.folderPath, task.fileName) || '';
-
-  if (!task.hasCdrPreview) {
-    return { preview: null, path, error: null };
-  }
 
   const pathError = getCdrPathValidationError(task.folderPath, task.fileName);
   if (pathError) {
@@ -116,7 +112,7 @@ export async function loadTaskCdrPreview(task) {
       return { preview: stored, path: stored.path || path, error: null };
     }
   } catch {
-    // нет превью или временная ошибка — без шума в консоли
+    // временная ошибка — без шума в консоли
   }
 
   return { preview: null, path, error: null };

@@ -11,6 +11,7 @@ import { shouldShowHoursTypeColumns } from '../../utils/taskTableColumns';
 import { handleTaskTableHubEvent } from '../../utils/taskTableHubHandler';
 import { DEV_CDR_PREVIEW_ENABLED, formatDevTaskFilePath } from '../../utils/devCdrPreviewConfig';
 import { loadTaskCdrPreview } from '../../utils/devCdrPreviewService';
+import { getCdrPathValidationError } from '../../utils/cdrPreviewErrors';
 import { cdrPreviewCacheKey } from '../../utils/cdrPreviewRowHandlers';
 
 export default function useTaskTableController({
@@ -195,6 +196,10 @@ export default function useTaskTableController({
   const handleShowCdrPreview = useCallback(async (task, anchor) => {
     if (!DEV_CDR_PREVIEW_ENABLED) return;
 
+    if (getCdrPathValidationError(task.folderPath, task.fileName)) {
+      return;
+    }
+
     attachCdrPreviewRmbListeners(handleCloseCdrPreview);
 
     const path = formatDevTaskFilePath(task.folderPath, task.fileName);
@@ -216,8 +221,7 @@ export default function useTaskTableController({
       } else if (error) {
         setCdrPreviewData({ error, path: displayPath });
       } else {
-        handleCloseCdrPreview();
-        return;
+        setCdrPreviewData({ path: displayPath });
       }
     } catch {
       if (loadId !== cdrPreviewLoadRef.current) return;
