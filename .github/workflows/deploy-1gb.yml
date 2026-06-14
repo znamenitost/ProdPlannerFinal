@@ -80,12 +80,6 @@ jobs:
           mkdir -p publish/wwwroot/downloads
           cp tools/ProductionPlanner.FileOpener/releases/ProductionPlanner-FileOpener-win-x64.zip publish/wwwroot/downloads/
 
-      - name: Build CDR Preview Shell for Explorer
-        run: |
-          chmod +x scripts/build-cdr-preview-shell.sh
-          scripts/build-cdr-preview-shell.sh
-          cp tools/CdrPreviewShell/releases/CdrPreviewShell-win-x64.zip publish/wwwroot/downloads/
-
       - name: Configure PostgreSQL connection for production
         env:
           POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
