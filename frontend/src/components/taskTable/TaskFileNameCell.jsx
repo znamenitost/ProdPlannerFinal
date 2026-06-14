@@ -10,28 +10,31 @@ export default function TaskFileNameCell({ fileName = '', task = null, textLimit
   const limit = textLimit ?? 40;
   const name = fileName || '—';
   const showDot = task ? taskFileShowsOnlineDot(task) : false;
-  const dot = showDot ? (
+  const dotSlot = (
     <Box
       component="span"
-      title="Файл найден"
-      aria-label="Файл найден"
+      title={showDot ? 'Файл найден' : undefined}
+      aria-label={showDot ? 'Файл найден' : undefined}
+      aria-hidden={showDot ? undefined : true}
       sx={{
         width: 8,
         height: 8,
         borderRadius: '50%',
-        bgcolor: 'success.main',
         flexShrink: 0,
-        boxShadow: (theme) => `0 0 0 1px ${theme.palette.success.dark}`
+        bgcolor: showDot ? 'success.main' : 'transparent',
+        boxShadow: showDot
+          ? (theme) => `0 0 0 1px ${theme.palette.success.dark}`
+          : 'none'
       }}
     />
-  ) : null;
+  );
 
   const content = (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, maxWidth: '100%' }}>
+      {dotSlot}
       <Typography variant="body2" component="span" sx={cellDisplayTextSx}>
         {needsTooltip(name, limit) ? truncateText(name, limit) : name}
       </Typography>
-      {dot}
     </Box>
   );
 
