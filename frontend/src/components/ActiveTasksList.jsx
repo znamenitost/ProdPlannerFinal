@@ -30,8 +30,8 @@ import { useUiFeedback } from '../context/UiFeedbackContext';
 import useActiveTasksQuery from '../hooks/queries/useActiveTasksQuery';
 import useAuth from '../hooks/useAuth';
 import useUserPreference from '../hooks/useUserPreference';
-import { openFileOnClient, reserveLaunchWindow } from '../utils/openFileOnClient';
-import { normalizePathForOpen, detectClientPlatform } from '../utils/filePathForOpen';
+import { openFileOnClient } from '../utils/openFileOnClient';
+import { normalizePathForOpen } from '../utils/filePathForOpen';
 import EmptyState from './ui/EmptyState';
 import { Assignment } from '@mui/icons-material';
 import { getTaskStatusLine } from './TaskTitleTwoLines';
@@ -146,8 +146,7 @@ export default function ActiveTasksList({
     const parts = String(filePath).replace(/\\/g, '/').split('/');
     const fileName = parts.pop() || '';
     const folderPath = parts.join('/');
-    const launchWindow = reserveLaunchWindow(detectClientPlatform());
-    void openFileOnClient(normalizePathForOpen(folderPath, fileName), { launchWindow })
+    void openFileOnClient(normalizePathForOpen(folderPath, fileName))
       .then((result) => {
         if (!result.ok) {
           showError(result.reason || 'Не удалось открыть файл');

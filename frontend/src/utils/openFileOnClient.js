@@ -36,65 +36,30 @@ export async function preflightLaunchUrl(launchUrl) {
 }
 
 /**
- * Синхронно резервирует вкладку, пока жив user gesture — иначе netopen блокируется браузером.
- */
-export function reserveLaunchWindow(platform) {
-  if (platform !== 'Win32' && platform !== 'mac') return null;
-  try {
-    return window.open('about:blank', '_blank', 'noopener,noreferrer');
-  } catch {
-    return null;
-  }
-}
-
-function triggerLaunchViaWindow(launchUrl) {
-  const opened = window.open(launchUrl, '_blank');
-  if (opened) return true;
-  window.location.assign(launchUrl);
-  return true;
-}
-
-/**
  * @returns {{ ok: boolean, reason?: string }}
  */
-export function triggerLaunch(launchUrl, platform, reservedWindow) {
-  if (reservedWindow && !reservedWindow.closed) {
-    try {
-      reservedWindow.location.href = launchUrl;
-      return { ok: true };
-    } catch {
-      try {
-        reservedWindow.close();
-      } catch {
-        /* ignore */
-      }
-    }
-  }
+export function triggerLaunch(launchUrl, platform) {
+  const opened = window.open(launchUrl, '_blank');
+  if (opened) return { ok: true };
 
   if (platform === 'mac') {
-    return triggerLaunchViaWindow(launchUrl)
-      ? { ok: true }
-      : { ok: false, reason: 'Браузер заблокировал открытие файла' };
+    window.location.assign(launchUrl);
+    return { ok: true };
   }
 
-  if (platform === 'Win32') {
-    return {
-      ok: false,
-      reason: 'Браузер заблокировал окно открытия файла. Разрешите всплывающие окна для этого сайта.'
-    };
-  }
-
-  return { ok: false, reason: 'Открытие файла поддерживается только на Windows и macOS' };
+  return {
+    ok: false,
+    reason: 'Браузер заблокировал открытие файла. Разрешите всплывающие окна для этого сайта.'
+  };
 }
 
-export async function openFileOnClient(relativePath, options = {}) {
+export async function openFileOnClient(relativePath) {
   if (!relativePath || relativePath === '/') {
     return { ok: false, reason: 'Путь к файлу не указан' };
   }
 
   const platform = detectClientPlatform();
   const launchUrl = buildLaunchUrl(relativePath);
-  const reservedWindow = options.launchWindow ?? reserveLaunchWindow(platform);
 
   let agentError = null;
   let agentUncPath = null;
@@ -103,7 +68,6 @@ export async function openFileOnClient(relativePath, options = {}) {
     try {
       const agentResult = await openFileViaAgent(relativePath);
       if (agentResult.ok) {
-        reservedWindow?.close();
         return { ok: true, method: 'agent' };
       }
       agentError = agentResult.error || 'HTTP error';
@@ -115,20 +79,18 @@ export async function openFileOnClient(relativePath, options = {}) {
 
   const tryLaunch = platform === 'mac' || (platform === 'Win32' && agentError);
   if (!tryLaunch) {
-    reservedWindow?.close();
     return { ok: false, reason: 'Открытие файла не поддерживается на этой платформе' };
   }
 
   const preflight = await preflightLaunchUrl(launchUrl);
   if (!preflight.ok) {
-    reservedWindow?.close();
     return {
       ok: false,
       reason: formatOpenFileCombinedError(agentError, agentUncPath, preflight.reason)
     };
   }
 
-  const launch = triggerLaunch(launchUrl, platform, reservedWindow);
+  const launch = triggerLaunch(launchUrl, platform);
   if (!launch.ok) {
     return {
       ok: false,

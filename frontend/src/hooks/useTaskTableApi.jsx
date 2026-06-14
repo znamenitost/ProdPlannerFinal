@@ -158,12 +158,12 @@ export default function useTaskTableApi() {
     return await handleResponse(response);
   }, [handleResponse, lifecycleUrl]);
 
-  const openFile = useCallback(async (row, options = {}) => {
+  const openFile = useCallback(async (row) => {
     const relativePath = normalizePathForOpen(row.folderPath, row.fileName);
     if (!relativePath || relativePath === '/') {
       throw new Error('Путь к файлу не указан');
     }
-    const result = await openFileOnClient(relativePath, options);
+    const result = await openFileOnClient(relativePath);
     if (!result.ok) {
       throw new Error(result.reason || 'Не удалось открыть файл');
     }

@@ -63,7 +63,7 @@ namespace ProductionPlanner.Controllers
             if (!TryBuildOpenUrl(path, clientPlatform, out var openUrl, out var error))
                 return BadRequest(new { message = error });
 
-            if (IsCustomProtocolUrl(openUrl))
+            if (RequiresProtocolLauncherHtml(openUrl))
                 return Content(BuildProtocolLauncherHtml(openUrl), "text/html; charset=utf-8");
 
             return Redirect(openUrl);
@@ -150,9 +150,22 @@ namespace ProductionPlanner.Controllers
             return true;
         }
 
-        private static bool IsCustomProtocolUrl(string url) =>
-            !url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-            && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        /// <summary>
+        /// HTML-страница с автозапуском — только для netopen и подобных схем.
+        /// smb:// и file:// отдаём через Redirect без промежуточной страницы.
+        /// </summary>
+        private static bool RequiresProtocolLauncherHtml(string url)
+        {
+            if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (url.StartsWith("smb://", StringComparison.OrdinalIgnoreCase)
+                || url.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return true;
+        }
 
         private static string BuildProtocolLauncherHtml(string openUrl)
         {
