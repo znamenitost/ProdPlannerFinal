@@ -116,4 +116,20 @@ public class TaskCdrPreviewService : ITaskCdrPreviewService
         _db.TaskCdrPreviews.Remove(existing);
         await _db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<HashSet<int>> GetExistingTaskIdsAsync(
+        IReadOnlyList<int> taskIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (taskIds.Count == 0)
+            return new HashSet<int>();
+
+        var ids = await _db.TaskCdrPreviews
+            .AsNoTracking()
+            .Where(p => taskIds.Contains(p.TaskId) && p.Data.Length > 0)
+            .Select(p => p.TaskId)
+            .ToListAsync(cancellationToken);
+
+        return ids.ToHashSet();
+    }
 }

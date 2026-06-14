@@ -38,7 +38,6 @@ function ChildTaskRow({
   isLastInSharedGroup = false,
   onOpenFile,
   onShowCdrPreview,
-  onPrefetchCdrPreview,
   onStart,
   onPause,
   onResume,
@@ -114,7 +113,6 @@ function ChildTaskRow({
   const cdrPreviewRowHandlers = getCdrPreviewRowHandlers({
     task,
     onShowCdrPreview,
-    onPrefetchCdrPreview
   });
 
   return (

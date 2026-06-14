@@ -2,6 +2,7 @@ using ProductionPlanner.Data;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Models.Dtos;
+using ProductionPlanner.Services.TaskCdrPreview;
 
 namespace ProductionPlanner.Services.TaskTable;
 
@@ -14,6 +15,7 @@ public class TaskTableService : ITaskTableService
     private readonly ITaskSplitService _splitService;
     private readonly IWorkHoursCalculator _workHours;
     private readonly IEmployeeStatsService _statsService;
+    private readonly ITaskCdrPreviewService _cdrPreviewService;
 
     public TaskTableService(
         IProductionTaskRepository repo,
@@ -22,7 +24,8 @@ public class TaskTableService : ITaskTableService
         ITaskNotificationService notificationService,
         ITaskSplitService splitService,
         IWorkHoursCalculator workHours,
-        IEmployeeStatsService statsService)
+        IEmployeeStatsService statsService,
+        ITaskCdrPreviewService cdrPreviewService)
     {
         _repo = repo;
         _lifecycle = lifecycle;
@@ -31,6 +34,7 @@ public class TaskTableService : ITaskTableService
         _splitService = splitService;
         _workHours = workHours;
         _statsService = statsService;
+        _cdrPreviewService = cdrPreviewService;
     }
 
     /// <summary>
@@ -71,6 +75,7 @@ public class TaskTableService : ITaskTableService
             .GroupBy(i => i.ProductionTaskId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<WorkInterval>)g.ToList());
         var now = _timeService.Now;
+        var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync(parentIds, cancellationToken);
 
         var rows = pageResult.Items.Select(parent =>
         {
@@ -81,8 +86,10 @@ public class TaskTableService : ITaskTableService
                 targetEmployeeName);
             intervalsByTask.TryGetValue(parent.Id, out var intervals);
             intervals ??= Array.Empty<WorkInterval>();
-            return TaskTableRowDto.FromParent(
+            var dto = TaskTableRowDto.FromParent(
                 parent, statusText, hasSubtask, children, intervals, now);
+            dto.HasCdrPreview = previewIds.Contains(parent.Id);
+            return dto;
         }).ToList();
 
         return new PaginatedResult<TaskTableRowDto>
@@ -106,6 +113,8 @@ public class TaskTableService : ITaskTableService
         if (task.HiddenFromTaskTable)
             return null;
 
+        var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync([id], cancellationToken);
+        var hasCdrPreview = previewIds.Contains(id);
         var now = _timeService.Now;
         var intervals = (IReadOnlyList<WorkInterval>)(task.WorkIntervals ?? []);
 
@@ -125,6 +134,7 @@ public class TaskTableService : ITaskTableService
             dto.SequenceOrder = sequenceOrder;
             dto.SequenceStartBlocked = parent?.SupplyMode == SupplyMode.InternalProduction
                 && task.Status == JobStatus.Waiting;
+            dto.HasCdrPreview = hasCdrPreview;
             return dto;
         }
 
@@ -137,8 +147,10 @@ public class TaskTableService : ITaskTableService
             children ?? [],
             targetEmployeeName);
 
-        return TaskTableRowDto.FromParent(
+        var parentDto = TaskTableRowDto.FromParent(
             task, statusText, hasSubtask, children, intervals, now);
+        parentDto.HasCdrPreview = hasCdrPreview;
+        return parentDto;
     }
 
     public async Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(

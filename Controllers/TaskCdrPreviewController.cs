@@ -28,7 +28,7 @@ public class TaskCdrPreviewController : ControllerBase
         {
             var preview = await _previewService.GetAsync(id, cancellationToken);
             if (preview == null)
-                return NotFound();
+                return NoContent();
 
             var (bytes, contentType, updatedAt, sourceKey) = preview.Value;
             Response.Headers[HeaderNames.CacheControl] = "private, max-age=3600";

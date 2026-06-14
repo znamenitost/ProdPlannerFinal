@@ -13,4 +13,8 @@ public interface ITaskCdrPreviewService
         CancellationToken cancellationToken = default);
 
     Task DeleteAsync(int taskId, CancellationToken cancellationToken = default);
+
+    Task<HashSet<int>> GetExistingTaskIdsAsync(
+        IReadOnlyList<int> taskIds,
+        CancellationToken cancellationToken = default);
 }

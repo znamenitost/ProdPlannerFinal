@@ -1,5 +1,5 @@
 import { getDevAgentAbsolutePath, DEV_CDR_PREVIEW_ENABLED } from './devCdrPreviewConfig';
-import { readDevCdrViaAgent } from './fileOpenerAgent';
+import { getLocalAgentUnavailableMessage, readDevCdrViaAgent } from './fileOpenerAgent';
 import { extractCdrPreview } from './cdrPreview';
 import { fetchTaskCdrPreview, persistTaskCdrPreview } from './cdrPreviewApi';
 import {
@@ -29,6 +29,11 @@ async function readAndPreviewCdr(taskId, folderPath, fileName) {
   const pathError = getCdrPathValidationError(folderPath, fileName);
   if (pathError) return null;
 
+  const agentUnavailable = await getLocalAgentUnavailableMessage();
+  if (agentUnavailable) {
+    throw new Error(agentUnavailable);
+  }
+
   const path = getDevAgentAbsolutePath(folderPath, fileName);
   try {
     const bytes = await readDevCdrViaAgent(path);
@@ -45,7 +50,7 @@ export async function buildTaskCdrPreview(taskId, folderPath, fileName) {
 }
 
 /**
- * ПКМ: превью из БД → при необходимости пересобрать через агент.
+ * ПКМ: только превью из БД. Без агента и без сетевых запросов, если превью нет.
  * @returns {{ preview: object|null, path: string|null, error: string|null }}
  */
 export async function loadTaskCdrPreview(task) {
@@ -53,26 +58,25 @@ export async function loadTaskCdrPreview(task) {
     return { preview: null, path: null, error: null };
   }
 
-  const pathError = getCdrPathValidationError(task.folderPath, task.fileName);
-  if (pathError) {
-    return { preview: null, path: null, error: pathError };
+  const path = getDevAgentAbsolutePath(task.folderPath, task.fileName) || '';
+
+  if (task.hasCdrPreview === false) {
+    return { preview: null, path, error: null };
   }
 
-  const path = getDevAgentAbsolutePath(task.folderPath, task.fileName);
+  const pathError = getCdrPathValidationError(task.folderPath, task.fileName);
+  if (pathError) {
+    return { preview: null, path: path || null, error: pathError };
+  }
 
   try {
     const stored = await fetchTaskCdrPreview(task.id);
-    if (stored && (!stored.sourceKey || stored.sourceKey === path)) {
+    if (stored) {
       return { preview: stored, path: stored.path || path, error: null };
     }
   } catch {
-    // fallback to agent below
+    // нет превью или временная ошибка — без шума в консоли
   }
 
-  try {
-    const fromAgent = await readAndPreviewCdr(task.id, task.folderPath, task.fileName);
-    return { preview: fromAgent, path: fromAgent.path || path, error: null };
-  } catch (err) {
-    return { preview: null, path, error: err?.message || 'Не удалось построить превью .cdr' };
-  }
+  return { preview: null, path, error: null };
 }

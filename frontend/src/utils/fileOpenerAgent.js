@@ -1,10 +1,17 @@
 import { detectClientPlatform } from './filePathForOpen';
+import { FILE_OPENER_INSTALL_HINT } from './fileOpenerHints.js';
 
 export const FILE_OPENER_PORT = 17888;
 export const FILE_OPENER_BASE = `http://127.0.0.1:${FILE_OPENER_PORT}`;
 
+export { FILE_OPENER_INSTALL_HINT };
+
 const DEFAULT_WINDOWS_HOST = 'MINIMARKER';
 const DEFAULT_SHARE = 'Клиенты';
+
+let cachedAgentUnavailableMessage;
+let cachedAgentUnavailableAt = 0;
+const AGENT_AVAILABILITY_TTL_MS = 5000;
 
 export function buildWindowsUncPath(
   relativePath,
@@ -30,6 +37,25 @@ export async function isFileOpenerAgentRunning(timeoutMs = 800) {
   }
 }
 
+/** @returns {Promise<string|null>} Текст предупреждения или null, если агент доступен. */
+export async function getLocalAgentUnavailableMessage() {
+  const now = Date.now();
+  if (now - cachedAgentUnavailableAt < AGENT_AVAILABILITY_TTL_MS) {
+    return cachedAgentUnavailableMessage ?? null;
+  }
+
+  let message = null;
+  if (detectClientPlatform() !== 'Win32') {
+    message = `Превью .cdr доступно только на Windows с установленным агентом. ${FILE_OPENER_INSTALL_HINT}`;
+  } else if (!(await isFileOpenerAgentRunning())) {
+    message = `Локальный агент не запущен (порт ${FILE_OPENER_PORT}). ${FILE_OPENER_INSTALL_HINT}`;
+  }
+
+  cachedAgentUnavailableMessage = message;
+  cachedAgentUnavailableAt = now;
+  return message;
+}
+
 export async function openFileViaAgent(relativePath) {
   const uncPath = buildWindowsUncPath(relativePath);
   const url = `${FILE_OPENER_BASE}/open?path=${encodeURIComponent(uncPath)}`;
@@ -47,6 +73,11 @@ export async function openFileViaAgent(relativePath) {
 
 /** Чтение байтов .cdr: read-dev → open-dev?read=1 (только octet-stream, без открытия Corel). */
 export async function readDevCdrViaAgent(absolutePath) {
+  const agentUnavailable = await getLocalAgentUnavailableMessage();
+  if (agentUnavailable) {
+    throw new Error(agentUnavailable);
+  }
+
   const encodedPath = encodeURIComponent(absolutePath);
   const urls = [
     `${FILE_OPENER_BASE}/read-dev?path=${encodedPath}`,

@@ -5,6 +5,7 @@ using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Models.Dtos;
 using ProductionPlanner.Services.TaskTable;
+using ProductionPlanner.Services.TaskCdrPreview;
 using ProductionPlanner.Data;
 
 namespace ProductionPlanner.Controllers
@@ -19,19 +20,22 @@ namespace ProductionPlanner.Controllers
         private readonly IAppTimeService _timeService;
         private readonly IPlanningWarningService _planningWarnings;
         private readonly UserManager<User> _userManager;
+        private readonly ITaskCdrPreviewService _cdrPreviewService;
 
         public TaskSplitController(
             ITaskSplitService splitService,
             IProductionTaskRepository repo,
             IAppTimeService timeService,
             IPlanningWarningService planningWarnings,
-            UserManager<User> userManager)
+            UserManager<User> userManager,
+            ITaskCdrPreviewService cdrPreviewService)
         {
             _splitService = splitService;
             _repo = repo;
             _timeService = timeService;
             _planningWarnings = planningWarnings;
             _userManager = userManager;
+            _cdrPreviewService = cdrPreviewService;
         }
 
         [HttpPost]
@@ -110,6 +114,7 @@ namespace ProductionPlanner.Controllers
             var splits = await _repo.GetTaskSplitsByParentIdAsync(parentRowNumber, cancellationToken);
             var sequenceByChild = splits.ToDictionary(s => s.ChildTaskId, s => s.SequenceOrder);
             var childIds = children.Select(c => c.Id).ToList();
+            var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync(childIds, cancellationToken);
             var intervalsByTask = (await _repo.GetWorkIntervalsForTaskIdsAsync(childIds, cancellationToken))
                 .GroupBy(i => i.ProductionTaskId)
                 .ToDictionary(g => g.Key, g => g.ToList());
@@ -151,7 +156,8 @@ namespace ProductionPlanner.Controllers
                     requiresTestBeforeProduction = c.RequiresTestBeforeProduction,
                     testEstimateHours = c.TestEstimateHours,
                     productionEstimateHours = c.ProductionEstimateHours,
-                    workPhase = (int)c.WorkPhase
+                    workPhase = (int)c.WorkPhase,
+                    hasCdrPreview = previewIds.Contains(c.Id)
                 };
             });
             return Ok(result);

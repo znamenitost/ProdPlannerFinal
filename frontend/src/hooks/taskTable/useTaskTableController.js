@@ -164,14 +164,6 @@ export default function useTaskTableController({
     window.addEventListener('contextmenu', onContextMenu, true);
   }, [detachCdrPreviewRmbListeners]);
 
-  const handlePrefetchCdrPreview = useCallback((task) => {
-    if (!DEV_CDR_PREVIEW_ENABLED || !task?.id) return;
-    const key = cdrPreviewCacheKey(task);
-    if (!key || cdrPreviewCacheRef.current.has(key)) return;
-    const promise = loadTaskCdrPreview(task).catch(() => null);
-    cdrPreviewCacheRef.current.set(key, promise);
-  }, []);
-
   const loadCachedCdrPreview = useCallback(async (task) => {
     const key = cdrPreviewCacheKey(task);
     let promise = key ? cdrPreviewCacheRef.current.get(key) : null;
@@ -221,18 +213,14 @@ export default function useTaskTableController({
       const displayPath = resolvedPath || path;
       if (preview) {
         setCdrPreviewData({ ...preview, path: preview.path || displayPath });
+      } else if (error) {
+        setCdrPreviewData({ error, path: displayPath });
       } else {
-        setCdrPreviewData({
-          error: error || 'Превью не найдено. Сохраните задачу ещё раз (превью строится при сохранении).',
-          path: displayPath
-        });
+        setCdrPreviewData({ path: displayPath });
       }
-    } catch (err) {
+    } catch {
       if (loadId !== cdrPreviewLoadRef.current) return;
-      setCdrPreviewData({
-        error: err?.message || 'Не удалось построить превью .cdr',
-        path
-      });
+      setCdrPreviewData({ path });
     } finally {
       if (loadId === cdrPreviewLoadRef.current) {
         setCdrPreviewPending(false);
@@ -311,7 +299,6 @@ export default function useTaskTableController({
     ...modals,
     handleOpenFile,
     handleShowCdrPreview,
-    handlePrefetchCdrPreview,
     handleCloseCdrPreview,
     cdrPreviewOpen,
     cdrPreviewTask,

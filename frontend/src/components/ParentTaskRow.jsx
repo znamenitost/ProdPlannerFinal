@@ -58,7 +58,6 @@ function ParentTaskRow({
   onToggleExpand,
   onOpenFile,
   onShowCdrPreview,
-  onPrefetchCdrPreview,
   onStart,
   onPause,
   onResume,
@@ -112,7 +111,6 @@ function ParentTaskRow({
   const cdrPreviewRowHandlers = getCdrPreviewRowHandlers({
     task,
     onShowCdrPreview,
-    onPrefetchCdrPreview
   });
 
   const canUserManage = () => {
@@ -329,7 +327,6 @@ function ParentTaskRow({
           isLastInSharedGroup={index === childCount - 1}
           onOpenFile={onOpenFile}
           onShowCdrPreview={onShowCdrPreview}
-          onPrefetchCdrPreview={onPrefetchCdrPreview}
           onStart={onStart}
           onPause={onPause}
           onResume={onResume}

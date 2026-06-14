@@ -89,7 +89,7 @@ export default function CdrPreviewDialog({
           </Box>
         ) : (
           <Typography variant="body2" color="text.secondary">
-            Превью не найдено
+            Превью нет
           </Typography>
         )}
       </Paper>

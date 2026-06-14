@@ -1,3 +1,4 @@
+import { FILE_OPENER_INSTALL_HINT } from './fileOpenerHints.js';
 import { normalizePathForOpen } from './filePathForOpen.js';
 
 const AGENT_ERROR_MESSAGES = {
@@ -44,7 +45,10 @@ function isAgentUnreachableMessage(message) {
     || normalized.includes('networkerror')
     || normalized.includes('network error')
     || normalized.includes('aborterror')
-    || normalized.includes('fetch failed');
+    || normalized.includes('fetch failed')
+    || normalized.includes('not allowed to request resource')
+    || normalized.includes('access control')
+    || normalized.includes('load failed');
 }
 
 /** Человекочитаемая ошибка открытия файла через локальный агент. */
@@ -62,7 +66,7 @@ export function formatCdrPreviewReadError(rawMessage, filePath = '') {
   }
 
   if (isAgentUnreachableMessage(message)) {
-    return `Локальный агент не отвечает (порт 17888). Установите File Opener из меню приложения и проверьте, что он запущен.${pathSuffix}`;
+    return `Локальный агент недоступен. ${FILE_OPENER_INSTALL_HINT}${pathSuffix}`;
   }
 
   const httpMatch = message.match(/^HTTP (\d{3})$/i);

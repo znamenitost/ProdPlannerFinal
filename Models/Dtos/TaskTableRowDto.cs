@@ -46,6 +46,8 @@ public class TaskTableRowDto
 
     public bool SequenceStartBlocked { get; set; }
 
+    public bool HasCdrPreview { get; set; }
+
     public static TaskTableRowDto FromParent(
         ProductionTask parent,
         string statusText,

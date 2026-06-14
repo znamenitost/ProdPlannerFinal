@@ -42,8 +42,8 @@ describe('cdrPreviewErrors', () => {
 
   it('explains unreachable agent', () => {
     const message = formatCdrPreviewReadError('Failed to fetch', '\\\\MINIMARKER\\Клиенты\\test.cdr');
-    assert.match(message, /агент не отвечает/i);
-    assert.match(message, /17888/);
+    assert.match(message, /агент недоступен/i);
+    assert.match(message, /аватар/i);
   });
 
   it('maps HTTP 404', () => {

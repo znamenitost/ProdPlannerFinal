@@ -7,12 +7,11 @@ describe('cdrPreviewRowHandlers', () => {
     const calls = [];
     const handlers = getCdrPreviewRowHandlers({
       task: { id: 1 },
-      onShowCdrPreview: (...args) => calls.push(args),
-      onPrefetchCdrPreview: () => calls.push(['prefetch'])
+      onShowCdrPreview: (...args) => calls.push(args)
     });
 
     assert.equal(typeof handlers.onPointerDownCapture, 'function');
-    assert.equal(typeof handlers.onMouseEnter, 'function');
+    assert.equal(handlers.onMouseEnter, undefined);
 
     handlers.onPointerDownCapture({
       button: 2,
