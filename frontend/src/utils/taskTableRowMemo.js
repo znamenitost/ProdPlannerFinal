@@ -56,6 +56,7 @@ export function areParentRowPropsEqual(prev, next) {
     prev.onToggleExpand === next.onToggleExpand &&
     prev.onOpenFile === next.onOpenFile &&
     prev.onShowCdrPreview === next.onShowCdrPreview &&
+    prev.onPrefetchCdrPreview === next.onPrefetchCdrPreview &&
     prev.onStart === next.onStart &&
     prev.onPause === next.onPause &&
     prev.onResume === next.onResume &&
@@ -99,6 +100,8 @@ export function areChildRowPropsEqual(prev, next) {
   if (prev.isLastInSharedGroup !== next.isLastInSharedGroup) return false;
   return (
     prev.onOpenFile === next.onOpenFile &&
+    prev.onShowCdrPreview === next.onShowCdrPreview &&
+    prev.onPrefetchCdrPreview === next.onPrefetchCdrPreview &&
     prev.onStart === next.onStart &&
     prev.onPause === next.onPause &&
     prev.onResume === next.onResume &&

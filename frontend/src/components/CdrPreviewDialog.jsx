@@ -32,7 +32,7 @@ export default function CdrPreviewDialog({
         position: 'fixed',
         left,
         top,
-        zIndex: (theme) => theme.zIndex.tooltip + 2,
+        zIndex: (theme) => theme.zIndex.modal + 2,
         pointerEvents: 'none',
         maxWidth: 400
       }}

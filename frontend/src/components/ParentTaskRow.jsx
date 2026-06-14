@@ -1,5 +1,5 @@
 import { Fragment, memo } from 'react';
-import { areParentRowPropsEqual } from '../utils/taskTableRowMemo';
+import { getCdrPreviewRowHandlers } from '../utils/cdrPreviewRowHandlers';
 import {
   TableRow,
   TableCell,
@@ -57,6 +57,7 @@ function ParentTaskRow({
   onToggleExpand,
   onOpenFile,
   onShowCdrPreview,
+  onPrefetchCdrPreview,
   onStart,
   onPause,
   onResume,
@@ -107,6 +108,11 @@ function ParentTaskRow({
 
   const fullFilePath = `${task.folderPath || ''}/${task.fileName || ''}`.replace(/\/\//g, '/');
   const shortFolderPath = getLastPathSegment(task.folderPath);
+  const cdrPreviewRowHandlers = getCdrPreviewRowHandlers({
+    task,
+    onShowCdrPreview,
+    onPrefetchCdrPreview
+  });
 
   const canUserManage = () => {
     if (!currentUser) return false;
@@ -166,15 +172,7 @@ function ParentTaskRow({
     <Fragment>
       <TableRow
         sx={(theme) => getRowStyle(theme)}
-        onContextMenu={(event) => {
-          if (!onShowCdrPreview) return;
-          event.preventDefault();
-        }}
-        onMouseDown={(event) => {
-          if (!onShowCdrPreview || event.button !== 2) return;
-          event.preventDefault();
-          onShowCdrPreview(task, { x: event.clientX, y: event.clientY });
-        }}
+        {...cdrPreviewRowHandlers}
       >
         {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}
         <TableCell sx={COL_ICON}>
@@ -329,6 +327,8 @@ function ParentTaskRow({
           sharedGroupParentTask={task}
           isLastInSharedGroup={index === childCount - 1}
           onOpenFile={onOpenFile}
+          onShowCdrPreview={onShowCdrPreview}
+          onPrefetchCdrPreview={onPrefetchCdrPreview}
           onStart={onStart}
           onPause={onPause}
           onResume={onResume}

@@ -290,6 +290,7 @@ export default function TaskTable({
         onToggleExpand={table.toggleExpand}
         onOpenFile={table.handleOpenFile}
         onShowCdrPreview={DEV_CDR_PREVIEW_ENABLED ? table.handleShowCdrPreview : undefined}
+        onPrefetchCdrPreview={DEV_CDR_PREVIEW_ENABLED ? table.handlePrefetchCdrPreview : undefined}
         onStart={table.handleStartTask}
         onPause={table.handlePauseTask}
         onResume={table.handleResumeTask}

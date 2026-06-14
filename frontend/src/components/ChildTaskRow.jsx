@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { TableRow, TableCell, Box, Typography, Chip } from '@mui/material';
 import { areChildRowPropsEqual } from '../utils/taskTableRowMemo';
+import { getCdrPreviewRowHandlers } from '../utils/cdrPreviewRowHandlers';
 import { alpha } from '@mui/material/styles';
 import { Person } from '@mui/icons-material';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
@@ -36,6 +37,8 @@ function ChildTaskRow({
   sharedGroupParentTask = null,
   isLastInSharedGroup = false,
   onOpenFile,
+  onShowCdrPreview,
+  onPrefetchCdrPreview,
   onStart,
   onPause,
   onResume,
@@ -108,10 +111,15 @@ function ChildTaskRow({
   const showActionButtons = canUserManage() && canChangeStatus;
   const lifecycleBusy = pendingLifecycleTaskId != null;
   const tableColSpan = taskTableColumnCount(columnVisibility, showHoursTypeColumns);
+  const cdrPreviewRowHandlers = getCdrPreviewRowHandlers({
+    task,
+    onShowCdrPreview,
+    onPrefetchCdrPreview
+  });
 
   return (
     <>
-    <TableRow sx={(theme) => getRowStyle(theme)}>
+    <TableRow sx={(theme) => getRowStyle(theme)} {...cdrPreviewRowHandlers}>
       <TableCell sx={COL_ICON}>
         <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap' }}>
           <Box sx={{ ...ICON_SLOT_EXPAND, height: 34, position: 'relative' }}>

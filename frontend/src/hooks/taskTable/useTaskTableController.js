@@ -11,6 +11,7 @@ import { shouldShowHoursTypeColumns } from '../../utils/taskTableColumns';
 import { handleTaskTableHubEvent } from '../../utils/taskTableHubHandler';
 import { DEV_CDR_PREVIEW_ENABLED, formatDevTaskFilePath } from '../../utils/devCdrPreviewConfig';
 import { loadTaskCdrPreview } from '../../utils/devCdrPreviewService';
+import { cdrPreviewCacheKey } from '../../utils/cdrPreviewRowHandlers';
 
 export default function useTaskTableController({
   onCalendarRefresh,
@@ -36,12 +37,16 @@ export default function useTaskTableController({
   const [cdrPreviewAnchor, setCdrPreviewAnchor] = useState(null);
   const cdrPreviewLoadRef = useRef(0);
   const cdrPreviewRmbListenersRef = useRef(null);
+  const cdrPreviewCacheRef = useRef(new Map());
 
   const detachCdrPreviewRmbListeners = useCallback(() => {
     const listeners = cdrPreviewRmbListenersRef.current;
     if (!listeners) return;
-    window.removeEventListener('mouseup', listeners.onMouseUp);
-    window.removeEventListener('contextmenu', listeners.onContextMenu);
+    window.removeEventListener('pointerup', listeners.onPointerUp, true);
+    window.removeEventListener('mouseup', listeners.onMouseUp, true);
+    window.removeEventListener('pointermove', listeners.onPointerMove, true);
+    window.removeEventListener('contextmenu', listeners.onContextMenu, true);
+    if (listeners.openTimer) window.clearTimeout(listeners.openTimer);
     cdrPreviewRmbListenersRef.current = null;
   }, []);
 
@@ -114,6 +119,69 @@ export default function useTaskTableController({
     return () => onRegisterHubHandler(null);
   }, [onRegisterHubHandler]);
 
+  const attachCdrPreviewRmbListeners = useCallback((onRelease) => {
+    detachCdrPreviewRmbListeners();
+
+    let closeAllowed = false;
+    const openTimer = window.setTimeout(() => {
+      closeAllowed = true;
+    }, 0);
+
+    const shouldClose = (event) => {
+      if (!closeAllowed) return false;
+      if (event.pointerType && event.pointerType !== 'mouse') return false;
+      return (event.buttons & 2) === 0;
+    };
+
+    const onPointerUp = (event) => {
+      if (shouldClose(event)) onRelease();
+    };
+
+    const onMouseUp = (event) => {
+      if (shouldClose(event)) onRelease();
+    };
+
+    const onPointerMove = (event) => {
+      if (!closeAllowed) return;
+      if (event.pointerType && event.pointerType !== 'mouse') return;
+      if ((event.buttons & 2) === 0) onRelease();
+    };
+
+    const onContextMenu = (event) => {
+      event.preventDefault();
+    };
+
+    cdrPreviewRmbListenersRef.current = {
+      onPointerUp,
+      onMouseUp,
+      onPointerMove,
+      onContextMenu,
+      openTimer
+    };
+    window.addEventListener('pointerup', onPointerUp, true);
+    window.addEventListener('mouseup', onMouseUp, true);
+    window.addEventListener('pointermove', onPointerMove, true);
+    window.addEventListener('contextmenu', onContextMenu, true);
+  }, [detachCdrPreviewRmbListeners]);
+
+  const handlePrefetchCdrPreview = useCallback((task) => {
+    if (!DEV_CDR_PREVIEW_ENABLED || !task?.id) return;
+    const key = cdrPreviewCacheKey(task);
+    if (!key || cdrPreviewCacheRef.current.has(key)) return;
+    const promise = loadTaskCdrPreview(task).catch(() => null);
+    cdrPreviewCacheRef.current.set(key, promise);
+  }, []);
+
+  const loadCachedCdrPreview = useCallback(async (task) => {
+    const key = cdrPreviewCacheKey(task);
+    let promise = key ? cdrPreviewCacheRef.current.get(key) : null;
+    if (!promise) {
+      promise = loadTaskCdrPreview(task);
+      if (key) cdrPreviewCacheRef.current.set(key, promise);
+    }
+    return promise;
+  }, []);
+
   const handleOpenFile = useCallback(async (row) => {
     try {
       await api.openFile(row);
@@ -135,19 +203,7 @@ export default function useTaskTableController({
   const handleShowCdrPreview = useCallback(async (task, anchor) => {
     if (!DEV_CDR_PREVIEW_ENABLED) return;
 
-    detachCdrPreviewRmbListeners();
-
-    const onMouseUp = (event) => {
-      if (event.button === 2) {
-        handleCloseCdrPreview();
-      }
-    };
-    const onContextMenu = (event) => {
-      event.preventDefault();
-    };
-    cdrPreviewRmbListenersRef.current = { onMouseUp, onContextMenu };
-    window.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('contextmenu', onContextMenu);
+    attachCdrPreviewRmbListeners(handleCloseCdrPreview);
 
     const path = formatDevTaskFilePath(task.folderPath, task.fileName);
     const loadId = ++cdrPreviewLoadRef.current;
@@ -159,7 +215,7 @@ export default function useTaskTableController({
     setCdrPreviewData(null);
 
     try {
-      const { preview, path: resolvedPath, error } = await loadTaskCdrPreview(task);
+      const { preview, path: resolvedPath, error } = await loadCachedCdrPreview(task);
       if (loadId !== cdrPreviewLoadRef.current) return;
 
       const displayPath = resolvedPath || path;
@@ -182,7 +238,7 @@ export default function useTaskTableController({
         setCdrPreviewPending(false);
       }
     }
-  }, [detachCdrPreviewRmbListeners, handleCloseCdrPreview]);
+  }, [attachCdrPreviewRmbListeners, handleCloseCdrPreview, loadCachedCdrPreview]);
 
   const modals = useTaskTableModals({
     api,
@@ -255,6 +311,7 @@ export default function useTaskTableController({
     ...modals,
     handleOpenFile,
     handleShowCdrPreview,
+    handlePrefetchCdrPreview,
     handleCloseCdrPreview,
     cdrPreviewOpen,
     cdrPreviewTask,
