@@ -1,4 +1,5 @@
 import { Fragment, memo } from 'react';
+import { areParentRowPropsEqual } from '../utils/taskTableRowMemo';
 import { getCdrPreviewRowHandlers } from '../utils/cdrPreviewRowHandlers';
 import {
   TableRow,
