@@ -263,9 +263,42 @@ jobs:
       - name: Start IIS (remove app_offline.htm)
         if: always()
         run: |
-          lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${{ steps.ftp.outputs.server }}; cd '${{ steps.ftp.outputs.server_dir }}'; rm -f app_offline.htm; bye" || {
-            echo "::warning::Не удалось удалить app_offline.htm — удалите вручную в /http/ через FileZilla"
+          FTP_USER='${{ secrets.FTP_USERNAME }}'
+          FTP_PASS='${{ secrets.FTP_PASSWORD }}'
+          FTP_HOST='${{ steps.ftp.outputs.server }}'
+          FTP_DIR='${{ steps.ftp.outputs.server_dir }}'
+
+          lftp_offline() {
+            lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${FTP_USER}','${FTP_PASS}' ${FTP_HOST}; cd '${FTP_DIR}'; $1; bye"
           }
+
+          offline_still_present() {
+            lftp_offline "cls -1 app_offline.htm" 2>/dev/null | grep -qi 'app_offline\.htm'
+          }
+
+          removed=0
+          for attempt in 1 2 3 4 5 6; do
+            if lftp_offline "rm -f app_offline.htm"; then
+              sleep 2
+              if ! offline_still_present; then
+                echo "app_offline.htm удалён (попытка ${attempt})"
+                removed=1
+                break
+              fi
+              echo "rm прошёл, но файл ещё виден на FTP — ждём 10 с (попытка ${attempt})"
+            else
+              echo "lftp rm не удался — ждём 10 с (попытка ${attempt})"
+            fi
+            sleep 10
+          done
+
+          if [ "$removed" -eq 0 ]; then
+            if offline_still_present; then
+              echo "::warning::Не удалось удалить app_offline.htm (файл загружен этим деплоем на шаге Stop IIS). IIS может держать блокировку — удалите вручную в ${FTP_DIR} через FileZilla или подождите и перезапустите workflow."
+            else
+              echo "app_offline.htm на FTP не найден — сайт должен подняться без ручного удаления"
+            fi
+          fi
 
       - name: Deploy summary
         run: |
