@@ -1,5 +1,6 @@
 import { detectClientPlatform } from './filePathForOpen';
 import { openFileViaAgent } from './fileOpenerAgent';
+import { formatFileOpenError } from './cdrPreviewErrors';
 
 function buildLaunchUrl(relativePath) {
   const params = new URLSearchParams({
@@ -39,9 +40,15 @@ export async function openFileOnClient(relativePath, options = {}) {
 
   if (platform === 'Win32') {
     try {
-      const openedViaAgent = await openFileViaAgent(relativePath);
-      if (openedViaAgent) {
+      const agentResult = await openFileViaAgent(relativePath);
+      if (agentResult.ok) {
         return { ok: true, method: 'agent' };
+      }
+      if (agentResult.error) {
+        return {
+          ok: false,
+          reason: formatFileOpenError(agentResult.error, agentResult.uncPath)
+        };
       }
     } catch {
       // fallback to netopen below

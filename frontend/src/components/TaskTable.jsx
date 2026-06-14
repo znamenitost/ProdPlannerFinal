@@ -422,6 +422,7 @@ export default function TaskTable({
       {DEV_CDR_PREVIEW_ENABLED && (
         <CdrPreviewDialog
           open={table.cdrPreviewOpen}
+          anchor={table.cdrPreviewAnchor}
           taskTitle={
             table.cdrPreviewTask?.title
             || table.cdrPreviewTask?.heading
@@ -438,7 +439,6 @@ export default function TaskTable({
           }
           previewError={table.cdrPreviewData?.error}
           pending={table.cdrPreviewPending}
-          onClose={table.handleCloseCdrPreview}
         />
       )}
       <TaskIntervalsDialog

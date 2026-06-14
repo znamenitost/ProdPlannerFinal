@@ -1,78 +1,75 @@
-import { useEffect, useRef } from 'react';
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Box,
-  Typography,
-  CircularProgress
-} from '@mui/material';
-import { Close, FolderOpen, Image } from '@mui/icons-material';
+import { Box, CircularProgress, Paper, Typography } from '@mui/material';
+import { Image } from '@mui/icons-material';
+
+function clampAnchor(anchor) {
+  const x = Number(anchor?.x) || 0;
+  const y = Number(anchor?.y) || 0;
+  const maxLeft = Math.max(8, window.innerWidth - 408);
+  const maxTop = Math.max(8, window.innerHeight - 320);
+  return {
+    left: Math.min(Math.max(8, x + 12), maxLeft),
+    top: Math.min(Math.max(8, y + 12), maxTop)
+  };
+}
 
 export default function CdrPreviewDialog({
   open,
+  anchor = null,
   taskTitle = '',
   previewUrl,
   previewInfo = '',
   previewPath = '',
   previewError = '',
-  needsPick = false,
-  pending = false,
-  onClose,
-  onFilePicked
+  pending = false
 }) {
-  const fileInputRef = useRef(null);
-  const autoPickDoneRef = useRef(false);
+  if (!open || !anchor) return null;
 
-  useEffect(() => {
-    if (!open) {
-      autoPickDoneRef.current = false;
-      return;
-    }
-    if (!pending && needsPick && !previewUrl && !previewError && !autoPickDoneRef.current) {
-      autoPickDoneRef.current = true;
-      window.requestAnimationFrame(() => fileInputRef.current?.click());
-    }
-  }, [open, pending, needsPick, previewUrl, previewError]);
-
-  const handleFileChange = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file || !onFilePicked) return;
-    await onFilePicked(file);
-  };
+  const { left, top } = clampAnchor(anchor);
 
   return (
-    <Dialog open={open} onClose={pending ? undefined : onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Image color="primary" fontSize="small" />
-        Превью .cdr
-      </DialogTitle>
-      <DialogContent>
+    <Box
+      sx={{
+        position: 'fixed',
+        left,
+        top,
+        zIndex: (theme) => theme.zIndex.tooltip + 2,
+        pointerEvents: 'none',
+        maxWidth: 400
+      }}
+    >
+      <Paper elevation={8} sx={{ p: 1.5, bgcolor: 'background.paper' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+          <Image color="primary" sx={{ fontSize: 18 }} />
+          <Typography variant="subtitle2" component="span">
+            Превью .cdr
+          </Typography>
+        </Box>
         {taskTitle ? (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
             {taskTitle}
           </Typography>
         ) : null}
         {previewPath ? (
-          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-            Файл: {previewPath}
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+            {previewPath}
           </Typography>
         ) : null}
         {pending ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-            <CircularProgress size={32} />
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress size={28} />
           </Box>
         ) : previewError ? (
-          <Typography color="error" sx={{ whiteSpace: 'pre-wrap', mb: 2 }}>
+          <Typography variant="body2" color="error" sx={{ whiteSpace: 'pre-wrap' }}>
             {previewError}
           </Typography>
         ) : previewUrl ? (
           <Box>
             {previewInfo ? (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, whiteSpace: 'pre-wrap' }}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', mb: 0.5, whiteSpace: 'pre-wrap' }}
+              >
                 {previewInfo}
               </Typography>
             ) : null}
@@ -80,38 +77,22 @@ export default function CdrPreviewDialog({
               component="img"
               src={previewUrl}
               alt="CDR preview"
-              sx={{ maxWidth: '100%', maxHeight: 480, border: 1, borderColor: 'divider', borderRadius: 1 }}
+              sx={{
+                display: 'block',
+                maxWidth: '100%',
+                maxHeight: 280,
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: 1
+              }}
             />
           </Box>
-        ) : needsPick ? (
-          <Typography color="text.secondary">
-            Выберите .cdr в диалоге (тот же файл, что открывается по иконке папки).
-          </Typography>
         ) : (
-          <Typography color="text.secondary">Превью не найдено</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Превью не найдено
+          </Typography>
         )}
-      </DialogContent>
-      <DialogActions>
-        {needsPick && !pending && (
-          <Button
-            startIcon={<FolderOpen />}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={pending}
-          >
-            Выбрать .cdr
-          </Button>
-        )}
-        <Button onClick={onClose} startIcon={<Close />} disabled={pending}>
-          Закрыть
-        </Button>
-      </DialogActions>
-      <input
-        ref={fileInputRef}
-        type="file"
-        hidden
-        accept=".cdr"
-        onChange={handleFileChange}
-      />
-    </Dialog>
+      </Paper>
+    </Box>
   );
 }

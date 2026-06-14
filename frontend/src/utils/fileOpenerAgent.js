@@ -34,7 +34,15 @@ export async function openFileViaAgent(relativePath) {
   const uncPath = buildWindowsUncPath(relativePath);
   const url = `${FILE_OPENER_BASE}/open?path=${encodeURIComponent(uncPath)}`;
   const response = await fetch(url);
-  return response.ok;
+  if (response.ok) {
+    return { ok: true, uncPath };
+  }
+  const text = (await response.text().catch(() => '')).trim();
+  return {
+    ok: false,
+    uncPath,
+    error: text || `HTTP ${response.status}`
+  };
 }
 
 /** Чтение байтов .cdr: read-dev → open-dev?read=1 (только octet-stream, без открытия Corel). */

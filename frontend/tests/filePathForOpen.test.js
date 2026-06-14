@@ -1,0 +1,49 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  ensureClientLetterPrefix,
+  isClientLetterSegment,
+  normalizePathForOpen
+} from '../src/utils/filePathForOpen.js';
+
+describe('filePathForOpen', () => {
+  it('detects single-letter client bucket segment', () => {
+    assert.equal(isClientLetterSegment('Ф'), true);
+    assert.equal(isClientLetterSegment('Федерация'), false);
+  });
+
+  it('prepends letter from folder name when bucket is missing', () => {
+    assert.equal(
+      ensureClientLetterPrefix('Федерация Бодибилдинга/макет.cdr', 'Федерация Бодибилдинга'),
+      'Ф/Федерация Бодибилдинга/макет.cdr'
+    );
+  });
+
+  it('keeps path when letter bucket is already present', () => {
+    assert.equal(
+      ensureClientLetterPrefix('Ф/Федерация Бодибилдинга/макет.cdr'),
+      'Ф/Федерация Бодибилдинга/макет.cdr'
+    );
+  });
+
+  it('strips yandex disk root and prepends letter bucket', () => {
+    const result = normalizePathForOpen(
+      'C:\\Users\\пк\\Yandex.Disk\\Клиенты\\Федерация Бодибилдинга',
+      'макет.cdr'
+    );
+    assert.equal(result, 'Ф/Федерация Бодибилдинга/макет.cdr');
+  });
+
+  it('keeps standard path with letter bucket after share', () => {
+    const result = normalizePathForOpen(
+      'C:/Users/пк/Yandex.Disk/Клиенты/Ф/Фрэшмемори',
+      '18,05,26 конфеты.cdr'
+    );
+    assert.equal(result, 'Ф/Фрэшмемори/18,05,26 конфеты.cdr');
+  });
+
+  it('builds from short folder path without base root', () => {
+    const result = normalizePathForOpen('Федерация Бодибилдинга', 'макет.cdr');
+    assert.equal(result, 'Ф/Федерация Бодибилдинга/макет.cdr');
+  });
+});

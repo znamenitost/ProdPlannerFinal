@@ -1,5 +1,47 @@
 const DEFAULT_SHARE = 'Клиенты';
 
+function stripShareRelativeFolder(folderPath, shareName = DEFAULT_SHARE) {
+  let raw = String(folderPath || '').replace(/\\/g, '/').trim();
+  raw = raw.replace(/^[A-Za-z]:/i, '').replace(/^\/+/, '');
+
+  const marker = `${shareName}/`;
+  const idx = raw.toLowerCase().indexOf(marker.toLowerCase());
+  if (idx >= 0) raw = raw.slice(idx + marker.length);
+
+  return raw.replace(/^\/+|\/+$/g, '');
+}
+
+/** Однобуквенный сегмент после «Клиенты» (Ф, С, …). */
+export function isClientLetterSegment(segment) {
+  return Boolean(segment && segment.length === 1 && /\p{L}/u.test(segment));
+}
+
+/**
+ * Дополняет путь буквой-каталогом, если указан без корня «Клиенты/БУКВА/».
+ * Буква берётся из первой буквы папки в задаче (например «Федерация…» → «Ф»).
+ */
+export function ensureClientLetterPrefix(relativePath, folderPathHint = '') {
+  const parts = String(relativePath || '').split('/').filter(Boolean);
+  if (parts.length === 0) return '';
+
+  if (isClientLetterSegment(parts[0])) {
+    return parts.join('/');
+  }
+
+  const folderOnly = String(folderPathHint || '').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+    || (parts.length > 1 ? parts.slice(0, -1).join('/') : '');
+
+  if (!folderOnly && parts.length === 1) {
+    return parts.join('/');
+  }
+
+  const letterSource = folderOnly || parts[0];
+  const letter = letterSource.match(/\p{L}/u)?.[0];
+  if (!letter) return parts.join('/');
+
+  return `${letter}/${parts.join('/')}`;
+}
+
 export function normalizePathForOpen(folderPath, fileName, shareName = DEFAULT_SHARE) {
   let raw = `${folderPath || ''}/${fileName || ''}`.replace(/\\/g, '/');
   while (raw.includes('//')) raw = raw.replace('//', '/');
@@ -9,7 +51,10 @@ export function normalizePathForOpen(folderPath, fileName, shareName = DEFAULT_S
   const idx = raw.toLowerCase().indexOf(marker.toLowerCase());
   if (idx >= 0) raw = raw.slice(idx + marker.length);
 
-  return raw.replace(/^\/+/, '').replace(/\/+$/, '');
+  const trimmed = raw.replace(/^\/+/, '').replace(/\/+$/, '');
+  if (!trimmed) return '';
+
+  return ensureClientLetterPrefix(trimmed, stripShareRelativeFolder(folderPath, shareName));
 }
 
 export function detectClientPlatform() {

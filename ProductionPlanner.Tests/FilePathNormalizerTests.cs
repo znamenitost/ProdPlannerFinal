@@ -82,4 +82,28 @@ public class FilePathNormalizerTests
         Assert.False(ok);
         Assert.Equal("Недопустимый путь", error);
     }
+
+    [Fact]
+    public void Prepends_letter_bucket_when_path_lacks_share_letter_segment()
+    {
+        var input = "Федерация Бодибилдинга/макет.cdr";
+        var result = FilePathNormalizer.NormalizeRelativePath(input, Share);
+        Assert.Equal("Ф/Федерация Бодибилдинга/макет.cdr", result);
+    }
+
+    [Fact]
+    public void Prepends_letter_after_stripping_yandex_disk_path_without_letter_folder()
+    {
+        var input = @"C:\Users\пк\Yandex.Disk\Клиенты\Федерация Бодибилдинга\макет.cdr";
+        var result = FilePathNormalizer.NormalizeRelativePath(input, Share);
+        Assert.Equal("Ф/Федерация Бодибилдинга/макет.cdr", result);
+    }
+
+    [Fact]
+    public void Keeps_path_when_letter_bucket_already_present()
+    {
+        var input = @"C:\Users\пк\Yandex.Disk\Клиенты\Ф\Федерация Бодибилдинга\макет.cdr";
+        var result = FilePathNormalizer.NormalizeRelativePath(input, Share);
+        Assert.Equal("Ф/Федерация Бодибилдинга/макет.cdr", result);
+    }
 }

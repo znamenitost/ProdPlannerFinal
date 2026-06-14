@@ -256,7 +256,7 @@ export default function useTaskTableActions({
     } finally {
       savingRowIdRef.current = null;
     }
-  }, [api, syncRowFromServer, setEditingId, showError, applyPlanningWarnings]);
+  }, [api, syncRowFromServer, setEditingId, showError, showWarning, applyPlanningWarnings]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
     if (pendingLifecycleTaskIdRef.current != null) return;

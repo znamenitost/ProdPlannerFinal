@@ -2,71 +2,79 @@ import { getDevAgentAbsolutePath, DEV_CDR_PREVIEW_ENABLED } from './devCdrPrevie
 import { readDevCdrViaAgent } from './fileOpenerAgent';
 import { extractCdrPreview } from './cdrPreview';
 import { fetchTaskCdrPreview, persistTaskCdrPreview } from './cdrPreviewApi';
+import {
+  formatCdrPreviewPersistError,
+  formatCdrPreviewReadError,
+  getCdrPathValidationError
+} from './cdrPreviewErrors';
 
 async function previewFromBytes(bytes, taskId, path) {
   const result = await extractCdrPreview(bytes);
   if (!result.ok) {
-    throw new Error(result.error);
+    const pathSuffix = path ? `\nФайл: ${path}` : '';
+    throw new Error(`${result.error}${pathSuffix}`);
   }
 
   const preview = { url: result.url, method: result.method, path };
   if (!taskId) return preview;
 
-  return persistTaskCdrPreview(taskId, preview);
+  try {
+    return await persistTaskCdrPreview(taskId, preview);
+  } catch (err) {
+    throw new Error(formatCdrPreviewPersistError(err?.message));
+  }
 }
 
-async function tryAgentPreview(taskId, folderPath, fileName) {
+async function readAndPreviewCdr(taskId, folderPath, fileName) {
+  const pathError = getCdrPathValidationError(folderPath, fileName);
+  if (pathError) {
+    throw new Error(pathError);
+  }
+
   const path = getDevAgentAbsolutePath(folderPath, fileName);
-  if (!path) return null;
   try {
     const bytes = await readDevCdrViaAgent(path);
     return previewFromBytes(bytes, taskId, path);
-  } catch {
-    return null;
+  } catch (err) {
+    throw new Error(formatCdrPreviewReadError(err?.message, path));
   }
 }
 
 /** При сохранении задачи: агент читает .cdr, превью сохраняется в БД. */
 export async function buildTaskCdrPreview(taskId, folderPath, fileName) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return null;
-  if (!getDevAgentAbsolutePath(folderPath, fileName)) return null;
-
-  const preview = await tryAgentPreview(taskId, folderPath, fileName);
-  if (!preview) {
-    throw new Error(
-      'Не удалось прочитать .cdr для превью. Проверьте агент и доступ к \\\\MINIMARKER\\Клиенты\\...'
-    );
-  }
-  return preview;
+  return readAndPreviewCdr(taskId, folderPath, fileName);
 }
 
 /**
  * ПКМ: превью из БД → при необходимости пересобрать через агент.
- * @returns {{ preview: object|null, path: string|null }}
+ * @returns {{ preview: object|null, path: string|null, error: string|null }}
  */
 export async function loadTaskCdrPreview(task) {
   if (!DEV_CDR_PREVIEW_ENABLED || !task?.id) {
-    return { preview: null, path: null };
+    return { preview: null, path: null, error: null };
+  }
+
+  const pathError = getCdrPathValidationError(task.folderPath, task.fileName);
+  if (pathError) {
+    return { preview: null, path: null, error: pathError };
   }
 
   const path = getDevAgentAbsolutePath(task.folderPath, task.fileName);
-  if (!path) {
-    return { preview: null, path: null };
-  }
 
   try {
     const stored = await fetchTaskCdrPreview(task.id);
     if (stored && (!stored.sourceKey || stored.sourceKey === path)) {
-      return { preview: stored, path: stored.path || path };
+      return { preview: stored, path: stored.path || path, error: null };
     }
   } catch {
     // fallback to agent below
   }
 
-  const fromAgent = await tryAgentPreview(task.id, task.folderPath, task.fileName);
-  if (fromAgent) {
-    return { preview: fromAgent, path: fromAgent.path || path };
+  try {
+    const fromAgent = await readAndPreviewCdr(task.id, task.folderPath, task.fileName);
+    return { preview: fromAgent, path: fromAgent.path || path, error: null };
+  } catch (err) {
+    return { preview: null, path, error: err?.message || 'Не удалось построить превью .cdr' };
   }
-
-  return { preview: null, path };
 }

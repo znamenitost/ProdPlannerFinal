@@ -169,7 +169,11 @@ function ParentTaskRow({
         onContextMenu={(event) => {
           if (!onShowCdrPreview) return;
           event.preventDefault();
-          onShowCdrPreview(task);
+        }}
+        onMouseDown={(event) => {
+          if (!onShowCdrPreview || event.button !== 2) return;
+          event.preventDefault();
+          onShowCdrPreview(task, { x: event.clientX, y: event.clientY });
         }}
       >
         {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}

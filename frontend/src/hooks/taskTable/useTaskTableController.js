@@ -33,6 +33,19 @@ export default function useTaskTableController({
   const [cdrPreviewTask, setCdrPreviewTask] = useState(null);
   const [cdrPreviewData, setCdrPreviewData] = useState(null);
   const [cdrPreviewPending, setCdrPreviewPending] = useState(false);
+  const [cdrPreviewAnchor, setCdrPreviewAnchor] = useState(null);
+  const cdrPreviewLoadRef = useRef(0);
+  const cdrPreviewRmbListenersRef = useRef(null);
+
+  const detachCdrPreviewRmbListeners = useCallback(() => {
+    const listeners = cdrPreviewRmbListenersRef.current;
+    if (!listeners) return;
+    window.removeEventListener('mouseup', listeners.onMouseUp);
+    window.removeEventListener('contextmenu', listeners.onContextMenu);
+    cdrPreviewRmbListenersRef.current = null;
+  }, []);
+
+  useEffect(() => () => detachCdrPreviewRmbListeners(), [detachCdrPreviewRmbListeners]);
 
   const rowsState = useTaskTableRows(api, {
     selectedEmployeeForHighlight,
@@ -109,42 +122,67 @@ export default function useTaskTableController({
     }
   }, [api, showError]);
 
-  const handleShowCdrPreview = useCallback(async (task) => {
+  const handleCloseCdrPreview = useCallback(() => {
+    cdrPreviewLoadRef.current += 1;
+    detachCdrPreviewRmbListeners();
+    setCdrPreviewOpen(false);
+    setCdrPreviewTask(null);
+    setCdrPreviewData(null);
+    setCdrPreviewPending(false);
+    setCdrPreviewAnchor(null);
+  }, [detachCdrPreviewRmbListeners]);
+
+  const handleShowCdrPreview = useCallback(async (task, anchor) => {
     if (!DEV_CDR_PREVIEW_ENABLED) return;
 
+    detachCdrPreviewRmbListeners();
+
+    const onMouseUp = (event) => {
+      if (event.button === 2) {
+        handleCloseCdrPreview();
+      }
+    };
+    const onContextMenu = (event) => {
+      event.preventDefault();
+    };
+    cdrPreviewRmbListenersRef.current = { onMouseUp, onContextMenu };
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('contextmenu', onContextMenu);
+
     const path = formatDevTaskFilePath(task.folderPath, task.fileName);
+    const loadId = ++cdrPreviewLoadRef.current;
 
     setCdrPreviewTask(task);
+    setCdrPreviewAnchor(anchor || { x: 0, y: 0 });
     setCdrPreviewOpen(true);
     setCdrPreviewPending(true);
     setCdrPreviewData(null);
 
     try {
-      const { preview } = await loadTaskCdrPreview(task);
+      const { preview, path: resolvedPath, error } = await loadTaskCdrPreview(task);
+      if (loadId !== cdrPreviewLoadRef.current) return;
+
+      const displayPath = resolvedPath || path;
       if (preview) {
-        setCdrPreviewData({ ...preview, path: preview.path || path });
+        setCdrPreviewData({ ...preview, path: preview.path || displayPath });
       } else {
         setCdrPreviewData({
-          error: 'Превью не найдено. Сохраните задачу ещё раз (превью строится при сохранении).',
-          path
+          error: error || 'Превью не найдено. Сохраните задачу ещё раз (превью строится при сохранении).',
+          path: displayPath
         });
       }
     } catch (err) {
+      if (loadId !== cdrPreviewLoadRef.current) return;
       setCdrPreviewData({
         error: err?.message || 'Не удалось построить превью .cdr',
         path
       });
     } finally {
-      setCdrPreviewPending(false);
+      if (loadId === cdrPreviewLoadRef.current) {
+        setCdrPreviewPending(false);
+      }
     }
-  }, []);
-
-  const handleCloseCdrPreview = useCallback(() => {
-    if (cdrPreviewPending) return;
-    setCdrPreviewOpen(false);
-    setCdrPreviewTask(null);
-    setCdrPreviewData(null);
-  }, [cdrPreviewPending]);
+  }, [detachCdrPreviewRmbListeners, handleCloseCdrPreview]);
 
   const modals = useTaskTableModals({
     api,
@@ -222,6 +260,7 @@ export default function useTaskTableController({
     cdrPreviewTask,
     cdrPreviewData,
     cdrPreviewPending,
+    cdrPreviewAnchor,
     intervalsDialogOpen,
     intervalsPending,
     intervalsTask,

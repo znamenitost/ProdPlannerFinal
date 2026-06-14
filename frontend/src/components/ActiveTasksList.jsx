@@ -147,7 +147,9 @@ export default function ActiveTasksList({
     const fileName = parts.pop() || '';
     const folderPath = parts.join('/');
     const result = await openFileOnClient(normalizePathForOpen(folderPath, fileName));
-    if (!result.ok) showError('Не удалось открыть файл');
+    if (!result.ok) {
+      showError(result.reason || 'Не удалось открыть файл');
+    }
   }, [showError, showWarning]);
 
   const sortControls = (

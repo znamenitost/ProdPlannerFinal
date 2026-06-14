@@ -89,9 +89,43 @@ public static class FilePathNormalizer
             cleanFileName += ".cdr";
 
         parts[^1] = cleanFileName;
-        relativePath = string.Join("/", parts);
+        relativePath = EnsureClientLetterPrefix(string.Join("/", parts));
         return true;
     }
+
+    /// <summary>
+    /// Дополняет путь буквой-каталогом после «Клиенты», если указан без неё
+    /// (например «Федерация Бодибилдинга/файл.cdr» → «Ф/Федерация Бодибилдинга/файл.cdr»).
+    /// </summary>
+    internal static string EnsureClientLetterPrefix(string relativePath, string? folderPathHint = null)
+    {
+        var parts = relativePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+            return relativePath;
+
+        if (IsClientLetterSegment(parts[0]))
+            return string.Join("/", parts);
+
+        var folderOnly = !string.IsNullOrWhiteSpace(folderPathHint)
+            ? folderPathHint.Trim().Trim('/').Replace('\\', '/')
+            : parts.Length > 1
+                ? string.Join("/", parts[..^1])
+                : "";
+
+        if (string.IsNullOrEmpty(folderOnly) && parts.Length == 1)
+            return string.Join("/", parts);
+
+        var letterSource = !string.IsNullOrEmpty(folderOnly) ? folderOnly : parts[0];
+        var letter = letterSource.FirstOrDefault(char.IsLetter);
+        if (letter == default)
+            return string.Join("/", parts);
+
+        return $"{letter}/{string.Join("/", parts)}";
+    }
+
+    private static bool IsClientLetterSegment(string segment) =>
+        segment.Length == 1 && char.IsLetter(segment[0]);
 
     /// <summary>
     /// Абсолютный путь на Mac: /Volumes/Клиенты/Ф/.../file.cdr (для команды open).
