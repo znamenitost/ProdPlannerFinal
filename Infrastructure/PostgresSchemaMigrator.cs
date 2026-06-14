@@ -36,6 +36,7 @@ public static class PostgresSchemaMigrator
         await ApplyProductionTasksCompatibilityPatchAsync(db, logger, cancellationToken);
         await ApplyUserNotificationsPatchAsync(db, logger, cancellationToken);
         await ApplyLunchIntervalsPatchAsync(db, logger, cancellationToken);
+        await ApplyTaskCdrPreviewsPatchAsync(db, logger, cancellationToken);
         await ApplyPhase2PerformanceIndexesPatchAsync(db, logger, cancellationToken);
     }
 
@@ -140,6 +141,36 @@ public static class PostgresSchemaMigrator
         catch (Exception ex)
         {
             logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (LunchIntervals)");
+            throw;
+        }
+    }
+
+    private static async Task ApplyTaskCdrPreviewsPatchAsync(
+        ApplicationDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "TaskCdrPreviews" (
+                    "TaskId" integer NOT NULL PRIMARY KEY,
+                    "ContentType" character varying(64) NOT NULL DEFAULT 'image/webp',
+                    "Data" bytea NOT NULL DEFAULT '\x'::bytea,
+                    "ByteSize" integer NOT NULL DEFAULT 0,
+                    "SourceKey" character varying(512) NOT NULL DEFAULT '',
+                    "UpdatedAt" timestamp with time zone NOT NULL DEFAULT NOW(),
+                    CONSTRAINT "FK_TaskCdrPreviews_ProductionTasks_TaskId"
+                        FOREIGN KEY ("TaskId") REFERENCES "ProductionTasks" ("Id") ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS "IX_TaskCdrPreviews_UpdatedAt"
+                    ON "TaskCdrPreviews" ("UpdatedAt");
+                """, cancellationToken);
+            logger.LogInformation("Таблица TaskCdrPreviews проверена/создана (PostgreSQL).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (TaskCdrPreviews)");
             throw;
         }
     }

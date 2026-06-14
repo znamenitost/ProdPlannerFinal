@@ -51,6 +51,17 @@ function isAgentUnreachableMessage(message) {
     || normalized.includes('load failed');
 }
 
+/** Предупреждение пользователю только при недоступном агенте (не путь/файл/превью). */
+export function isAgentUnavailableWarning(message) {
+  const text = String(message || '');
+  if (!text) return false;
+  if (text.includes(FILE_OPENER_INSTALL_HINT)) return true;
+  if (/локальный агент недоступен/i.test(text)) return true;
+  if (/только на windows/i.test(text)) return true;
+  if (/агент не запущен/i.test(text)) return true;
+  return false;
+}
+
 /** Человекочитаемая ошибка открытия файла через локальный агент. */
 export function formatFileOpenError(rawMessage, filePath = '') {
   return formatCdrPreviewReadError(rawMessage, filePath);

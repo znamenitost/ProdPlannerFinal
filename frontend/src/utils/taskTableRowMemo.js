@@ -37,7 +37,6 @@ export function areParentRowPropsEqual(prev, next) {
   if (prev.task.fileName !== next.task.fileName) return false;
   if (prev.task.folderPath !== next.task.folderPath) return false;
   if (prev.task.hasCdrPreview !== next.task.hasCdrPreview) return false;
-  if (prev.task.fileFoundOnline !== next.task.fileFoundOnline) return false;
   if ((prev.task.workIntervals?.length ?? 0) !== (next.task.workIntervals?.length ?? 0)) return false;
   if (workIntervalsKey(prev.task) !== workIntervalsKey(next.task)) return false;
   if (prev.task.plannedTimeProgress !== next.task.plannedTimeProgress) return false;

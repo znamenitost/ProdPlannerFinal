@@ -97,6 +97,7 @@ public static class DatabaseInitializer
             await ApplyTaskSplitsSchemaPatchesAsync(connection, logger);
             await EnsureUserNotificationsTableSqliteAsync(connection, logger);
             await EnsureLunchIntervalsTableSqliteAsync(connection, logger);
+            await EnsureTaskCdrPreviewsTableSqliteAsync(connection, logger);
             await ApplyPhase2PerformanceIndexesSqliteAsync(connection, logger);
             await connection.CloseAsync();
         }
@@ -203,5 +204,25 @@ public static class DatabaseInitializer
             """;
         await createLunchIntervals.ExecuteNonQueryAsync();
         logger.LogInformation("Таблица LunchIntervals проверена/создана.");
+    }
+
+    private static async Task EnsureTaskCdrPreviewsTableSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)
+    {
+        using var createPreviews = connection.CreateCommand();
+        createPreviews.CommandText = """
+            CREATE TABLE IF NOT EXISTS TaskCdrPreviews (
+                TaskId INTEGER NOT NULL PRIMARY KEY,
+                ContentType TEXT NOT NULL DEFAULT 'image/webp',
+                Data BLOB NOT NULL DEFAULT X'',
+                ByteSize INTEGER NOT NULL DEFAULT 0,
+                SourceKey TEXT NOT NULL DEFAULT '',
+                UpdatedAt TEXT NOT NULL DEFAULT '2024-01-01 00:00:00',
+                FOREIGN KEY (TaskId) REFERENCES ProductionTasks(Id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS IX_TaskCdrPreviews_UpdatedAt
+                ON TaskCdrPreviews(UpdatedAt);
+            """;
+        await createPreviews.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблица TaskCdrPreviews проверена/создана.");
     }
 }

@@ -4,7 +4,8 @@ import {
   formatCdrPreviewPersistError,
   formatCdrPreviewReadError,
   getCdrPathValidationError,
-  getTaskFilePathHint
+  getTaskFilePathHint,
+  isAgentUnavailableWarning
 } from '../src/utils/cdrPreviewErrors.js';
 
 describe('cdrPreviewErrors', () => {
@@ -44,6 +45,12 @@ describe('cdrPreviewErrors', () => {
     const message = formatCdrPreviewReadError('Failed to fetch', '\\\\MINIMARKER\\Клиенты\\test.cdr');
     assert.match(message, /агент недоступен/i);
     assert.match(message, /аватар/i);
+    assert.equal(isAgentUnavailableWarning(message), true);
+  });
+
+  it('does not treat file-not-found as agent warning', () => {
+    const message = formatCdrPreviewReadError('file not found', '\\\\MINIMARKER\\Клиенты\\test.cdr');
+    assert.equal(isAgentUnavailableWarning(message), false);
   });
 
   it('maps HTTP 404', () => {

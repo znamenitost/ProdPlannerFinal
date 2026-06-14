@@ -36,11 +36,8 @@ async function applyPostSaveFileStatus({
 }
 
 function patchTaskFileFoundStatus(taskId, status, patchRow) {
-  if (!taskId || !status?.fileFound) return;
-  patchRow(taskId, {
-    fileFoundOnline: true,
-    ...(status.hasCdrPreview ? { hasCdrPreview: true } : {})
-  });
+  if (!taskId || !status?.hasCdrPreview) return;
+  patchRow(taskId, { hasCdrPreview: true });
 }
 
 export default function useTaskTableActions({
@@ -93,13 +90,7 @@ export default function useTaskTableActions({
         patchRow(parentId, parentDto);
       } else {
         const updated = await api.fetchTableRow(row.id, employee);
-        patchRow(row.id, {
-          ...updated,
-          fileFoundOnline: updated.hasCdrPreview
-            || (row.fileFoundOnline
-              && row.folderPath === updated.folderPath
-              && row.fileName === updated.fileName)
-        });
+        patchRow(row.id, updated);
       }
     } catch (err) {
       if (!isNotFound(err)) throw err;

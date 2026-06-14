@@ -216,7 +216,8 @@ export default function useTaskTableController({
       } else if (error) {
         setCdrPreviewData({ error, path: displayPath });
       } else {
-        setCdrPreviewData({ path: displayPath });
+        handleCloseCdrPreview();
+        return;
       }
     } catch {
       if (loadId !== cdrPreviewLoadRef.current) return;

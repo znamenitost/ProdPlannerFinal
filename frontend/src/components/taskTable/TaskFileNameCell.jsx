@@ -3,7 +3,7 @@ import LazyTooltip from '../common/LazyTooltip';
 import { needsTooltip, truncateText, cellDisplayTextSx } from '../../utils/taskTableStyles';
 
 export function taskFileShowsOnlineDot(task) {
-  return Boolean(task?.hasCdrPreview || task?.fileFoundOnline);
+  return Boolean(task?.hasCdrPreview);
 }
 
 export default function TaskFileNameCell({ fileName = '', task = null, textLimit }) {

@@ -5,7 +5,8 @@ import { fetchTaskCdrPreview, persistTaskCdrPreview } from './cdrPreviewApi';
 import {
   formatCdrPreviewPersistError,
   formatCdrPreviewReadError,
-  getCdrPathValidationError
+  getCdrPathValidationError,
+  isAgentUnavailableWarning
 } from './cdrPreviewErrors';
 
 async function previewFromBytes(bytes, taskId, path) {
@@ -66,7 +67,7 @@ export async function isTaskCdrFileReadable(folderPath, fileName) {
 export async function verifyTaskCdrFileAfterSave(taskId, folderPath, fileName) {
   const pathIssue = getCdrPathValidationError(folderPath, fileName);
   if (pathIssue) {
-    return { fileFound: false, hasCdrPreview: false, warning: pathIssue };
+    return { fileFound: false, hasCdrPreview: false, warning: null };
   }
 
   try {
@@ -74,17 +75,13 @@ export async function verifyTaskCdrFileAfterSave(taskId, folderPath, fileName) {
     if (preview) {
       return { fileFound: true, hasCdrPreview: true, warning: null };
     }
+    return { fileFound: false, hasCdrPreview: false, warning: null };
   } catch (previewErr) {
-    const readable = await isTaskCdrFileReadable(folderPath, fileName);
-    return {
-      fileFound: readable,
-      hasCdrPreview: false,
-      warning: previewErr?.message || 'Не удалось построить превью .cdr'
-    };
+    const warning = isAgentUnavailableWarning(previewErr?.message)
+      ? previewErr.message
+      : null;
+    return { fileFound: false, hasCdrPreview: false, warning };
   }
-
-  const readable = await isTaskCdrFileReadable(folderPath, fileName);
-  return { fileFound: readable, hasCdrPreview: false, warning: null };
 }
 
 /** При сохранении задачи: агент читает .cdr, превью сохраняется в БД. */
@@ -104,13 +101,13 @@ export async function loadTaskCdrPreview(task) {
 
   const path = getDevAgentAbsolutePath(task.folderPath, task.fileName) || '';
 
-  if (task.hasCdrPreview === false) {
+  if (!task.hasCdrPreview) {
     return { preview: null, path, error: null };
   }
 
   const pathError = getCdrPathValidationError(task.folderPath, task.fileName);
   if (pathError) {
-    return { preview: null, path: path || null, error: pathError };
+    return { preview: null, path: path || null, error: null };
   }
 
   try {
