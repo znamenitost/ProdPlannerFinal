@@ -2,22 +2,24 @@ import { detectClientPlatform } from './filePathForOpen';
 import { openFileViaAgent } from './fileOpenerAgent';
 import {
   formatOpenFileCombinedError,
-  isFileNotFoundAgentError
+  formatFileOpenError,
+  shouldTryNetopenAfterAgentFailure
 } from './cdrPreviewErrors';
 
-function buildLaunchUrl(relativePath) {
-  const params = new URLSearchParams({
-    path: relativePath,
-    clientPlatform: detectClientPlatform()
-  });
-  return `/api/files/launch?${params.toString()}`;
-}
-
-/** Проверка, что сервер собрал ссылку netopen/smb (без запуска протокола). */
-export async function preflightLaunchUrl(launchUrl) {
+/** Получить netopen/smb URL с сервера (без HTML-страницы launch). */
+export async function resolveOpenUrl(relativePath) {
   try {
-    const response = await fetch(launchUrl, { credentials: 'include', redirect: 'manual' });
-    if (response.status === 400) {
+    const response = await fetch('/api/files/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        filePath: relativePath,
+        clientPlatform: detectClientPlatform()
+      })
+    });
+
+    if (!response.ok) {
       const text = (await response.text().catch(() => '')).trim();
       try {
         const body = JSON.parse(text);
@@ -26,10 +28,13 @@ export async function preflightLaunchUrl(launchUrl) {
         return { ok: false, reason: text || 'Не удалось сформировать ссылку на файл' };
       }
     }
-    if (response.status >= 200 && response.status < 400) {
-      return { ok: true };
+
+    const data = await response.json();
+    if (!data?.openUrl) {
+      return { ok: false, reason: 'Не удалось сформировать ссылку на файл' };
     }
-    return { ok: false, reason: `Не удалось открыть файл (HTTP ${response.status})` };
+
+    return { ok: true, openUrl: data.openUrl };
   } catch (err) {
     return { ok: false, reason: err?.message || 'Не удалось открыть файл' };
   }
@@ -38,12 +43,12 @@ export async function preflightLaunchUrl(launchUrl) {
 /**
  * @returns {{ ok: boolean, reason?: string }}
  */
-export function triggerLaunch(launchUrl, platform) {
-  const opened = window.open(launchUrl, '_blank');
+export function triggerLaunch(openUrl, platform) {
+  const opened = window.open(openUrl, '_blank');
   if (opened) return { ok: true };
 
   if (platform === 'mac') {
-    window.location.assign(launchUrl);
+    window.location.assign(openUrl);
     return { ok: true };
   }
 
@@ -59,8 +64,6 @@ export async function openFileOnClient(relativePath) {
   }
 
   const platform = detectClientPlatform();
-  const launchUrl = buildLaunchUrl(relativePath);
-
   let agentError = null;
   let agentUncPath = null;
 
@@ -75,6 +78,10 @@ export async function openFileOnClient(relativePath) {
     } catch (err) {
       agentError = err?.message || 'Не удалось связаться с агентом';
     }
+
+    if (agentError && !shouldTryNetopenAfterAgentFailure(agentError)) {
+      return { ok: false, reason: formatFileOpenError(agentError, agentUncPath) };
+    }
   }
 
   const tryLaunch = platform === 'mac' || (platform === 'Win32' && agentError);
@@ -82,28 +89,20 @@ export async function openFileOnClient(relativePath) {
     return { ok: false, reason: 'Открытие файла не поддерживается на этой платформе' };
   }
 
-  const preflight = await preflightLaunchUrl(launchUrl);
-  if (!preflight.ok) {
+  const resolved = await resolveOpenUrl(relativePath);
+  if (!resolved.ok) {
     return {
       ok: false,
-      reason: formatOpenFileCombinedError(agentError, agentUncPath, preflight.reason)
+      reason: formatOpenFileCombinedError(agentError, agentUncPath, resolved.reason)
     };
   }
 
-  const launch = triggerLaunch(launchUrl, platform);
+  const launch = triggerLaunch(resolved.openUrl, platform);
   if (!launch.ok) {
     return {
       ok: false,
       reason: formatOpenFileCombinedError(agentError, agentUncPath, launch.reason)
     };
-  }
-
-  if (platform === 'Win32' && agentError && isFileNotFoundAgentError(agentError)) {
-    return { ok: true, method: 'launch', fallback: true };
-  }
-
-  if (platform === 'Win32' && agentError) {
-    return { ok: true, method: 'launch', fallback: true };
   }
 
   return { ok: true, method: 'launch' };

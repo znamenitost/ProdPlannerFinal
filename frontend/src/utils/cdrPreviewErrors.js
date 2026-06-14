@@ -70,6 +70,13 @@ export function isFileNotFoundAgentError(message) {
   return false;
 }
 
+/** Netopen только если агент недоступен; при «файл не найден» и прочих ответах агента — ошибка в UI. */
+export function shouldTryNetopenAfterAgentFailure(agentError) {
+  if (!agentError) return false;
+  if (isFileNotFoundAgentError(agentError)) return false;
+  return isAgentUnreachableMessage(agentError);
+}
+
 /** Сообщение, когда и агент, и netopen не смогли открыть файл. */
 export function formatOpenFileCombinedError(agentMessage, filePath = '', launchReason = '') {
   const agentPart = agentMessage
