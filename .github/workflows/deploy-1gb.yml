@@ -270,29 +270,58 @@ jobs:
             lftp_offline "cls -1 app_offline.htm" 2>/dev/null | grep -qi 'app_offline\.htm'
           }
 
+          echo "Ждём освобождение app_offline.htm после FTP (45 с)…"
+          sleep 45
+
           removed=0
-          for attempt in 1 2 3 4 5 6; do
-            if lftp_offline "rm -f app_offline.htm"; then
-              sleep 2
-              if ! offline_still_present; then
-                echo "app_offline.htm удалён (попытка ${attempt})"
-                removed=1
-                break
-              fi
-              echo "rm прошёл, но файл ещё виден на FTP — ждём 10 с (попытка ${attempt})"
-            else
-              echo "lftp rm не удался — ждём 10 с (попытка ${attempt})"
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if ! offline_still_present; then
+              echo "app_offline.htm уже отсутствует (попытка ${attempt})"
+              removed=1
+              break
             fi
-            sleep 10
+
+            lftp_offline "rm -f app_offline.htm" || true
+            sleep 3
+            if ! offline_still_present; then
+              echo "app_offline.htm удалён (попытка ${attempt})"
+              removed=1
+              break
+            fi
+
+            # IIS реагирует только на точное имя app_offline.htm — переименование снимает 503, если rm заблокирован.
+            lftp_offline "mv -f app_offline.htm _app_offline_removed.htm" || true
+            sleep 3
+            if ! offline_still_present; then
+              echo "app_offline.htm переименован — сайт должен подняться (попытка ${attempt})"
+              removed=1
+              break
+            fi
+
+            echo "app_offline.htm всё ещё на месте — ждём 15 с (попытка ${attempt})"
+            sleep 15
           done
 
           if [ "$removed" -eq 0 ]; then
-            if offline_still_present; then
-              echo "::warning::Не удалось удалить app_offline.htm (файл загружен этим деплоем на шаге Stop IIS). IIS может держать блокировку — удалите вручную в ${FTP_DIR} через FileZilla или подождите и перезапустите workflow."
-            else
-              echo "app_offline.htm на FTP не найден — сайт должен подняться без ручного удаления"
-            fi
+            echo "::error::app_offline.htm не снят после деплоя — сайт останется в 503. Удалите или переименуйте файл в ${FTP_DIR} вручную."
+            exit 1
           fi
+
+      - name: Verify production is online
+        if: always()
+        run: |
+          SITE="http://team-mainb6d.1gb.ru"
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 "${SITE}/api/deploy-info" || echo "000")
+            echo "deploy-info HTTP ${code} (попытка ${attempt})"
+            if [ "$code" = "200" ] || [ "$code" = "401" ]; then
+              echo "Сайт отвечает (${code})"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Сайт не отвечает после деплоя (ожидали 200/401, не 503)"
+          exit 1
 
       - name: Deploy summary
         run: |
