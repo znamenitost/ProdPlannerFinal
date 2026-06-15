@@ -186,7 +186,7 @@ public static class PostgresSchemaMigrator
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS "AppSettings" (
                     "Key" character varying(128) NOT NULL PRIMARY KEY,
-                    "Json" text NOT NULL DEFAULT '{}',
+                    "Json" text NOT NULL DEFAULT '{{}}',
                     "UpdatedAt" timestamp with time zone NOT NULL DEFAULT NOW()
                 );
                 """, cancellationToken);
