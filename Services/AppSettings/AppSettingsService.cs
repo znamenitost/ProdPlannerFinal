@@ -24,30 +24,12 @@ public class AppSettingsService : IAppSettingsService
     public async Task<T?> GetJsonAsync<T>(string key, CancellationToken cancellationToken = default)
         where T : class
     {
-        await using var command = _db.Database.GetDbConnection().CreateCommand();
-        command.CommandText = _db.Database.IsNpgsql()
-            ? """
-              SELECT "Json"
-              FROM "AppSettings"
-              WHERE "Key" = @key
-              LIMIT 1
-              """
-            : """
-              SELECT Json
-              FROM AppSettings
-              WHERE Key = @key
-              LIMIT 1
-              """;
+        var row = await _db.AppSettings
+            .AsNoTracking()
+            .Where(s => s.Key == key)
+            .Select(s => s.Json)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = "@key";
-        parameter.Value = key;
-        command.Parameters.Add(parameter);
-
-        if (command.Connection?.State != System.Data.ConnectionState.Open)
-            await _db.Database.OpenConnectionAsync(cancellationToken);
-
-        var row = await command.ExecuteScalarAsync(cancellationToken) as string;
         if (string.IsNullOrWhiteSpace(row))
             return null;
 
@@ -66,33 +48,24 @@ public class AppSettingsService : IAppSettingsService
     {
         var json = JsonSerializer.Serialize(value, JsonOptions);
         var now = _timeService.Now;
+        var existing = await _db.AppSettings
+            .FirstOrDefaultAsync(s => s.Key == key, cancellationToken);
 
-        if (_db.Database.IsNpgsql())
+        if (existing == null)
         {
-            await _db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO "AppSettings" ("Key", "Json", "UpdatedAt")
-                VALUES ({0}, {1}, {2})
-                ON CONFLICT ("Key") DO UPDATE
-                SET "Json" = EXCLUDED."Json",
-                    "UpdatedAt" = EXCLUDED."UpdatedAt"
-                """,
-                key,
-                json,
-                now);
-            return;
+            _db.AppSettings.Add(new Models.AppSetting
+            {
+                Key = key,
+                Json = json,
+                UpdatedAt = now
+            });
+        }
+        else
+        {
+            existing.Json = json;
+            existing.UpdatedAt = now;
         }
 
-        await _db.Database.ExecuteSqlRawAsync(
-            """
-            INSERT INTO AppSettings (Key, Json, UpdatedAt)
-            VALUES ({0}, {1}, {2})
-            ON CONFLICT(Key) DO UPDATE SET
-                Json = excluded.Json,
-                UpdatedAt = excluded.UpdatedAt
-            """,
-            key,
-            json,
-            now);
+        await _db.SaveChangesAsync(cancellationToken);
     }
 }

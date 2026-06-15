@@ -51,7 +51,7 @@ public static class SchemaMigrationCli
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Ошибка миграции: {ex.Message}");
+            Console.Error.WriteLine($"Ошибка миграции: {ex}");
             logger.LogError(ex, "apply-migrations failed");
             return 1;
         }
