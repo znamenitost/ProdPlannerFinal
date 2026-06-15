@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fetchTaskTableSortSettings,
   saveTaskTableSortSettings
-} from '../services/taskTableSortSettingsApi';
+} from '../../services/taskTableSortSettingsApi';
 import useUserPreference from '../useUserPreference';
 
 export const TASK_TABLE_SORT_DEFAULTS = {
