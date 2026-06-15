@@ -60,3 +60,36 @@
 На IIS файл `ProductionPlanner.exe` заблокирован работающим сайтом. Workflow перед деплоем загружает `app_offline.htm` (останавливает приложение), ждёт 15 с, затем заливает файлы и удаляет `app_offline.htm`.
 
 Если 550 остаётся — проверьте **FTP_PASSWORD** (не путать с паролем PostgreSQL) и каталог **FTP_SERVER_DIR** (`/http/`).
+
+## Сайт отдаёт 503 после деплоя
+
+**База данных здесь ни при чём.** `apply-migrations` только добавляет таблицы/колонки (`CREATE IF NOT EXISTS`), задачи и интервалы не удаляются.
+
+503 на IIS почти всегда значит, что в корне сайта остался **`app_offline.htm`** (workflow ставит его перед заливкой файлов).
+
+### Быстрое восстановление
+
+1. Панель 1gb → FTP / FileZilla → каталог **`/http/`**
+2. Удалите **`app_offline.htm`** или переименуйте в `_app_offline_removed.htm`
+3. Обновите http://team-mainb6d.1gb.ru/api/deploy-info — ожидается **200** или **401**, не 503
+
+Или из репозитория (пароль FTP из панели 1gb):
+
+```bash
+FTP_PASSWORD='ваш_ftp_пароль' ./scripts/recover-site-1gb.sh
+```
+
+### Если после снятия 503 главная пустая / 404
+
+Деплой мог удалить `wwwroot/index.html` и упасть до заливки новой сборки. Перезапустите workflow **Deploy to 1gb.ru** (Actions → Run workflow) после того как `app_offline.htm` снят.
+
+### Проверка PostgreSQL (если переживаете за БД)
+
+В панели 1gb откройте PostgreSQL → phpPgAdmin / psql:
+
+```sql
+SELECT COUNT(*) FROM "ProductionTasks";
+SELECT COUNT(*) FROM "AppSettings";
+```
+
+Если `ProductionTasks` с ненулевым count — данные на месте.

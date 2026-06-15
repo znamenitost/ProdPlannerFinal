@@ -309,8 +309,25 @@ jobs:
 
       - name: Verify production is online
         if: always()
+        env:
+          FTP_USER: ${{ secrets.FTP_USERNAME }}
+          FTP_PASS: ${{ secrets.FTP_PASSWORD }}
+          FTP_HOST: ${{ steps.ftp.outputs.server }}
+          FTP_DIR: ${{ steps.ftp.outputs.server_dir }}
         run: |
           SITE="http://team-mainb6d.1gb.ru"
+
+          lftp_offline() {
+            lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${FTP_USER}','${FTP_PASS}' ${FTP_HOST}; cd '${FTP_DIR}'; $1; bye"
+          }
+
+          try_remove_offline() {
+            lftp_offline "rm -f app_offline.htm" || true
+            sleep 2
+            lftp_offline "mv -f app_offline.htm _app_offline_removed.htm" || true
+            sleep 2
+          }
+
           for attempt in 1 2 3 4 5 6; do
             code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 "${SITE}/api/deploy-info" || echo "000")
             echo "deploy-info HTTP ${code} (попытка ${attempt})"
@@ -318,9 +335,13 @@ jobs:
               echo "Сайт отвечает (${code})"
               exit 0
             fi
+            if [ "$code" = "503" ] && [ -n "${FTP_HOST:-}" ] && [ -n "${FTP_DIR:-}" ]; then
+              echo "503 — пробуем снять app_offline.htm через FTP…"
+              try_remove_offline
+            fi
             sleep 15
           done
-          echo "::error::Сайт не отвечает после деплоя (ожидали 200/401, не 503)"
+          echo "::error::Сайт не отвечает после деплоя (ожидали 200/401, не 503). БД не трогали — удалите app_offline.htm в ${FTP_DIR:-/http/} вручную или: FTP_PASSWORD=... ./scripts/recover-site-1gb.sh"
           exit 1
 
       - name: Deploy summary
