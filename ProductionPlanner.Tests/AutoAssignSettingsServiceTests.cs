@@ -54,6 +54,13 @@ public class AutoAssignSettingsServiceTests
         var db = new ApplicationDbContext(options);
         db.Database.OpenConnection();
         db.Database.EnsureCreated();
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS AppSettings (
+                Key TEXT NOT NULL PRIMARY KEY,
+                Json TEXT NOT NULL DEFAULT '{{}}',
+                UpdatedAt TEXT NOT NULL DEFAULT '2024-01-01 00:00:00'
+            );
+            """);
         return db;
     }
 

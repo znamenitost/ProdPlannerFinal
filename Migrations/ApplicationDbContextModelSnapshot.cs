@@ -154,24 +154,6 @@ namespace ProductionPlanner.Migrations
                     b.ToTable("UserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("ProductionPlanner.Models.AppSetting", b =>
-                {
-                    b.Property<string>("Key")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("Json")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Key");
-
-                    b.ToTable("AppSettings", (string)null);
-                });
-
             modelBuilder.Entity("ProductionPlanner.Models.EmployeeStat", b =>
                 {
                     b.Property<int>("Id")
@@ -195,7 +177,7 @@ namespace ProductionPlanner.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("EmployeeStats");
+                    b.ToTable("EmployeeStats", (string)null);
                 });
 
             modelBuilder.Entity("ProductionPlanner.Models.LunchInterval", b =>
@@ -223,7 +205,7 @@ namespace ProductionPlanner.Migrations
 
                     b.HasIndex("EmployeeName", "StartTime");
 
-                    b.ToTable("LunchIntervals");
+                    b.ToTable("LunchIntervals", (string)null);
                 });
 
             modelBuilder.Entity("ProductionPlanner.Models.ProductionTask", b =>
@@ -334,7 +316,7 @@ namespace ProductionPlanner.Migrations
 
                     b.HasIndex("EmployeeName", "Status");
 
-                    b.ToTable("ProductionTasks");
+                    b.ToTable("ProductionTasks", (string)null);
                 });
 
             modelBuilder.Entity("ProductionPlanner.Models.TaskCdrPreview", b =>
@@ -409,7 +391,7 @@ namespace ProductionPlanner.Migrations
 
                     b.HasIndex("ParentRowNumber");
 
-                    b.ToTable("TaskSplits");
+                    b.ToTable("TaskSplits", (string)null);
                 });
 
             modelBuilder.Entity("ProductionPlanner.Models.User", b =>
@@ -535,7 +517,7 @@ namespace ProductionPlanner.Migrations
 
                     b.HasIndex("UserId", "AcknowledgedAt");
 
-                    b.ToTable("UserNotifications");
+                    b.ToTable("UserNotifications", (string)null);
                 });
 
             modelBuilder.Entity("ProductionPlanner.Models.WorkInterval", b =>
@@ -561,7 +543,7 @@ namespace ProductionPlanner.Migrations
 
                     b.HasIndex("StartTime", "EndTime");
 
-                    b.ToTable("WorkIntervals");
+                    b.ToTable("WorkIntervals", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
