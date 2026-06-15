@@ -109,6 +109,9 @@ public class UpdateTaskRequest
 
     /// <summary>Ручной обход очереди этапов (Waiting → Assigned).</summary>
     public bool SequenceOverride { get; set; }
+
+    /// <summary>Оптимистичная блокировка: метка версии строки с клиента (<see cref="TaskTableRowDto.UpdatedAt"/>).</summary>
+    public DateTime? ExpectedUpdatedAt { get; set; }
 }
 
 public class UpdateWorkIntervalsRequest

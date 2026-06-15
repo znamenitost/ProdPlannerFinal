@@ -102,7 +102,8 @@ export default function useTaskTableApi() {
         employeeName: rowData.employeeName,
         parentRowNumber: rowData.parentRowNumber,
         statusText: rowData.statusText,
-        sequenceOverride: rowData.sequenceOverride ?? false
+        sequenceOverride: rowData.sequenceOverride ?? false,
+        expectedUpdatedAt: rowData.expectedUpdatedAt ?? null
       })
     });
     return await handleResponse(response);

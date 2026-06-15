@@ -70,7 +70,7 @@ public class WeekCalendarService : IWeekCalendarService
         // на следующий рабочий день».
         var weekIntervals = CollectIntervalsForWeek(
             allEmployeeTasks, weekStart, weekEnd, currentTime);
-        var (layerByTask, maxDepthByTask) = ComputeWeeklyLayoutForTasks(weekIntervals);
+        var (layerByTask, maxDepthByTask) = CalendarWeeklyLayout.ComputeWeeklyLayoutForTasks(weekIntervals);
 
         var days = new List<WeekCalendarDayDto>();
         for (var day = weekStart; day < weekEnd; day = day.AddDays(1))
@@ -278,37 +278,13 @@ public class WeekCalendarService : IWeekCalendarService
     private static List<CalendarTimelineSegmentDto> BuildWorkTimelineSegments(
         List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval)> intervalsForDay,
         IReadOnlyDictionary<int, int> layerByTask,
-        IReadOnlyDictionary<int, int> maxDepthByTask)
+        IReadOnlyDictionary<int, int> _)
     {
-        var segments = new List<CalendarTimelineSegmentDto>();
         if (intervalsForDay.Count == 0)
-            return segments;
+            return new List<CalendarTimelineSegmentDto>();
 
         intervalsForDay = intervalsForDay.OrderBy(i => i.start).ToList();
-
-        for (var i = 0; i < intervalsForDay.Count; i++)
-        {
-            var iv = intervalsForDay[i];
-            var layer = layerByTask.TryGetValue(iv.taskId, out var l) ? l : 0;
-            var depth = maxDepthByTask.TryGetValue(iv.taskId, out var d) ? d : 1;
-            segments.Add(new CalendarTimelineSegmentDto
-            {
-                Start = iv.start,
-                End = iv.end,
-                Type = "work",
-                TaskId = iv.taskId,
-                TaskTitle = iv.taskTitle,
-                FolderPath = iv.folderPath,
-                FileName = iv.fileName,
-                Completed = iv.completed,
-                StatusText = iv.statusText,
-                Layer = layer,
-                MaxDepth = depth,
-                IsOpenInterval = iv.isOpenInterval
-            });
-        }
-
-        return segments;
+        return CalendarDayWorkLayout.BuildWorkSegments(intervalsForDay, layerByTask);
     }
 
     /// <summary>
@@ -342,109 +318,6 @@ public class WeekCalendarService : IWeekCalendarService
         }
 
         return weekIntervals;
-    }
-
-    /// <summary>
-    /// Сразу два глобальных расчёта по неделе:
-    /// 1) <c>layerByTask</c> — стабильная позиция полосы (ряд) для задачи на всё время её
-    ///    появлений в неделе. Жадно даём минимальный свободный слой, чтобы пересекающиеся
-    ///    задачи раздвигались, а не «менялись местами» между днями.
-    /// 2) <c>maxDepthByTask</c> — максимальная глубина (количество одновременных задач)
-    ///    в моменты, когда конкретная задача активна. По спеке высота полосы фиксирована
-    ///    на всё время жизни задачи и считается от глобального пика её параллельностей.
-    /// </summary>
-    private static (Dictionary<int, int> LayerByTask, Dictionary<int, int> MaxDepthByTask)
-        ComputeWeeklyLayoutForTasks(
-            List<(DateTime start, DateTime end, int taskId)> intervals)
-    {
-        var layerByTask = new Dictionary<int, int>();
-        var maxDepthByTask = new Dictionary<int, int>();
-
-        if (intervals.Count == 0)
-            return (layerByTask, maxDepthByTask);
-
-        var tasksByFirstAppearance = intervals
-            .GroupBy(i => i.taskId)
-            .OrderBy(g => g.Min(i => i.start))
-            .ToList();
-
-        var intervalsByLayer = new Dictionary<int, List<(DateTime start, DateTime end)>>();
-        foreach (var group in tasksByFirstAppearance)
-        {
-            var taskId = group.Key;
-            var taskIntervals = group.Select(i => (i.start, i.end)).ToList();
-
-            var layer = 0;
-            while (true)
-            {
-                if (!intervalsByLayer.TryGetValue(layer, out var existing))
-                {
-                    intervalsByLayer[layer] = new List<(DateTime, DateTime)>(taskIntervals);
-                    break;
-                }
-                var conflicts = taskIntervals.Any(ti =>
-                    existing.Any(ei => ti.start < ei.end && ti.end > ei.start));
-                if (!conflicts)
-                {
-                    existing.AddRange(taskIntervals);
-                    break;
-                }
-                layer++;
-            }
-            layerByTask[taskId] = layer;
-            maxDepthByTask[taskId] = 1;
-        }
-
-        // Глобальная sweep-line: максимум одновременных задач за время жизни каждой.
-        var events = new List<(DateTime time, int type, int taskId)>(intervals.Count * 2);
-        foreach (var iv in intervals)
-        {
-            events.Add((iv.start, 1, iv.taskId));
-            events.Add((iv.end, -1, iv.taskId));
-        }
-        events = events
-            .OrderBy(e => e.time)
-            .ThenBy(e => e.type == 1 ? 0 : 1)
-            .ToList();
-
-        var refCountByTask = new Dictionary<int, int>();
-        foreach (var ev in events)
-        {
-            if (ev.type == 1)
-            {
-                refCountByTask.TryGetValue(ev.taskId, out var count);
-                refCountByTask[ev.taskId] = count + 1;
-            }
-            else
-            {
-                refCountByTask[ev.taskId] = refCountByTask[ev.taskId] - 1;
-                if (refCountByTask[ev.taskId] <= 0)
-                    refCountByTask.Remove(ev.taskId);
-            }
-
-            var distinctTasks = refCountByTask.Count;
-            if (distinctTasks == 0) continue;
-
-            foreach (var activeTaskId in refCountByTask.Keys)
-            {
-                if (!maxDepthByTask.TryGetValue(activeTaskId, out var current))
-                    current = 1;
-                maxDepthByTask[activeTaskId] = Math.Max(current, distinctTasks);
-            }
-        }
-
-        // Слой обязан помещаться в полосы depth: на всякий случай поднимаем depth,
-        // если жадная раскладка дала layer >= depth (это возможно только для редких
-        // случаев с разрозненными интервалами).
-        foreach (var kvp in layerByTask)
-        {
-            var taskId = kvp.Key;
-            var layer = kvp.Value;
-            if (!maxDepthByTask.TryGetValue(taskId, out var depth) || layer >= depth)
-                maxDepthByTask[taskId] = Math.Max(depth, layer + 1);
-        }
-
-        return (layerByTask, maxDepthByTask);
     }
 
     private static List<CalendarTimelineSegmentDto> BuildIdleSegments(

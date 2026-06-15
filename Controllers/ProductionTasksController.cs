@@ -172,6 +172,8 @@ public class ProductionTasksController : ControllerBase
                 if (!IsEmployeeAllowedStatusUpdate(request))
                     return Forbid();
 
+                var expectedUpdatedAt = request.ExpectedUpdatedAt;
+
                 // Сотруднику разрешено менять только статус; остальное берём из текущей записи,
                 // чтобы он не мог переписать дедлайн, часы, тип, сотрудника и пр.
                 request = new UpdateTaskRequest
@@ -185,7 +187,8 @@ public class ProductionTasksController : ControllerBase
                     EmployeeName = task.EmployeeName,
                     ParentRowNumber = task.ParentRowNumber,
                     StatusText = request.StatusText,
-                    SequenceOverride = request.SequenceOverride
+                    SequenceOverride = request.SequenceOverride,
+                    ExpectedUpdatedAt = expectedUpdatedAt
                 };
             }
 
@@ -196,9 +199,22 @@ public class ProductionTasksController : ControllerBase
                 return BadRequest(new { error = result.Error });
 
             if (!isAdmin)
+            {
+                if (result.ReplacedTaskId.HasValue)
+                    return Ok(new { task = result.Data, replacedTaskId = result.ReplacedTaskId.Value });
                 return Ok(result.Data);
+            }
 
-            return Ok(await BuildSaveResponseAsync(result.Data!, parts: null, cancellationToken));
+            return Ok(await BuildSaveResponseAsync(
+                result.Data!,
+                parts: null,
+                cancellationToken,
+                result.ReplacedTaskId));
+        }
+        catch (TaskConcurrencyException ex)
+        {
+            _logger.LogWarning(ex, "Concurrency conflict in UpdateTableRow for id {Id}", id);
+            return Conflict(new { error = ex.Message, code = "concurrency_conflict" });
         }
         catch (Exception ex)
         {
@@ -217,6 +233,11 @@ public class ProductionTasksController : ControllerBase
             if (result.NotFound)
                 return NotFound();
             return Ok();
+        }
+        catch (TaskConcurrencyException ex)
+        {
+            _logger.LogWarning(ex, "Concurrency conflict in DeleteTableRow for id {Id}", id);
+            return Conflict(new { error = ex.Message, code = "concurrency_conflict" });
         }
         catch (Exception ex)
         {
@@ -292,7 +313,8 @@ public class ProductionTasksController : ControllerBase
     private async Task<object> BuildSaveResponseAsync(
         ProductionTask task,
         List<SplitPart>? parts,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? replacedTaskId = null)
     {
         HashSet<int> focusIds;
         List<string> employees;
@@ -320,6 +342,9 @@ public class ProductionTasksController : ControllerBase
             _timeService.Now,
             focusIds,
             cancellationToken);
+
+        if (replacedTaskId.HasValue)
+            return new { task, planningWarnings = warnings, replacedTaskId = replacedTaskId.Value };
 
         return new { task, planningWarnings = warnings };
     }

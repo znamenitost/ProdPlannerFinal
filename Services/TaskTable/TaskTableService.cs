@@ -268,9 +268,25 @@ public class TaskTableService : ITaskTableService
         UpdateTaskRequest request,
         CancellationToken cancellationToken = default)
     {
+        TaskTableServiceResult<ProductionTask>? result = null;
+        await _repo.ExecuteWithTaskLifecycleLockAsync(id, async ct =>
+        {
+            result = await UpdateRowCoreAsync(id, request, ct);
+        }, cancellationToken);
+
+        return result ?? TaskTableServiceResult<ProductionTask>.Missing();
+    }
+
+    private async Task<TaskTableServiceResult<ProductionTask>> UpdateRowCoreAsync(
+        int id,
+        UpdateTaskRequest request,
+        CancellationToken cancellationToken)
+    {
         var task = await _repo.GetTaskByIdAsync(id, cancellationToken, includeIntervals: true);
         if (task == null)
             return TaskTableServiceResult<ProductionTask>.Missing();
+
+        TaskTableConcurrencyHelper.RequireExpectedUpdatedAt(id, task.UpdatedAt, request.ExpectedUpdatedAt);
 
         var isSplitParent = task.IsSplitTask && task.ParentRowNumber == null;
         if (!isSplitParent
@@ -563,6 +579,19 @@ public class TaskTableService : ITaskTableService
     public async Task<TaskTableServiceResult<bool>> DeleteRowAsync(
         int id,
         CancellationToken cancellationToken = default)
+    {
+        TaskTableServiceResult<bool>? result = null;
+        await _repo.ExecuteWithTaskLifecycleLockAsync(id, async ct =>
+        {
+            result = await DeleteRowCoreAsync(id, ct);
+        }, cancellationToken);
+
+        return result ?? TaskTableServiceResult<bool>.Missing();
+    }
+
+    private async Task<TaskTableServiceResult<bool>> DeleteRowCoreAsync(
+        int id,
+        CancellationToken cancellationToken)
     {
         var task = await _repo.GetTaskByIdAsync(id, cancellationToken, includeIntervals: true);
         if (task == null)
@@ -911,7 +940,7 @@ public class TaskTableService : ITaskTableService
         var finalOriginal = await _repo.GetTaskByIdAsync(original.Id, cancellationToken) ?? original;
         await _notificationService.NotifyTaskUpdatedAsync(finalOriginal, oldEmployeeName);
 
-        return TaskTableServiceResult<ProductionTask>.Ok(clone);
+        return TaskTableServiceResult<ProductionTask>.Reassigned(clone, original.Id);
     }
 
     public Task ReorderRowsAsync(List<int> orderedIds, CancellationToken cancellationToken = default) =>

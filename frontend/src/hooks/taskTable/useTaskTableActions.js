@@ -296,13 +296,14 @@ export default function useTaskTableActions({
         estimateHours: row.estimateHours,
         type: row.type,
         employeeName: row.employeeName,
-        parentRowNumber: row.parentRowNumber
+        parentRowNumber: row.parentRowNumber,
+        expectedUpdatedAt: row.updatedAt ?? null
       });
-      const { planningWarnings } = unwrapTaskSaveResponse(raw);
+      const { planningWarnings, replacedTaskId } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
       setEditingId(null);
       let fileStatus = null;
-      if (DEV_CDR_PREVIEW_ENABLED) {
+      if (DEV_CDR_PREVIEW_ENABLED && replacedTaskId == null) {
         fileStatus = await applyPostSaveFileStatus({
           taskId: row.id,
           folderPath: row.folderPath,
@@ -310,15 +311,24 @@ export default function useTaskTableActions({
           showWarning
         });
       }
-      await syncRowFromServer(row);
-      patchTaskFileFoundStatus(row.id, fileStatus, patchRow);
+      if (replacedTaskId != null) {
+        removeRow(replacedTaskId);
+        await refresh();
+        onCalendarRefresh?.();
+      } else {
+        await syncRowFromServer(row);
+        patchTaskFileFoundStatus(row.id, fileStatus, patchRow);
+      }
     } catch (err) {
       console.error('Ошибка обновления:', err);
-      showError('Ошибка обновления задачи');
+      if (err?.code === 'concurrency_conflict') {
+        await syncRowFromServer(row);
+      }
+      showError(err.message || 'Ошибка обновления задачи');
     } finally {
       savingRowIdRef.current = null;
     }
-  }, [api, syncRowFromServer, setEditingId, showError, showWarning, applyPlanningWarnings, patchRow]);
+  }, [api, syncRowFromServer, setEditingId, showError, showWarning, applyPlanningWarnings, patchRow, removeRow, refresh, onCalendarRefresh]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
     if (pendingLifecycleTaskIdRef.current != null) return;
@@ -387,29 +397,30 @@ export default function useTaskTableActions({
 
     setPendingLifecycleTask(row.id);
     try {
-      await api.updateRow(row.id, {
-        folderPath: row.folderPath,
-        fileName: row.fileName,
-        comment: row.comment,
-        deadline: row.deadline,
-        estimateHours: row.estimateHours,
-        type: row.type,
-        employeeName: row.employeeName,
-        parentRowNumber: row.parentRowNumber,
+      await api.updateRow(row.id, buildTaskUpdatePayload(
+        row,
+        selectedEmployeeForHighlight || row.employeeName,
         statusText,
-        sequenceOverride: extra?.sequenceOverride ?? false
-      });
+        extra
+      ));
       await syncRowFromServer(row);
     } catch (err) {
       console.error(err);
+      if (err?.code === 'concurrency_conflict') {
+        await syncRowFromServer(row);
+      }
       showError(err.message || 'Не удалось изменить статус задачи');
     } finally {
       setPendingLifecycleTask(null);
     }
-  }, [api, syncRowFromServer, showError, setPendingLifecycleTask]);
+  }, [api, syncRowFromServer, showError, setPendingLifecycleTask, selectedEmployeeForHighlight]);
 
   const handleDeleteRow = useCallback(async (id) => {
     if (deletingRowIdRef.current != null) return;
+    if (pendingLifecycleTaskIdRef.current != null) {
+      showWarning('Дождитесь завершения действия с задачей');
+      return;
+    }
 
     const confirmed = await confirm({
       title: 'Удалить задачу?',
@@ -428,11 +439,14 @@ export default function useTaskTableActions({
       onCalendarRefresh?.();
     } catch (err) {
       console.error(err);
+      if (err?.code === 'concurrency_conflict') {
+        await refresh();
+      }
       showError(err.message || 'Не удалось удалить задачу');
     } finally {
       deletingRowIdRef.current = null;
     }
-  }, [api, removeRow, refresh, invalidateChildCache, onCalendarRefresh, confirm, showError]);
+  }, [api, removeRow, refresh, invalidateChildCache, onCalendarRefresh, confirm, showError, showWarning]);
 
   const handleAddNewRow = useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);

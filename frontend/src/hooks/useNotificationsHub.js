@@ -111,11 +111,12 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
         if (shouldRefreshCalendar(event)) {
           h.onCalendarRefresh?.(event);
         }
-        if (!tableHandled) {
-          h.onTableFallbackRefresh?.(event);
-        }
       } catch (err) {
         console.error('Hub task event handler error:', err);
+      } finally {
+        if (!tableHandled) {
+          handlersRef.current.onTableFallbackRefresh?.(event);
+        }
       }
     };
 

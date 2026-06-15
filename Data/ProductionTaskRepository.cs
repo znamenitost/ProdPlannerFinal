@@ -12,6 +12,7 @@ namespace ProductionPlanner.Data
         private readonly ApplicationDbContext _context;
         private readonly IAppTimeService _timeService;
         private static readonly ConcurrentDictionary<int, SemaphoreSlim> LifecycleLocks = new();
+        private static readonly AsyncLocal<int?> HeldLifecycleLockTaskId = new();
         private static readonly SemaphoreSlim DisplayOrderLock = new(1, 1);
         private const long DisplayOrderAdvisoryLockKey = 7_326_001L;
 
@@ -680,16 +681,31 @@ namespace ProductionPlanner.Data
             Func<CancellationToken, Task> action,
             CancellationToken cancellationToken = default)
         {
-            // На 1gb.ru один worker IIS — in-process lock достаточен; pg_advisory_xact_lock
-            // через EF давал 500 на start/pause (неверная передача CancellationToken в SQL).
+            if (HeldLifecycleLockTaskId.Value == taskId)
+            {
+                await action(cancellationToken);
+                return;
+            }
+
             var sem = LifecycleLocks.GetOrAdd(taskId, _ => new SemaphoreSlim(1, 1));
             await sem.WaitAsync(cancellationToken);
             try
             {
-                await ExecuteInTransactionAsync(action, cancellationToken);
+                HeldLifecycleLockTaskId.Value = taskId;
+                await ExecuteInTransactionAsync(async ct =>
+                {
+                    if (_context.Database.IsNpgsql())
+                    {
+                        await _context.Database.ExecuteSqlInterpolatedAsync(
+                            $"SELECT pg_advisory_xact_lock({taskId})");
+                    }
+
+                    await action(ct);
+                }, cancellationToken);
             }
             finally
             {
+                HeldLifecycleLockTaskId.Value = null;
                 sem.Release();
                 if (sem.CurrentCount == 1
                     && LifecycleLocks.TryRemove(new KeyValuePair<int, SemaphoreSlim>(taskId, sem)))

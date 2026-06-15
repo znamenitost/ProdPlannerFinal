@@ -236,26 +236,29 @@ public class TaskLifecycleService : ITaskLifecycleService
         DateTime now,
         CancellationToken cancellationToken = default)
     {
-        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
-        if (task == null || task.Status == JobStatus.Completed) return;
-        if (newProgress > 0.99) newProgress = 0.99;
-
-        // Симметрично со StartTaskAsync: «стартовые» статусы — Assigned/Approved/InStock.
-        // Без этого % > 0 для Approved/InStock записывались бы в задачу, оставляя её
-        // без открытого WorkInterval — задача с прогрессом, но без отметки начала работы.
-        if (newProgress > 0
-            && task.Status is JobStatus.Assigned or JobStatus.Approved or JobStatus.InStock)
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
-            await StartTaskAsync(taskId, now, cancellationToken);
-            task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
-            if (task == null) return;
-        }
+            var task = await _repo.GetTaskByIdAsync(taskId, ct);
+            if (task == null || task.Status == JobStatus.Completed) return;
+            if (newProgress > 0.99) newProgress = 0.99;
 
-        var updated = await _repo.TryUpdateProgressAsync(taskId, newProgress, now, cancellationToken);
-        if (updated == 0)
-            return;
+            // Симметрично со StartTaskAsync: «стартовые» статусы — Assigned/Approved/InStock.
+            // Без этого % > 0 для Approved/InStock записывались бы в задачу, оставляя её
+            // без открытого WorkInterval — задача с прогрессом, но без отметки начала работы.
+            if (newProgress > 0
+                && task.Status is JobStatus.Assigned or JobStatus.Approved or JobStatus.InStock)
+            {
+                await StartTaskAsync(taskId, now, ct);
+                task = await _repo.GetTaskByIdAsync(taskId, ct);
+                if (task == null) return;
+            }
 
-        await _notificationService.NotifyProgressChangedAsync(task, newProgress);
+            var updated = await _repo.TryUpdateProgressAsync(taskId, newProgress, now, ct);
+            if (updated == 0)
+                return;
+
+            await _notificationService.NotifyProgressChangedAsync(task, newProgress);
+        }, cancellationToken);
     }
 
     public async Task CompleteTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)

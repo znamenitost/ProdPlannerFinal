@@ -149,7 +149,8 @@ export function buildTaskUpdatePayload(task, employeeName, statusText, extra) {
     employeeName: task.employeeName ?? employeeName ?? '',
     parentRowNumber: task.parentRowNumber ?? null,
     statusText: statusText ?? task.statusText,
-    sequenceOverride: extra?.sequenceOverride ?? false
+    sequenceOverride: extra?.sequenceOverride ?? false,
+    expectedUpdatedAt: task.updatedAt ?? null
   };
 }
 
@@ -169,10 +170,16 @@ export async function updateTaskRow(id, rowData) {
       employeeName: rowData.employeeName,
       parentRowNumber: rowData.parentRowNumber,
       statusText: rowData.statusText,
-      sequenceOverride: rowData.sequenceOverride ?? false
+      sequenceOverride: rowData.sequenceOverride ?? false,
+      expectedUpdatedAt: rowData.expectedUpdatedAt ?? null
     })
   });
-  await throwIfNotOk(res, 'Не удалось обновить задачу');
+  if (!res.ok) await throwApiError(res, 'Не удалось обновить задачу');
+  const contentType = res.headers.get('content-type');
+  if (contentType?.includes('application/json')) {
+    return res.json();
+  }
+  return null;
 }
 
 export async function returnTask(id) {
