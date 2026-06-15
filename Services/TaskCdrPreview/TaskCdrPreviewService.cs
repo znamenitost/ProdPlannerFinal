@@ -31,7 +31,7 @@ public class TaskCdrPreviewService : ITaskCdrPreviewService
             .Select(p => new { p.Data, p.ContentType, p.UpdatedAt, p.SourceKey })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (preview == null || preview.Data.Length == 0)
+        if (preview == null || preview.Data == null || preview.Data.Length == 0)
             return null;
 
         return (preview.Data, preview.ContentType, preview.UpdatedAt, preview.SourceKey);

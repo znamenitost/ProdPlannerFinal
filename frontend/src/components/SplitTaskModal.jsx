@@ -34,21 +34,29 @@ import {
   TASK_EXECUTION_SEQUENTIAL
 } from '../constants/taskStatuses';
 import useAuth from '../hooks/useAuth';
-import useUserPreference from '../hooks/useUserPreference';
+import useAutoAssignSettings from '../hooks/useAutoAssignSettings';
 import { getAssignmentLoad } from '../services/api';
 import { applyAutoAssignToParts, didExpandPartsByTypeSplit, isPartAutoAssignable, partTotalHours } from '../utils/autoAssignSplitParts';
 import {
-  createDefaultAutoAssignTypeRules,
   getUncoveredTaskTypes,
   normalizeAutoAssignTypeRules
 } from '../utils/autoAssignTypeRules';
-import { AUTO_ASSIGN_EMPLOYEES, TASK_TABLE_TYPES } from '../hooks/taskTable/taskTableConstants';
+import { AUTO_ASSIGN_EMPLOYEES } from '../hooks/taskTable/taskTableConstants';
 import AutoAssignSettingsPopover from './AutoAssignSettingsPopover';
 
-const DEFAULT_AUTO_ASSIGN_TYPE_RULES = createDefaultAutoAssignTypeRules(
-  AUTO_ASSIGN_EMPLOYEES,
-  TASK_TABLE_TYPES
-);
+function isEmployeeLockedForPart(part, { autoAssignEnabled, canAutoAssign, isEdit }) {
+  return autoAssignEnabled
+    && canAutoAssign
+    && isPartAutoAssignable(part, isEdit)
+    && !part.employeeName;
+}
+
+function isTaskTypesLockedForPart(part, { autoAssignEnabled, canAutoAssign, isEdit }) {
+  return autoAssignEnabled
+    && canAutoAssign
+    && isPartAutoAssignable(part, isEdit)
+    && Boolean(part.employeeName);
+}
 
 function getAutoAssignConstraintWarning(parts, employees, typeRules, isEdit) {
   for (const part of parts) {
@@ -106,20 +114,12 @@ export default function SplitTaskModal({
   onDraftApply
 }) {
   const { user } = useAuth();
-  const [autoAssignEnabled, setAutoAssignEnabled] = useUserPreference(
-    user,
-    'splitModal.autoAssign',
-    true
-  );
-  const [rawTypeRules, setRawTypeRules] = useUserPreference(
-    user,
-    'splitModal.autoAssignTypeRules',
-    DEFAULT_AUTO_ASSIGN_TYPE_RULES
-  );
-  const typeRules = useMemo(
-    () => normalizeAutoAssignTypeRules(rawTypeRules, AUTO_ASSIGN_EMPLOYEES, taskTypes),
-    [rawTypeRules, taskTypes]
-  );
+  const {
+    autoAssignEnabled,
+    setAutoAssignEnabled,
+    typeRules,
+    setTypeRules
+  } = useAutoAssignSettings(user, AUTO_ASSIGN_EMPLOYEES, taskTypes);
   const [parts, setParts] = useState([]);
   const [executionMode, setExecutionMode] = useState(TASK_EXECUTION_PARALLEL);
   const [error, setError] = useState('');
@@ -129,6 +129,7 @@ export default function SplitTaskModal({
   const [openTaskTypesIndex, setOpenTaskTypesIndex] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const autoAssignPendingRef = useRef(false);
   const partsRef = useRef([]);
 
   partsRef.current = parts;
@@ -242,7 +243,7 @@ export default function SplitTaskModal({
     return undefined;
   }, [open, task, initialParts, mode, employees, taskTypes, isDraft, taskExecutionMode, autoAssignEnabled, canAutoAssign, isEdit, refreshLoadSummary]);
 
-  const employeeFieldLocked = autoAssignEnabled && canAutoAssign;
+  const partLockContext = { autoAssignEnabled, canAutoAssign, isEdit };
 
   const employeeSelectOptions = useMemo(() => {
     const names = new Set(employees);
@@ -326,33 +327,29 @@ export default function SplitTaskModal({
 
   const updatePartTaskTypes = (index, value) => {
     const next = [...parts];
-    const part = next[index];
-    next[index] = {
-      ...part,
-      taskTypes: value,
-      ...(employeeFieldLocked && isPartAutoAssignable(part, isEdit)
-        ? { employeeName: '' }
-        : {})
-    };
+    next[index] = { ...next[index], taskTypes: value };
     partsRef.current = next;
     setParts(next);
     revalidateHours(next);
   };
 
-  const handleAssignFromTypesMenu = (index) => {
+  const handleTaskTypesMenuClose = useCallback((index) => {
     setOpenTaskTypesIndex(null);
 
-    if (!autoAssignEnabled || !canAutoAssign) return;
+    if (!autoAssignEnabled || !canAutoAssign || autoAssignPendingRef.current) return;
 
     const part = partsRef.current[index];
+    if (!isEmployeeLockedForPart(part, { autoAssignEnabled, canAutoAssign, isEdit })) return;
     if (!part?.taskTypes?.length) return;
 
-    void commitAutoAssign(partsRef.current);
-  };
+    autoAssignPendingRef.current = true;
+    void commitAutoAssign(partsRef.current).finally(() => {
+      autoAssignPendingRef.current = false;
+    });
+  }, [autoAssignEnabled, canAutoAssign, isEdit, commitAutoAssign]);
 
   const handleTypeRulesChange = (nextRules) => {
-    const normalized = normalizeAutoAssignTypeRules(nextRules, AUTO_ASSIGN_EMPLOYEES, taskTypes);
-    setRawTypeRules(normalized);
+    setTypeRules(normalizeAutoAssignTypeRules(nextRules, AUTO_ASSIGN_EMPLOYEES, taskTypes));
   };
 
   const validateParts = () => {
@@ -558,7 +555,11 @@ export default function SplitTaskModal({
         )}
 
         <Stack spacing={2}>
-          {parts.map((part, idx) => (
+          {parts.map((part, idx) => {
+            const employeeLocked = isEmployeeLockedForPart(part, partLockContext);
+            const taskTypesLocked = isTaskTypesLockedForPart(part, partLockContext);
+
+            return (
             <Paper key={idx} variant="outlined" sx={{ p: 1.5, display: 'inline-block', maxWidth: '100%' }}>
               {isSequential && parts.length > 1 && (
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
@@ -579,7 +580,7 @@ export default function SplitTaskModal({
                 <FormControl
                   size="small"
                   sx={{ width: 132, flexShrink: 0, maxWidth: '100%' }}
-                  disabled={employeeFieldLocked}
+                  disabled={employeeLocked}
                 >
                   <InputLabel
                     id={`split-employee-label-${idx}`}
@@ -592,7 +593,7 @@ export default function SplitTaskModal({
                     autoWidth
                     value={part.employeeName || ''}
                     label="Сотрудник"
-                    disabled={employeeFieldLocked}
+                    disabled={employeeLocked}
                     renderValue={(selected) => selected || part.employeeName || ''}
                     onChange={(e) => updatePart(idx, 'employeeName', e.target.value)}
                   >
@@ -628,19 +629,24 @@ export default function SplitTaskModal({
                   }}
                 />
 
-                <FormControl size="small" sx={{ width: 190, flexShrink: 0, maxWidth: '100%' }}>
+                <FormControl
+                  size="small"
+                  sx={{ width: 190, flexShrink: 0, maxWidth: '100%' }}
+                  disabled={taskTypesLocked}
+                >
                   <InputLabel>Тип работы</InputLabel>
                   <Select
                     multiple
                     value={part.taskTypes}
                     label="Тип работы"
+                    disabled={taskTypesLocked}
                     open={
-                      employeeFieldLocked && isPartAutoAssignable(part, isEdit)
+                      employeeLocked
                         ? openTaskTypesIndex === idx
                         : undefined
                     }
                     onOpen={() => setOpenTaskTypesIndex(idx)}
-                    onClose={() => setOpenTaskTypesIndex(null)}
+                    onClose={() => handleTaskTypesMenuClose(idx)}
                     onChange={(e) => updatePartTaskTypes(idx, e.target.value)}
                     input={<OutlinedInput label="Тип работы" />}
                     renderValue={(selected) => selected.join(', ')}
@@ -651,7 +657,7 @@ export default function SplitTaskModal({
                         <ListItemText primary={type} />
                       </MenuItem>
                     ))}
-                    {employeeFieldLocked && isPartAutoAssignable(part, isEdit) && (
+                    {employeeLocked && (
                       <>
                         <Divider sx={{ my: 0.5 }} />
                         <Box
@@ -664,7 +670,7 @@ export default function SplitTaskModal({
                             variant="contained"
                             disabled={!part.taskTypes?.length}
                             onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => handleAssignFromTypesMenu(idx)}
+                            onClick={() => handleTaskTypesMenuClose(idx)}
                           >
                             Назначить
                           </Button>
@@ -709,7 +715,8 @@ export default function SplitTaskModal({
                 )}
               </Stack>
             </Paper>
-          ))}
+            );
+          })}
 
           <Button startIcon={<Add />} onClick={addPart} variant="outlined" size="small">
             {isSequential ? 'Добавить этап' : 'Добавить сотрудника'}

@@ -111,8 +111,14 @@ export async function loadTaskCdrPreview(task) {
     if (stored) {
       return { preview: stored, path: stored.path || path, error: null };
     }
-  } catch {
-    // временная ошибка — без шума в консоли
+  } catch (err) {
+    if (task.hasCdrPreview) {
+      return {
+        preview: null,
+        path,
+        error: err?.message || 'Не удалось загрузить превью из базы данных'
+      };
+    }
   }
 
   return { preview: null, path, error: null };

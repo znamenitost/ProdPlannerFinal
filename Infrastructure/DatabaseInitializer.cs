@@ -98,6 +98,7 @@ public static class DatabaseInitializer
             await EnsureUserNotificationsTableSqliteAsync(connection, logger);
             await EnsureLunchIntervalsTableSqliteAsync(connection, logger);
             await EnsureTaskCdrPreviewsTableSqliteAsync(connection, logger);
+            await EnsureAppSettingsTableSqliteAsync(connection, logger);
             await ApplyPhase2PerformanceIndexesSqliteAsync(connection, logger);
             await connection.CloseAsync();
         }
@@ -224,5 +225,19 @@ public static class DatabaseInitializer
             """;
         await createPreviews.ExecuteNonQueryAsync();
         logger.LogInformation("Таблица TaskCdrPreviews проверена/создана.");
+    }
+
+    private static async Task EnsureAppSettingsTableSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)
+    {
+        using var createSettings = connection.CreateCommand();
+        createSettings.CommandText = """
+            CREATE TABLE IF NOT EXISTS AppSettings (
+                Key TEXT NOT NULL PRIMARY KEY,
+                Json TEXT NOT NULL DEFAULT '{}',
+                UpdatedAt TEXT NOT NULL DEFAULT '2024-01-01 00:00:00'
+            );
+            """;
+        await createSettings.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблица AppSettings проверена/создана.");
     }
 }

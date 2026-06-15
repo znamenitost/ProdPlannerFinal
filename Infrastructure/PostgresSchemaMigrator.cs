@@ -37,6 +37,7 @@ public static class PostgresSchemaMigrator
         await ApplyUserNotificationsPatchAsync(db, logger, cancellationToken);
         await ApplyLunchIntervalsPatchAsync(db, logger, cancellationToken);
         await ApplyTaskCdrPreviewsPatchAsync(db, logger, cancellationToken);
+        await ApplyAppSettingsPatchAsync(db, logger, cancellationToken);
         await ApplyPhase2PerformanceIndexesPatchAsync(db, logger, cancellationToken);
     }
 
@@ -171,6 +172,29 @@ public static class PostgresSchemaMigrator
         catch (Exception ex)
         {
             logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (TaskCdrPreviews)");
+            throw;
+        }
+    }
+
+    private static async Task ApplyAppSettingsPatchAsync(
+        ApplicationDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "AppSettings" (
+                    "Key" character varying(128) NOT NULL PRIMARY KEY,
+                    "Json" text NOT NULL DEFAULT '{}',
+                    "UpdatedAt" timestamp with time zone NOT NULL DEFAULT NOW()
+                );
+                """, cancellationToken);
+            logger.LogInformation("Таблица AppSettings проверена/создана (PostgreSQL).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (AppSettings)");
             throw;
         }
     }

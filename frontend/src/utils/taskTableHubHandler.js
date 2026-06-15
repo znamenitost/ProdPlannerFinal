@@ -77,13 +77,29 @@ export async function handleTaskTableHubEvent(event, ctx) {
       return false;
     } catch (err) {
       if (isNotFound(err)) {
-        removeRow(taskId);
-        for (const [parentId, children] of childrenCache.entries()) {
+        let parentId = null;
+        for (const [candidateParentId, children] of childrenCache.entries()) {
           if (children.some((c) => c.id === taskId)) {
-            const kids = await loadChildrenForParent(parentId, { force: true });
-            setChildrenForParent(parentId, kids);
-            return true;
+            parentId = candidateParentId;
+            break;
           }
+        }
+
+        if (parentId) {
+          const kids = await loadChildrenForParent(parentId, { force: true });
+          setChildrenForParent(parentId, kids);
+          try {
+            const parentDto = await api.fetchTableRow(parentId, employee);
+            patchRow(parentId, parentDto);
+          } catch (parentErr) {
+            if (isNotFound(parentErr)) {
+              removeRow(parentId);
+            } else {
+              throw parentErr;
+            }
+          }
+        } else {
+          removeRow(taskId);
         }
         return true;
       }

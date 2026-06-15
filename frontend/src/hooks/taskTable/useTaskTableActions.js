@@ -96,7 +96,15 @@ export default function useTaskTableActions({
       if (!isNotFound(err)) throw err;
 
       if (parentId) {
-        removeRow(parentId);
+        const children = await api.loadChildren(parentId);
+        setChildrenForParent(parentId, children);
+        try {
+          const parentDto = await api.fetchTableRow(parentId, employee);
+          patchRow(parentId, parentDto);
+        } catch (parentErr) {
+          if (isNotFound(parentErr)) removeRow(parentId);
+          else throw parentErr;
+        }
       } else {
         removeRow(row.id);
       }
@@ -115,6 +123,17 @@ export default function useTaskTableActions({
     onCalendarRefresh
   ]);
 
+  const refreshParentRow = useCallback(async (parentId) => {
+    const employee = selectedEmployeeForHighlight || '';
+    try {
+      const parentDto = await api.fetchTableRow(parentId, employee);
+      patchRow(parentId, parentDto);
+    } catch (err) {
+      if (isNotFound(err)) removeRow(parentId);
+      else throw err;
+    }
+  }, [api, selectedEmployeeForHighlight, patchRow, removeRow, isNotFound]);
+
   const applyLifecycleResult = useCallback(async (row, result) => {
     if (!result || typeof result !== 'object' || !('removedFromTable' in result)) {
       await syncRowFromServer(row);
@@ -130,23 +149,37 @@ export default function useTaskTableActions({
 
       if (result.row) {
         patchChildInCache(result.row.id, result.row);
+      } else if (!result.removedFromTable) {
+        try {
+          const employee = selectedEmployeeForHighlight || '';
+          const updatedChild = await api.fetchTableRow(row.id, employee);
+          patchChildInCache(row.id, updatedChild);
+        } catch (err) {
+          if (!isNotFound(err)) throw err;
+        }
       }
 
       if (result.parentRemovedFromTable) {
         removeRow(parentId);
       } else if (result.parentRow) {
         patchRow(parentId, result.parentRow);
+      } else {
+        await refreshParentRow(parentId);
       }
     } else if (result.removedFromTable) {
       removeRow(row.id);
     } else if (result.row) {
       patchRow(row.id, result.row);
+    } else {
+      await syncRowFromServer(row);
     }
 
     onCalendarRefresh?.();
   }, [
     api,
     syncRowFromServer,
+    refreshParentRow,
+    selectedEmployeeForHighlight,
     invalidateChildCache,
     setChildrenForParent,
     patchChildInCache,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getUserPreferencesKey,
   loadUserPreference,
+  migrateLegacyUserPreferences,
   saveUserPreference
 } from '../utils/userPreferencesStorage';
 
@@ -19,8 +20,9 @@ export default function useUserPreference(currentUser, preferenceKey, defaultVal
   const [value, setValueState] = useState(readValue);
 
   useEffect(() => {
+    migrateLegacyUserPreferences(currentUser);
     setValueState(readValue());
-  }, [readValue]);
+  }, [currentUser, readValue]);
 
   const setValue = useCallback((next) => {
     setValueState((prev) => {

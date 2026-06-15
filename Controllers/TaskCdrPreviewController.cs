@@ -33,7 +33,7 @@ public class TaskCdrPreviewController : ControllerBase
             var (bytes, contentType, updatedAt, sourceKey) = preview.Value;
             Response.Headers[HeaderNames.CacheControl] = "private, max-age=3600";
             Response.Headers[HeaderNames.ETag] = $"\"{updatedAt.Ticks}\"";
-            Response.Headers["X-Preview-Source-Key"] = sourceKey;
+            PreviewSourceKeyHeaders.Apply(Response, sourceKey);
             return File(bytes, contentType);
         }
         catch (Exception ex)
@@ -44,7 +44,6 @@ public class TaskCdrPreviewController : ControllerBase
     }
 
     [HttpPut("{id:int}/cdr-preview")]
-    [Authorize(Roles = "Admin")]
     [RequestSizeLimit(6 * 1024 * 1024)]
     public async Task<IActionResult> SavePreview(
         int id,

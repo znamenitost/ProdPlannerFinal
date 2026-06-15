@@ -1,7 +1,44 @@
 export function getUserPreferencesKey(currentUser) {
   if (!currentUser) return 'app.preferences.v1.guest';
+  if (currentUser.id) return `app.preferences.v1.${currentUser.id}`;
   if (currentUser.role === 'Admin') return 'app.preferences.v1.admin';
   return `app.preferences.v1.${currentUser.fullName}`;
+}
+
+function getLegacyUserPreferencesKeys(currentUser) {
+  if (!currentUser) return [];
+  const keys = [];
+  if (currentUser.role === 'Admin') keys.push('app.preferences.v1.admin');
+  if (currentUser.fullName) keys.push(`app.preferences.v1.${currentUser.fullName}`);
+  return keys;
+}
+
+/** Переносит настройки со старых ключей (admin / fullName) на ключ по user.id. */
+export function migrateLegacyUserPreferences(currentUser) {
+  if (!currentUser?.id) return;
+
+  const targetKey = getUserPreferencesKey(currentUser);
+  const targetStore = readPreferencesStore(targetKey);
+  if (Object.keys(targetStore).length > 0) return;
+
+  for (const legacyKey of getLegacyUserPreferencesKeys(currentUser)) {
+    if (legacyKey === targetKey) continue;
+    const legacyStore = readPreferencesStore(legacyKey);
+    if (Object.keys(legacyStore).length > 0) {
+      writePreferencesStore(targetKey, legacyStore);
+      return;
+    }
+  }
+}
+
+export const SHARED_PREFERENCES_KEY = 'app.preferences.v1.shared';
+
+export function loadSharedPreference(preferenceKey, defaultValue) {
+  return loadUserPreference(SHARED_PREFERENCES_KEY, preferenceKey, defaultValue);
+}
+
+export function saveSharedPreference(preferenceKey, value) {
+  saveUserPreference(SHARED_PREFERENCES_KEY, preferenceKey, value);
 }
 
 function readPreferencesStore(storageKey) {

@@ -59,6 +59,7 @@ namespace ProductionPlanner.Data
         public DbSet<TaskSplit> TaskSplits { get; set; }
         public DbSet<UserNotification> UserNotifications { get; set; }
         public DbSet<TaskCdrPreview> TaskCdrPreviews { get; set; }
+        public DbSet<AppSetting> AppSettings { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -93,6 +94,13 @@ namespace ProductionPlanner.Data
                     .WithOne()
                     .HasForeignKey<TaskCdrPreview>(p => p.TaskId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AppSetting>(entity =>
+            {
+                entity.ToTable("AppSettings");
+                entity.Property(s => s.Key).HasMaxLength(128);
+                entity.Property(s => s.Json).HasColumnType("text");
             });
 
             modelBuilder.Entity<WorkInterval>()

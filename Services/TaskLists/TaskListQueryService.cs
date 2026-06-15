@@ -176,6 +176,7 @@ public class TaskListQueryService : ITaskListQueryService
             task.Progress,
             task.Status,
             task.IsSplitTask,
+            task.ParentRowNumber,
             SupplyMode = supplyMode,
             SequenceOrder = sequenceOrder,
             SequenceStartBlocked = supplyMode == SupplyMode.InternalProduction && task.Status == JobStatus.Waiting,

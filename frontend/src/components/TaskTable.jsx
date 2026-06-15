@@ -31,6 +31,7 @@ import { buildTaskTableSearchResult } from '../utils/taskTableSearch';
 import { hasPlannedProgressFooter } from '../utils/taskTablePlannedProgress';
 import useTaskTablePlannedProgressPreference from '../hooks/taskTable/useTaskTablePlannedProgressPreference';
 import useTaskTablePlannedProgressPolling from '../hooks/taskTable/useTaskTablePlannedProgressPolling';
+import useTaskTableSortSettings from '../hooks/taskTable/useTaskTableSortSettings';
 import useUserPreference from '../hooks/useUserPreference';
 
 const ROW_GROUP_BASE_HEIGHT = 44;
@@ -107,17 +108,14 @@ export default function TaskTable({
   const columnSettings = useTaskTableColumnVisibility(currentUser);
   const plannedProgressPref = useTaskTablePlannedProgressPreference(currentUser);
   const showPlannedProgress = isAdmin && plannedProgressPref.showPlannedProgress;
-  const [deadlineSort, setDeadlineSort] = useUserPreference(currentUser, 'taskTable.deadlineSort', false);
-  const [completedBottomSort, setCompletedBottomSort] = useUserPreference(
-    currentUser,
-    'taskTable.completedBottomSort',
-    true
-  );
-  const [hideCompletedSort, setHideCompletedSort] = useUserPreference(
-    currentUser,
-    'taskTable.hideCompletedSort',
-    false
-  );
+  const {
+    deadlineSort,
+    setDeadlineSort,
+    completedBottomSort,
+    setCompletedBottomSort,
+    hideCompletedSort,
+    setHideCompletedSort
+  } = useTaskTableSortSettings(currentUser);
   const [searchQuery, setSearchQuery] = useUserPreference(currentUser, 'taskTable.searchQuery', '');
   const sortOptions = useMemo(
     () => ({ deadlineSort, completedBottomSort }),

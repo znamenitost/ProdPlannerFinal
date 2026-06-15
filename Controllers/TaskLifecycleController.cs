@@ -160,20 +160,36 @@ public class TaskLifecycleController : ControllerBase
         var targetEmployeeName = (isAdmin && !string.IsNullOrEmpty(employee))
             ? employee
             : currentUser.FullName;
-        var row = await _tableService.GetRowDtoAsync(taskId, targetEmployeeName, cancellationToken);
-        TaskTableRowDto? parentRow = null;
 
+        var taskEntity = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
+        var removedFromTable = taskEntity == null || taskEntity.HiddenFromTaskTable;
+        TaskTableRowDto? row = null;
+        if (!removedFromTable)
+            row = await _tableService.GetRowDtoAsync(taskId, targetEmployeeName, cancellationToken);
+
+        TaskTableRowDto? parentRow = null;
+        var parentRemovedFromTable = false;
         if (parentRowId.HasValue)
-            parentRow = await _tableService.GetRowDtoAsync(parentRowId.Value, targetEmployeeName, cancellationToken);
+        {
+            var parentEntity = await _repo.GetTaskByIdAsync(parentRowId.Value, cancellationToken);
+            parentRemovedFromTable = parentEntity == null || parentEntity.HiddenFromTaskTable;
+            if (!parentRemovedFromTable)
+            {
+                parentRow = await _tableService.GetRowDtoAsync(
+                    parentRowId.Value,
+                    targetEmployeeName,
+                    cancellationToken);
+            }
+        }
 
         return Ok(new TaskLifecycleResultDto
         {
             Message = message,
             Row = row,
-            RemovedFromTable = row == null,
+            RemovedFromTable = removedFromTable,
             ParentRowId = parentRowId,
             ParentRow = parentRow,
-            ParentRemovedFromTable = parentRowId.HasValue && parentRow == null
+            ParentRemovedFromTable = parentRemovedFromTable
         });
     }
 }

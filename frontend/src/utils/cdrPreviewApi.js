@@ -1,3 +1,23 @@
+function decodePreviewSourceKey(value, encoding) {
+  if (!value) return '';
+  if (encoding?.toLowerCase() === 'base64') {
+    try {
+      const binary = atob(value);
+      const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+function readPreviewSourceKey(response) {
+  const raw = response.headers.get('X-Preview-Source-Key') || '';
+  const encoding = response.headers.get('X-Preview-Source-Key-Encoding') || '';
+  return decodePreviewSourceKey(raw, encoding);
+}
+
 async function readErrorMessage(response) {
   const text = (await response.text().catch(() => '')).trim();
   if (!text) return `HTTP ${response.status}`;
@@ -22,11 +42,13 @@ export async function fetchTaskCdrPreview(taskId) {
   const blob = await response.blob();
   if (!blob.size) return null;
 
+  const sourceKey = readPreviewSourceKey(response);
+
   return {
     url: URL.createObjectURL(blob),
     method: 'БД (WebP)',
-    path: response.headers.get('X-Preview-Source-Key') || '',
-    sourceKey: response.headers.get('X-Preview-Source-Key') || ''
+    path: sourceKey,
+    sourceKey
   };
 }
 
