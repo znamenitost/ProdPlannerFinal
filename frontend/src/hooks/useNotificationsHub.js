@@ -105,24 +105,25 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       let tableHandled = false;
       try {
         tableHandled = Boolean(await h.onTaskEvent?.(event));
+        if (shouldRefreshActiveTasks(event)) {
+          h.onActiveTasksRefresh?.(event);
+        }
+        if (shouldRefreshCalendar(event)) {
+          h.onCalendarRefresh?.(event);
+        }
+        if (!tableHandled) {
+          h.onTableFallbackRefresh?.(event);
+        }
       } catch (err) {
         console.error('Hub task event handler error:', err);
-      }
-      if (shouldRefreshActiveTasks(event)) {
-        h.onActiveTasksRefresh?.(event);
-      }
-      if (shouldRefreshCalendar(event)) {
-        h.onCalendarRefresh?.(event);
-      }
-      if (!tableHandled) {
-        h.onTableFallbackRefresh?.(event);
       }
     };
 
     const enqueueRun = () => {
       taskEventChainRef.current = taskEventChainRef.current
         .catch(() => {})
-        .then(run);
+        .then(run)
+        .catch((err) => console.error('Hub task event chain error:', err));
     };
 
     const immediate = event.type === 'TaskStatusChanged' || event.type === 'TaskProgressChanged';

@@ -72,16 +72,22 @@ export default function EmployeeStatusButtons({
 
   const handleClose = () => setAnchorEl(null);
 
-  const runWorkflow = (lifecycleAction) => async () => {
+  const runWorkflow = (lifecycleAction) => (event) => {
+    event?.stopPropagation?.();
     handleClose();
     if (statusActionsDisabled) return;
-    await lifecycleAction(task);
+    void Promise.resolve(lifecycleAction(task)).catch((err) => {
+      console.error('Ошибка действия с задачей:', err);
+    });
   };
 
-  const runInfoStatus = (statusText) => () => {
+  const runInfoStatus = (statusText) => (event) => {
+    event?.stopPropagation?.();
     handleClose();
     if (statusActionsDisabled || !onSetStatus) return;
-    onSetStatus(task, statusText);
+    void Promise.resolve(onSetStatus(task, statusText)).catch((err) => {
+      console.error('Ошибка смены статуса задачи:', err);
+    });
   };
 
   if (isDone) return null;
@@ -108,7 +114,7 @@ export default function EmployeeStatusButtons({
         anchorEl={anchorEl}
         open={open}
         onClose={handleClose}
-        onClick={handleClose}
+        onClick={(event) => event.stopPropagation()}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >

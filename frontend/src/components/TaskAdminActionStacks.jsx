@@ -81,18 +81,22 @@ export default function TaskAdminActionStacks({
   // нужно их снять через «Начал» (workflow сам подтвердит) — это совпадает со спецификацией.
   const canComplete = isStarted || isPaused;
 
-  const runWorkflow = (lifecycleAction) => async (event) => {
+  const runWorkflow = (lifecycleAction) => (event) => {
     event.stopPropagation();
     handleClose();
     if (statusWorkflowDisabled) return;
-    await lifecycleAction(task);
+    void Promise.resolve(lifecycleAction(task)).catch((err) => {
+      console.error('Ошибка действия с задачей:', err);
+    });
   };
 
   const runInfo = (statusText) => (event) => {
     event.stopPropagation();
     handleClose();
     if (statusWorkflowDisabled || !onSetStatus) return;
-    onSetStatus(task, statusText);
+    void Promise.resolve(onSetStatus(task, statusText)).catch((err) => {
+      console.error('Ошибка смены статуса задачи:', err);
+    });
   };
 
   const showWorkflowBlock = showWorkflow && !isDone;

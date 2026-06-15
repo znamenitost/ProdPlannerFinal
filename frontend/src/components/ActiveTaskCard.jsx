@@ -42,6 +42,12 @@ import { ThroughApprovalMark } from './taskTable/ThroughApprovalChip';
 const blockedButtonSx = { opacity: 0.5 };
 const PROGRESS_MARKS = [0.3, 0.6, 0.9];
 
+function invokeTaskAction(action, ...args) {
+  void Promise.resolve(action(...args)).catch((err) => {
+    console.error('Ошибка действия с задачей:', err);
+  });
+}
+
 function isProgressMarkActive(progress, mark) {
   return Math.abs((progress ?? 0) - mark) < 0.02;
 }
@@ -184,7 +190,7 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
                   color={primaryColor}
                   startIcon={<PrimaryIcon />}
                   disabled={statusActionsDisabled}
-                  onClick={() => onAction(task, primaryAction)}
+                  onClick={() => invokeTaskAction(onAction, task, primaryAction)}
                   sx={primaryBlocked ? blockedButtonSx : undefined}
                 >
                   {primaryLabel}
@@ -195,7 +201,7 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
                   color="primary"
                   startIcon={<CheckCircle />}
                   disabled={statusActionsDisabled || !canComplete}
-                  onClick={() => onAction(task, 'complete')}
+                  onClick={() => invokeTaskAction(onAction, task, 'complete')}
                   sx={primaryBlocked ? blockedButtonSx : undefined}
                 >
                   Готово
@@ -211,7 +217,7 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
                     variant={isProgressMarkActive(task.progress, p) ? 'contained' : 'text'}
                     color="secondary"
                     disabled={statusActionsDisabled}
-                    onClick={() => onAction(task, 'progress', p)}
+                    onClick={() => invokeTaskAction(onAction, task, 'progress', p)}
                     sx={compactButtonThemeStyles}
                   >
                     {Math.round(p * 100)}%
