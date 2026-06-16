@@ -488,11 +488,30 @@ namespace ProductionPlanner.Data
         public async Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(
             int page,
             int pageSize,
+            bool excludeCompleted = false,
             CancellationToken cancellationToken = default)
         {
             var query = _context.ProductionTasks
                 .AsNoTracking()
-                .Where(t => t.ParentRowNumber == null && !t.HiddenFromTaskTable)
+                .Where(t => t.ParentRowNumber == null && !t.HiddenFromTaskTable);
+
+            if (excludeCompleted)
+            {
+                query = query.Where(t =>
+                    t.Status != JobStatus.Completed
+                    && (!t.IsSplitTask
+                        || !_context.TaskSplits.Any(s => s.ParentRowNumber == t.Id)
+                        || _context.TaskSplits
+                            .Where(s => s.ParentRowNumber == t.Id)
+                            .Join(
+                                _context.ProductionTasks,
+                                s => s.ChildTaskId,
+                                c => c.Id,
+                                (s, c) => c)
+                            .Any(c => c.Status != JobStatus.Completed)));
+            }
+
+            query = query
                 .OrderBy(t => t.Status == JobStatus.Completed)
                 .ThenByDescending(t => t.DisplayOrder)
                 .ThenByDescending(t => t.Id);

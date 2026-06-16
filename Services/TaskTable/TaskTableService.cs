@@ -54,9 +54,14 @@ public class TaskTableService : ITaskTableService
         int page,
         int pageSize,
         string targetEmployeeName,
+        bool excludeCompleted = false,
         CancellationToken cancellationToken = default)
     {
-        var pageResult = await _repo.GetRootTasksPaginatedAsync(page, pageSize, cancellationToken);
+        var pageResult = await _repo.GetRootTasksPaginatedAsync(
+            page,
+            pageSize,
+            excludeCompleted,
+            cancellationToken);
 
         if (pageResult.Items.Count == 0)
         {

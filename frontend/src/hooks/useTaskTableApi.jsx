@@ -44,6 +44,9 @@ export default function useTaskTableApi() {
     if (selectedEmployee) {
       url += `&employee=${encodeURIComponent(selectedEmployee)}`;
     }
+    if (options.excludeCompleted) {
+      url += '&excludeCompleted=true';
+    }
     const response = await fetch(url, { signal: options.signal });
     const data = await handleResponse(response);
     if (data.items && data.totalCount !== undefined) {

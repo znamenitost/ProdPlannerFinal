@@ -1,11 +1,15 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import useTaskTableQuery from '../queries/useTaskTableQuery';
 import { queryKeys } from '../../lib/queryKeys';
 import useAuth from '../useAuth';
 import useUserPreference from '../useUserPreference';
 
-export default function useTaskTableRows(api, { selectedEmployeeForHighlight, onCalendarRefresh }) {
+export default function useTaskTableRows(api, {
+  selectedEmployeeForHighlight,
+  onCalendarRefresh,
+  excludeCompleted = false
+}) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [page, setPage] = useUserPreference(user, 'taskTable.page', 0);
@@ -15,16 +19,32 @@ export default function useTaskTableRows(api, { selectedEmployeeForHighlight, on
   const [highlightMyTasks, setHighlightMyTasks] = useUserPreference(user, 'taskTable.highlightMyTasks', false);
 
   const employeeFilter = selectedEmployeeForHighlight || '';
+  const prevExcludeCompletedRef = useRef(excludeCompleted);
 
   const { data, refetch } = useTaskTableQuery(
     api,
     page,
     rowsPerPage,
-    employeeFilter
+    employeeFilter,
+    excludeCompleted
   );
 
   const rows = data?.items ?? [];
   const totalCount = data?.totalCount ?? 0;
+
+  useEffect(() => {
+    if (prevExcludeCompletedRef.current === excludeCompleted) return;
+    prevExcludeCompletedRef.current = excludeCompleted;
+    setPage(0);
+  }, [excludeCompleted, setPage]);
+
+  useEffect(() => {
+    if (!excludeCompleted) return;
+    const maxPage = Math.max(0, Math.ceil(totalCount / rowsPerPage) - 1);
+    if (page > maxPage) {
+      setPage(maxPage);
+    }
+  }, [excludeCompleted, totalCount, rowsPerPage, page, setPage]);
 
   const refresh = useCallback(async () => {
     await refetch();

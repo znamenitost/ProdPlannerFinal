@@ -100,11 +100,6 @@ export default function TaskTable({
   const isAdmin = userRole === 'Admin';
   const tableContainerRef = useRef(null);
   const [scrollMargin, setScrollMargin] = useState(0);
-  const table = useTaskTableController({
-    onCalendarRefresh,
-    onRegisterHubHandler,
-    selectedEmployeeForHighlight
-  });
   const columnSettings = useTaskTableColumnVisibility(currentUser);
   const plannedProgressPref = useTaskTablePlannedProgressPreference(currentUser);
   const showPlannedProgress = isAdmin && plannedProgressPref.showPlannedProgress;
@@ -117,6 +112,13 @@ export default function TaskTable({
     setHideCompletedSort
   } = useTaskTableSortSettings(currentUser);
   const [searchQuery, setSearchQuery] = useUserPreference(currentUser, 'taskTable.searchQuery', '');
+  const excludeCompletedFromApi = hideCompletedSort && !searchQuery.trim();
+  const table = useTaskTableController({
+    onCalendarRefresh,
+    onRegisterHubHandler,
+    selectedEmployeeForHighlight,
+    excludeCompleted: excludeCompletedFromApi
+  });
   const sortOptions = useMemo(
     () => ({ deadlineSort, completedBottomSort }),
     [deadlineSort, completedBottomSort]
@@ -395,10 +397,12 @@ export default function TaskTable({
       {table.totalCount > 0 && (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, pt: 3, mt: 2, px: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            {`${table.page * table.rowsPerPage + 1}–${Math.min((table.page + 1) * table.rowsPerPage, table.totalCount)} из ${table.totalCount}`}
+            {excludeCompletedFromApi
+              ? `${visibleRows.length === 0 ? 0 : table.page * table.rowsPerPage + 1}–${table.page * table.rowsPerPage + visibleRows.length} из ${table.totalCount}`
+              : `${table.page * table.rowsPerPage + 1}–${Math.min((table.page + 1) * table.rowsPerPage, table.totalCount)} из ${table.totalCount}`}
           </Typography>
           <Pagination
-            count={Math.ceil(table.totalCount / table.rowsPerPage)}
+            count={Math.max(1, Math.ceil(table.totalCount / table.rowsPerPage))}
             page={table.page + 1}
             onChange={(_e, p) => table.handleChangePage(null, p - 1)}
             color="primary"

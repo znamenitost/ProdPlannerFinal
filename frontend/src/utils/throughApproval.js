@@ -2,7 +2,7 @@ import {
   STATUS_COMPLETED,
   WORK_PHASE_DONE,
   WORK_PHASE_TEST
-} from '../constants/taskStatuses';
+} from '../constants/taskStatuses.js';
 
 function isTaskCompleted(task) {
   if (!task) return true;
@@ -33,8 +33,14 @@ function isActiveTestPhase(task) {
 }
 
 /** Показываем маркер только на первом этапе до согласования. */
-export function taskShowsThroughApproval(task) {
+export function taskShowsThroughApproval(task, childrenTasks = null) {
   if (!task || isTaskCompleted(task)) return false;
+
+  if (isSplitParentTask(task)) {
+    if (!childrenTasks?.length) return false;
+    return childrenTasks.some((child) => taskShowsThroughApproval(child));
+  }
+
   if (!isTestPhaseTask(task)) return false;
   return isActiveTestPhase(task);
 }

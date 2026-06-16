@@ -28,8 +28,8 @@ export function ThroughApprovalMark({ size = 22, iconSize = 13 }) {
   );
 }
 
-export default function ThroughApprovalChip({ task }) {
-  if (!taskShowsThroughApproval(task)) return null;
+export default function ThroughApprovalChip({ task, childrenTasks = null }) {
+  if (!taskShowsThroughApproval(task, childrenTasks)) return null;
 
   return (
     <LazyTooltip title="Через согласование" arrow>

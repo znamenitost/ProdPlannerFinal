@@ -17,7 +17,8 @@ import { cdrPreviewCacheKey } from '../../utils/cdrPreviewRowHandlers';
 export default function useTaskTableController({
   onCalendarRefresh,
   onRegisterHubHandler,
-  selectedEmployeeForHighlight
+  selectedEmployeeForHighlight,
+  excludeCompleted = false
 }) {
   const { showError, showWarning, showSuccess, confirm } = useUiFeedback();
   const api = useTaskTableApi();
@@ -55,7 +56,8 @@ export default function useTaskTableController({
 
   const rowsState = useTaskTableRows(api, {
     selectedEmployeeForHighlight,
-    onCalendarRefresh
+    onCalendarRefresh,
+    excludeCompleted
   });
 
   const childrenState = useTaskTableChildren(api);

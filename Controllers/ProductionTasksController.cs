@@ -60,6 +60,7 @@ public class ProductionTasksController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] string? employee = null,
+        [FromQuery] bool excludeCompleted = false,
         CancellationToken cancellationToken = default)
     {
         try
@@ -67,7 +68,12 @@ public class ProductionTasksController : ControllerBase
             var (currentUser, targetEmployeeName) = await ResolveViewerAsync(employee, cancellationToken);
             if (currentUser == null) return Unauthorized();
 
-            var result = await _tableService.GetRowsAsync(page, pageSize, targetEmployeeName!, cancellationToken);
+            var result = await _tableService.GetRowsAsync(
+                page,
+                pageSize,
+                targetEmployeeName!,
+                excludeCompleted,
+                cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)

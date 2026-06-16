@@ -60,7 +60,11 @@ namespace ProductionPlanner.Data
         Task<Dictionary<int, (SupplyMode SupplyMode, int SequenceOrder)>> GetTaskSplitMetadataByChildTaskIdsAsync(
             IReadOnlyList<int> childTaskIds,
             CancellationToken cancellationToken = default);
-        Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(int page, int pageSize, CancellationToken cancellationToken = default);
+        Task<PaginatedResult<ProductionTask>> GetRootTasksPaginatedAsync(
+            int page,
+            int pageSize,
+            bool excludeCompleted = false,
+            CancellationToken cancellationToken = default);
         Task HideTaskFromTableAsync(int taskId, CancellationToken cancellationToken = default);
         Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken = default);
         Task ReorderTasksAsync(List<int> orderedIds, CancellationToken cancellationToken = default);

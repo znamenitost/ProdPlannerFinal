@@ -265,7 +265,7 @@ function ParentTaskRow({
               statusText={task.statusText}
               label={hasChildren ? displayStatus : undefined}
             />
-            <ThroughApprovalChip task={task} />
+            <ThroughApprovalChip task={task} childrenTasks={childrenTasks} />
           </Box>
         </TableCell>
 

@@ -24,6 +24,9 @@ function sameChildren(a, b) {
     if (workIntervalsKey(a[i]) !== workIntervalsKey(b[i])) return false;
     if (a[i].plannedTimeProgress !== b[i].plannedTimeProgress) return false;
     if (a[i].requiresTestBeforeProduction !== b[i].requiresTestBeforeProduction) return false;
+    if (a[i].testEstimateHours !== b[i].testEstimateHours) return false;
+    if (a[i].productionEstimateHours !== b[i].productionEstimateHours) return false;
+    if (a[i].workPhase !== b[i].workPhase) return false;
     if (a[i].supplyMode !== b[i].supplyMode) return false;
     if (a[i].sequenceOrder !== b[i].sequenceOrder) return false;
   }
