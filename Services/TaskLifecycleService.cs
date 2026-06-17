@@ -316,16 +316,16 @@ public class TaskLifecycleService : ITaskLifecycleService
         {
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
-            var intervals = (await _repo.GetTaskByIdAsync(taskId, ct, includeIntervals: true))?.WorkIntervals ?? [];
-            foreach (var interval in intervals)
-            {
-                if (interval.EndTime.HasValue)
-                {
-                    actualHours += _workHours.GetWorkHoursBetween(
-                        AppDateTime.ToMoscowWallClockFromDb(interval.StartTime),
-                        AppDateTime.ToMoscowWallClockFromDb(interval.EndTime.Value));
-                }
-            }
+            var lockedTask = await _repo.GetTaskByIdAsync(taskId, ct, includeIntervals: true);
+            if (lockedTask == null)
+                return;
+
+            actualHours = TestPhaseWorkflow.SumAllClosedWorkHours(
+                lockedTask,
+                lockedTask.WorkIntervals,
+                (start, end) => _workHours.GetWorkHoursBetween(
+                    AppDateTime.ToMoscowWallClockFromDb(start),
+                    AppDateTime.ToMoscowWallClockFromDb(end)));
 
             await RequireStatusTransitionAsync(
                 taskId,
@@ -345,8 +345,16 @@ public class TaskLifecycleService : ITaskLifecycleService
         task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null) return;
 
+        var allIntervals = (await _repo.GetTaskByIdAsync(taskId, cancellationToken, includeIntervals: true))
+            ?.WorkIntervals ?? [];
         var phaseEstimate = TestPhaseWorkflow.GetActiveEstimateHours(task);
-        double saved = phaseEstimate - actualHours;
+        var completionIntervals = TestPhaseWorkflow.GetIntervalsForCompletion(task, allIntervals);
+        var completionHours = TestPhaseWorkflow.SumClosedWorkHours(
+            completionIntervals,
+            (start, end) => _workHours.GetWorkHoursBetween(
+                AppDateTime.ToMoscowWallClockFromDb(start),
+                AppDateTime.ToMoscowWallClockFromDb(end)));
+        double saved = phaseEstimate - completionHours;
         await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
 
         if (task.ParentRowNumber.HasValue && task.IsSplitTask)

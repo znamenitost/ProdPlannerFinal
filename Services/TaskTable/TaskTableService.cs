@@ -543,14 +543,21 @@ public class TaskTableService : ITaskTableService
         if (task.Status == JobStatus.Completed)
         {
             var now = _timeService.Now;
-            var oldSaved = task.EstimateHours - task.ActualHours;
+            var workHoursBetween = (DateTime start, DateTime end) => _workHours.GetWorkHoursBetween(
+                AppDateTime.ToMoscowWallClockFromDb(start),
+                AppDateTime.ToMoscowWallClockFromDb(end));
+            var oldSaved = TestPhaseWorkflow.ComputeSavedHours(task, existing, workHoursBetween);
+            var updatedIntervals = byId.Values.ToList();
             var newActualHours = CalculateActualHours(new ProductionTask
             {
                 ActualHours = task.ActualHours,
                 EmployeeName = task.EmployeeName,
-                WorkIntervals = byId.Values.ToList()
+                WorkIntervals = updatedIntervals
             });
-            var newSaved = task.EstimateHours - newActualHours;
+            var newSaved = TestPhaseWorkflow.ComputeSavedHours(
+                task,
+                updatedIntervals,
+                workHoursBetween);
 
             await TransferSavedHoursAsync(
                 task.EmployeeName,

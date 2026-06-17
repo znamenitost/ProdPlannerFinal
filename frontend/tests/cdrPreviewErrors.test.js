@@ -2,11 +2,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   formatCdrPreviewPersistError,
+  formatCdrPreviewPostSaveWarning,
   formatCdrPreviewReadError,
   getCdrPathValidationError,
   getTaskFilePathHint,
   isAgentUnavailableWarning,
-  isFileNotFoundAgentError
+  isFileNotFoundAgentError,
+  shouldAttemptCdrPreviewOnSave
 } from '../src/utils/cdrPreviewErrors.js';
 
 describe('cdrPreviewErrors', () => {
@@ -76,5 +78,39 @@ describe('cdrPreviewErrors', () => {
       formatCdrPreviewPersistError('ImageSharp unknown'),
       /Не удалось сохранить превью/
     );
+  });
+
+  it('skips preview warning when file name is empty', () => {
+    assert.equal(shouldAttemptCdrPreviewOnSave('Клиент', ''), false);
+    assert.equal(shouldAttemptCdrPreviewOnSave('Клиент', '  '), false);
+  });
+
+  it('attempts preview when file name is set', () => {
+    assert.equal(shouldAttemptCdrPreviewOnSave('Клиент', 'layout.cdr'), true);
+  });
+
+  it('formats post-save file not found warning', () => {
+    const detail = formatCdrPreviewReadError('file not found', '\\\\MINIMARKER\\Клиенты\\test.cdr');
+    const warning = formatCdrPreviewPostSaveWarning(detail);
+    assert.match(warning, /сохранена/i);
+    assert.match(warning, /не найден/i);
+    assert.match(warning, /test\.cdr/);
+  });
+
+  it('formats post-save extract failure warning', () => {
+    const warning = formatCdrPreviewPostSaveWarning('Превью не найдено\nФайл: \\\\MINIMARKER\\Клиенты\\a.cdr');
+    assert.match(warning, /не удалось извлечь превью/i);
+    assert.match(warning, /Превью не найдено/);
+  });
+
+  it('formats post-save persist failure warning', () => {
+    const warning = formatCdrPreviewPostSaveWarning(formatCdrPreviewPersistError('Превью слишком большое'));
+    assert.match(warning, /не записано в базу/i);
+    assert.match(warning, /Превью слишком большое/);
+  });
+
+  it('passes through agent unavailable without duplicate prefix', () => {
+    const agentMsg = formatCdrPreviewReadError('Failed to fetch', '\\\\MINIMARKER\\Клиенты\\test.cdr');
+    assert.equal(formatCdrPreviewPostSaveWarning(agentMsg), agentMsg);
   });
 });

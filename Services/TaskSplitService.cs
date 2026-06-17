@@ -231,7 +231,26 @@ namespace ProductionPlanner.Services
                 parentTask.SupplyMode,
                 cancellationToken);
 
+            await ReconcileSplitChildrenAfterEditAsync(parentTaskId, parentTask.SupplyMode, cancellationToken);
+            await RecalculateParentStatusAsync(parentTaskId, cancellationToken);
+
             return parentTask;
+        }
+
+        private async Task ReconcileSplitChildrenAfterEditAsync(
+            int parentTaskId,
+            SupplyMode supplyMode,
+            CancellationToken cancellationToken)
+        {
+            var ordered = await GetOrderedChildrenForSupplyModeAsync(parentTaskId, cancellationToken);
+            if (ordered.Count == 0)
+                return;
+
+            if (SupplyWorkflow.IsSequential(supplyMode))
+                SupplyWorkflow.ReconcileSequentialStatuses(ordered);
+
+            foreach (var (child, _) in ordered)
+                await _repo.UpdateTaskAsync(child, cancellationToken);
         }
 
         private async Task ApplySupplyModeChangeIfNeededAsync(

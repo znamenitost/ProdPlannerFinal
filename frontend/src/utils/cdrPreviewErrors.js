@@ -136,6 +136,52 @@ export function formatCdrPreviewReadError(rawMessage, filePath = '') {
   return `${message}${pathSuffix}`;
 }
 
+/** Есть имя файла — при сохранении пытаемся построить превью и показать предупреждение при сбое. */
+export function shouldAttemptCdrPreviewOnSave(_folderPath, fileName) {
+  return Boolean(String(fileName || '').trim());
+}
+
+/**
+ * Предупреждение после сохранения задачи: задача записана, превью — нет.
+ * @param {string} detail — уже локализованная причина
+ */
+export function formatCdrPreviewPostSaveWarning(detail) {
+  const message = String(detail || '').trim();
+  if (!message) {
+    return 'Задача сохранена, но превью не получено';
+  }
+
+  if (isAgentUnavailableWarning(message)) {
+    return message;
+  }
+
+  if (isFileNotFoundAgentError(message) || /файл или папка не найден/i.test(message)) {
+    return `Задача сохранена, но файл не найден для превью.\n\n${message}`;
+  }
+
+  if (
+    /превью не найдено/i.test(message)
+    || /в zip нет превью/i.test(message)
+    || /zip ошибка/i.test(message)
+    || /не удалось извлечь/i.test(message)
+  ) {
+    return `Задача сохранена, но не удалось извлечь превью из .cdr.\n\n${message}`;
+  }
+
+  if (
+    /сохранить превью|превью не записано|базе данных/i.test(message)
+    || /превью слишком большое|пустой файл превью|файл превью не передан/i.test(message)
+  ) {
+    return `Задача сохранена, но превью не записано в базу.\n\n${message}`;
+  }
+
+  if (/превью строится только для \.cdr/i.test(message)) {
+    return `Задача сохранена, но превью недоступно.\n\n${message}`;
+  }
+
+  return `Задача сохранена, но превью не получено.\n\n${message}`;
+}
+
 /** Человекочитаемая ошибка сохранения превью в БД. */
 export function formatCdrPreviewPersistError(rawMessage) {
   const message = String(rawMessage || '').trim();

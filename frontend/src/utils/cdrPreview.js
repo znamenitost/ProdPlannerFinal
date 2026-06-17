@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 
+/** Приоритет: точные пути Corel, затем более широкие шаблоны. */
 const ZIP_PREVIEW_PATTERNS = [
   /^previews\/thumbnail\.png$/i,
   /^metadata\/thumbnails\/thumbnail\.bmp$/i,
@@ -7,8 +8,39 @@ const ZIP_PREVIEW_PATTERNS = [
   /^metadata\/thumbnails\/thumbnail\.png$/i,
   /^previews\/page1\.png$/i,
   /^metadata\/thumbnails\/page1\.bmp$/i,
-  /thumbnail.*\.(png|bmp|jpg|jpeg)$/i
+  /thumbnail.*\.(png|bmp|jpg|jpeg|webp)$/i,
+  /^previews\/page\d+\.(png|bmp|jpg|jpeg|webp)$/i,
+  /^metadata\/thumbnails\/page\d+\.(bmp|png|jpg|jpeg|webp)$/i,
+  /^previews\/[^/]+\.(png|bmp|jpg|jpeg|webp)$/i,
+  /^metadata\/thumbnails\/[^/]+\.(bmp|png|jpg|jpeg|webp)$/i
 ];
+
+const ZIP_RIFF_FALLBACK_PATTERNS = [
+  /^content\/riffData\.cdr$/i,
+  /^content\/root\.dat$/i
+];
+
+const MIN_ZIP_PREVIEW_BYTES = 100;
+
+function normalizeZipName(name) {
+  return String(name || '').replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+function zipEntryNames(zip) {
+  return Object.keys(zip.files).filter((n) => !zip.files[n].dir);
+}
+
+function findZipEntryName(names, pattern) {
+  return names.find((name) => pattern.test(normalizeZipName(name)));
+}
+
+function isRiffBytes(bytes) {
+  return bytes.length >= 4
+    && bytes[0] === 0x52
+    && bytes[1] === 0x49
+    && bytes[2] === 0x46
+    && bytes[3] === 0x46;
+}
 
 function readU32(view, offset) {
   return view.getUint32(offset, true);
@@ -18,6 +50,10 @@ function imageMime(data) {
   if (data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) return 'image/png';
   if (data[0] === 0x42 && data[1] === 0x4d) return 'image/bmp';
   if (data[0] === 0xff && data[1] === 0xd8) return 'image/jpeg';
+  if (data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46
+    && data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50) {
+    return 'image/webp';
+  }
   return 'application/octet-stream';
 }
 
@@ -84,20 +120,66 @@ function extractFromDisp(bytes) {
   return null;
 }
 
-async function fromZip(bytes) {
-  const zip = await JSZip.loadAsync(bytes);
-  const names = Object.keys(zip.files).filter((n) => !zip.files[n].dir);
-
-  for (const pattern of ZIP_PREVIEW_PATTERNS) {
-    const name = names.find((n) => pattern.test(n));
-    if (!name) continue;
-    const data = await zip.file(name).async('uint8array');
-    if (data.length > 100) {
-      return { data, method: `ZIP: ${name} (${data.length} bytes)` };
-    }
+function previewFromRiffBytes(bytes, sourceLabel) {
+  const disp = extractFromDisp(bytes);
+  if (disp) {
+    return { canvas: disp.canvas, method: `ZIP ${sourceLabel}: ${disp.method}` };
   }
 
-  return { error: `В ZIP нет превью. Записи:\n${names.join('\n')}` };
+  const bmp = findBmpInBuffer(bytes, 256 * 1024);
+  if (bmp) {
+    return { data: bmp.data, method: `ZIP ${sourceLabel}: ${bmp.method}` };
+  }
+
+  return null;
+}
+
+async function readZipImageEntry(zip, entryName) {
+  const data = await zip.file(entryName).async('uint8array');
+  if (!data || data.length < MIN_ZIP_PREVIEW_BYTES) return null;
+  return data;
+}
+
+async function fromZipImageEntries(zip, names) {
+  for (const pattern of ZIP_PREVIEW_PATTERNS) {
+    const name = findZipEntryName(names, pattern);
+    if (!name) continue;
+    const data = await readZipImageEntry(zip, name);
+    if (data) {
+      return { data, method: `ZIP: ${normalizeZipName(name)} (${data.length} bytes)` };
+    }
+  }
+  return null;
+}
+
+async function fromZipInnerRiff(zip, names) {
+  for (const pattern of ZIP_RIFF_FALLBACK_PATTERNS) {
+    const name = findZipEntryName(names, pattern);
+    if (!name) continue;
+
+    const data = await zip.file(name).async('uint8array');
+    if (!data?.length || !isRiffBytes(data)) continue;
+
+    const preview = previewFromRiffBytes(data, normalizeZipName(name));
+    if (preview) return preview;
+  }
+
+  return null;
+}
+
+async function fromZip(bytes) {
+  const zip = await JSZip.loadAsync(bytes);
+  const names = zipEntryNames(zip);
+
+  const imagePreview = await fromZipImageEntries(zip, names);
+  if (imagePreview) return imagePreview;
+
+  const riffPreview = await fromZipInnerRiff(zip, names);
+  if (riffPreview) return riffPreview;
+
+  return {
+    error: `В ZIP нет превью. Записи:\n${names.map(normalizeZipName).join('\n')}`
+  };
 }
 
 function previewUrlFromBytes(data) {
@@ -117,6 +199,10 @@ export async function extractCdrPreview(bytes) {
       const zipResult = await fromZip(bytes);
       if (zipResult.data) {
         const { url, method } = previewUrlFromBytes(zipResult.data);
+        return { ok: true, url, method: zipResult.method };
+      }
+      if (zipResult.canvas) {
+        const { url, method } = previewUrlFromCanvas(zipResult.canvas, zipResult.method);
         return { ok: true, url, method: zipResult.method };
       }
       return { ok: false, error: zipResult.error || 'Превью в ZIP не найдено' };

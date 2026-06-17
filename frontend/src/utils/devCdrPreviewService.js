@@ -4,9 +4,10 @@ import { extractCdrPreview } from './cdrPreview';
 import { fetchTaskCdrPreview, persistTaskCdrPreview } from './cdrPreviewApi';
 import {
   formatCdrPreviewPersistError,
+  formatCdrPreviewPostSaveWarning,
   formatCdrPreviewReadError,
   getCdrPathValidationError,
-  isAgentUnavailableWarning
+  shouldAttemptCdrPreviewOnSave
 } from './cdrPreviewErrors';
 
 async function previewFromBytes(bytes, taskId, path) {
@@ -28,7 +29,7 @@ async function previewFromBytes(bytes, taskId, path) {
 
 async function readAndPreviewCdr(taskId, folderPath, fileName) {
   const pathError = getCdrPathValidationError(folderPath, fileName);
-  if (pathError) return null;
+  if (pathError) throw new Error(pathError);
 
   const agentUnavailable = await getLocalAgentUnavailableMessage();
   if (agentUnavailable) {
@@ -65,9 +66,17 @@ export async function isTaskCdrFileReadable(folderPath, fileName) {
 
 /** @returns {{ fileFound: boolean, hasCdrPreview: boolean, warning: string|null }} */
 export async function verifyTaskCdrFileAfterSave(taskId, folderPath, fileName) {
+  if (!shouldAttemptCdrPreviewOnSave(folderPath, fileName)) {
+    return { fileFound: false, hasCdrPreview: false, warning: null };
+  }
+
   const pathIssue = getCdrPathValidationError(folderPath, fileName);
   if (pathIssue) {
-    return { fileFound: false, hasCdrPreview: false, warning: null };
+    return {
+      fileFound: false,
+      hasCdrPreview: false,
+      warning: formatCdrPreviewPostSaveWarning(pathIssue)
+    };
   }
 
   try {
@@ -75,12 +84,21 @@ export async function verifyTaskCdrFileAfterSave(taskId, folderPath, fileName) {
     if (preview) {
       return { fileFound: true, hasCdrPreview: true, warning: null };
     }
-    return { fileFound: false, hasCdrPreview: false, warning: null };
+
+    const path = getDevAgentAbsolutePath(folderPath, fileName);
+    return {
+      fileFound: false,
+      hasCdrPreview: false,
+      warning: formatCdrPreviewPostSaveWarning(
+        path ? `Не удалось прочитать файл\nФайл: ${path}` : 'Не удалось построить превью'
+      )
+    };
   } catch (previewErr) {
-    const warning = isAgentUnavailableWarning(previewErr?.message)
-      ? previewErr.message
-      : null;
-    return { fileFound: false, hasCdrPreview: false, warning };
+    return {
+      fileFound: false,
+      hasCdrPreview: false,
+      warning: formatCdrPreviewPostSaveWarning(previewErr?.message)
+    };
   }
 }
 
