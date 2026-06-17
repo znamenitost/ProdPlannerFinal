@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
+using ProductionPlanner.Models.Dtos;
 using ProductionPlanner.Services;
 using ProductionPlanner.Services.TaskTable;
 
@@ -110,10 +111,31 @@ public class ProductionTasksController : ControllerBase
     }
 
     /// <summary>
-    /// Сотруднику через PUT /table/row разрешено менять только инфо-статусы (Согласование/Нет изделий)
-    /// и их резолв (Согласовано/В наличии). Жизненный цикл (Начал/Пауза/Продолжить/Готово)
-    /// идёт через выделенные эндпоинты <c>/api/tasks/{id}/start|pause|resume|complete</c>.
+    /// Сотруднику через PUT /table/row разрешено менять комментарий (без других полей)
+    /// или инфо-статусы (Согласование/Нет изделий) и их резолв (Согласовано/В наличии).
+    /// Жизненный цикл (Начал/Пауза/Продолжить/Готово) идёт через выделенные эндпоинты
+    /// <c>/api/tasks/{id}/start|pause|resume|complete</c>.
     /// </summary>
+    private static bool IsEmployeeCommentOnlyUpdate(UpdateTaskRequest request, TaskTableRowDto task)
+    {
+        if (request.Comment == null
+            || string.Equals(request.Comment, task.Comment, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (request.SequenceOverride)
+            return false;
+
+        if (!string.IsNullOrEmpty(request.StatusText)
+            && !string.Equals(request.StatusText, task.StatusText, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
     private static bool IsEmployeeAllowedStatusUpdate(UpdateTaskRequest request)
     {
         if (string.IsNullOrEmpty(request.StatusText))
@@ -151,7 +173,7 @@ public class ProductionTasksController : ControllerBase
     }
 
     /// <summary>
-    /// Редактирует строку. Админ может менять любые поля; сотрудник — только статус
+    /// Редактирует строку. Админ может менять любые поля; сотрудник — комментарий или статус
     /// и только своей задачи (включая инфо-статусы); чужие данные не попадают в
     /// PUT, потому что обновление полей принимается только когда зовущий — админ.
     /// </summary>
@@ -177,25 +199,26 @@ public class ProductionTasksController : ControllerBase
                 if (!isOwnTask)
                     return Forbid();
 
-                if (!IsEmployeeAllowedStatusUpdate(request))
+                var commentOnly = IsEmployeeCommentOnlyUpdate(request, task);
+                if (!commentOnly && !IsEmployeeAllowedStatusUpdate(request))
                     return Forbid();
 
                 var expectedUpdatedAt = request.ExpectedUpdatedAt;
 
-                // Сотруднику разрешено менять только статус; остальное берём из текущей записи,
-                // чтобы он не мог переписать дедлайн, часы, тип, сотрудника и пр.
+                // Сотруднику разрешено менять только комментарий или статус; остальное берём
+                // из текущей записи, чтобы он не мог переписать дедлайн, часы, тип, сотрудника и пр.
                 request = new UpdateTaskRequest
                 {
                     FolderPath = task.FolderPath,
                     FileName = task.FileName,
-                    Comment = task.Comment,
+                    Comment = commentOnly ? request.Comment : task.Comment,
                     Deadline = task.Deadline,
                     EstimateHours = task.EstimateHours,
                     Type = task.Type,
                     EmployeeName = task.EmployeeName,
                     ParentRowNumber = task.ParentRowNumber,
-                    StatusText = request.StatusText,
-                    SequenceOverride = request.SequenceOverride,
+                    StatusText = commentOnly ? null : request.StatusText,
+                    SequenceOverride = commentOnly ? false : request.SequenceOverride,
                     ExpectedUpdatedAt = expectedUpdatedAt
                 };
             }

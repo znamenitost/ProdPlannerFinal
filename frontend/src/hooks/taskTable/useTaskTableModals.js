@@ -176,7 +176,17 @@ export default function useTaskTableModals({
     setCommentSaving(true);
     const task = selectedCommentTask;
     try {
-      await api.updateRow(task.id, { ...task, comment: newComment });
+      await api.updateRow(task.id, {
+        folderPath: task.folderPath ?? '',
+        fileName: task.fileName ?? '',
+        comment: newComment,
+        deadline: task.deadline,
+        estimateHours: task.estimateHours ?? 0,
+        type: task.type ?? '',
+        employeeName: task.employeeName ?? '',
+        parentRowNumber: task.parentRowNumber ?? null,
+        expectedUpdatedAt: task.updatedAt ?? null
+      });
 
       const parentId = task.parentRowNumber;
       if (parentId) {
