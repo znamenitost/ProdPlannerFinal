@@ -47,6 +47,10 @@ export default function useTaskTableApi() {
     if (options.excludeCompleted) {
       url += '&excludeCompleted=true';
     }
+    const search = String(options.search ?? '').trim();
+    if (search) {
+      url += `&search=${encodeURIComponent(search)}`;
+    }
     const response = await fetch(url, { signal: options.signal });
     const data = await handleResponse(response);
     if (data.items && data.totalCount !== undefined) {

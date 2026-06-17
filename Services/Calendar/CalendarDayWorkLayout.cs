@@ -3,14 +3,16 @@ using ProductionPlanner.Models.Dtos.Calendar;
 namespace ProductionPlanner.Services.Calendar;
 
 /// <summary>
-/// Разбивает дневные интервалы работы на отрезки с локальной глубиной (maxDepth),
-/// чтобы короткое пересечение не сжимало полосу на весь день.
+/// Разбивает дневные интервалы работы на отрезки. Высота полосы (maxDepth) — глобальная
+/// для задачи на неделю: если хотя бы один интервал пересёкся с другой задачей, все
+/// интервалы этой задачи рисуются с той же долей высоты (100% / maxDepth).
 /// </summary>
 public static class CalendarDayWorkLayout
 {
     public static List<CalendarTimelineSegmentDto> BuildWorkSegments(
         List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval)> intervalsForDay,
-        IReadOnlyDictionary<int, int> layerByTask)
+        IReadOnlyDictionary<int, int> layerByTask,
+        IReadOnlyDictionary<int, int> maxDepthByTask)
     {
         if (intervalsForDay.Count == 0)
             return new List<CalendarTimelineSegmentDto>();
@@ -38,10 +40,10 @@ public static class CalendarDayWorkLayout
             if (active.Count == 0)
                 continue;
 
-            var depth = active.Count;
             foreach (var iv in active)
             {
                 var layer = layerByTask.TryGetValue(iv.taskId, out var l) ? l : 0;
+                var depth = maxDepthByTask.TryGetValue(iv.taskId, out var d) ? d : 1;
                 slices.Add((sliceStart, sliceEnd, iv.taskId, iv.taskTitle, iv.folderPath, iv.fileName, iv.completed, iv.statusText, iv.isOpenInterval, layer, depth));
             }
         }

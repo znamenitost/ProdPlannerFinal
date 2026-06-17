@@ -35,8 +35,9 @@ export function getTaskSearchScore(row, query) {
   return score;
 }
 
-export function buildTaskTableSearchResult(rows, childrenCache, query, compareRows) {
+export function buildTaskTableSearchResult(rows, childrenCache, query, compareRows, options = {}) {
   const trimmed = String(query ?? '').trim();
+  const { serverFiltered = false } = options;
   if (!trimmed) {
     return {
       rows,
@@ -48,6 +49,35 @@ export function buildTaskTableSearchResult(rows, childrenCache, query, compareRo
 
   const childrenFilter = new Map();
   const autoExpandIds = new Set();
+
+  if (serverFiltered) {
+    const ranked = rows.map((row, index) => ({
+      row,
+      score: getTaskSearchScore(row, trimmed),
+      index
+    }));
+
+    ranked.sort((a, b) => b.score - a.score || compareRows(a.row, b.row) || a.index - b.index);
+
+    for (const { row } of ranked) {
+      const children = childrenCache.get(row.id) || [];
+      const matchingChildren = children.filter((child) => getTaskSearchScore(child, trimmed) > 0);
+      if (matchingChildren.length === 0) continue;
+
+      autoExpandIds.add(row.id);
+      if (matchingChildren.length < children.length) {
+        childrenFilter.set(row.id, new Set(matchingChildren.map((child) => child.id)));
+      }
+    }
+
+    return {
+      rows: ranked.map((item) => item.row),
+      childrenFilter: childrenFilter.size > 0 ? childrenFilter : null,
+      autoExpandIds,
+      isActive: true
+    };
+  }
+
   const ranked = [];
 
   for (const [index, row] of rows.entries()) {

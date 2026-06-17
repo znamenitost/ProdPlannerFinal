@@ -51,3 +51,27 @@ test('buildTaskTableSearchResult keeps only matching children for split parents'
   assert.ok(result.autoExpandIds.has(10));
   assert.deepEqual([...result.childrenFilter.get(10)], [101]);
 });
+
+test('buildTaskTableSearchResult with serverFiltered keeps all rows and filters children', () => {
+  const rows = [
+    { id: 10, isSplitTask: true, folderPath: 'Root', fileName: 'root.pdf' },
+    { id: 20, folderPath: 'Other', fileName: 'needle.pdf' }
+  ];
+  const childrenCache = new Map([
+    [
+      10,
+      [
+        { id: 101, folderPath: 'Child A', fileName: 'needle.pdf' },
+        { id: 102, folderPath: 'Child B', fileName: 'other.pdf' }
+      ]
+    ]
+  ]);
+
+  const result = buildTaskTableSearchResult(rows, childrenCache, 'needle', () => 0, {
+    serverFiltered: true
+  });
+
+  assert.equal(result.rows.length, 2);
+  assert.ok(result.autoExpandIds.has(10));
+  assert.deepEqual([...result.childrenFilter.get(10)], [101]);
+});

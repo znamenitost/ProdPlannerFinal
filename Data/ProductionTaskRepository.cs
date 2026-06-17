@@ -489,6 +489,7 @@ namespace ProductionPlanner.Data
             int page,
             int pageSize,
             bool excludeCompleted = false,
+            string? search = null,
             CancellationToken cancellationToken = default)
         {
             var query = _context.ProductionTasks
@@ -510,6 +511,8 @@ namespace ProductionPlanner.Data
                                 (s, c) => c)
                             .Any(c => c.Status != JobStatus.Completed)));
             }
+
+            query = query.ApplyToRootTasks(_context, search);
 
             query = query
                 .OrderBy(t => t.Status == JobStatus.Completed)

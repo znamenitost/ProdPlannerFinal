@@ -18,7 +18,8 @@ export default function useTaskTableController({
   onCalendarRefresh,
   onRegisterHubHandler,
   selectedEmployeeForHighlight,
-  excludeCompleted = false
+  excludeCompleted = false,
+  searchQuery = ''
 }) {
   const { showError, showWarning, showSuccess, confirm } = useUiFeedback();
   const api = useTaskTableApi();
@@ -57,7 +58,8 @@ export default function useTaskTableController({
   const rowsState = useTaskTableRows(api, {
     selectedEmployeeForHighlight,
     onCalendarRefresh,
-    excludeCompleted
+    excludeCompleted,
+    searchQuery
   });
 
   const childrenState = useTaskTableChildren(api);

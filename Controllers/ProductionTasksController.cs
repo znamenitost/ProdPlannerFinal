@@ -61,6 +61,7 @@ public class ProductionTasksController : ControllerBase
         [FromQuery] int pageSize = 50,
         [FromQuery] string? employee = null,
         [FromQuery] bool excludeCompleted = false,
+        [FromQuery] string? search = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -73,6 +74,7 @@ public class ProductionTasksController : ControllerBase
                 pageSize,
                 targetEmployeeName!,
                 excludeCompleted,
+                search,
                 cancellationToken);
             return Ok(result);
         }

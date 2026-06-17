@@ -10,6 +10,7 @@ public interface ITaskTableService
         int pageSize,
         string targetEmployeeName,
         bool excludeCompleted = false,
+        string? search = null,
         CancellationToken cancellationToken = default);
     Task<TaskTableRowDto?> GetRowDtoAsync(
         int id,

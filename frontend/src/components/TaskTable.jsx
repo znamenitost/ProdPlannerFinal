@@ -112,17 +112,24 @@ export default function TaskTable({
     setHideCompletedSort
   } = useTaskTableSortSettings(currentUser);
   const [searchQuery, setSearchQuery] = useUserPreference(currentUser, 'taskTable.searchQuery', '');
-  const excludeCompletedFromApi = hideCompletedSort && !searchQuery.trim();
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+  const excludeCompletedFromApi = hideCompletedSort && !debouncedSearchQuery.trim();
   const table = useTaskTableController({
     onCalendarRefresh,
     onRegisterHubHandler,
     selectedEmployeeForHighlight,
-    excludeCompleted: excludeCompletedFromApi
+    excludeCompleted: excludeCompletedFromApi,
+    searchQuery: debouncedSearchQuery
   });
   const sortOptions = useMemo(
     () => ({ deadlineSort, completedBottomSort }),
     [deadlineSort, completedBottomSort]
   );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
   const compareVisibleRows = useCallback(
     (a, b) => compareTaskRows(a, b, sortOptions),
@@ -133,10 +140,11 @@ export default function TaskTable({
     () => buildTaskTableSearchResult(
       table.rows,
       table.childrenCache,
-      searchQuery,
-      compareVisibleRows
+      debouncedSearchQuery,
+      compareVisibleRows,
+      { serverFiltered: Boolean(debouncedSearchQuery.trim()) }
     ),
-    [table.rows, table.childrenCache, searchQuery, compareVisibleRows]
+    [table.rows, table.childrenCache, debouncedSearchQuery, compareVisibleRows]
   );
 
   const visibleRows = useMemo(() => {
@@ -160,7 +168,7 @@ export default function TaskTable({
   });
 
   useEffect(() => {
-    const query = searchQuery.trim();
+    const query = debouncedSearchQuery.trim();
     if (!query) return undefined;
 
     const timer = window.setTimeout(() => {
@@ -172,7 +180,7 @@ export default function TaskTable({
     }, 250);
 
     return () => window.clearTimeout(timer);
-  }, [searchQuery, table.rows, table.loadChildrenForParent]);
+  }, [debouncedSearchQuery, table.rows, table.loadChildrenForParent]);
 
   const tableColSpan = taskTableColumnCount(
     columnSettings.visibility,

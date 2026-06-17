@@ -12,13 +12,14 @@ export const queryKeys = {
     statsPeriod
   ],
   completedAll: (employee) => ['app', 'completedTasks', employee],
-  taskTable: (page, pageSize, employeeFilter, excludeCompleted = false) => [
+  taskTable: (page, pageSize, employeeFilter, excludeCompleted = false, search = '') => [
     'app',
     'taskTable',
     page,
     pageSize,
     employeeFilter || '',
-    excludeCompleted
+    excludeCompleted,
+    search || ''
   ],
   taskTableAll: () => ['app', 'taskTable'],
   deadlineRisks: (employee) => ['app', 'deadlineRisks', employee],

@@ -1,13 +1,14 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../../lib/queryKeys';
 
-export default function useTaskTableQuery(api, page, rowsPerPage, employeeFilter, excludeCompleted) {
+export default function useTaskTableQuery(api, page, rowsPerPage, employeeFilter, excludeCompleted, search) {
   const filter = employeeFilter || '';
+  const searchQuery = String(search ?? '').trim();
 
   return useQuery({
-    queryKey: queryKeys.taskTable(page, rowsPerPage, filter, excludeCompleted),
+    queryKey: queryKeys.taskTable(page, rowsPerPage, filter, excludeCompleted, searchQuery),
     queryFn: ({ signal }) =>
-      api.loadRows(page + 1, rowsPerPage, filter, { signal, excludeCompleted }),
+      api.loadRows(page + 1, rowsPerPage, filter, { signal, excludeCompleted, search: searchQuery }),
     placeholderData: keepPreviousData,
     refetchInterval: false,
     refetchOnWindowFocus: true

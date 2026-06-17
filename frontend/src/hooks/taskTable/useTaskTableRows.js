@@ -8,7 +8,8 @@ import useUserPreference from '../useUserPreference';
 export default function useTaskTableRows(api, {
   selectedEmployeeForHighlight,
   onCalendarRefresh,
-  excludeCompleted = false
+  excludeCompleted = false,
+  searchQuery = ''
 }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -20,13 +21,15 @@ export default function useTaskTableRows(api, {
 
   const employeeFilter = selectedEmployeeForHighlight || '';
   const prevExcludeCompletedRef = useRef(excludeCompleted);
+  const prevSearchRef = useRef(searchQuery);
 
   const { data, refetch } = useTaskTableQuery(
     api,
     page,
     rowsPerPage,
     employeeFilter,
-    excludeCompleted
+    excludeCompleted,
+    searchQuery
   );
 
   const rows = data?.items ?? [];
@@ -37,6 +40,12 @@ export default function useTaskTableRows(api, {
     prevExcludeCompletedRef.current = excludeCompleted;
     setPage(0);
   }, [excludeCompleted, setPage]);
+
+  useEffect(() => {
+    if (prevSearchRef.current === searchQuery) return;
+    prevSearchRef.current = searchQuery;
+    setPage(0);
+  }, [searchQuery, setPage]);
 
   useEffect(() => {
     if (!excludeCompleted) return;

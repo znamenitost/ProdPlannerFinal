@@ -64,6 +64,7 @@ namespace ProductionPlanner.Data
             int page,
             int pageSize,
             bool excludeCompleted = false,
+            string? search = null,
             CancellationToken cancellationToken = default);
         Task HideTaskFromTableAsync(int taskId, CancellationToken cancellationToken = default);
         Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken = default);

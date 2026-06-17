@@ -278,13 +278,13 @@ public class WeekCalendarService : IWeekCalendarService
     private static List<CalendarTimelineSegmentDto> BuildWorkTimelineSegments(
         List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval)> intervalsForDay,
         IReadOnlyDictionary<int, int> layerByTask,
-        IReadOnlyDictionary<int, int> _)
+        IReadOnlyDictionary<int, int> maxDepthByTask)
     {
         if (intervalsForDay.Count == 0)
             return new List<CalendarTimelineSegmentDto>();
 
         intervalsForDay = intervalsForDay.OrderBy(i => i.start).ToList();
-        return CalendarDayWorkLayout.BuildWorkSegments(intervalsForDay, layerByTask);
+        return CalendarDayWorkLayout.BuildWorkSegments(intervalsForDay, layerByTask, maxDepthByTask);
     }
 
     /// <summary>
