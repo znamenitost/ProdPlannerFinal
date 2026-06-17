@@ -37,8 +37,10 @@ export function taskShowsThroughApproval(task, childrenTasks = null) {
   if (!task || isTaskCompleted(task)) return false;
 
   if (isSplitParentTask(task)) {
-    if (!childrenTasks?.length) return false;
-    return childrenTasks.some((child) => taskShowsThroughApproval(child));
+    if (childrenTasks?.length) {
+      return childrenTasks.some((child) => taskShowsThroughApproval(child));
+    }
+    return task.showsThroughApproval === true;
   }
 
   if (!isTestPhaseTask(task)) return false;

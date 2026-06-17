@@ -43,6 +43,7 @@ export function areParentRowPropsEqual(prev, next) {
   if ((prev.task.workIntervals?.length ?? 0) !== (next.task.workIntervals?.length ?? 0)) return false;
   if (workIntervalsKey(prev.task) !== workIntervalsKey(next.task)) return false;
   if (prev.task.plannedTimeProgress !== next.task.plannedTimeProgress) return false;
+  if (prev.task.showsThroughApproval !== next.task.showsThroughApproval) return false;
   if (prev.showPlannedProgress !== next.showPlannedProgress) return false;
   if (prev.isExpanded !== next.isExpanded) return false;
   if (pendingLifecycleAffectsRow(

@@ -48,4 +48,9 @@ describe('taskShowsThroughApproval', () => {
   it('shows marker on standalone test-phase task', () => {
     assert.equal(taskShowsThroughApproval(testChild), true);
   });
+
+  it('shows marker on split parent via server flag when children not loaded', () => {
+    const parent = { ...splitParent, showsThroughApproval: true };
+    assert.equal(taskShowsThroughApproval(parent), true);
+  });
 });

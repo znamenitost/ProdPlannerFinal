@@ -48,6 +48,9 @@ public class TaskTableRowDto
 
     public bool HasCdrPreview { get; set; }
 
+    /// <summary>Маркер «через согласование» (для родителя split — агрегат по детям).</summary>
+    public bool ShowsThroughApproval { get; set; }
+
     public static TaskTableRowDto FromParent(
         ProductionTask parent,
         string statusText,
@@ -102,7 +105,8 @@ public class TaskTableRowDto
             RequiresTestBeforeProduction = parent.RequiresTestBeforeProduction,
             TestEstimateHours = parent.TestEstimateHours,
             ProductionEstimateHours = parent.ProductionEstimateHours,
-            WorkPhase = parent.WorkPhase
+            WorkPhase = parent.WorkPhase,
+            ShowsThroughApproval = TestPhaseWorkflow.TaskShowsThroughApproval(parent, children)
         };
     }
 }
