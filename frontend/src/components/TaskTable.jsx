@@ -195,7 +195,7 @@ export default function TaskTable({
 
       const children = table.childrenCache.get(row.id) || [];
       const hasChildren = row.isSplitTask || children.length > 0;
-      const parentFooter = hasChildren ? 0 : (hasProgressFooter(row, showPlannedProgress) ? ROW_PROGRESS_HEIGHT : 0);
+      const parentFooter = hasProgressFooter(row, showPlannedProgress) ? ROW_PROGRESS_HEIGHT : 0;
 
       if (!hasChildren || !table.expandedRows.has(row.id)) {
         return ROW_GROUP_BASE_HEIGHT + parentFooter;
@@ -270,9 +270,6 @@ export default function TaskTable({
       table.childrenCache.get(parent.id) || [],
       sortOptions
     );
-    if (!searchResult.isActive) {
-      children = filterCompletedRows(children, hideCompletedSort);
-    }
     const allowedChildIds = searchResult.childrenFilter?.get(parent.id);
     if (allowedChildIds) {
       children = children.filter((child) => allowedChildIds.has(child.id));

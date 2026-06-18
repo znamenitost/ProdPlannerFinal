@@ -42,6 +42,16 @@ describe('syncHubViewGroups calendar-viewers', () => {
     assert.equal(prev.lastJoinedCalendarEmployee, 'Яромир');
   });
 
+  it('re-joins table viewers when already on table tab (reconnect/focus recovery)', async () => {
+    const conn = mockConnection();
+    let prev = await syncHubViewGroups(conn, null, adminState(1, 'Дима'));
+    conn.invocations.length = 0;
+
+    prev = await syncHubViewGroups(conn, prev, adminState(1, 'Дима'));
+
+    assert.deepEqual(conn.invocations, [['JoinTableViewers']]);
+  });
+
   it('leaves calendar when admin opens table after viewing calendar', async () => {
     const conn = mockConnection();
     let prev = await syncHubViewGroups(conn, null, adminState(0, 'Дима'));

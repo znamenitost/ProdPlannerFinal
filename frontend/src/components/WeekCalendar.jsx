@@ -66,6 +66,11 @@ export default function WeekCalendar({ employee }) {
   }, [isError, showError]);
 
   useEffect(() => {
+    const currentDate = new Date();
+    setAnchorDate(getWorkdayOrPrevious(currentDate));
+  }, [setAnchorDate]);
+
+  useEffect(() => {
     if (!weekData?.start) return;
     const serverMonday = startOfDay(new Date(weekData.start));
     if (serverMonday.toDateString() !== weekStart.toDateString()) {

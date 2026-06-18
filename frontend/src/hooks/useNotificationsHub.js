@@ -337,6 +337,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       if (document.visibilityState === 'visible') {
         flushHiddenQueue();
         fetchPendingNotifications(abort.signal);
+        applyViewSubscription();
       }
     };
 

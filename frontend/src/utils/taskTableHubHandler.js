@@ -10,11 +10,11 @@ export async function handleTaskTableHubEvent(event, ctx) {
   const {
     rows,
     childrenCache,
+    expandedRows,
     api,
     selectedEmployeeForHighlight,
     patchRow,
     removeRow,
-    patchChildInCache,
     setChildrenForParent,
     loadChildrenForParent
   } = ctx;
@@ -22,6 +22,22 @@ export async function handleTaskTableHubEvent(event, ctx) {
   const employee = selectedEmployeeForHighlight || '';
 
   const isNotFound = (err) => err?.status === 404 || String(err?.message || '').includes('"status":404');
+
+  const refreshSplitChildren = async (parentId) => {
+    const kids = await loadChildrenForParent(parentId, { force: true });
+    setChildrenForParent(parentId, kids);
+    return kids;
+  };
+
+  const shouldReloadChildren = (parentId) =>
+    childrenCache.has(parentId) || expandedRows?.has(parentId);
+
+  const patchParentIfVisible = async (parentId) => {
+    if (!rows.some((r) => r.id === parentId)) return false;
+    const parentDto = await api.fetchTableRow(parentId, employee);
+    if (parentDto) patchRow(parentId, parentDto);
+    return true;
+  };
 
   if (type === 'TaskDeleted') {
     if (rows.some((r) => r.id === taskId)) {
@@ -31,11 +47,9 @@ export async function handleTaskTableHubEvent(event, ctx) {
 
     for (const [parentId, children] of childrenCache.entries()) {
       if (children.some((c) => c.id === taskId)) {
-        const kids = await loadChildrenForParent(parentId, { force: true });
-        setChildrenForParent(parentId, kids);
+        await refreshSplitChildren(parentId);
         try {
-          const parentDto = await api.fetchTableRow(parentId, employee);
-          patchRow(parentId, parentDto);
+          await patchParentIfVisible(parentId);
         } catch (err) {
           if (isNotFound(err)) {
             removeRow(parentId);
@@ -58,15 +72,10 @@ export async function handleTaskTableHubEvent(event, ctx) {
       const parentId = updated.parentRowNumber;
 
       if (parentId) {
-        if (childrenCache.has(parentId)) {
-          patchChildInCache(taskId, updated);
+        if (shouldReloadChildren(parentId)) {
+          await refreshSplitChildren(parentId);
         }
-        if (rows.some((r) => r.id === parentId)) {
-          const parentDto = await api.fetchTableRow(parentId, employee);
-          if (parentDto) patchRow(parentId, parentDto);
-          return true;
-        }
-        return false;
+        return await patchParentIfVisible(parentId);
       }
 
       if (rows.some((r) => r.id === taskId)) {
@@ -86,11 +95,9 @@ export async function handleTaskTableHubEvent(event, ctx) {
         }
 
         if (parentId) {
-          const kids = await loadChildrenForParent(parentId, { force: true });
-          setChildrenForParent(parentId, kids);
+          await refreshSplitChildren(parentId);
           try {
-            const parentDto = await api.fetchTableRow(parentId, employee);
-            patchRow(parentId, parentDto);
+            await patchParentIfVisible(parentId);
           } catch (parentErr) {
             if (isNotFound(parentErr)) {
               removeRow(parentId);

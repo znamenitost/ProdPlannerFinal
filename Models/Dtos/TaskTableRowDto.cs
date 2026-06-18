@@ -57,7 +57,8 @@ public class TaskTableRowDto
         bool hasCurrentUserSubtask,
         IReadOnlyList<ProductionTask>? children = null,
         IReadOnlyList<WorkInterval>? workIntervals = null,
-        DateTime? now = null)
+        DateTime? now = null,
+        IReadOnlyDictionary<int, IReadOnlyList<WorkInterval>>? childIntervalsByTaskId = null)
     {
         var splitEmployeeNames = "";
         if (parent.IsSplitTask && children is { Count: > 0 })
@@ -71,7 +72,9 @@ public class TaskTableRowDto
 
         var at = now ?? DateTime.UtcNow;
         var intervals = workIntervals ?? Array.Empty<WorkInterval>();
-        var hidePlannedBar = parent.IsSplitTask && children is { Count: > 0 };
+        var isSplitWithChildren = parent.IsSplitTask && children is { Count: > 0 };
+        var childIntervals = childIntervalsByTaskId
+            ?? new Dictionary<int, IReadOnlyList<WorkInterval>>();
         var phaseEstimate = TestPhaseWorkflow.GetActiveEstimateHours(parent);
         var progressIntervals = TestPhaseWorkflow.GetIntervalsForProgress(parent, intervals.ToList());
 
@@ -97,11 +100,14 @@ public class TaskTableRowDto
             HasCurrentUserSubtask = hasCurrentUserSubtask,
             SplitEmployeeNames = splitEmployeeNames,
             WorkIntervals = intervals.Select(WorkIntervalDto.FromEntity).ToList(),
-            PlannedTimeProgress = PlannedTimeProgressCalculator.GetPercent(
-                parent, progressIntervals, at, phaseEstimate),
-            ShowPlannedTimeProgress = !hidePlannedBar
-                && (PlannedTimeProgressCalculator.ShouldShow(parent, progressIntervals, phaseEstimate)
-                    || statusText is "Начал" or "Пауза"),
+            PlannedTimeProgress = isSplitWithChildren
+                ? PlannedTimeProgressCalculator.GetSplitParentPercent(children!, childIntervals, at)
+                : PlannedTimeProgressCalculator.GetPercent(
+                    parent, progressIntervals, at, phaseEstimate),
+            ShowPlannedTimeProgress = isSplitWithChildren
+                ? PlannedTimeProgressCalculator.ShouldShowSplitParent(children!, childIntervals, statusText)
+                : PlannedTimeProgressCalculator.ShouldShow(parent, progressIntervals, phaseEstimate)
+                    || statusText is "Начал" or "Пауза",
             RequiresTestBeforeProduction = parent.RequiresTestBeforeProduction,
             TestEstimateHours = parent.TestEstimateHours,
             ProductionEstimateHours = parent.ProductionEstimateHours,

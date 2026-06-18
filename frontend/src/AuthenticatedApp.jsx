@@ -102,6 +102,14 @@ function AuthenticatedAppContent() {
     if (activeTab === 1) refreshTable();
   }, [activeTab, refreshTable]);
 
+  const prevActiveTabRef = useRef(activeTab);
+  useEffect(() => {
+    if (activeTab === 1 && prevActiveTabRef.current !== 1) {
+      refreshTable();
+    }
+    prevActiveTabRef.current = activeTab;
+  }, [activeTab, refreshTable]);
+
   const handleHubActiveTasksRefresh = useCallback(() => {
     if (activeTab === 0) refreshActiveTasks();
   }, [activeTab, refreshActiveTasks]);

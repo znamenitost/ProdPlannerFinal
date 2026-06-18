@@ -306,8 +306,8 @@ function ParentTaskRow({
       <TaskPlannedProgressFooter
         task={task}
         colSpan={tableColSpan}
-        hideForSplitParent={hasChildren}
         enabled={showPlannedProgress}
+        color={hasChildren ? 'primary' : 'success'}
       />
 
       {hasChildren && isExpanded && (childrenTasks || []).map((child, index) => (

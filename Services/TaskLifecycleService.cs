@@ -93,11 +93,12 @@ public class TaskLifecycleService : ITaskLifecycleService
             ? new TaskStatusPatch { Progress = 1, CompletedAt = now }
             : new TaskStatusPatch { Progress = 0, ClearCompletedAt = true };
 
+        var parentUpdated = 0;
         if (parent.Status == newStatus)
         {
             if (newStatus == JobStatus.Completed && parent.Progress < 0.99)
             {
-                await _repo.TryTransitionStatusAsync(
+                parentUpdated = await _repo.TryTransitionStatusAsync(
                     parent.Id,
                     JobStatus.Completed,
                     now,
@@ -105,17 +106,31 @@ public class TaskLifecycleService : ITaskLifecycleService
                     patch,
                     cancellationToken);
             }
-
-            return;
+        }
+        else
+        {
+            parentUpdated = await _repo.TryTransitionStatusAsync(
+                parent.Id,
+                newStatus,
+                now,
+                expectedStatuses: null,
+                patch,
+                cancellationToken);
         }
 
-        await _repo.TryTransitionStatusAsync(
-            parent.Id,
-            newStatus,
-            now,
-            expectedStatuses: null,
-            patch,
-            cancellationToken);
+        if (parentUpdated > 0)
+            await NotifySplitParentStatusChangedAsync(parent.Id, cancellationToken);
+    }
+
+    private async Task NotifySplitParentStatusChangedAsync(int parentId, CancellationToken cancellationToken)
+    {
+        var parent = await _repo.GetTaskByIdAsync(parentId, cancellationToken);
+        if (parent == null || !parent.IsSplitTask)
+            return;
+
+        await _notificationService.NotifyStatusChangedAsync(
+            parent,
+            TaskStatusMapper.ToText(parent.Status));
     }
 
     public async Task StartTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
@@ -453,7 +468,10 @@ public class TaskLifecycleService : ITaskLifecycleService
             cancellationToken);
 
         if (updated > 0)
+        {
             _logger.LogInformation("Parent task {ParentId} marked completed after all children done", parentId);
+            await NotifySplitParentStatusChangedAsync(parentId, cancellationToken);
+        }
     }
 
     public async Task ReturnTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)

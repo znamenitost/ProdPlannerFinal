@@ -42,7 +42,7 @@ export async function syncHubViewGroups(connection, previous, next) {
   if (wasTable && !isTable) {
     await invokeSafe(connection, 'LeaveTableViewers');
   }
-  if (!wasTable && isTable) {
+  if (isTable) {
     await invokeSafe(connection, 'JoinTableViewers');
   }
 

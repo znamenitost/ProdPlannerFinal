@@ -6,7 +6,8 @@ export default function TaskPlannedProgressFooter({
   task,
   colSpan,
   hideForSplitParent = false,
-  enabled = false
+  enabled = false,
+  color = 'success'
 }) {
   const show = task.showPlannedTimeProgress ?? false;
 
@@ -34,12 +35,12 @@ export default function TaskPlannedProgressFooter({
         <LinearProgress
           variant="determinate"
           value={percent}
-          color="success"
+          color={color}
           aria-label={`Плановый прогресс ${percent}%`}
           sx={(theme) => ({
             height: 5,
             borderRadius: 0,
-            bgcolor: alpha(theme.palette.success.main, 0.12),
+            bgcolor: alpha(theme.palette[color].main, 0.12),
             '& .MuiLinearProgress-bar': {
               borderRadius: 0
             }

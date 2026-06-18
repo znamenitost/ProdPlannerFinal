@@ -107,6 +107,7 @@ export default function useTaskTableController({
   hubCtxRef.current = {
     rows: rowsState.rows,
     childrenCache: childrenState.childrenCache,
+    expandedRows: childrenState.expandedRows,
     api,
     selectedEmployeeForHighlight,
     patchRow: rowsState.patchRow,

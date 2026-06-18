@@ -81,6 +81,15 @@ public class TaskTableService : ITaskTableService
         var intervalsByTask = (await _repo.GetWorkIntervalsForTaskIdsAsync(parentIds, cancellationToken))
             .GroupBy(i => i.ProductionTaskId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<WorkInterval>)g.ToList());
+        var allChildIds = childrenByParent.Values
+            .SelectMany(children => children.Select(c => c.Id))
+            .Distinct()
+            .ToList();
+        var childIntervalsByTask = allChildIds.Count == 0
+            ? new Dictionary<int, IReadOnlyList<WorkInterval>>()
+            : (await _repo.GetWorkIntervalsForTaskIdsAsync(allChildIds, cancellationToken))
+                .GroupBy(i => i.ProductionTaskId)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<WorkInterval>)g.ToList());
         var now = _timeService.Now;
         var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync(parentIds, cancellationToken);
 
@@ -94,7 +103,7 @@ public class TaskTableService : ITaskTableService
             intervalsByTask.TryGetValue(parent.Id, out var intervals);
             intervals ??= Array.Empty<WorkInterval>();
             var dto = TaskTableRowDto.FromParent(
-                parent, statusText, hasSubtask, children, intervals, now);
+                parent, statusText, hasSubtask, children, intervals, now, childIntervalsByTask);
             dto.HasCdrPreview = previewIds.Contains(parent.Id);
             return dto;
         }).ToList();
@@ -154,8 +163,17 @@ public class TaskTableService : ITaskTableService
             children ?? [],
             targetEmployeeName);
 
+        IReadOnlyDictionary<int, IReadOnlyList<WorkInterval>>? childIntervalsByTask = null;
+        if (task.IsSplitTask && children is { Count: > 0 })
+        {
+            var childIds = children.Select(c => c.Id).ToList();
+            childIntervalsByTask = (await _repo.GetWorkIntervalsForTaskIdsAsync(childIds, cancellationToken))
+                .GroupBy(i => i.ProductionTaskId)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<WorkInterval>)g.ToList());
+        }
+
         var parentDto = TaskTableRowDto.FromParent(
-            task, statusText, hasSubtask, children, intervals, now);
+            task, statusText, hasSubtask, children, intervals, now, childIntervalsByTask);
         parentDto.HasCdrPreview = hasCdrPreview;
         return parentDto;
     }

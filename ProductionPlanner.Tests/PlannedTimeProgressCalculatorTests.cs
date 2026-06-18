@@ -66,4 +66,62 @@ public class PlannedTimeProgressCalculatorTests
         var task = new ProductionTask { EstimateHours = 2, Status = JobStatus.InProgress };
         Assert.True(PlannedTimeProgressCalculator.ShouldShow(task, []));
     }
+
+    [Fact]
+    public void GetSplitParentPercent_SumsChildrenElapsedOverTotalEstimate()
+    {
+        var children = new List<ProductionTask>
+        {
+            new() { Id = 1, EstimateHours = 2, Status = JobStatus.InProgress },
+            new() { Id = 2, EstimateHours = 2, Status = JobStatus.Assigned }
+        };
+        var now = new DateTime(2026, 5, 22, 12, 0, 0);
+        var intervalsByChild = new Dictionary<int, IReadOnlyList<WorkInterval>>
+        {
+            [1] = new List<WorkInterval>
+            {
+                new()
+                {
+                    StartTime = new DateTime(2026, 5, 22, 11, 0, 0),
+                    EndTime = null
+                }
+            }
+        };
+
+        var percent = PlannedTimeProgressCalculator.GetSplitParentPercent(children, intervalsByChild, now);
+
+        Assert.Equal(25, percent, 1);
+    }
+
+    [Fact]
+    public void ShouldShowSplitParent_WhenAnyChildStarted_ReturnsTrue()
+    {
+        var children = new List<ProductionTask>
+        {
+            new() { Id = 1, EstimateHours = 2, Status = JobStatus.InProgress },
+            new() { Id = 2, EstimateHours = 2, Status = JobStatus.Assigned }
+        };
+        var intervalsByChild = new Dictionary<int, IReadOnlyList<WorkInterval>>
+        {
+            [1] = new List<WorkInterval>
+            {
+                new() { StartTime = new DateTime(2026, 5, 22, 11, 0, 0), EndTime = null }
+            }
+        };
+
+        Assert.True(PlannedTimeProgressCalculator.ShouldShowSplitParent(children, intervalsByChild, "Начал"));
+    }
+
+    [Fact]
+    public void ShouldShowSplitParent_WhenAllChildrenCompleted_ReturnsFalse()
+    {
+        var children = new List<ProductionTask>
+        {
+            new() { Id = 1, EstimateHours = 2, Status = JobStatus.Completed },
+            new() { Id = 2, EstimateHours = 2, Status = JobStatus.Completed }
+        };
+
+        Assert.False(PlannedTimeProgressCalculator.ShouldShowSplitParent(
+            children, new Dictionary<int, IReadOnlyList<WorkInterval>>(), "Готово"));
+    }
 }

@@ -52,6 +52,7 @@ export function collectInProgressProgressTaskIds({
     const isExpanded = expandedRows.has(row.id) || autoExpandIds.has(row.id);
 
     if (hasChildren) {
+      if (isTaskStatusInProgress(row)) addParent(row);
       if (!isExpanded) continue;
       for (const child of children) {
         if (isTaskStatusInProgress(child)) addChild(child, row.id);

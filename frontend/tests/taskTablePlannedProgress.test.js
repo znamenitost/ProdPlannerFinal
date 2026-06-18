@@ -58,6 +58,21 @@ test('collectInProgressProgressTaskIds includes only visible in-progress rows', 
   ]);
 });
 
+test('collectInProgressProgressTaskIds includes split parent in progress even when collapsed', () => {
+  const rows = [{ id: 10, isSplitTask: true, statusText: STATUS_IN_PROGRESS }];
+  const childrenCache = new Map([
+    [10, [{ id: 11, statusText: STATUS_COMPLETED }]]
+  ]);
+
+  const ids = collectInProgressProgressTaskIds({
+    rows,
+    childrenCache,
+    expandedRows: new Set()
+  });
+
+  assert.deepEqual(ids, [{ id: 10, isChild: false }]);
+});
+
 test('collectInProgressProgressTaskIds skips collapsed split children', () => {
   const rows = [{ id: 10, isSplitTask: true }];
   const childrenCache = new Map([

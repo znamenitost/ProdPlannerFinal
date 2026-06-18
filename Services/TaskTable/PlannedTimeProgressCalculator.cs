@@ -44,6 +44,63 @@ public static class PlannedTimeProgressCalculator
         return estimateHours > 0 && HasWorkStarted(task.Status, intervals);
     }
 
+    /// <summary>
+    /// Плановый % для split-родителя: сумма отработанных часов детей / сумма выделенных часов детей.
+    /// </summary>
+    public static double GetSplitParentPercent(
+        IReadOnlyList<ProductionTask> children,
+        IReadOnlyDictionary<int, IReadOnlyList<WorkInterval>> intervalsByChildId,
+        DateTime now)
+    {
+        if (children.Count == 0)
+            return 0;
+
+        var totalEstimate = children.Sum(TestPhaseWorkflow.GetActiveEstimateHours);
+        if (totalEstimate <= 0)
+            return 0;
+
+        if (children.All(c => c.Status == JobStatus.Completed))
+            return 100;
+
+        double totalElapsed = 0;
+        foreach (var child in children)
+        {
+            intervalsByChildId.TryGetValue(child.Id, out var intervals);
+            intervals ??= Array.Empty<WorkInterval>();
+            var progressIntervals = TestPhaseWorkflow.GetIntervalsForProgress(child, intervals.ToList());
+            totalElapsed += GetElapsedWorkHours(progressIntervals, now);
+        }
+
+        var percent = totalElapsed / totalEstimate * 100;
+        return Math.Clamp(Math.Round(percent), 0, 100);
+    }
+
+    public static bool ShouldShowSplitParent(
+        IReadOnlyList<ProductionTask> children,
+        IReadOnlyDictionary<int, IReadOnlyList<WorkInterval>> intervalsByChildId,
+        string statusText)
+    {
+        if (children.Count == 0)
+            return false;
+
+        if (children.All(c => c.Status == JobStatus.Completed))
+            return false;
+
+        var totalEstimate = children.Sum(TestPhaseWorkflow.GetActiveEstimateHours);
+        if (totalEstimate <= 0)
+            return false;
+
+        if (statusText is "Начал" or "Пауза")
+            return true;
+
+        return children.Any(child =>
+        {
+            intervalsByChildId.TryGetValue(child.Id, out var intervals);
+            intervals ??= Array.Empty<WorkInterval>();
+            return HasWorkStarted(child.Status, intervals);
+        });
+    }
+
     private static bool HasWorkStarted(JobStatus status, IReadOnlyList<WorkInterval> intervals)
     {
         if (intervals.Count > 0)
