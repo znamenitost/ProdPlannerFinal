@@ -359,12 +359,8 @@ public class TaskTableService : ITaskTableService
         var newFolderPath = request.FolderPath ?? task.FolderPath;
         var newFileName = request.FileName ?? task.FileName;
 
-        if (!string.Equals(newFolderPath, task.FolderPath, StringComparison.Ordinal)
-            || !string.Equals(newFileName, task.FileName, StringComparison.Ordinal))
-        {
-            task.CdrPreviewRetryAt = null;
-            task.CdrPreviewRetryAttempts = 0;
-        }
+        task.CdrPreviewRetryAt = null;
+        task.CdrPreviewRetryAttempts = 0;
 
         task.FolderPath = newFolderPath;
         task.FileName = newFileName;

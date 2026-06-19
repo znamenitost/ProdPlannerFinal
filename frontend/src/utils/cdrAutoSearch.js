@@ -7,7 +7,8 @@ import {
   getCdrPathValidationError,
   isCdrPreviewRetryableFailure,
   shouldAttemptCdrPreviewOnSave,
-  formatCdrPreviewPostSaveWarning
+  formatCdrPreviewPostSaveWarning,
+  formatFileNotFoundByPath
 } from './cdrPreviewErrors';
 import { formatDevTaskFilePath } from './devCdrPreviewConfig';
 
@@ -51,22 +52,17 @@ function normalizeAutoSearchMinutes(value) {
   return Math.min(n, 1440);
 }
 
+function formatFileNotFoundWarning(folderPath, fileName) {
+  return formatFileNotFoundByPath(formatDevTaskFilePath(folderPath, fileName));
+}
+
 function formatAutoSearchFailedMessage(folderPath, fileName) {
-  const path = formatDevTaskFilePath(folderPath, fileName);
-  if (path) {
-    return `Автопоиск не нашёл превью.\n\nФайл: ${path}`;
-  }
-  return 'Автопоиск не нашёл превью для задачи.';
+  return formatFileNotFoundWarning(folderPath, fileName);
 }
 
 function formatFirstAttemptFailureMessage(folderPath, fileName, errMessage = '') {
   if (errMessage) return formatCdrPreviewPostSaveWarning(errMessage);
-
-  const path = formatDevTaskFilePath(folderPath, fileName);
-  const detail = path
-    ? `Файл или папка не найдены. Проверьте путь к папке и имя файла в задаче.\n\nФайл: ${path}`
-    : 'Файл или папка не найдены. Проверьте путь к папке и имя файла в задаче.';
-  return formatCdrPreviewPostSaveWarning(detail);
+  return formatFileNotFoundWarning(folderPath, fileName);
 }
 
 async function tryBuildPreview(taskId, folderPath, fileName) {
@@ -98,8 +94,10 @@ export function startCdrAutoSearchAfterSave({
       const ok = await tryBuildPreview(taskId, folderPath, fileName);
       if (ok) return;
 
-      showWarning?.(formatFirstAttemptFailureMessage(folderPath, fileName));
-      await scheduleCdrPreviewRetry(taskId);
+      const scheduled = await scheduleCdrPreviewRetry(taskId);
+      if (!scheduled) {
+        showWarning?.(formatFirstAttemptFailureMessage(folderPath, fileName));
+      }
     } catch (err) {
       const message = err?.message || '';
       if (!isCdrPreviewRetryableFailure(message)) {
@@ -107,11 +105,13 @@ export function startCdrAutoSearchAfterSave({
         return;
       }
 
-      showWarning?.(formatFirstAttemptFailureMessage(folderPath, fileName, message));
       try {
-        await scheduleCdrPreviewRetry(taskId);
+        const scheduled = await scheduleCdrPreviewRetry(taskId);
+        if (!scheduled) {
+          showWarning?.(formatFirstAttemptFailureMessage(folderPath, fileName, message));
+        }
       } catch {
-        /* ignore */
+        showWarning?.(formatFirstAttemptFailureMessage(folderPath, fileName, message));
       }
     } finally {
       notifyPreviewBuildEnd(taskId);

@@ -85,6 +85,43 @@ public class CdrPreviewRetryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetDueRetriesAsync_skips_future_retry()
+    {
+        var future = await SeedTaskAsync("folder", "design.cdr");
+        future.CdrPreviewRetryAt = _now.AddMinutes(1);
+        future.CdrPreviewRetryAttempts = 1;
+        await _db.SaveChangesAsync();
+
+        var items = await _service.GetDueRetriesAsync();
+
+        Assert.Empty(items);
+    }
+
+    [Fact]
+    public async Task ScheduleSecondAttemptAsync_returns_false_when_auto_search_disabled()
+    {
+        var disabled = new CdrPreviewRetryService(
+            _db,
+            new FixedTimeService(_now),
+            new FixedAutoSearchSettings(0));
+        var task = await SeedTaskAsync("folder", "design.cdr");
+
+        var scheduled = await disabled.ScheduleSecondAttemptAsync(task.Id);
+
+        Assert.False(scheduled);
+    }
+
+    [Fact]
+    public async Task ScheduleSecondAttemptAsync_returns_true_when_scheduled()
+    {
+        var task = await SeedTaskAsync("folder", "design.cdr");
+
+        var scheduled = await _service.ScheduleSecondAttemptAsync(task.Id);
+
+        Assert.True(scheduled);
+    }
+
+    [Fact]
     public async Task GetDueRetriesAsync_returns_only_second_attempt_queue()
     {
         var due = await SeedTaskAsync("folder", "design.cdr");

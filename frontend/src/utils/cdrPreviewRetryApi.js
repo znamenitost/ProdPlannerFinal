@@ -31,6 +31,9 @@ export async function scheduleCdrPreviewRetry(taskId) {
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));
   }
+
+  const body = await response.json().catch(() => ({}));
+  return Boolean(body?.scheduled);
 }
 
 export async function reportCdrPreviewRetryFailed(taskId) {

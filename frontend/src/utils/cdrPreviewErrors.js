@@ -2,7 +2,7 @@ import { FILE_OPENER_INSTALL_HINT } from './fileOpenerHints.js';
 import { normalizePathForOpen } from './filePathForOpen.js';
 
 const AGENT_ERROR_MESSAGES = {
-  'file not found': 'Файл или папка не найдены. Проверьте путь к папке и имя файла в задаче',
+  'file not found': 'Файл не найден',
   'missing path': 'Не указан путь к файлу',
   'read path not allowed': 'Путь не разрешён для чтения',
   'dev path not allowed': 'Путь не разрешён (только C:\\... или \\\\MINIMARKER\\Клиенты\\...)',
@@ -62,6 +62,25 @@ export function isAgentUnavailableWarning(message) {
   return false;
 }
 
+/** Короткое сообщение: файл не найден по UNC/локальному пути. */
+export function formatFileNotFoundByPath(filePath = '') {
+  const path = String(filePath || '').trim();
+  if (path) return `Файл по пути (${path}) не найден`;
+  return 'Файл не найден';
+}
+
+function extractFilePathFromErrorMessage(message) {
+  const pathMatch = String(message || '').match(/(?:Путь|Файл):\s*(.+)$/m);
+  return pathMatch?.[1]?.trim() || '';
+}
+
+function isFileNotFoundDetail(message) {
+  const text = String(message || '');
+  return isFileNotFoundAgentError(text)
+    || /файл по пути/i.test(text)
+    || /файл или папка не найден/i.test(text);
+}
+
 /** Агент ответил, но файл/папка на UNC недоступны (404, off VPN и т.п.). */
 export function isFileNotFoundAgentError(message) {
   const lower = String(message || '').trim().toLowerCase();
@@ -116,15 +135,22 @@ export function formatCdrPreviewReadError(rawMessage, filePath = '') {
   if (httpMatch) {
     const status = httpMatch[1];
     if (status === '404') {
-      return `Файл или папка не найдены. Проверьте путь к папке и имя файла в задаче.${pathSuffix}`;
+      return formatFileNotFoundByPath(filePath);
     }
     if (status === '403') return `Доступ к файлу запрещён агентом.${pathSuffix}`;
     return `Ошибка агента (HTTP ${status}).${pathSuffix}`;
   }
 
   const lower = message.toLowerCase();
+  if (lower === 'file not found') {
+    return formatFileNotFoundByPath(filePath);
+  }
+
   for (const [key, label] of Object.entries(AGENT_ERROR_MESSAGES)) {
     if (lower === key) {
+      if (key === 'file not found') {
+        return formatFileNotFoundByPath(filePath);
+      }
       return `${label}.${pathSuffix}`;
     }
   }
@@ -139,6 +165,7 @@ export function formatCdrPreviewReadError(rawMessage, filePath = '') {
 /** Ошибка «файл не найден» — можно повторить позже (задержка синхронизации и т.п.). */
 export function isCdrPreviewRetryableFailure(message) {
   return isFileNotFoundAgentError(message)
+    || /файл по пути/i.test(String(message || ''))
     || /файл или папка не найден/i.test(String(message || ''));
 }
 
@@ -161,8 +188,9 @@ export function formatCdrPreviewPostSaveWarning(detail) {
     return message;
   }
 
-  if (isFileNotFoundAgentError(message) || /файл или папка не найден/i.test(message)) {
-    return `Задача сохранена, но файл не найден для превью.\n\n${message}`;
+  if (isFileNotFoundDetail(message)) {
+    if (/файл по пути/i.test(message)) return message;
+    return formatFileNotFoundByPath(extractFilePathFromErrorMessage(message));
   }
 
   if (

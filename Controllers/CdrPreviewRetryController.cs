@@ -31,8 +31,8 @@ public class CdrPreviewRetryController : ControllerBase
     [HttpPost("{id:int}/cdr-preview/schedule-retry")]
     public async Task<IActionResult> ScheduleRetry(int id, CancellationToken cancellationToken)
     {
-        await _retryService.ScheduleSecondAttemptAsync(id, cancellationToken);
-        return Ok(new { scheduled = true });
+        var scheduled = await _retryService.ScheduleSecondAttemptAsync(id, cancellationToken);
+        return Ok(new { scheduled });
     }
 
     [HttpPost("{id:int}/cdr-preview/retry-failed")]

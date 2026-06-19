@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models.Dtos;
 using ProductionPlanner.Services.AppSettings;
 
@@ -7,7 +8,7 @@ namespace ProductionPlanner.Services.TaskCdrPreview;
 
 public interface ICdrPreviewRetryService
 {
-    Task ScheduleSecondAttemptAsync(int taskId, CancellationToken cancellationToken = default);
+    Task<bool> ScheduleSecondAttemptAsync(int taskId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<CdrPreviewRetryItemDto>> GetDueRetriesAsync(
         int limit = 50,
@@ -36,21 +37,21 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
         _autoSearchSettings = autoSearchSettings;
     }
 
-    public async Task ScheduleSecondAttemptAsync(int taskId, CancellationToken cancellationToken = default)
+    public async Task<bool> ScheduleSecondAttemptAsync(int taskId, CancellationToken cancellationToken = default)
     {
         var autoSearchMinutes = await _autoSearchSettings.GetMinutesAsync(cancellationToken);
         if (autoSearchMinutes <= 0)
-            return;
+            return false;
 
         var task = await _db.ProductionTasks
             .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
         if (task == null || !FilePathNormalizer.IsEligibleForCdrPreview(task.FolderPath, task.FileName))
-            return;
+            return false;
 
         if (await HasPreviewAsync(taskId, cancellationToken))
         {
             await ClearRetryInternalAsync(task, cancellationToken);
-            return;
+            return false;
         }
 
         var now = _timeService.Now;
@@ -58,6 +59,7 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
         task.CdrPreviewRetryAt = now.AddMinutes(autoSearchMinutes);
         task.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<IReadOnlyList<CdrPreviewRetryItemDto>> GetDueRetriesAsync(
@@ -68,7 +70,7 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
         if (autoSearchMinutes <= 0)
             return Array.Empty<CdrPreviewRetryItemDto>();
 
-        var now = _timeService.Now;
+        var now = RetryDueCompareInstant();
         var take = Math.Clamp(limit, 1, 200);
 
         var candidates = await _db.ProductionTasks
@@ -161,4 +163,12 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
             .AsNoTracking()
             .AnyAsync(p => p.TaskId == taskId && p.ByteSize > 0, cancellationToken);
     }
+
+    /// <summary>
+    /// timestamptz в Postgres хранится в UTC; AppTimeService.Now — московская стенка.
+    /// </summary>
+    private DateTime RetryDueCompareInstant() =>
+        _db.Database.IsNpgsql()
+            ? PostgresDateTime.ToUtc(_timeService.Now)
+            : _timeService.Now;
 }

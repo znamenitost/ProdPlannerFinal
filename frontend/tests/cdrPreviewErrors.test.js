@@ -41,8 +41,7 @@ describe('cdrPreviewErrors', () => {
 
   it('localizes file not found from agent', () => {
     const message = formatCdrPreviewReadError('file not found', '\\\\MINIMARKER\\Клиенты\\test.cdr');
-    assert.match(message, /не найден/i);
-    assert.match(message, /test\.cdr/);
+    assert.equal(message, 'Файл по пути (\\\\MINIMARKER\\Клиенты\\test.cdr) не найден');
   });
 
   it('explains unreachable agent', () => {
@@ -64,7 +63,7 @@ describe('cdrPreviewErrors', () => {
 
   it('maps HTTP 404', () => {
     const message = formatCdrPreviewReadError('HTTP 404', '\\\\MINIMARKER\\Клиенты\\test.cdr');
-    assert.match(message, /не найден/i);
+    assert.equal(message, 'Файл по пути (\\\\MINIMARKER\\Клиенты\\test.cdr) не найден');
   });
 
   it('passes through known persist errors', () => {
@@ -93,9 +92,7 @@ describe('cdrPreviewErrors', () => {
   it('formats post-save file not found warning', () => {
     const detail = formatCdrPreviewReadError('file not found', '\\\\MINIMARKER\\Клиенты\\test.cdr');
     const warning = formatCdrPreviewPostSaveWarning(detail);
-    assert.match(warning, /сохранена/i);
-    assert.match(warning, /не найден/i);
-    assert.match(warning, /test\.cdr/);
+    assert.equal(warning, 'Файл по пути (\\\\MINIMARKER\\Клиенты\\test.cdr) не найден');
   });
 
   it('formats post-save extract failure warning', () => {
@@ -117,7 +114,7 @@ describe('cdrPreviewErrors', () => {
 
   it('detects retryable file-not-found failures', () => {
     assert.equal(isCdrPreviewRetryableFailure('file not found'), true);
-    assert.equal(isCdrPreviewRetryableFailure('Файл или папка не найдены.'), true);
+    assert.equal(isCdrPreviewRetryableFailure('Файл по пути (\\\\server\\a.cdr) не найден'), true);
     assert.equal(isCdrPreviewRetryableFailure('Failed to fetch'), false);
   });
 });
