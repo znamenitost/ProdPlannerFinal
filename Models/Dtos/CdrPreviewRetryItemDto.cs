@@ -7,4 +7,6 @@ public sealed class CdrPreviewRetryItemDto
     public string FolderPath { get; set; } = "";
 
     public string FileName { get; set; } = "";
+
+    public int AutoSearchMinutes { get; set; }
 }

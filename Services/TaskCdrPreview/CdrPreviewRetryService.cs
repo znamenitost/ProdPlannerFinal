@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using ProductionPlanner.Data;
 using ProductionPlanner.Models.Dtos;
 
@@ -7,7 +6,7 @@ namespace ProductionPlanner.Services.TaskCdrPreview;
 
 public interface ICdrPreviewRetryService
 {
-    Task ScheduleRetryAsync(int taskId, CancellationToken cancellationToken = default);
+    Task ScheduleSecondAttemptAsync(int taskId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<CdrPreviewRetryItemDto>> GetDueRetriesAsync(
         int limit = 50,
@@ -15,7 +14,7 @@ public interface ICdrPreviewRetryService
 
     Task<IReadOnlyList<int>> GetDueTaskIdsAsync(CancellationToken cancellationToken = default);
 
-    Task RecordFailedRetryAsync(int taskId, CancellationToken cancellationToken = default);
+    Task MarkAutoSearchFailedAsync(int taskId, CancellationToken cancellationToken = default);
 
     Task ClearRetryAsync(int taskId, CancellationToken cancellationToken = default);
 }
@@ -24,37 +23,32 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
 {
     private readonly ApplicationDbContext _db;
     private readonly IAppTimeService _timeService;
-    private readonly CdrPreviewRetryOptions _options;
 
-    public CdrPreviewRetryService(
-        ApplicationDbContext db,
-        IAppTimeService timeService,
-        IOptions<CdrPreviewRetryOptions> options)
+    public CdrPreviewRetryService(ApplicationDbContext db, IAppTimeService timeService)
     {
         _db = db;
         _timeService = timeService;
-        _options = options.Value;
     }
 
-    public async Task ScheduleRetryAsync(int taskId, CancellationToken cancellationToken = default)
+    public async Task ScheduleSecondAttemptAsync(int taskId, CancellationToken cancellationToken = default)
     {
         var task = await _db.ProductionTasks
             .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
         if (task == null || !IsCdrFileName(task.FileName))
             return;
 
+        if (task.CdrPreviewAutoSearchMinutes <= 0)
+            return;
+
         if (await HasPreviewAsync(taskId, cancellationToken))
         {
-            await ClearRetryAsync(taskId, cancellationToken);
+            await ClearRetryInternalAsync(task, cancellationToken);
             return;
         }
 
-        if (_options.MaxRetryAttempts <= 0)
-            return;
-
         var now = _timeService.Now;
-        task.CdrPreviewRetryAttempts = 0;
-        task.CdrPreviewRetryAt = now.AddMinutes(Math.Max(1, _options.RetryDelayMinutes));
+        task.CdrPreviewRetryAttempts = 1;
+        task.CdrPreviewRetryAt = now.AddMinutes(task.CdrPreviewAutoSearchMinutes);
         task.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
     }
@@ -64,7 +58,6 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
         CancellationToken cancellationToken = default)
     {
         var now = _timeService.Now;
-        var maxAttempts = Math.Max(0, _options.MaxRetryAttempts);
         var take = Math.Clamp(limit, 1, 200);
 
         var tasks = await _db.ProductionTasks
@@ -72,7 +65,8 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
             .Where(t =>
                 t.CdrPreviewRetryAt != null
                 && t.CdrPreviewRetryAt <= now
-                && t.CdrPreviewRetryAttempts < maxAttempts
+                && t.CdrPreviewRetryAttempts == 1
+                && t.CdrPreviewAutoSearchMinutes > 0
                 && t.FileName.ToLower().EndsWith(".cdr"))
             .OrderBy(t => t.CdrPreviewRetryAt)
             .Take(take)
@@ -80,7 +74,8 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
             {
                 TaskId = t.Id,
                 FolderPath = t.FolderPath,
-                FileName = t.FileName
+                FileName = t.FileName,
+                AutoSearchMinutes = t.CdrPreviewAutoSearchMinutes
             })
             .ToListAsync(cancellationToken);
 
@@ -107,7 +102,7 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
         return items.Select(i => i.TaskId).ToList();
     }
 
-    public async Task RecordFailedRetryAsync(int taskId, CancellationToken cancellationToken = default)
+    public async Task MarkAutoSearchFailedAsync(int taskId, CancellationToken cancellationToken = default)
     {
         var task = await _db.ProductionTasks
             .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
@@ -120,20 +115,7 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
             return;
         }
 
-        var now = _timeService.Now;
-        task.CdrPreviewRetryAttempts += 1;
-
-        if (task.CdrPreviewRetryAttempts >= Math.Max(1, _options.MaxRetryAttempts))
-        {
-            task.CdrPreviewRetryAt = null;
-        }
-        else
-        {
-            task.CdrPreviewRetryAt = now.AddMinutes(Math.Max(1, _options.RetryDelayMinutes));
-        }
-
-        task.UpdatedAt = now;
-        await _db.SaveChangesAsync(cancellationToken);
+        await ClearRetryInternalAsync(task, cancellationToken);
     }
 
     public async Task ClearRetryAsync(int taskId, CancellationToken cancellationToken = default)

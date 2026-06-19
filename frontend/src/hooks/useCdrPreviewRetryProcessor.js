@@ -1,36 +1,16 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { DEV_CDR_PREVIEW_ENABLED } from '../utils/devCdrPreviewConfig';
-import { buildTaskCdrPreview } from '../utils/devCdrPreviewService';
-import { fetchTaskCdrPreview } from '../utils/cdrPreviewApi';
-import {
-  fetchPendingCdrPreviewRetries,
-  reportCdrPreviewRetryFailed
-} from '../utils/cdrPreviewRetryApi';
+import { fetchPendingCdrPreviewRetries } from '../utils/cdrPreviewRetryApi';
 import { getLocalAgentUnavailableMessage } from '../utils/fileOpenerAgent';
-import { isCdrPreviewRetryableFailure } from '../utils/cdrPreviewErrors';
+import { runCdrAutoSearchSecondAttempt } from '../utils/cdrAutoSearch';
 
 const POLL_INTERVAL_MS = 60_000;
 
-async function tryBuildPreviewForRetryItem(item) {
-  const stored = await fetchTaskCdrPreview(item.taskId);
-  if (stored) return { ok: true, skipped: true };
-
-  try {
-    const preview = await buildTaskCdrPreview(item.taskId, item.folderPath, item.fileName);
-    if (preview) return { ok: true, skipped: false };
-    await reportCdrPreviewRetryFailed(item.taskId);
-    return { ok: false, skipped: false };
-  } catch (err) {
-    if (isCdrPreviewRetryableFailure(err?.message)) {
-      await reportCdrPreviewRetryFailed(item.taskId);
-    }
-    return { ok: false, skipped: false };
-  }
-}
-
-export default function useCdrPreviewRetryProcessor({ enabled = false } = {}) {
+export default function useCdrPreviewRetryProcessor({ enabled = false, showWarning } = {}) {
   const processingRef = useRef(false);
   const activeTaskIdsRef = useRef(new Set());
+  const showWarningRef = useRef(showWarning);
+  showWarningRef.current = showWarning;
 
   const processPending = useCallback(async () => {
     if (!enabled || !DEV_CDR_PREVIEW_ENABLED || processingRef.current) return;
@@ -47,13 +27,13 @@ export default function useCdrPreviewRetryProcessor({ enabled = false } = {}) {
 
         activeTaskIdsRef.current.add(taskId);
         try {
-          await tryBuildPreviewForRetryItem(item);
+          await runCdrAutoSearchSecondAttempt(item, showWarningRef.current);
         } finally {
           activeTaskIdsRef.current.delete(taskId);
         }
       }
     } catch (err) {
-      console.warn('CDR preview retry processor:', err?.message || err);
+      console.warn('CDR autopsearch processor:', err?.message || err);
     } finally {
       processingRef.current = false;
     }

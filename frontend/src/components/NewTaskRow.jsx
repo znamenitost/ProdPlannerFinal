@@ -71,6 +71,15 @@ export default function NewTaskRow({
           value={newRow.fileName || ''}
           onChange={(e) => setNewRow({ ...newRow, fileName: e.target.value })}
         />
+        <TextField
+          {...TASK_TABLE_TEXT_FIELD_PROPS}
+          type="number"
+          placeholder="Автопоиск, мин"
+          value={newRow.cdrPreviewAutoSearchMinutes ?? ''}
+          onChange={(e) => setNewRow({ ...newRow, cdrPreviewAutoSearchMinutes: e.target.value })}
+          slotProps={{ htmlInput: { min: 0, max: 1440, step: 1 } }}
+          sx={{ mt: 0.5 }}
+        />
       </TableCell>
 
       <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>

@@ -39,6 +39,10 @@ public class CreateTaskRequest : IValidatableObject
     [Range(0, 1000)]
     public double ProductionEstimateHours { get; set; }
 
+    /// <summary>Автопоиск превью .cdr: минуты до второй попытки (0 — выкл.).</summary>
+    [Range(0, 1440)]
+    public int CdrPreviewAutoSearchMinutes { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         var validParts = Parts?
@@ -112,6 +116,10 @@ public class UpdateTaskRequest
 
     /// <summary>Оптимистичная блокировка: метка версии строки с клиента (<see cref="TaskTableRowDto.UpdatedAt"/>).</summary>
     public DateTime? ExpectedUpdatedAt { get; set; }
+
+    /// <summary>Автопоиск превью .cdr: минуты до второй попытки (0 — выкл.).</summary>
+    [Range(0, 1440)]
+    public int CdrPreviewAutoSearchMinutes { get; set; }
 }
 
 public class UpdateWorkIntervalsRequest

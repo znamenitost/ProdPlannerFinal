@@ -76,6 +76,9 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE "ProductionTasks"
                     ADD COLUMN IF NOT EXISTS "CdrPreviewRetryAttempts" integer NOT NULL DEFAULT 0;
 
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "CdrPreviewAutoSearchMinutes" integer NOT NULL DEFAULT 0;
+
                 CREATE INDEX IF NOT EXISTS "IX_ProductionTasks_CdrPreviewRetryAt"
                     ON "ProductionTasks" ("CdrPreviewRetryAt");
 

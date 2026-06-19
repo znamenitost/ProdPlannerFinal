@@ -9,6 +9,7 @@ export function taskFileShowsOnlineDot(task) {
 export default function TaskFileNameCell({ fileName = '', task = null, textLimit }) {
   const limit = textLimit ?? 40;
   const name = fileName || '—';
+  const autoSearchMinutes = Number(task?.cdrPreviewAutoSearchMinutes) || 0;
   const showDot = task ? taskFileShowsOnlineDot(task) : false;
   const dotSlot = (
     <Box
@@ -40,11 +41,27 @@ export default function TaskFileNameCell({ fileName = '', task = null, textLimit
 
   if (needsTooltip(name, limit)) {
     return (
-      <LazyTooltip title={fileName} arrow>
-        {content}
-      </LazyTooltip>
+      <Box>
+        <LazyTooltip title={fileName} arrow>
+          {content}
+        </LazyTooltip>
+        {autoSearchMinutes > 0 ? (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+            Автопоиск: {autoSearchMinutes} мин
+          </Typography>
+        ) : null}
+      </Box>
     );
   }
 
-  return content;
+  return (
+    <Box>
+      {content}
+      {autoSearchMinutes > 0 ? (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+          Автопоиск: {autoSearchMinutes} мин
+        </Typography>
+      ) : null}
+    </Box>
+  );
 }

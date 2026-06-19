@@ -14,39 +14,23 @@ import {
   getDevCdrDefaultFolderPath,
   getDevCdrDefaultFileName
 } from '../../utils/devCdrPreviewConfig';
-import { verifyTaskCdrFileAfterSave } from '../../utils/devCdrPreviewService';
-import { scheduleCdrPreviewRetry } from '../../utils/cdrPreviewRetryApi';
+import { startCdrAutoSearchAfterSave } from '../../utils/cdrAutoSearch';
 
-async function applyPostSaveFileStatus({
-  taskId,
-  folderPath,
-  fileName,
-  showWarning
-}) {
-  if (!DEV_CDR_PREVIEW_ENABLED || !taskId) {
-    return { fileFound: false, hasCdrPreview: false, warning: null };
-  }
-
-  const status = await verifyTaskCdrFileAfterSave(taskId, folderPath, fileName);
-
-  if (status.warning) {
-    showWarning(status.warning);
-  }
-
-  if (status.retryable) {
-    try {
-      await scheduleCdrPreviewRetry(taskId);
-    } catch (err) {
-      console.warn('Не удалось запланировать повтор превью:', err?.message || err);
-    }
-  }
-
-  return status;
+function parseAutoSearchMinutes(value) {
+  const n = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, 1440);
 }
 
-function patchTaskFileFoundStatus(taskId, status, patchRow) {
-  if (!taskId || !status?.hasCdrPreview) return;
-  patchRow(taskId, { hasCdrPreview: true });
+function kickOffCdrAutoSearch({ taskId, folderPath, fileName, autoSearchMinutes, showWarning }) {
+  if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return;
+  startCdrAutoSearchAfterSave({
+    taskId,
+    folderPath,
+    fileName,
+    autoSearchMinutes,
+    showWarning
+  });
 }
 
 export default function useTaskTableActions({
@@ -215,7 +199,8 @@ export default function useTaskTableActions({
         fileName: newRow.fileName,
         comment: newRow.comment,
         deadline: newRow.deadline,
-        parentRowNumber: null
+        parentRowNumber: null,
+        cdrPreviewAutoSearchMinutes: parseAutoSearchMinutes(newRow.cdrPreviewAutoSearchMinutes)
       };
 
       if (isShared) {
@@ -255,21 +240,20 @@ export default function useTaskTableActions({
       const raw = await api.createRow(payload);
       const { task: created, planningWarnings } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
-      let fileStatus = null;
-      if (created?.id) {
-        fileStatus = await applyPostSaveFileStatus({
-          taskId: created.id,
-          folderPath: created.folderPath || payload.folderPath,
-          fileName: created.fileName || payload.fileName,
-          showWarning
-        });
-      }
+      const wasShared = newRow.isSharedTask;
       setNewRow(null);
-      await refresh();
-      if (created?.id) {
-        patchTaskFileFoundStatus(created.id, fileStatus, patchRow);
-      }
-      if (newRow.isSharedTask && created?.id) {
+      void refresh().then(() => {
+        if (created?.id) {
+          kickOffCdrAutoSearch({
+            taskId: created.id,
+            folderPath: created.folderPath || payload.folderPath,
+            fileName: created.fileName || payload.fileName,
+            autoSearchMinutes: created.cdrPreviewAutoSearchMinutes ?? payload.cdrPreviewAutoSearchMinutes,
+            showWarning
+          });
+        }
+      });
+      if (wasShared && created?.id) {
         await loadChildrenForParent(created.id);
         expandParent(created.id);
       }
@@ -306,27 +290,26 @@ export default function useTaskTableActions({
         type: row.type,
         employeeName: row.employeeName,
         parentRowNumber: row.parentRowNumber,
-        expectedUpdatedAt: row.updatedAt ?? null
+        expectedUpdatedAt: row.updatedAt ?? null,
+        cdrPreviewAutoSearchMinutes: parseAutoSearchMinutes(row.cdrPreviewAutoSearchMinutes)
       });
       const { planningWarnings, replacedTaskId } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
       setEditingId(null);
-      let fileStatus = null;
-      if (DEV_CDR_PREVIEW_ENABLED && replacedTaskId == null) {
-        fileStatus = await applyPostSaveFileStatus({
-          taskId: row.id,
-          folderPath: row.folderPath,
-          fileName: row.fileName,
-          showWarning
-        });
-      }
       if (replacedTaskId != null) {
         removeRow(replacedTaskId);
-        await refresh();
+        void refresh();
         onCalendarRefresh?.();
       } else {
-        await syncRowFromServer(row);
-        patchTaskFileFoundStatus(row.id, fileStatus, patchRow);
+        void syncRowFromServer(row).then(() => {
+          kickOffCdrAutoSearch({
+            taskId: row.id,
+            folderPath: row.folderPath,
+            fileName: row.fileName,
+            autoSearchMinutes: row.cdrPreviewAutoSearchMinutes,
+            showWarning
+          });
+        });
       }
     } catch (err) {
       console.error('Ошибка обновления:', err);
@@ -470,7 +453,8 @@ export default function useTaskTableActions({
       assigneeParts: null,
       isSharedTask: false,
       taskExecutionMode: TASK_EXECUTION_PARALLEL,
-      parentRowNumber: null
+      parentRowNumber: null,
+      cdrPreviewAutoSearchMinutes: ''
     });
   }, [setNewRow]);
 

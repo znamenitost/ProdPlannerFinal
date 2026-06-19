@@ -150,7 +150,8 @@ export function buildTaskUpdatePayload(task, employeeName, statusText, extra) {
     parentRowNumber: task.parentRowNumber ?? null,
     statusText: statusText ?? task.statusText,
     sequenceOverride: extra?.sequenceOverride ?? false,
-    expectedUpdatedAt: task.updatedAt ?? null
+    expectedUpdatedAt: task.updatedAt ?? null,
+    cdrPreviewAutoSearchMinutes: Number(task.cdrPreviewAutoSearchMinutes) || 0
   };
 }
 
@@ -171,7 +172,8 @@ export async function updateTaskRow(id, rowData) {
       parentRowNumber: rowData.parentRowNumber,
       statusText: rowData.statusText,
       sequenceOverride: rowData.sequenceOverride ?? false,
-      expectedUpdatedAt: rowData.expectedUpdatedAt ?? null
+      expectedUpdatedAt: rowData.expectedUpdatedAt ?? null,
+      cdrPreviewAutoSearchMinutes: Number(rowData.cdrPreviewAutoSearchMinutes) || 0
     })
   });
   if (!res.ok) await throwApiError(res, 'Не удалось обновить задачу');

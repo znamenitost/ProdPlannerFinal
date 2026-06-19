@@ -88,11 +88,14 @@ namespace ProductionPlanner.Models
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
 
-        /// <summary>Когда повторно попытаться построить превью .cdr (если файл не был найден).</summary>
+        /// <summary>Когда повторно попытаться построить превью .cdr (вторая попытка).</summary>
         public DateTime? CdrPreviewRetryAt { get; set; }
 
-        /// <summary>Число неудачных попыток построения превью после сохранения задачи.</summary>
+        /// <summary>1 — запланирована вторая попытка; 0 — первая ещё не провалена или завершено.</summary>
         public int CdrPreviewRetryAttempts { get; set; }
+
+        /// <summary>Автопоиск превью: интервал в минутах до второй попытки (0 — выкл.).</summary>
+        public int CdrPreviewAutoSearchMinutes { get; set; }
         
         public string FullPath => string.IsNullOrEmpty(FolderPath) ? FileName : $"{FolderPath}/{FileName}";
         

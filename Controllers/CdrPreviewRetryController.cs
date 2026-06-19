@@ -31,14 +31,14 @@ public class CdrPreviewRetryController : ControllerBase
     [HttpPost("{id:int}/cdr-preview/schedule-retry")]
     public async Task<IActionResult> ScheduleRetry(int id, CancellationToken cancellationToken)
     {
-        await _retryService.ScheduleRetryAsync(id, cancellationToken);
+        await _retryService.ScheduleSecondAttemptAsync(id, cancellationToken);
         return Ok(new { scheduled = true });
     }
 
     [HttpPost("{id:int}/cdr-preview/retry-failed")]
     public async Task<IActionResult> RecordFailedRetry(int id, CancellationToken cancellationToken)
     {
-        await _retryService.RecordFailedRetryAsync(id, cancellationToken);
+        await _retryService.MarkAutoSearchFailedAsync(id, cancellationToken);
         return Ok(new { recorded = true });
     }
 }

@@ -219,7 +219,8 @@ public class TaskTableService : ITaskTableService
                 IsSplitTask = false,
                 SupplyMode = supplyMode,
                 CreatedAt = _timeService.Now,
-                UpdatedAt = _timeService.Now
+                UpdatedAt = _timeService.Now,
+                CdrPreviewAutoSearchMinutes = NormalizeAutoSearchMinutes(request.CdrPreviewAutoSearchMinutes)
             };
 
             ProductionTask? parent = null;
@@ -260,7 +261,8 @@ public class TaskTableService : ITaskTableService
             ParentRowNumber = request.ParentRowNumber,
             IsSplitTask = false,
             CreatedAt = _timeService.Now,
-            UpdatedAt = _timeService.Now
+            UpdatedAt = _timeService.Now,
+            CdrPreviewAutoSearchMinutes = NormalizeAutoSearchMinutes(request.CdrPreviewAutoSearchMinutes)
         };
 
         var throughTest = request.RequiresTestBeforeProduction
@@ -356,9 +358,20 @@ public class TaskTableService : ITaskTableService
         }
 
         var oldEmployeeName = task.EmployeeName;
+        var newFolderPath = request.FolderPath ?? task.FolderPath;
+        var newFileName = request.FileName ?? task.FileName;
+        var newAutoSearchMinutes = NormalizeAutoSearchMinutes(request.CdrPreviewAutoSearchMinutes);
 
-        task.FolderPath = request.FolderPath ?? task.FolderPath;
-        task.FileName = request.FileName ?? task.FileName;
+        if (!string.Equals(newFolderPath, task.FolderPath, StringComparison.Ordinal)
+            || !string.Equals(newFileName, task.FileName, StringComparison.Ordinal)
+            || newAutoSearchMinutes != task.CdrPreviewAutoSearchMinutes)
+        {
+            task.CdrPreviewRetryAt = null;
+            task.CdrPreviewRetryAttempts = 0;
+        }
+
+        task.FolderPath = newFolderPath;
+        task.FileName = newFileName;
         task.Comment = request.Comment ?? task.Comment;
         task.Deadline = request.Deadline;
         task.EstimateHours = request.EstimateHours;
@@ -368,6 +381,7 @@ public class TaskTableService : ITaskTableService
         else
             task.EmployeeName = "";
         task.ParentRowNumber = request.ParentRowNumber;
+        task.CdrPreviewAutoSearchMinutes = newAutoSearchMinutes;
         task.UpdatedAt = _timeService.Now;
 
         if (task.IsSplitTask && task.ParentRowNumber == null)
@@ -984,6 +998,9 @@ public class TaskTableService : ITaskTableService
             ? AppDateTime.ToMoscowWallClockFromDb(value)
             : DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
 
+    private static int NormalizeAutoSearchMinutes(int minutes) =>
+        minutes < 0 ? 0 : Math.Min(minutes, 1440);
+
     private static void ApplyRowMetadata(ProductionTask task, UpdateTaskRequest request)
     {
         var isSplitParent = task.IsSplitTask && task.ParentRowNumber == null;
@@ -999,5 +1016,6 @@ public class TaskTableService : ITaskTableService
         else
             task.EmployeeName = "";
         task.ParentRowNumber = request.ParentRowNumber;
+        task.CdrPreviewAutoSearchMinutes = NormalizeAutoSearchMinutes(request.CdrPreviewAutoSearchMinutes);
     }
 }

@@ -90,7 +90,8 @@ function AuthenticatedAppContent() {
   }, []);
 
   const { processPending: processCdrPreviewRetries } = useCdrPreviewRetryProcessor({
-    enabled: Boolean(user?.isAuthenticated)
+    enabled: Boolean(user?.isAuthenticated),
+    showWarning
   });
   const processCdrPreviewRetriesRef = useRef(processCdrPreviewRetries);
   processCdrPreviewRetriesRef.current = processCdrPreviewRetries;

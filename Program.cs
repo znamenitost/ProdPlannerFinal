@@ -6,7 +6,6 @@ using ProductionPlanner.Hubs;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Infrastructure.Logging;
 using ProductionPlanner.Models;
-using ProductionPlanner.Services.TaskCdrPreview;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -103,8 +102,6 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
-builder.Services.Configure<CdrPreviewRetryOptions>(
-    builder.Configuration.GetSection(CdrPreviewRetryOptions.SectionName));
 builder.Services.AddProductionPlannerServices();
 builder.Services.AddSingleton<NotificationConnectionRegistry>();
 builder.Services.AddSignalR(options =>
