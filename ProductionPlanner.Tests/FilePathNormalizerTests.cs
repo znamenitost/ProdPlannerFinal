@@ -106,4 +106,16 @@ public class FilePathNormalizerTests
         var result = FilePathNormalizer.NormalizeRelativePath(input, Share);
         Assert.Equal("Ф/Федерация Бодибилдинга/макет.cdr", result);
     }
+
+    [Fact]
+    public void IsEligibleForCdrPreview_appends_cdr_when_extension_missing()
+    {
+        Assert.True(FilePathNormalizer.IsEligibleForCdrPreview("Федерация Бодибилдинга", "11,06,26 тт", Share));
+    }
+
+    [Fact]
+    public void IsEligibleForCdrPreview_rejects_non_cdr_extension()
+    {
+        Assert.False(FilePathNormalizer.IsEligibleForCdrPreview("Клиент/2024", "layout.ai", Share));
+    }
 }

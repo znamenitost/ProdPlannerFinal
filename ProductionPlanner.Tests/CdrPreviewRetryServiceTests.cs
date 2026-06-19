@@ -61,6 +61,30 @@ public class CdrPreviewRetryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ScheduleSecondAttemptAsync_schedules_for_extensionless_file_name()
+    {
+        var task = await SeedTaskAsync("Федерация Бодибилдинга", "11,06,26 тт");
+
+        await _service.ScheduleSecondAttemptAsync(task.Id);
+
+        var updated = await _db.ProductionTasks.FindAsync(task.Id);
+        Assert.NotNull(updated?.CdrPreviewRetryAt);
+        Assert.Equal(1, updated.CdrPreviewRetryAttempts);
+    }
+
+    [Fact]
+    public async Task ScheduleSecondAttemptAsync_skips_non_cdr_extension()
+    {
+        var task = await SeedTaskAsync("Федерация Бодибилдинга", "layout.ai");
+
+        await _service.ScheduleSecondAttemptAsync(task.Id);
+
+        var updated = await _db.ProductionTasks.FindAsync(task.Id);
+        Assert.Null(updated!.CdrPreviewRetryAt);
+        Assert.Equal(0, updated.CdrPreviewRetryAttempts);
+    }
+
+    [Fact]
     public async Task GetDueRetriesAsync_returns_only_second_attempt_queue()
     {
         var due = await SeedTaskAsync("folder", "design.cdr");

@@ -6,7 +6,8 @@ import { getLocalAgentUnavailableMessage } from './fileOpenerAgent';
 import {
   getCdrPathValidationError,
   isCdrPreviewRetryableFailure,
-  shouldAttemptCdrPreviewOnSave
+  shouldAttemptCdrPreviewOnSave,
+  formatCdrPreviewPostSaveWarning
 } from './cdrPreviewErrors';
 import { formatDevTaskFilePath } from './devCdrPreviewConfig';
 
@@ -58,6 +59,16 @@ function formatAutoSearchFailedMessage(folderPath, fileName) {
   return 'Автопоиск не нашёл превью для задачи.';
 }
 
+function formatFirstAttemptFailureMessage(folderPath, fileName, errMessage = '') {
+  if (errMessage) return formatCdrPreviewPostSaveWarning(errMessage);
+
+  const path = formatDevTaskFilePath(folderPath, fileName);
+  const detail = path
+    ? `Файл или папка не найдены. Проверьте путь к папке и имя файла в задаче.\n\nФайл: ${path}`
+    : 'Файл или папка не найдены. Проверьте путь к папке и имя файла в задаче.';
+  return formatCdrPreviewPostSaveWarning(detail);
+}
+
 async function tryBuildPreview(taskId, folderPath, fileName) {
   const stored = await fetchTaskCdrPreview(taskId);
   if (stored) return true;
@@ -78,8 +89,6 @@ export function startCdrAutoSearchAfterSave({
   if (!shouldAttemptCdrPreviewOnSave(folderPath, fileName)) return;
   if (getCdrPathValidationError(folderPath, fileName)) return;
 
-  const retryMinutes = normalizeAutoSearchMinutes(autoSearchMinutes);
-
   notifyPreviewBuildStart(taskId);
   void (async () => {
     try {
@@ -88,11 +97,17 @@ export function startCdrAutoSearchAfterSave({
 
       const ok = await tryBuildPreview(taskId, folderPath, fileName);
       if (ok) return;
-      if (retryMinutes <= 0) return;
+
+      showWarning?.(formatFirstAttemptFailureMessage(folderPath, fileName));
       await scheduleCdrPreviewRetry(taskId);
     } catch (err) {
-      if (!isCdrPreviewRetryableFailure(err?.message)) return;
-      if (retryMinutes <= 0) return;
+      const message = err?.message || '';
+      if (!isCdrPreviewRetryableFailure(message)) {
+        if (message) showWarning?.(formatCdrPreviewPostSaveWarning(message));
+        return;
+      }
+
+      showWarning?.(formatFirstAttemptFailureMessage(folderPath, fileName, message));
       try {
         await scheduleCdrPreviewRetry(taskId);
       } catch {

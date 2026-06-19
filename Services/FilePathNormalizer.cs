@@ -212,4 +212,25 @@ public static class FilePathNormalizer
         || fileName.EndsWith(".ai", StringComparison.OrdinalIgnoreCase)
         || fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
         || fileName.EndsWith(".eps", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Задача подходит для превью .cdr: имя нормализуется как при открытии файла
+    /// (дописывается .cdr, если расширения нет; .ai/.pdf/.eps — не CDR).
+    /// </summary>
+    public static bool IsEligibleForCdrPreview(string? folderPath, string? fileName, string shareName = "Клиенты")
+    {
+        var trimmedName = (fileName ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(trimmedName))
+            return false;
+
+        var folder = (folderPath ?? string.Empty).Trim().TrimEnd('/', '\\').Replace('\\', '/');
+        var combined = string.IsNullOrEmpty(folder) ? trimmedName : $"{folder}/{trimmedName}";
+
+        if (!TryNormalizeRelativePath(combined, shareName, out var relativePath, out _)
+            || string.IsNullOrEmpty(relativePath))
+            return false;
+
+        var file = relativePath.Split('/').LastOrDefault() ?? string.Empty;
+        return file.EndsWith(".cdr", StringComparison.OrdinalIgnoreCase);
+    }
 }

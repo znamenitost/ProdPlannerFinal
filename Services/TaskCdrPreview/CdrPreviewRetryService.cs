@@ -44,7 +44,7 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
 
         var task = await _db.ProductionTasks
             .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
-        if (task == null || !IsCdrFileName(task.FileName))
+        if (task == null || !FilePathNormalizer.IsEligibleForCdrPreview(task.FolderPath, task.FileName))
             return;
 
         if (await HasPreviewAsync(taskId, cancellationToken))
@@ -71,15 +71,19 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
         var now = _timeService.Now;
         var take = Math.Clamp(limit, 1, 200);
 
-        var tasks = await _db.ProductionTasks
+        var candidates = await _db.ProductionTasks
             .AsNoTracking()
             .Where(t =>
                 t.CdrPreviewRetryAt != null
                 && t.CdrPreviewRetryAt <= now
                 && t.CdrPreviewRetryAttempts == 1
-                && t.FileName.ToLower().EndsWith(".cdr"))
+                && t.FileName != "")
             .OrderBy(t => t.CdrPreviewRetryAt)
             .Take(take)
+            .ToListAsync(cancellationToken);
+
+        var tasks = candidates
+            .Where(t => FilePathNormalizer.IsEligibleForCdrPreview(t.FolderPath, t.FileName))
             .Select(t => new CdrPreviewRetryItemDto
             {
                 TaskId = t.Id,
@@ -87,7 +91,7 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
                 FileName = t.FileName,
                 AutoSearchMinutes = autoSearchMinutes
             })
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         if (tasks.Count == 0)
             return tasks;
@@ -156,11 +160,5 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
         return await _db.TaskCdrPreviews
             .AsNoTracking()
             .AnyAsync(p => p.TaskId == taskId && p.ByteSize > 0, cancellationToken);
-    }
-
-    internal static bool IsCdrFileName(string? fileName)
-    {
-        var name = (fileName ?? string.Empty).Trim();
-        return name.EndsWith(".cdr", StringComparison.OrdinalIgnoreCase);
     }
 }
