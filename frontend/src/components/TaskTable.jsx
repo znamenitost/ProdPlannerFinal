@@ -318,6 +318,7 @@ export default function TaskTable({
         columnVisibility={columnSettings.visibility}
         textLimit={columnSettings.textLimit}
         showPlannedProgress={showPlannedProgress}
+        cdrPreviewBuilding={table.isCdrPreviewBuilding(parent.id)}
       />
     );
   };

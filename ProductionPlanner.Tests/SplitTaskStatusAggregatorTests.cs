@@ -139,4 +139,51 @@ public class SplitTaskStatusAggregatorTests
 
         Assert.False(hasSubtask);
     }
+
+    [Fact]
+    public void SingleActiveChildPaused_ShowsPauza()
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Completed),
+            Child("Яромир", JobStatus.Paused)
+        };
+
+        var (statusText, _) = SplitTaskStatusAggregator.Aggregate(parent, children, "Яромир");
+
+        Assert.Equal("Пауза", statusText);
+    }
+
+    [Theory]
+    [InlineData(JobStatus.Paused, JobStatus.Paused)]
+    [InlineData(JobStatus.InProgress, JobStatus.InProgress)]
+    [InlineData(JobStatus.Assigned, JobStatus.Assigned)]
+    public void ResolveParentStatus_WithSingleActiveChild_MirrorsChildStatus(
+        JobStatus childStatus,
+        JobStatus expectedParentStatus)
+    {
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Completed),
+            Child("Яромир", childStatus)
+        };
+
+        var resolved = SplitTaskStatusAggregator.ResolveParentStatus(children);
+
+        Assert.Equal(expectedParentStatus, resolved);
+    }
+
+    [Fact]
+    public void ResolveParentStatus_WithSingleRemainingChild_MirrorsChildStatus()
+    {
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Paused)
+        };
+
+        var resolved = SplitTaskStatusAggregator.ResolveParentStatus(children);
+
+        Assert.Equal(JobStatus.Paused, resolved);
+    }
 }

@@ -1,4 +1,4 @@
-import { Box, Typography } from '@mui/material';
+import { Box, CircularProgress, Typography } from '@mui/material';
 import LazyTooltip from '../common/LazyTooltip';
 import { needsTooltip, truncateText, cellDisplayTextSx } from '../../utils/taskTableStyles';
 
@@ -6,11 +6,23 @@ export function taskFileShowsOnlineDot(task) {
   return Boolean(task?.hasCdrPreview);
 }
 
-export default function TaskFileNameCell({ fileName = '', task = null, textLimit }) {
+export default function TaskFileNameCell({
+  fileName = '',
+  task = null,
+  textLimit,
+  previewBuilding = false
+}) {
   const limit = textLimit ?? 40;
   const name = fileName || '—';
   const showDot = task ? taskFileShowsOnlineDot(task) : false;
-  const dotSlot = (
+  const dotSlot = previewBuilding ? (
+    <CircularProgress
+      size={8}
+      thickness={6}
+      aria-label="Построение превью"
+      sx={{ flexShrink: 0 }}
+    />
+  ) : (
     <Box
       component="span"
       title={showDot ? 'Файл найден' : undefined}

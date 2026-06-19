@@ -812,18 +812,9 @@ public class TaskTableService : ITaskTableService
             return;
         }
 
-        JobStatus newStatus;
-        if (children.All(c => c.Status == JobStatus.Completed))
-            newStatus = JobStatus.Completed;
-        else if (children.Any(c => c.Status is JobStatus.Completed or JobStatus.InProgress or JobStatus.Paused))
-            newStatus = JobStatus.InProgress;
-        else
-            newStatus = JobStatus.Assigned;
-
+        var newStatus = SplitTaskStatusAggregator.ResolveParentStatus(children);
         var now = _timeService.Now;
-        var patch = newStatus == JobStatus.Completed
-            ? new TaskStatusPatch { Progress = 1, CompletedAt = now }
-            : new TaskStatusPatch { Progress = 0, ClearCompletedAt = true };
+        var patch = SplitTaskStatusAggregator.BuildParentStatusPatch(newStatus, children, now);
 
         await _repo.TryTransitionStatusAsync(
             parentId,

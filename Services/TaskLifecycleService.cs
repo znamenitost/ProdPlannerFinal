@@ -80,18 +80,9 @@ public class TaskLifecycleService : ITaskLifecycleService
         var allChildren = await _repo.GetChildTasksAsync(parent.Id, cancellationToken);
         if (!allChildren.Any()) return;
 
-        JobStatus newStatus;
-        if (allChildren.All(c => c.Status == JobStatus.Completed))
-            newStatus = JobStatus.Completed;
-        else if (allChildren.Any(c => c.Status == JobStatus.Completed || c.Status == JobStatus.InProgress || c.Status == JobStatus.Paused))
-            newStatus = JobStatus.InProgress;
-        else
-            newStatus = JobStatus.Assigned;
-
+        var newStatus = SplitTaskStatusAggregator.ResolveParentStatus(allChildren);
         var now = _timeService.Now;
-        var patch = newStatus == JobStatus.Completed
-            ? new TaskStatusPatch { Progress = 1, CompletedAt = now }
-            : new TaskStatusPatch { Progress = 0, ClearCompletedAt = true };
+        var patch = SplitTaskStatusAggregator.BuildParentStatusPatch(newStatus, allChildren, now);
 
         var parentUpdated = 0;
         if (parent.Status == newStatus)

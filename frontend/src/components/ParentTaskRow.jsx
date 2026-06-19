@@ -78,7 +78,8 @@ function ParentTaskRow({
   showHoursTypeColumns = true,
   columnVisibility,
   textLimit: limit = 23,
-  showPlannedProgress = false
+  showPlannedProgress = false,
+  cdrPreviewBuilding = false
 }) {
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
   const lifecycleBusy = pendingLifecycleTaskId != null;
@@ -231,7 +232,12 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>
-          <TaskFileNameCell fileName={task.fileName} task={task} textLimit={limit} />
+          <TaskFileNameCell
+            fileName={task.fileName}
+            task={task}
+            textLimit={limit}
+            previewBuilding={cdrPreviewBuilding}
+          />
         </TableCell>
 
         <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>

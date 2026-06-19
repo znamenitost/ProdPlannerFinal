@@ -10,6 +10,20 @@ import {
 } from './cdrPreviewErrors';
 import { formatDevTaskFilePath } from './devCdrPreviewConfig';
 
+let previewBuildHooks = { onStart: null, onEnd: null };
+
+export function setCdrPreviewBuildHooks(hooks) {
+  previewBuildHooks = hooks ?? { onStart: null, onEnd: null };
+}
+
+function notifyPreviewBuildStart(taskId) {
+  previewBuildHooks.onStart?.(taskId);
+}
+
+function notifyPreviewBuildEnd(taskId) {
+  previewBuildHooks.onEnd?.(taskId);
+}
+
 function normalizeAutoSearchMinutes(value) {
   const n = Number.parseInt(String(value ?? ''), 10);
   if (!Number.isFinite(n) || n <= 0) return 0;
@@ -40,8 +54,9 @@ export function startCdrAutoSearchAfterSave({
   autoSearchMinutes,
   showWarning
 }) {
-  const minutes = normalizeAutoSearchMinutes(autoSearchMinutes);
-  if (!DEV_CDR_PREVIEW_ENABLED || !taskId || minutes <= 0) return;
+  if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return;
+
+  const retryMinutes = normalizeAutoSearchMinutes(autoSearchMinutes);
 
   void (async () => {
     if (!shouldAttemptCdrPreviewOnSave(folderPath, fileName)) return;
@@ -50,17 +65,22 @@ export function startCdrAutoSearchAfterSave({
     const agentUnavailable = await getLocalAgentUnavailableMessage();
     if (agentUnavailable) return;
 
+    notifyPreviewBuildStart(taskId);
     try {
       const ok = await tryBuildPreview(taskId, folderPath, fileName);
       if (ok) return;
+      if (retryMinutes <= 0) return;
       await scheduleCdrPreviewRetry(taskId);
     } catch (err) {
       if (!isCdrPreviewRetryableFailure(err?.message)) return;
+      if (retryMinutes <= 0) return;
       try {
         await scheduleCdrPreviewRetry(taskId);
       } catch {
         /* ignore */
       }
+    } finally {
+      notifyPreviewBuildEnd(taskId);
     }
   })();
 }
@@ -81,6 +101,7 @@ export async function runCdrAutoSearchSecondAttempt(item, showWarning) {
   const agentUnavailable = await getLocalAgentUnavailableMessage();
   if (agentUnavailable) return false;
 
+  notifyPreviewBuildStart(taskId);
   try {
     const ok = await tryBuildPreview(taskId, folderPath, fileName);
     if (ok) return true;
@@ -94,5 +115,7 @@ export async function runCdrAutoSearchSecondAttempt(item, showWarning) {
     }
     await reportCdrPreviewRetryFailed(taskId);
     return false;
+  } finally {
+    notifyPreviewBuildEnd(taskId);
   }
 }

@@ -13,6 +13,7 @@ import { DEV_CDR_PREVIEW_ENABLED, formatDevTaskFilePath } from '../../utils/devC
 import { loadTaskCdrPreview } from '../../utils/devCdrPreviewService';
 import { getCdrPathValidationError } from '../../utils/cdrPreviewErrors';
 import { cdrPreviewCacheKey } from '../../utils/cdrPreviewRowHandlers';
+import { setCdrPreviewBuildHooks } from '../../utils/cdrAutoSearch';
 
 export default function useTaskTableController({
   onCalendarRefresh,
@@ -42,6 +43,29 @@ export default function useTaskTableController({
   const cdrPreviewLoadRef = useRef(0);
   const cdrPreviewRmbListenersRef = useRef(null);
   const cdrPreviewCacheRef = useRef(new Map());
+  const [cdrPreviewBuildingIds, setCdrPreviewBuildingIds] = useState(() => new Set());
+
+  const markCdrPreviewBuilding = useCallback((taskId, building) => {
+    setCdrPreviewBuildingIds((prev) => {
+      const next = new Set(prev);
+      if (building) next.add(taskId);
+      else next.delete(taskId);
+      return next;
+    });
+  }, []);
+
+  const isCdrPreviewBuilding = useCallback(
+    (taskId) => cdrPreviewBuildingIds.has(taskId),
+    [cdrPreviewBuildingIds]
+  );
+
+  useEffect(() => {
+    setCdrPreviewBuildHooks({
+      onStart: (taskId) => markCdrPreviewBuilding(taskId, true),
+      onEnd: (taskId) => markCdrPreviewBuilding(taskId, false)
+    });
+    return () => setCdrPreviewBuildHooks(null);
+  }, [markCdrPreviewBuilding]);
 
   const detachCdrPreviewRmbListeners = useCallback(() => {
     const listeners = cdrPreviewRmbListenersRef.current;
@@ -315,6 +339,7 @@ export default function useTaskTableController({
     cdrPreviewData,
     cdrPreviewPending,
     cdrPreviewAnchor,
+    isCdrPreviewBuilding,
     intervalsDialogOpen,
     intervalsPending,
     intervalsTask,
