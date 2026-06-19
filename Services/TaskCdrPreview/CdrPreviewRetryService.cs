@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Models.Dtos;
+using ProductionPlanner.Services.AppSettings;
 
 namespace ProductionPlanner.Services.TaskCdrPreview;
 
@@ -23,21 +24,27 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
 {
     private readonly ApplicationDbContext _db;
     private readonly IAppTimeService _timeService;
+    private readonly ICdrPreviewAutoSearchSettingsService _autoSearchSettings;
 
-    public CdrPreviewRetryService(ApplicationDbContext db, IAppTimeService timeService)
+    public CdrPreviewRetryService(
+        ApplicationDbContext db,
+        IAppTimeService timeService,
+        ICdrPreviewAutoSearchSettingsService autoSearchSettings)
     {
         _db = db;
         _timeService = timeService;
+        _autoSearchSettings = autoSearchSettings;
     }
 
     public async Task ScheduleSecondAttemptAsync(int taskId, CancellationToken cancellationToken = default)
     {
+        var autoSearchMinutes = await _autoSearchSettings.GetMinutesAsync(cancellationToken);
+        if (autoSearchMinutes <= 0)
+            return;
+
         var task = await _db.ProductionTasks
             .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
         if (task == null || !IsCdrFileName(task.FileName))
-            return;
-
-        if (task.CdrPreviewAutoSearchMinutes <= 0)
             return;
 
         if (await HasPreviewAsync(taskId, cancellationToken))
@@ -48,7 +55,7 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
 
         var now = _timeService.Now;
         task.CdrPreviewRetryAttempts = 1;
-        task.CdrPreviewRetryAt = now.AddMinutes(task.CdrPreviewAutoSearchMinutes);
+        task.CdrPreviewRetryAt = now.AddMinutes(autoSearchMinutes);
         task.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
     }
@@ -57,6 +64,10 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
         int limit = 50,
         CancellationToken cancellationToken = default)
     {
+        var autoSearchMinutes = await _autoSearchSettings.GetMinutesAsync(cancellationToken);
+        if (autoSearchMinutes <= 0)
+            return Array.Empty<CdrPreviewRetryItemDto>();
+
         var now = _timeService.Now;
         var take = Math.Clamp(limit, 1, 200);
 
@@ -66,7 +77,6 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
                 t.CdrPreviewRetryAt != null
                 && t.CdrPreviewRetryAt <= now
                 && t.CdrPreviewRetryAttempts == 1
-                && t.CdrPreviewAutoSearchMinutes > 0
                 && t.FileName.ToLower().EndsWith(".cdr"))
             .OrderBy(t => t.CdrPreviewRetryAt)
             .Take(take)
@@ -75,7 +85,7 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
                 TaskId = t.Id,
                 FolderPath = t.FolderPath,
                 FileName = t.FileName,
-                AutoSearchMinutes = t.CdrPreviewAutoSearchMinutes
+                AutoSearchMinutes = autoSearchMinutes
             })
             .ToListAsync(cancellationToken);
 

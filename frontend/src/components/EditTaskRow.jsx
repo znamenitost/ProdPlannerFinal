@@ -32,8 +32,7 @@ export default function EditTaskRow({
     isSplitTask: task.isSplitTask,
     requiresTestBeforeProduction: task.requiresTestBeforeProduction ?? false,
     testEstimateHours: task.testEstimateHours ?? 0,
-    productionEstimateHours: task.productionEstimateHours ?? 0,
-    cdrPreviewAutoSearchMinutes: task.cdrPreviewAutoSearchMinutes ?? ''
+    productionEstimateHours: task.productionEstimateHours ?? 0
   }));
 
   useEffect(() => {
@@ -51,8 +50,7 @@ export default function EditTaskRow({
       isSplitTask: task.isSplitTask,
       requiresTestBeforeProduction: task.requiresTestBeforeProduction ?? false,
       testEstimateHours: task.testEstimateHours ?? 0,
-      productionEstimateHours: task.productionEstimateHours ?? 0,
-      cdrPreviewAutoSearchMinutes: task.cdrPreviewAutoSearchMinutes ?? ''
+      productionEstimateHours: task.productionEstimateHours ?? 0
     });
   }, [
     task.id,
@@ -67,8 +65,7 @@ export default function EditTaskRow({
     task.statusText,
     task.requiresTestBeforeProduction,
     task.testEstimateHours,
-    task.productionEstimateHours,
-    task.cdrPreviewAutoSearchMinutes
+    task.productionEstimateHours
   ]);
 
   const handleFieldChange = (field, value) => {
@@ -102,15 +99,6 @@ export default function EditTaskRow({
           placeholder="Имя файла"
         />
         <TaskFilePathHint folderPath={localTask.folderPath} fileName={localTask.fileName} />
-        <TextField
-          {...TASK_TABLE_TEXT_FIELD_PROPS}
-          type="number"
-          placeholder="Автопоиск, мин"
-          value={localTask.cdrPreviewAutoSearchMinutes ?? ''}
-          onChange={(e) => handleFieldChange('cdrPreviewAutoSearchMinutes', e.target.value)}
-          slotProps={{ htmlInput: { min: 0, max: 1440, step: 1 } }}
-          sx={{ mt: 0.5 }}
-        />
       </TableCell>
 
       <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, { width: '12%' })}>

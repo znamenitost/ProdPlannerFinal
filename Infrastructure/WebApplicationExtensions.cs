@@ -31,6 +31,7 @@ public static class WebApplicationExtensions
         services.AddScoped<ICdrPreviewRetryService, CdrPreviewRetryService>();
         services.AddScoped<IAppSettingsService, AppSettingsService>();
         services.AddScoped<IAutoAssignSettingsService, AutoAssignSettingsService>();
+        services.AddScoped<ICdrPreviewAutoSearchSettingsService, CdrPreviewAutoSearchSettingsService>();
         services.AddScoped<ITaskTableSortSettingsService, TaskTableSortSettingsService>();
         services.AddScoped<ITaskListQueryService, TaskListQueryService>();
         services.AddScoped<IEmployeeAssignmentLoadService, EmployeeAssignmentLoadService>();

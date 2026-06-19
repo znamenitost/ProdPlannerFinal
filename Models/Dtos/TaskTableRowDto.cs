@@ -48,9 +48,6 @@ public class TaskTableRowDto
 
     public bool HasCdrPreview { get; set; }
 
-    /// <summary>Автопоиск превью .cdr: минуты до второй попытки (0 — выкл.).</summary>
-    public int CdrPreviewAutoSearchMinutes { get; set; }
-
     /// <summary>Маркер «через согласование» (для родителя split — агрегат по детям).</summary>
     public bool ShowsThroughApproval { get; set; }
 
@@ -115,8 +112,7 @@ public class TaskTableRowDto
             TestEstimateHours = parent.TestEstimateHours,
             ProductionEstimateHours = parent.ProductionEstimateHours,
             WorkPhase = parent.WorkPhase,
-            ShowsThroughApproval = TestPhaseWorkflow.TaskShowsThroughApproval(parent, children),
-            CdrPreviewAutoSearchMinutes = parent.CdrPreviewAutoSearchMinutes
+            ShowsThroughApproval = TestPhaseWorkflow.TaskShowsThroughApproval(parent, children)
         };
     }
 }

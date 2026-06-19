@@ -8,6 +8,7 @@ import {
   ListItemText,
   Menu,
   MenuItem,
+  TextField,
   Tooltip,
   Typography
 } from '@mui/material';
@@ -35,7 +36,9 @@ export default function TaskTableToolbar({
   searchQuery,
   onSearchQueryChange,
   showPlannedProgress,
-  onToggleShowPlannedProgress
+  onToggleShowPlannedProgress,
+  autoSearchMinutes,
+  onAutoSearchMinutesChange
 }) {
   const [sortAnchorEl, setSortAnchorEl] = useState(null);
   const sortMenuOpen = Boolean(sortAnchorEl);
@@ -66,6 +69,17 @@ export default function TaskTableToolbar({
           >
             <Lightbulb />
           </IconButton>
+        </Tooltip>
+        <Tooltip title="Интервал до второй попытки поиска превью CDR (0 — выкл.)">
+          <TextField
+            label="Автопоиск"
+            type="number"
+            size="small"
+            value={autoSearchMinutes || ''}
+            onChange={(e) => onAutoSearchMinutesChange(e.target.value)}
+            slotProps={{ htmlInput: { min: 0, max: 1440, step: 1 } }}
+            sx={{ width: 120 }}
+          />
         </Tooltip>
         {isAdmin && (
           <Tooltip title={showPlannedProgress ? 'Скрыть прогресс по времени' : 'Показать прогресс по времени'}>

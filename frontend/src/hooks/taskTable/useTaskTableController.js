@@ -19,7 +19,8 @@ export default function useTaskTableController({
   onRegisterHubHandler,
   selectedEmployeeForHighlight,
   excludeCompleted = false,
-  searchQuery = ''
+  searchQuery = '',
+  getAutoSearchMinutes = () => 0
 }) {
   const { showError, showWarning, showSuccess, confirm } = useUiFeedback();
   const api = useTaskTableApi();
@@ -82,7 +83,8 @@ export default function useTaskTableController({
     showError,
     showWarning,
     confirm,
-    applyPlanningWarnings
+    applyPlanningWarnings,
+    getAutoSearchMinutes
   });
 
   const refresh = useCallback(async () => {

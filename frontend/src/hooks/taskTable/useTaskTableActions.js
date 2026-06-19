@@ -16,12 +16,6 @@ import {
 } from '../../utils/devCdrPreviewConfig';
 import { startCdrAutoSearchAfterSave } from '../../utils/cdrAutoSearch';
 
-function parseAutoSearchMinutes(value) {
-  const n = Number.parseInt(String(value ?? ''), 10);
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.min(n, 1440);
-}
-
 function kickOffCdrAutoSearch({ taskId, folderPath, fileName, autoSearchMinutes, showWarning }) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return;
   startCdrAutoSearchAfterSave({
@@ -51,7 +45,8 @@ export default function useTaskTableActions({
   showError,
   showWarning,
   confirm,
-  applyPlanningWarnings
+  applyPlanningWarnings,
+  getAutoSearchMinutes = () => 0
 }) {
   const [pendingLifecycleTaskId, setPendingLifecycleTaskId] = useState(null);
   const pendingLifecycleTaskIdRef = useRef(null);
@@ -199,8 +194,7 @@ export default function useTaskTableActions({
         fileName: newRow.fileName,
         comment: newRow.comment,
         deadline: newRow.deadline,
-        parentRowNumber: null,
-        cdrPreviewAutoSearchMinutes: parseAutoSearchMinutes(newRow.cdrPreviewAutoSearchMinutes)
+        parentRowNumber: null
       };
 
       if (isShared) {
@@ -248,7 +242,7 @@ export default function useTaskTableActions({
             taskId: created.id,
             folderPath: created.folderPath || payload.folderPath,
             fileName: created.fileName || payload.fileName,
-            autoSearchMinutes: created.cdrPreviewAutoSearchMinutes ?? payload.cdrPreviewAutoSearchMinutes,
+            autoSearchMinutes: getAutoSearchMinutes(),
             showWarning
           });
         }
@@ -273,7 +267,8 @@ export default function useTaskTableActions({
     showError,
     showWarning,
     applyPlanningWarnings,
-    patchRow
+    patchRow,
+    getAutoSearchMinutes
   ]);
 
   const handleUpdateRow = useCallback(async (row) => {
@@ -290,8 +285,7 @@ export default function useTaskTableActions({
         type: row.type,
         employeeName: row.employeeName,
         parentRowNumber: row.parentRowNumber,
-        expectedUpdatedAt: row.updatedAt ?? null,
-        cdrPreviewAutoSearchMinutes: parseAutoSearchMinutes(row.cdrPreviewAutoSearchMinutes)
+        expectedUpdatedAt: row.updatedAt ?? null
       });
       const { planningWarnings, replacedTaskId } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
@@ -306,7 +300,7 @@ export default function useTaskTableActions({
             taskId: row.id,
             folderPath: row.folderPath,
             fileName: row.fileName,
-            autoSearchMinutes: row.cdrPreviewAutoSearchMinutes,
+            autoSearchMinutes: getAutoSearchMinutes(),
             showWarning
           });
         });
@@ -320,7 +314,7 @@ export default function useTaskTableActions({
     } finally {
       savingRowIdRef.current = null;
     }
-  }, [api, syncRowFromServer, setEditingId, showError, showWarning, applyPlanningWarnings, patchRow, removeRow, refresh, onCalendarRefresh]);
+  }, [api, syncRowFromServer, setEditingId, showError, showWarning, applyPlanningWarnings, patchRow, removeRow, refresh, onCalendarRefresh, getAutoSearchMinutes]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
     if (pendingLifecycleTaskIdRef.current != null) return;
@@ -453,8 +447,7 @@ export default function useTaskTableActions({
       assigneeParts: null,
       isSharedTask: false,
       taskExecutionMode: TASK_EXECUTION_PARALLEL,
-      parentRowNumber: null,
-      cdrPreviewAutoSearchMinutes: ''
+      parentRowNumber: null
     });
   }, [setNewRow]);
 

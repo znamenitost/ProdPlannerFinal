@@ -33,6 +33,7 @@ import useTaskTablePlannedProgressPreference from '../hooks/taskTable/useTaskTab
 import useTaskTablePlannedProgressPolling from '../hooks/taskTable/useTaskTablePlannedProgressPolling';
 import useTaskTableSortSettings from '../hooks/taskTable/useTaskTableSortSettings';
 import useUserPreference from '../hooks/useUserPreference';
+import useCdrPreviewAutoSearchSettings from '../hooks/useCdrPreviewAutoSearchSettings';
 
 const ROW_GROUP_BASE_HEIGHT = 44;
 const ROW_PROGRESS_HEIGHT = 6;
@@ -113,13 +114,15 @@ export default function TaskTable({
   } = useTaskTableSortSettings(currentUser);
   const [searchQuery, setSearchQuery] = useUserPreference(currentUser, 'taskTable.searchQuery', '');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+  const autoSearchSettings = useCdrPreviewAutoSearchSettings(currentUser);
   const excludeCompletedFromApi = hideCompletedSort && !debouncedSearchQuery.trim();
   const table = useTaskTableController({
     onCalendarRefresh,
     onRegisterHubHandler,
     selectedEmployeeForHighlight,
     excludeCompleted: excludeCompletedFromApi,
-    searchQuery: debouncedSearchQuery
+    searchQuery: debouncedSearchQuery,
+    getAutoSearchMinutes: autoSearchSettings.getAutoSearchMinutes
   });
   const sortOptions = useMemo(
     () => ({ deadlineSort, completedBottomSort }),
@@ -348,6 +351,8 @@ export default function TaskTable({
         onSearchQueryChange={setSearchQuery}
         showPlannedProgress={plannedProgressPref.showPlannedProgress}
         onToggleShowPlannedProgress={plannedProgressPref.toggleShowPlannedProgress}
+        autoSearchMinutes={autoSearchSettings.minutes}
+        onAutoSearchMinutesChange={autoSearchSettings.setMinutes}
       />
 
       <TableContainer ref={tableContainerRef}>

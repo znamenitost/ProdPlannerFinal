@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Models;
+using ProductionPlanner.Models.Dtos;
 using ProductionPlanner.Services;
+using ProductionPlanner.Services.AppSettings;
 using ProductionPlanner.Services.TaskCdrPreview;
 
 namespace ProductionPlanner.Tests;
@@ -23,13 +25,16 @@ public class CdrPreviewRetryServiceTests : IDisposable
         _db.Database.OpenConnection();
         _db.Database.EnsureCreated();
 
-        _service = new CdrPreviewRetryService(_db, new FixedTimeService(_now));
+        _service = new CdrPreviewRetryService(
+            _db,
+            new FixedTimeService(_now),
+            new FixedAutoSearchSettings(7));
     }
 
     [Fact]
-    public async Task ScheduleSecondAttemptAsync_uses_task_minutes()
+    public async Task ScheduleSecondAttemptAsync_uses_global_minutes()
     {
-        var task = await SeedTaskAsync("folder", "design.cdr", autoSearchMinutes: 7);
+        var task = await SeedTaskAsync("folder", "design.cdr");
 
         await _service.ScheduleSecondAttemptAsync(task.Id);
 
@@ -42,9 +47,13 @@ public class CdrPreviewRetryServiceTests : IDisposable
     [Fact]
     public async Task ScheduleSecondAttemptAsync_skips_when_auto_search_disabled()
     {
-        var task = await SeedTaskAsync("folder", "design.cdr", autoSearchMinutes: 0);
+        var disabled = new CdrPreviewRetryService(
+            _db,
+            new FixedTimeService(_now),
+            new FixedAutoSearchSettings(0));
+        var task = await SeedTaskAsync("folder", "design.cdr");
 
-        await _service.ScheduleSecondAttemptAsync(task.Id);
+        await disabled.ScheduleSecondAttemptAsync(task.Id);
 
         var updated = await _db.ProductionTasks.FindAsync(task.Id);
         Assert.Null(updated!.CdrPreviewRetryAt);
@@ -54,27 +63,22 @@ public class CdrPreviewRetryServiceTests : IDisposable
     [Fact]
     public async Task GetDueRetriesAsync_returns_only_second_attempt_queue()
     {
-        var due = await SeedTaskAsync("folder", "design.cdr", autoSearchMinutes: 5);
+        var due = await SeedTaskAsync("folder", "design.cdr");
         due.CdrPreviewRetryAt = new DateTime(2026, 6, 19, 11, 0, 0);
         due.CdrPreviewRetryAttempts = 1;
-        await _db.SaveChangesAsync();
-
-        var notDue = await SeedTaskAsync("folder", "other.cdr", autoSearchMinutes: 5);
-        notDue.CdrPreviewRetryAt = new DateTime(2026, 6, 19, 13, 0, 0);
-        notDue.CdrPreviewRetryAttempts = 1;
         await _db.SaveChangesAsync();
 
         var items = await _service.GetDueRetriesAsync();
 
         Assert.Single(items);
         Assert.Equal(due.Id, items[0].TaskId);
-        Assert.Equal(5, items[0].AutoSearchMinutes);
+        Assert.Equal(7, items[0].AutoSearchMinutes);
     }
 
     [Fact]
     public async Task MarkAutoSearchFailedAsync_clears_retry_state()
     {
-        var task = await SeedTaskAsync("folder", "design.cdr", autoSearchMinutes: 5);
+        var task = await SeedTaskAsync("folder", "design.cdr");
         task.CdrPreviewRetryAt = new DateTime(2026, 6, 19, 12, 5, 0);
         task.CdrPreviewRetryAttempts = 1;
         await _db.SaveChangesAsync();
@@ -86,7 +90,7 @@ public class CdrPreviewRetryServiceTests : IDisposable
         Assert.Equal(0, updated.CdrPreviewRetryAttempts);
     }
 
-    private async Task<ProductionTask> SeedTaskAsync(string folderPath, string fileName, int autoSearchMinutes)
+    private async Task<ProductionTask> SeedTaskAsync(string folderPath, string fileName)
     {
         var task = new ProductionTask
         {
@@ -98,7 +102,6 @@ public class CdrPreviewRetryServiceTests : IDisposable
             Type = "test",
             EmployeeName = "Иван",
             Status = JobStatus.Assigned,
-            CdrPreviewAutoSearchMinutes = autoSearchMinutes,
             CreatedAt = new DateTime(2026, 6, 19, 10, 0, 0),
             UpdatedAt = new DateTime(2026, 6, 19, 10, 0, 0)
         };
@@ -118,5 +121,17 @@ public class CdrPreviewRetryServiceTests : IDisposable
         public DateTime Now => now;
         public void SetMock(DateTime? mockDateTime) { }
         public void ResetMock() { }
+    }
+
+    private sealed class FixedAutoSearchSettings(int minutes) : ICdrPreviewAutoSearchSettingsService
+    {
+        public Task<CdrPreviewAutoSearchSettingsDto> GetAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new CdrPreviewAutoSearchSettingsDto { Minutes = minutes });
+
+        public Task SaveAsync(CdrPreviewAutoSearchSettingsDto settings, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<int> GetMinutesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(minutes);
     }
 }
