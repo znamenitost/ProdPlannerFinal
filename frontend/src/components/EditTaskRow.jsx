@@ -1,20 +1,19 @@
 import { useState, useEffect } from 'react';
-import { TableRow, TableCell, TextField, IconButton, Box, Typography } from '@mui/material';
+import { TableRow, TableCell, TextField, IconButton, Box, Typography, CircularProgress } from '@mui/material';
 import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
 import { TASK_TABLE_TEXT_FIELD_PROPS } from '../utils/taskTableStyles';
 import { columnCellSx } from '../utils/taskTableColumns';
 import { COLLAPSED_COLUMN_SX } from '../utils/taskTableColumns';
-import TaskFilePathHint from './TaskFilePathHint';
-
 export default function EditTaskRow({
   task,
   onUpdate,
   onCancel,
   onOpenAssigneeModal,
   showHoursTypeColumns = true,
-  columnVisibility
+  columnVisibility,
+  cdrPreviewBuilding = false
 }) {
   const isShared = task.isSplitTask;
 
@@ -92,13 +91,23 @@ export default function EditTaskRow({
       </TableCell>
 
       <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, { width: '10%' })}>
-        <TextField
-          {...TASK_TABLE_TEXT_FIELD_PROPS}
-          value={localTask.fileName}
-          onChange={(e) => handleFieldChange('fileName', e.target.value)}
-          placeholder="Имя файла"
-        />
-        <TaskFilePathHint folderPath={localTask.folderPath} fileName={localTask.fileName} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          {cdrPreviewBuilding ? (
+            <CircularProgress
+              size={12}
+              thickness={6}
+              aria-label="Построение превью"
+              sx={{ flexShrink: 0 }}
+            />
+          ) : null}
+          <TextField
+            {...TASK_TABLE_TEXT_FIELD_PROPS}
+            value={localTask.fileName}
+            onChange={(e) => handleFieldChange('fileName', e.target.value)}
+            placeholder="Имя файла"
+            sx={{ flex: 1, minWidth: 0 }}
+          />
+        </Box>
       </TableCell>
 
       <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, { width: '12%' })}>

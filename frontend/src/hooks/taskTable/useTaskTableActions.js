@@ -236,17 +236,16 @@ export default function useTaskTableActions({
       applyPlanningWarnings(planningWarnings);
       const wasShared = newRow.isSharedTask;
       setNewRow(null);
-      void refresh().then(() => {
-        if (created?.id) {
-          kickOffCdrAutoSearch({
-            taskId: created.id,
-            folderPath: created.folderPath || payload.folderPath,
-            fileName: created.fileName || payload.fileName,
-            autoSearchMinutes: getAutoSearchMinutes(),
-            showWarning
-          });
-        }
-      });
+      if (created?.id) {
+        kickOffCdrAutoSearch({
+          taskId: created.id,
+          folderPath: created.folderPath || payload.folderPath,
+          fileName: created.fileName || payload.fileName,
+          autoSearchMinutes: getAutoSearchMinutes(),
+          showWarning
+        });
+      }
+      void refresh();
       if (wasShared && created?.id) {
         await loadChildrenForParent(created.id);
         expandParent(created.id);
@@ -289,21 +288,21 @@ export default function useTaskTableActions({
       });
       const { planningWarnings, replacedTaskId } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
-      setEditingId(null);
       if (replacedTaskId != null) {
+        setEditingId(null);
         removeRow(replacedTaskId);
         void refresh();
         onCalendarRefresh?.();
       } else {
-        void syncRowFromServer(row).then(() => {
-          kickOffCdrAutoSearch({
-            taskId: row.id,
-            folderPath: row.folderPath,
-            fileName: row.fileName,
-            autoSearchMinutes: getAutoSearchMinutes(),
-            showWarning
-          });
+        kickOffCdrAutoSearch({
+          taskId: row.id,
+          folderPath: row.folderPath,
+          fileName: row.fileName,
+          autoSearchMinutes: getAutoSearchMinutes(),
+          showWarning
         });
+        setEditingId(null);
+        void syncRowFromServer(row);
       }
     } catch (err) {
       console.error('Ошибка обновления:', err);

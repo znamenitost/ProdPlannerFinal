@@ -55,18 +55,17 @@ export function startCdrAutoSearchAfterSave({
   showWarning
 }) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return;
+  if (!shouldAttemptCdrPreviewOnSave(folderPath, fileName)) return;
+  if (getCdrPathValidationError(folderPath, fileName)) return;
 
   const retryMinutes = normalizeAutoSearchMinutes(autoSearchMinutes);
 
+  notifyPreviewBuildStart(taskId);
   void (async () => {
-    if (!shouldAttemptCdrPreviewOnSave(folderPath, fileName)) return;
-    if (getCdrPathValidationError(folderPath, fileName)) return;
-
-    const agentUnavailable = await getLocalAgentUnavailableMessage();
-    if (agentUnavailable) return;
-
-    notifyPreviewBuildStart(taskId);
     try {
+      const agentUnavailable = await getLocalAgentUnavailableMessage();
+      if (agentUnavailable) return;
+
       const ok = await tryBuildPreview(taskId, folderPath, fileName);
       if (ok) return;
       if (retryMinutes <= 0) return;

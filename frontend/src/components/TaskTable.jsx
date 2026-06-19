@@ -288,6 +288,7 @@ export default function TaskTable({
         onOpenAssigneeModal={table.handleOpenAssigneeModal}
         showHoursTypeColumns={table.showHoursTypeColumns}
         columnVisibility={columnSettings.visibility}
+        cdrPreviewBuilding={table.isCdrPreviewBuilding(parent.id)}
       />
     ) : (
       <ParentTaskRow

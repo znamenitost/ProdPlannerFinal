@@ -17,7 +17,7 @@ export default function TaskFileNameCell({
   const showDot = task ? taskFileShowsOnlineDot(task) : false;
   const dotSlot = previewBuilding ? (
     <CircularProgress
-      size={8}
+      size={12}
       thickness={6}
       aria-label="Построение превью"
       sx={{ flexShrink: 0 }}
