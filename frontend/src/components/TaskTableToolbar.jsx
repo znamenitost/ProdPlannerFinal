@@ -53,9 +53,28 @@ export default function TaskTableToolbar({
 
   return (
     <Box sx={{ ...sectionHeaderSx, mb: 2 }}>
-      <Box sx={sectionTitleRowSx}>
+      <Box sx={{ ...sectionTitleRowSx, gap: 1.5 }}>
         <TableChart color="primary" />
         <Typography variant="h2" component="h2">Таблица задач</Typography>
+        {isAdmin && (
+          <Tooltip title="AutoSearch: минуты до второй попытки превью CDR (0 — выкл.)">
+            <TextField
+              label="AS"
+              placeholder="мин"
+              type="number"
+              size="small"
+              value={autoSearchMinutes || ''}
+              onChange={(e) => onAutoSearchMinutesChange(e.target.value)}
+              slotProps={{ htmlInput: { min: 0, max: 1440, step: 1, 'aria-label': 'AutoSearch, минуты' } }}
+              sx={{
+                width: 68,
+                '& .MuiInputBase-root': { fontSize: '0.8125rem' },
+                '& .MuiInputBase-input': { py: 0.75, px: 0.75, textAlign: 'center' },
+                '& .MuiInputLabel-root': { fontSize: '0.8125rem' }
+              }}
+            />
+          </Tooltip>
+        )}
       </Box>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <ExpandableSearchField value={searchQuery} onChange={onSearchQueryChange} />
@@ -69,17 +88,6 @@ export default function TaskTableToolbar({
           >
             <Lightbulb />
           </IconButton>
-        </Tooltip>
-        <Tooltip title="Интервал до второй попытки поиска превью CDR (0 — выкл.)">
-          <TextField
-            label="Автопоиск"
-            type="number"
-            size="small"
-            value={autoSearchMinutes || ''}
-            onChange={(e) => onAutoSearchMinutesChange(e.target.value)}
-            slotProps={{ htmlInput: { min: 0, max: 1440, step: 1 } }}
-            sx={{ width: 120 }}
-          />
         </Tooltip>
         {isAdmin && (
           <Tooltip title={showPlannedProgress ? 'Скрыть прогресс по времени' : 'Показать прогресс по времени'}>

@@ -114,7 +114,7 @@ export default function TaskTable({
   } = useTaskTableSortSettings(currentUser);
   const [searchQuery, setSearchQuery] = useUserPreference(currentUser, 'taskTable.searchQuery', '');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
-  const autoSearchSettings = useCdrPreviewAutoSearchSettings(currentUser);
+  const autoSearchSettings = useCdrPreviewAutoSearchSettings(isAdmin ? currentUser : null);
   const excludeCompletedFromApi = hideCompletedSort && !debouncedSearchQuery.trim();
   const table = useTaskTableController({
     onCalendarRefresh,

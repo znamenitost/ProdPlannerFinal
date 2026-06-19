@@ -7,7 +7,7 @@ namespace ProductionPlanner.Controllers;
 
 [ApiController]
 [Route("api/settings")]
-[Authorize]
+[Authorize(Roles = "Admin")]
 public class CdrPreviewAutoSearchSettingsController : ControllerBase
 {
     private readonly ICdrPreviewAutoSearchSettingsService _settingsService;
