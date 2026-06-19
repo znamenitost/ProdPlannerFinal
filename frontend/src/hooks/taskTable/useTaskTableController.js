@@ -13,7 +13,7 @@ import { DEV_CDR_PREVIEW_ENABLED, formatDevTaskFilePath } from '../../utils/devC
 import { loadTaskCdrPreview } from '../../utils/devCdrPreviewService';
 import { getCdrPathValidationError } from '../../utils/cdrPreviewErrors';
 import { cdrPreviewCacheKey } from '../../utils/cdrPreviewRowHandlers';
-import { setCdrPreviewBuildHooks } from '../../utils/cdrAutoSearch';
+import { setCdrPreviewBuildHooks, getActiveCdrPreviewBuildTaskIds } from '../../utils/cdrAutoSearch';
 
 export default function useTaskTableController({
   onCalendarRefresh,
@@ -46,16 +46,18 @@ export default function useTaskTableController({
   const [cdrPreviewBuildingIds, setCdrPreviewBuildingIds] = useState(() => new Set());
 
   const markCdrPreviewBuilding = useCallback((taskId, building) => {
+    const id = Number(taskId);
+    if (!Number.isFinite(id)) return;
     setCdrPreviewBuildingIds((prev) => {
       const next = new Set(prev);
-      if (building) next.add(taskId);
-      else next.delete(taskId);
+      if (building) next.add(id);
+      else next.delete(id);
       return next;
     });
   }, []);
 
   const isCdrPreviewBuilding = useCallback(
-    (taskId) => cdrPreviewBuildingIds.has(taskId),
+    (taskId) => cdrPreviewBuildingIds.has(Number(taskId)),
     [cdrPreviewBuildingIds]
   );
 
@@ -64,6 +66,9 @@ export default function useTaskTableController({
       onStart: (taskId) => markCdrPreviewBuilding(taskId, true),
       onEnd: (taskId) => markCdrPreviewBuilding(taskId, false)
     });
+    for (const taskId of getActiveCdrPreviewBuildTaskIds()) {
+      markCdrPreviewBuilding(taskId, true);
+    }
     return () => setCdrPreviewBuildHooks(null);
   }, [markCdrPreviewBuilding]);
 

@@ -49,6 +49,10 @@ export const TASK_TABLE_TEXT_FIELD_PROPS = {
   sx: tableTextFieldThemeStyles
 };
 
+export function withTaskTableTextFieldSx(extraSx = {}) {
+  return { ...tableTextFieldThemeStyles, ...extraSx };
+}
+
 export const cellDisplayTextSx = {
   fontSize: '0.875rem',
   whiteSpace: 'nowrap',

@@ -33,6 +33,11 @@ function sameChildren(a, b) {
   return true;
 }
 
+function childrenPreviewBuildingKey(children, isCdrPreviewBuilding) {
+  if (!children?.length || typeof isCdrPreviewBuilding !== 'function') return '';
+  return children.map((child) => (isCdrPreviewBuilding(child.id) ? '1' : '0')).join('');
+}
+
 export function areParentRowPropsEqual(prev, next) {
   if (prev.task.id !== next.task.id) return false;
   if (prev.task.updatedAt !== next.task.updatedAt) return false;
@@ -40,7 +45,11 @@ export function areParentRowPropsEqual(prev, next) {
   if (prev.task.fileName !== next.task.fileName) return false;
   if (prev.task.folderPath !== next.task.folderPath) return false;
   if (prev.task.hasCdrPreview !== next.task.hasCdrPreview) return false;
-  if (prev.cdrPreviewBuilding !== next.cdrPreviewBuilding) return false;
+  if (prev.isCdrPreviewBuilding?.(prev.task.id) !== next.isCdrPreviewBuilding?.(next.task.id)) return false;
+  if (
+    childrenPreviewBuildingKey(prev.childrenTasks, prev.isCdrPreviewBuilding)
+    !== childrenPreviewBuildingKey(next.childrenTasks, next.isCdrPreviewBuilding)
+  ) return false;
   if ((prev.task.workIntervals?.length ?? 0) !== (next.task.workIntervals?.length ?? 0)) return false;
   if (workIntervalsKey(prev.task) !== workIntervalsKey(next.task)) return false;
   if (prev.task.plannedTimeProgress !== next.task.plannedTimeProgress) return false;
@@ -72,6 +81,7 @@ export function areParentRowPropsEqual(prev, next) {
     prev.onDelete === next.onDelete &&
     prev.onOpenComment === next.onOpenComment &&
     prev.onOpenIntervals === next.onOpenIntervals &&
+    prev.isCdrPreviewBuilding === next.isCdrPreviewBuilding &&
     prev.currentUser === next.currentUser
   );
 }
@@ -90,6 +100,7 @@ export function areChildRowPropsEqual(prev, next) {
   if (prev.task.sequenceOrder !== next.task.sequenceOrder) return false;
   if (prev.task.plannedTimeProgress !== next.task.plannedTimeProgress) return false;
   if (prev.showPlannedProgress !== next.showPlannedProgress) return false;
+  if (prev.cdrPreviewBuilding !== next.cdrPreviewBuilding) return false;
   if (pendingLifecycleAffectsRow(
     prev.pendingLifecycleTaskId,
     next.pendingLifecycleTaskId,

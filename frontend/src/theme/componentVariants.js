@@ -97,10 +97,17 @@ const tableFieldOutlinedInputSx = {
   display: 'flex',
   alignItems: 'center',
   '& fieldset': tableFieldOutlinedFieldsetSx,
+  '& .MuiOutlinedInput-notchedOutline': tableFieldOutlinedFieldsetSx,
   '&:hover fieldset': {
     borderColor: alpha(primary.main, 0.45)
   },
+  '&:hover .MuiOutlinedInput-notchedOutline': {
+    borderColor: alpha(primary.main, 0.45)
+  },
   '&.Mui-focused fieldset, &.MuiPickersOutlinedInput-focused fieldset': {
+    borderColor: primary.main
+  },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline, &.MuiPickersOutlinedInput-focused .MuiOutlinedInput-notchedOutline': {
     borderColor: primary.main
   }
 };
@@ -122,9 +129,9 @@ export const tableTextFieldThemeStyles = {
 };
 
 export const tableDatePickerSlotSx = {
+  ...tableTextFieldThemeStyles,
   width: '100%',
   minWidth: 152,
-  ...tableFieldControlWrapperSx,
   [tableFieldOutlinedInputSelector]: {
     ...tableFieldOutlinedInputSx,
     minWidth: 152,

@@ -79,7 +79,7 @@ function ParentTaskRow({
   columnVisibility,
   textLimit: limit = 23,
   showPlannedProgress = false,
-  cdrPreviewBuilding = false
+  isCdrPreviewBuilding = () => false
 }) {
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
   const lifecycleBusy = pendingLifecycleTaskId != null;
@@ -236,7 +236,7 @@ function ParentTaskRow({
             fileName={task.fileName}
             task={task}
             textLimit={limit}
-            previewBuilding={cdrPreviewBuilding}
+            previewBuilding={isCdrPreviewBuilding(task.id)}
           />
         </TableCell>
 
@@ -343,6 +343,7 @@ function ParentTaskRow({
           columnVisibility={columnVisibility}
           textLimit={limit}
           showPlannedProgress={showPlannedProgress}
+          cdrPreviewBuilding={isCdrPreviewBuilding(child.id)}
         />
       ))}
     </Fragment>

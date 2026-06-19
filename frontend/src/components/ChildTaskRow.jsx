@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { TableRow, TableCell, Box, Typography, Chip } from '@mui/material';
+import { TableRow, TableCell, Box, Typography, Chip, CircularProgress } from '@mui/material';
 import { areChildRowPropsEqual } from '../utils/taskTableRowMemo';
 import { getCdrPreviewRowHandlers } from '../utils/cdrPreviewRowHandlers';
 import { alpha } from '@mui/material/styles';
@@ -56,7 +56,8 @@ function ChildTaskRow({
   showHoursTypeColumns = true,
   columnVisibility,
   textLimit,
-  showPlannedProgress = false
+  showPlannedProgress = false,
+  cdrPreviewBuilding = false
 }) {
   const supplyMode = getSplitSupplyMode(task, sharedGroupParentTask);
   const isSequentialChild = supplyMode === SUPPLY_MODE_INTERNAL;
@@ -150,7 +151,17 @@ function ChildTaskRow({
       </TableCell>
 
       <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)} />
-      <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)} />
+      <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>
+        {cdrPreviewBuilding ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <CircularProgress
+              size={12}
+              thickness={6}
+              aria-label="Построение превью"
+            />
+          </Box>
+        ) : null}
+      </TableCell>
 
       <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>
         <TaskCommentCell task={task} onOpenComment={onOpenComment} iconButtonColor="primary" />

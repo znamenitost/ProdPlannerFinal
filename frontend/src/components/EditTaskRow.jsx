@@ -3,7 +3,7 @@ import { TableRow, TableCell, TextField, IconButton, Box, Typography, CircularPr
 import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
-import { TASK_TABLE_TEXT_FIELD_PROPS } from '../utils/taskTableStyles';
+import { TASK_TABLE_TEXT_FIELD_PROPS, withTaskTableTextFieldSx } from '../utils/taskTableStyles';
 import { columnCellSx } from '../utils/taskTableColumns';
 import { COLLAPSED_COLUMN_SX } from '../utils/taskTableColumns';
 export default function EditTaskRow({
@@ -105,7 +105,7 @@ export default function EditTaskRow({
             value={localTask.fileName}
             onChange={(e) => handleFieldChange('fileName', e.target.value)}
             placeholder="Имя файла"
-            sx={{ flex: 1, minWidth: 0 }}
+            sx={withTaskTableTextFieldSx({ flex: 1, minWidth: 0 })}
           />
         </Box>
       </TableCell>

@@ -11,17 +11,37 @@ import {
 import { formatDevTaskFilePath } from './devCdrPreviewConfig';
 
 let previewBuildHooks = { onStart: null, onEnd: null };
+const previewBuildingTaskIds = new Set();
+
+function normalizePreviewTaskId(taskId) {
+  const id = Number(taskId);
+  return Number.isFinite(id) ? id : null;
+}
 
 export function setCdrPreviewBuildHooks(hooks) {
   previewBuildHooks = hooks ?? { onStart: null, onEnd: null };
+  if (!previewBuildHooks.onStart) return;
+  for (const taskId of previewBuildingTaskIds) {
+    previewBuildHooks.onStart(taskId);
+  }
+}
+
+export function getActiveCdrPreviewBuildTaskIds() {
+  return [...previewBuildingTaskIds];
 }
 
 function notifyPreviewBuildStart(taskId) {
-  previewBuildHooks.onStart?.(taskId);
+  const id = normalizePreviewTaskId(taskId);
+  if (id == null) return;
+  previewBuildingTaskIds.add(id);
+  previewBuildHooks.onStart?.(id);
 }
 
 function notifyPreviewBuildEnd(taskId) {
-  previewBuildHooks.onEnd?.(taskId);
+  const id = normalizePreviewTaskId(taskId);
+  if (id == null) return;
+  previewBuildingTaskIds.delete(id);
+  previewBuildHooks.onEnd?.(id);
 }
 
 function normalizeAutoSearchMinutes(value) {
@@ -97,11 +117,11 @@ export async function runCdrAutoSearchSecondAttempt(item, showWarning) {
   if (!shouldAttemptCdrPreviewOnSave(folderPath, fileName)) return false;
   if (getCdrPathValidationError(folderPath, fileName)) return false;
 
-  const agentUnavailable = await getLocalAgentUnavailableMessage();
-  if (agentUnavailable) return false;
-
   notifyPreviewBuildStart(taskId);
   try {
+    const agentUnavailable = await getLocalAgentUnavailableMessage();
+    if (agentUnavailable) return false;
+
     const ok = await tryBuildPreview(taskId, folderPath, fileName);
     if (ok) return true;
 
