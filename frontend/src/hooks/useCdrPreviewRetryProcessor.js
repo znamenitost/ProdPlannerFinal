@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { DEV_CDR_PREVIEW_ENABLED } from './devCdrPreviewConfig';
-import { buildTaskCdrPreview } from './devCdrPreviewService';
-import { fetchTaskCdrPreview } from './cdrPreviewApi';
+import { DEV_CDR_PREVIEW_ENABLED } from '../utils/devCdrPreviewConfig';
+import { buildTaskCdrPreview } from '../utils/devCdrPreviewService';
+import { fetchTaskCdrPreview } from '../utils/cdrPreviewApi';
 import {
   fetchPendingCdrPreviewRetries,
   reportCdrPreviewRetryFailed
-} from './cdrPreviewRetryApi';
-import { getLocalAgentUnavailableMessage } from './fileOpenerAgent';
-import { isCdrPreviewRetryableFailure } from './cdrPreviewErrors';
+} from '../utils/cdrPreviewRetryApi';
+import { getLocalAgentUnavailableMessage } from '../utils/fileOpenerAgent';
+import { isCdrPreviewRetryableFailure } from '../utils/cdrPreviewErrors';
 
 const POLL_INTERVAL_MS = 60_000;
 
