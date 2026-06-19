@@ -36,6 +36,8 @@ public static class CalendarDayWorkLayout
 
             var active = intervalsForDay
                 .Where(iv => iv.start < sliceEnd && iv.end > sliceStart)
+                .GroupBy(iv => iv.taskId)
+                .Select(g => g.First())
                 .ToList();
             if (active.Count == 0)
                 continue;
@@ -48,45 +50,116 @@ public static class CalendarDayWorkLayout
             }
         }
 
-        return MergeAdjacentSlices(slices);
+        return MergeSlicesPerTask(slices);
     }
 
-    private static List<CalendarTimelineSegmentDto> MergeAdjacentSlices(
+    /// <summary>
+    /// Склеивает пересекающиеся/стыкующиеся интервалы одной задачи в один отрезок на день,
+    /// чтобы дубли или перекрытия в WorkIntervals не рисовали несколько полос в одном месте.
+    /// </summary>
+    public static List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval)>
+        CoalesceIntervalsPerTask(
+            List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval)> intervalsForDay)
+    {
+        if (intervalsForDay.Count == 0)
+            return intervalsForDay;
+
+        var result = new List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval)>();
+
+        foreach (var group in intervalsForDay.GroupBy(i => i.taskId))
+        {
+            var ordered = group.OrderBy(i => i.start).ToList();
+            var mergedStart = ordered[0].start;
+            var mergedEnd = ordered[0].end;
+            var taskId = ordered[0].taskId;
+            var taskTitle = ordered[0].taskTitle;
+            var folderPath = ordered[0].folderPath;
+            var fileName = ordered[0].fileName;
+            var completed = ordered[0].completed;
+            var statusText = ordered[0].statusText;
+            var isOpenInterval = ordered[0].isOpenInterval;
+
+            for (var i = 1; i < ordered.Count; i++)
+            {
+                var current = ordered[i];
+                if (current.start <= mergedEnd)
+                {
+                    if (current.end > mergedEnd)
+                        mergedEnd = current.end;
+                    isOpenInterval |= current.isOpenInterval;
+                    completed &= current.completed;
+                    continue;
+                }
+
+                result.Add((mergedStart, mergedEnd, taskId, taskTitle, folderPath, fileName, completed, statusText, isOpenInterval));
+                mergedStart = current.start;
+                mergedEnd = current.end;
+                taskId = current.taskId;
+                taskTitle = current.taskTitle;
+                folderPath = current.folderPath;
+                fileName = current.fileName;
+                completed = current.completed;
+                statusText = current.statusText;
+                isOpenInterval = current.isOpenInterval;
+            }
+
+            result.Add((mergedStart, mergedEnd, taskId, taskTitle, folderPath, fileName, completed, statusText, isOpenInterval));
+        }
+
+        return result.OrderBy(i => i.start).ToList();
+    }
+
+    private static List<CalendarTimelineSegmentDto> MergeSlicesPerTask(
         List<(DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval, int layer, int maxDepth)> slices)
     {
         if (slices.Count == 0)
             return new List<CalendarTimelineSegmentDto>();
 
-        var merged = new List<CalendarTimelineSegmentDto>();
-        var current = slices[0];
+        var result = new List<CalendarTimelineSegmentDto>();
 
-        for (var i = 1; i < slices.Count; i++)
+        foreach (var group in slices.GroupBy(s => s.taskId))
         {
-            var next = slices[i];
-            if (CanMerge(current, next))
+            var ordered = group.OrderBy(s => s.start).ToList();
+            var current = ordered[0];
+
+            for (var i = 1; i < ordered.Count; i++)
             {
-                current = (current.start, next.end, current.taskId, current.taskTitle, current.folderPath, current.fileName, current.completed, current.statusText, current.isOpenInterval, current.layer, current.maxDepth);
-                continue;
+                var next = ordered[i];
+                if (CanMergePerTask(current, next))
+                {
+                    current = (
+                        current.start,
+                        next.end > current.end ? next.end : current.end,
+                        current.taskId,
+                        current.taskTitle,
+                        current.folderPath,
+                        current.fileName,
+                        current.completed && next.completed,
+                        current.statusText,
+                        current.isOpenInterval || next.isOpenInterval,
+                        current.layer,
+                        current.maxDepth);
+                    continue;
+                }
+
+                result.Add(ToDto(current));
+                current = next;
             }
 
-            merged.Add(ToDto(current));
-            current = next;
+            result.Add(ToDto(current));
         }
 
-        merged.Add(ToDto(current));
-        return merged;
+        return result.OrderBy(s => s.Start.Ticks).ToList();
     }
 
-    private static bool CanMerge(
+    private static bool CanMergePerTask(
         (DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval, int layer, int maxDepth) a,
         (DateTime start, DateTime end, int taskId, string taskTitle, string folderPath, string fileName, bool completed, string statusText, bool isOpenInterval, int layer, int maxDepth) b) =>
         a.taskId == b.taskId
-        && a.end == b.start
+        && b.start <= a.end
         && a.layer == b.layer
         && a.maxDepth == b.maxDepth
-        && a.completed == b.completed
         && a.statusText == b.statusText
-        && a.isOpenInterval == b.isOpenInterval
         && a.taskTitle == b.taskTitle
         && a.folderPath == b.folderPath
         && a.fileName == b.fileName;

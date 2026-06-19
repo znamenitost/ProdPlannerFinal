@@ -4,6 +4,9 @@ import { STATUS_NO_ITEMS, STATUS_PENDING_APPROVAL } from '../constants/taskStatu
 import { getTaskStatusLine, getTaskTitleSlashFile } from '../components/TaskTitleTwoLines';
 import { chrome, tokens } from '../theme/paletteTokens';
 import { getStatusIcon } from './taskHelpers';
+import { mergeWorkSegmentsByTask } from './calendarTimelineMerge';
+
+export { mergeWorkSegmentsByTask };
 
 export const CALENDAR_TOOLTIP_SX = {
   bgcolor: alpha(chrome.tooltipBg, 0.94),
@@ -149,12 +152,13 @@ function getWorkdayEnd(dayDate) {
 
 /** Продлевает открытые work-сегменты до «сейчас» и убирает idle, перекрытый работой. */
 export function extendTimelineToNow(segments, dayDate, now = new Date()) {
-  if (!segments?.length || !isSameCalendarDay(dayDate, now)) return segments;
+  const coalesced = mergeWorkSegmentsByTask(segments);
+  if (!coalesced?.length || !isSameCalendarDay(dayDate, now)) return coalesced;
 
   const workdayEnd = getWorkdayEnd(dayDate);
   const liveEnd = now > workdayEnd ? workdayEnd : now;
 
-  const extendedWork = segments.map((segment) => {
+  const extendedWork = coalesced.map((segment) => {
     if (segment.type !== 'work' || !segment.isOpenInterval) return segment;
     if (liveEnd <= segment.end) return segment;
     return { ...segment, end: liveEnd };

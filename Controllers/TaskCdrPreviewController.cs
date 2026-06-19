@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
+using ProductionPlanner.Data;
+using ProductionPlanner.Services;
 using ProductionPlanner.Services.TaskCdrPreview;
 
 namespace ProductionPlanner.Controllers;
@@ -11,13 +14,22 @@ namespace ProductionPlanner.Controllers;
 public class TaskCdrPreviewController : ControllerBase
 {
     private readonly ITaskCdrPreviewService _previewService;
+    private readonly ICdrPreviewRetryService _retryService;
+    private readonly ITaskNotificationService _notificationService;
+    private readonly ApplicationDbContext _db;
     private readonly ILogger<TaskCdrPreviewController> _logger;
 
     public TaskCdrPreviewController(
         ITaskCdrPreviewService previewService,
+        ICdrPreviewRetryService retryService,
+        ITaskNotificationService notificationService,
+        ApplicationDbContext db,
         ILogger<TaskCdrPreviewController> logger)
     {
         _previewService = previewService;
+        _retryService = retryService;
+        _notificationService = notificationService;
+        _db = db;
         _logger = logger;
     }
 
@@ -58,6 +70,14 @@ public class TaskCdrPreviewController : ControllerBase
 
             await using var stream = file.OpenReadStream();
             await _previewService.SaveAsync(id, stream, sourceKey ?? string.Empty, cancellationToken);
+            await _retryService.ClearRetryAsync(id, cancellationToken);
+
+            var task = await _db.ProductionTasks
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
+            if (task != null)
+                await _notificationService.NotifyTaskUpdatedAsync(task);
+
             return Ok(new { saved = true });
         }
         catch (ArgumentException ex)

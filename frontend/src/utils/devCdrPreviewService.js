@@ -7,6 +7,7 @@ import {
   formatCdrPreviewPostSaveWarning,
   formatCdrPreviewReadError,
   getCdrPathValidationError,
+  isCdrPreviewRetryableFailure,
   shouldAttemptCdrPreviewOnSave
 } from './cdrPreviewErrors';
 
@@ -64,10 +65,10 @@ export async function isTaskCdrFileReadable(folderPath, fileName) {
   }
 }
 
-/** @returns {{ fileFound: boolean, hasCdrPreview: boolean, warning: string|null }} */
+/** @returns {{ fileFound: boolean, hasCdrPreview: boolean, warning: string|null, retryable: boolean }} */
 export async function verifyTaskCdrFileAfterSave(taskId, folderPath, fileName) {
   if (!shouldAttemptCdrPreviewOnSave(folderPath, fileName)) {
-    return { fileFound: false, hasCdrPreview: false, warning: null };
+    return { fileFound: false, hasCdrPreview: false, warning: null, retryable: false };
   }
 
   const pathIssue = getCdrPathValidationError(folderPath, fileName);
@@ -75,29 +76,34 @@ export async function verifyTaskCdrFileAfterSave(taskId, folderPath, fileName) {
     return {
       fileFound: false,
       hasCdrPreview: false,
-      warning: formatCdrPreviewPostSaveWarning(pathIssue)
+      warning: formatCdrPreviewPostSaveWarning(pathIssue),
+      retryable: false
     };
   }
 
   try {
     const preview = await buildTaskCdrPreview(taskId, folderPath, fileName);
     if (preview) {
-      return { fileFound: true, hasCdrPreview: true, warning: null };
+      return { fileFound: true, hasCdrPreview: true, warning: null, retryable: false };
     }
 
     const path = getDevAgentAbsolutePath(folderPath, fileName);
+    const detail = path
+      ? `Не удалось прочитать файл\nФайл: ${path}`
+      : 'Не удалось построить превью';
     return {
       fileFound: false,
       hasCdrPreview: false,
-      warning: formatCdrPreviewPostSaveWarning(
-        path ? `Не удалось прочитать файл\nФайл: ${path}` : 'Не удалось построить превью'
-      )
+      warning: formatCdrPreviewPostSaveWarning(detail),
+      retryable: true
     };
   } catch (previewErr) {
+    const message = previewErr?.message;
     return {
       fileFound: false,
       hasCdrPreview: false,
-      warning: formatCdrPreviewPostSaveWarning(previewErr?.message)
+      warning: formatCdrPreviewPostSaveWarning(message),
+      retryable: isCdrPreviewRetryableFailure(message)
     };
   }
 }

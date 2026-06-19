@@ -283,7 +283,7 @@ public class WeekCalendarService : IWeekCalendarService
         if (intervalsForDay.Count == 0)
             return new List<CalendarTimelineSegmentDto>();
 
-        intervalsForDay = intervalsForDay.OrderBy(i => i.start).ToList();
+        intervalsForDay = CalendarDayWorkLayout.CoalesceIntervalsPerTask(intervalsForDay);
         return CalendarDayWorkLayout.BuildWorkSegments(intervalsForDay, layerByTask, maxDepthByTask);
     }
 
@@ -313,6 +313,7 @@ public class WeekCalendarService : IWeekCalendarService
                 : dayEndTime;
             var dayIntervals = CollectIntervalsForDay(
                 employeeTasks, dayDate, currentDate, dayStartTime, dayEndTime, timelineEnd);
+            dayIntervals = CalendarDayWorkLayout.CoalesceIntervalsPerTask(dayIntervals);
             foreach (var iv in dayIntervals)
                 weekIntervals.Add((iv.start, iv.end, iv.taskId));
         }

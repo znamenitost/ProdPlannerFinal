@@ -76,7 +76,7 @@ export default function PlannedBlocks({
         const highlighted = isHighlighted(block);
         const isFirst = idx === 0;
         const isLast = idx === taskBlocks.length - 1;
-        const blockKey = `planned-${block.taskId ?? idx}`;
+        const blockKey = `planned-${block.taskId ?? 'x'}-${idx}-${block.leftPercent}`;
         return (
           <Tooltip
             key={blockKey}
@@ -121,7 +121,7 @@ export default function PlannedBlocks({
       ))}
       {taskBlocks?.map((block, idx) => {
         const highlighted = isHighlighted(block);
-        const blockKey = `planned-${block.taskId ?? idx}`;
+        const blockKey = `planned-${block.taskId ?? 'x'}-${idx}-${block.leftPercent}`;
         return (
           <Box
             key={`label-${blockKey}`}

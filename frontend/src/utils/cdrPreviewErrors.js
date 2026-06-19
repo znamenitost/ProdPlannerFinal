@@ -136,6 +136,12 @@ export function formatCdrPreviewReadError(rawMessage, filePath = '') {
   return `${message}${pathSuffix}`;
 }
 
+/** Ошибка «файл не найден» — можно повторить позже (задержка синхронизации и т.п.). */
+export function isCdrPreviewRetryableFailure(message) {
+  return isFileNotFoundAgentError(message)
+    || /файл или папка не найден/i.test(String(message || ''));
+}
+
 /** Есть имя файла — при сохранении пытаемся построить превью и показать предупреждение при сбое. */
 export function shouldAttemptCdrPreviewOnSave(_folderPath, fileName) {
   return Boolean(String(fileName || '').trim());

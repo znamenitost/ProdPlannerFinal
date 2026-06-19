@@ -15,6 +15,7 @@ import {
   getDevCdrDefaultFileName
 } from '../../utils/devCdrPreviewConfig';
 import { verifyTaskCdrFileAfterSave } from '../../utils/devCdrPreviewService';
+import { scheduleCdrPreviewRetry } from '../../utils/cdrPreviewRetryApi';
 
 async function applyPostSaveFileStatus({
   taskId,
@@ -30,6 +31,14 @@ async function applyPostSaveFileStatus({
 
   if (status.warning) {
     showWarning(status.warning);
+  }
+
+  if (status.retryable) {
+    try {
+      await scheduleCdrPreviewRetry(taskId);
+    } catch (err) {
+      console.warn('Не удалось запланировать повтор превью:', err?.message || err);
+    }
   }
 
   return status;

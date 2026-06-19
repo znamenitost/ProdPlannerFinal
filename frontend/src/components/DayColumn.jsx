@@ -10,6 +10,7 @@ import {
   extendTimelineToNow,
   getTaskInfoForDeadline,
   getTimelineSegments,
+  mergeWorkSegmentsByTask,
   isSameCalendarDay,
   isWorkingWeekday
 } from '../utils/calendarDayUtils';
@@ -29,7 +30,7 @@ export default function DayColumn({
   const taskBlocksMap = taskBlocksMapProp ?? buildTaskBlocksMap(allDays);
 
   const rawTimelineSegments = useMemo(() => {
-    const base = getTimelineSegments(day.timeline);
+    const base = mergeWorkSegmentsByTask(getTimelineSegments(day.timeline));
     return isToday ? extendTimelineToNow(base, date) : base;
   }, [day.timeline, date, isToday, clockTick]);
   const workSegments = rawTimelineSegments.filter((s) => s.type === 'work');

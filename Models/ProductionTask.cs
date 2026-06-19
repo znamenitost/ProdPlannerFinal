@@ -8,6 +8,7 @@ namespace ProductionPlanner.Models
     [Index(nameof(ParentRowNumber))]
     [Index(nameof(Deadline))]
     [Index(nameof(DisplayOrder))]
+    [Index(nameof(CdrPreviewRetryAt))]
     public class ProductionTask
     {
         [Key]
@@ -86,6 +87,12 @@ namespace ProductionPlanner.Models
         
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+
+        /// <summary>Когда повторно попытаться построить превью .cdr (если файл не был найден).</summary>
+        public DateTime? CdrPreviewRetryAt { get; set; }
+
+        /// <summary>Число неудачных попыток построения превью после сохранения задачи.</summary>
+        public int CdrPreviewRetryAttempts { get; set; }
         
         public string FullPath => string.IsNullOrEmpty(FolderPath) ? FileName : $"{FolderPath}/{FileName}";
         

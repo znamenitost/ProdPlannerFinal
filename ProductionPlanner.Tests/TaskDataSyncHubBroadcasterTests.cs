@@ -29,6 +29,17 @@ public class TaskDataSyncHubBroadcasterTests
     }
 
     [Fact]
+    public void ResolveGroups_CdrPreviewRetryDue_includes_table_viewers()
+    {
+        var groups = TaskDataSyncHubBroadcaster.ResolveGroups(
+            "CdrPreviewRetryDue",
+            []);
+
+        Assert.Single(groups);
+        Assert.Equal(NotificationGroups.TableViewers, groups[0]);
+    }
+
+    [Fact]
     public void ResolveGroups_skips_empty_employee_names()
     {
         var groups = TaskDataSyncHubBroadcaster.ResolveGroups(

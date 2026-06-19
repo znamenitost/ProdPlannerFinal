@@ -28,6 +28,7 @@ public static class WebApplicationExtensions
         services.AddScoped<INotificationInboxService, NotificationInboxService>();
         services.AddScoped<ITaskTableService, TaskTableService>();
         services.AddScoped<ITaskCdrPreviewService, TaskCdrPreviewService>();
+        services.AddScoped<ICdrPreviewRetryService, CdrPreviewRetryService>();
         services.AddScoped<IAppSettingsService, AppSettingsService>();
         services.AddScoped<IAutoAssignSettingsService, AutoAssignSettingsService>();
         services.AddScoped<ITaskTableSortSettingsService, TaskTableSortSettingsService>();
@@ -42,6 +43,7 @@ public static class WebApplicationExtensions
         services.AddHostedService<LoginEmployeesBootstrapHostedService>();
         services.AddScoped<IAppTimeService, AppTimeService>();
         services.AddHostedService<EndOfWorkDayBackgroundService>();
+        services.AddHostedService<CdrPreviewRetryBackgroundService>();
         return services;
     }
 

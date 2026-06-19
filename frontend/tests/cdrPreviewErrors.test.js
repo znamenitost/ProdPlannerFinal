@@ -8,6 +8,7 @@ import {
   getTaskFilePathHint,
   isAgentUnavailableWarning,
   isFileNotFoundAgentError,
+  isCdrPreviewRetryableFailure,
   shouldAttemptCdrPreviewOnSave
 } from '../src/utils/cdrPreviewErrors.js';
 
@@ -112,5 +113,11 @@ describe('cdrPreviewErrors', () => {
   it('passes through agent unavailable without duplicate prefix', () => {
     const agentMsg = formatCdrPreviewReadError('Failed to fetch', '\\\\MINIMARKER\\Клиенты\\test.cdr');
     assert.equal(formatCdrPreviewPostSaveWarning(agentMsg), agentMsg);
+  });
+
+  it('detects retryable file-not-found failures', () => {
+    assert.equal(isCdrPreviewRetryableFailure('file not found'), true);
+    assert.equal(isCdrPreviewRetryableFailure('Файл или папка не найдены.'), true);
+    assert.equal(isCdrPreviewRetryableFailure('Failed to fetch'), false);
   });
 });

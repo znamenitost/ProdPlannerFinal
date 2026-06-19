@@ -45,7 +45,8 @@ public static class PlannedTimeProgressCalculator
     }
 
     /// <summary>
-    /// Плановый % для split-родителя: сумма отработанных часов детей / сумма выделенных часов детей.
+    /// Плановый % для split-родителя: каждый ребёнок заполняет только свою долю полосы
+    /// (estimate/total), внутри доли — не более 100% своего выделенного времени.
     /// </summary>
     public static double GetSplitParentPercent(
         IReadOnlyList<ProductionTask> children,
@@ -62,17 +63,21 @@ public static class PlannedTimeProgressCalculator
         if (children.All(c => c.Status == JobStatus.Completed))
             return 100;
 
-        double totalElapsed = 0;
+        double fraction = 0;
         foreach (var child in children)
         {
+            var estimate = TestPhaseWorkflow.GetActiveEstimateHours(child);
+            if (estimate <= 0)
+                continue;
+
             intervalsByChildId.TryGetValue(child.Id, out var intervals);
             intervals ??= Array.Empty<WorkInterval>();
             var progressIntervals = TestPhaseWorkflow.GetIntervalsForProgress(child, intervals.ToList());
-            totalElapsed += GetElapsedWorkHours(progressIntervals, now);
+            var elapsed = GetElapsedWorkHours(progressIntervals, now);
+            fraction += estimate / totalEstimate * Math.Min(elapsed / estimate, 1.0);
         }
 
-        var percent = totalElapsed / totalEstimate * 100;
-        return Math.Clamp(Math.Round(percent), 0, 100);
+        return Math.Clamp(Math.Round(fraction * 100), 0, 100);
     }
 
     public static bool ShouldShowSplitParent(

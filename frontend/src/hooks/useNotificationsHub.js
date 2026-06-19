@@ -54,6 +54,7 @@ function shouldRefreshCalendar(event) {
  * @param {() => void} [handlers.onTableFallbackRefresh] — полная перезагрузка таблицы, если строка не на экране
  * @param {(event?: { type: string, taskId?: number, affectedEmployees?: string[] }) => void} [handlers.onCalendarRefresh] — календарь / completed
  * @param {() => void} [handlers.onFullRefresh] — reconnect и т.п.
+ * @param {() => void} [handlers.onCdrPreviewRetryDue] — повторный поиск превью .cdr
  * @param {object} [options.viewSubscription] — { activeTab, employee, userFullName, isAdmin }
  */
 export default function useNotificationsHub(user, handlers = {}, options = {}) {
@@ -286,11 +287,17 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       connection.stop().catch((err) => console.error('SignalR forced stop error:', err));
     };
 
+    const handleCdrPreviewRetryDue = () => {
+      if (!isMounted) return;
+      handlersRef.current.onCdrPreviewRetryDue?.();
+    };
+
     connection.on('NewTask', handleNewTask);
     connection.on('TaskDeleted', handleTaskDeleted);
     connection.on('TaskUpdated', handleTaskUpdated);
     connection.on('TaskStatusChanged', handleTaskStatusChanged);
     connection.on('TaskProgressChanged', handleTaskProgressChanged);
+    connection.on('CdrPreviewRetryDue', handleCdrPreviewRetryDue);
     connection.on('ForceDisconnect', handleForceDisconnect);
 
     const startConnection = async () => {
@@ -359,6 +366,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       connection.off('TaskUpdated', handleTaskUpdated);
       connection.off('TaskStatusChanged', handleTaskStatusChanged);
       connection.off('TaskProgressChanged', handleTaskProgressChanged);
+      connection.off('CdrPreviewRetryDue', handleCdrPreviewRetryDue);
       connection.off('ForceDisconnect', handleForceDisconnect);
       connectionRef.current = null;
       prevViewRef.current = null;

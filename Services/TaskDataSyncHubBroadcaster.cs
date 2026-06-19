@@ -23,7 +23,8 @@ public sealed class TaskDataSyncHubBroadcaster : ITaskDataSyncHubBroadcaster, ID
     {
         "TaskUpdated",
         "TaskDeleted",
-        "TaskStatusChanged"
+        "TaskStatusChanged",
+        "CdrPreviewRetryDue"
     };
 
     private static readonly HashSet<string> CalendarSyncMethods = new(StringComparer.Ordinal)

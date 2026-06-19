@@ -50,6 +50,7 @@ import useActiveTasksRefresh from './hooks/useActiveTasksRefresh';
 import useAuth from './hooks/useAuth';
 import useUserPreference from './hooks/useUserPreference';
 import useNotificationsHub from './hooks/useNotificationsHub';
+import useCdrPreviewRetryProcessor from './hooks/useCdrPreviewRetryProcessor';
 import { endLunch, getCurrentLunch, prepareDeploy, startLunch } from './services/api';
 import { avatarDisplayUrl } from './utils/avatarUrl';
 import { detectClientPlatform } from './utils/filePathForOpen';
@@ -86,6 +87,21 @@ function AuthenticatedAppContent() {
   const tableHubHandlerRef = useRef(null);
   const registerTableHubHandler = useCallback((handler) => {
     tableHubHandlerRef.current = handler;
+  }, []);
+
+  const { processPending: processCdrPreviewRetries } = useCdrPreviewRetryProcessor({
+    enabled: Boolean(user?.isAuthenticated)
+  });
+  const processCdrPreviewRetriesRef = useRef(processCdrPreviewRetries);
+  processCdrPreviewRetriesRef.current = processCdrPreviewRetries;
+
+  const handleHubFullRefresh = useCallback(() => {
+    refreshAll();
+    processCdrPreviewRetriesRef.current?.();
+  }, [refreshAll]);
+
+  const handleCdrPreviewRetryDue = useCallback(() => {
+    processCdrPreviewRetriesRef.current?.();
   }, []);
 
   const handleHubTaskEvent = useCallback((event) => {
@@ -134,14 +150,16 @@ function AuthenticatedAppContent() {
       onActiveTasksRefresh: handleHubActiveTasksRefresh,
       onTableFallbackRefresh: handleHubTableFallbackRefresh,
       onCalendarRefresh: handleHubCalendarRefresh,
-      onFullRefresh: refreshAll
+      onFullRefresh: handleHubFullRefresh,
+      onCdrPreviewRetryDue: handleCdrPreviewRetryDue
     }),
     [
       handleHubTaskEventForTab,
       handleHubActiveTasksRefresh,
       handleHubTableFallbackRefresh,
       handleHubCalendarRefresh,
-      refreshAll
+      handleHubFullRefresh,
+      handleCdrPreviewRetryDue
     ]
   );
 

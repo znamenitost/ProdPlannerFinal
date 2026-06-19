@@ -94,6 +94,66 @@ public class PlannedTimeProgressCalculatorTests
     }
 
     [Fact]
+    public void GetSplitParentPercent_WhenFirstChildOvertimeAndSecondNotStarted_CapsAtFirstChildShare()
+    {
+        var children = new List<ProductionTask>
+        {
+            new() { Id = 1, EstimateHours = 2, Status = JobStatus.InProgress },
+            new() { Id = 2, EstimateHours = 3, Status = JobStatus.Assigned }
+        };
+        var now = new DateTime(2026, 5, 22, 16, 0, 0);
+        var intervalsByChild = new Dictionary<int, IReadOnlyList<WorkInterval>>
+        {
+            [1] = new List<WorkInterval>
+            {
+                new()
+                {
+                    StartTime = new DateTime(2026, 5, 22, 11, 0, 0),
+                    EndTime = new DateTime(2026, 5, 22, 16, 0, 0)
+                }
+            }
+        };
+
+        var percent = PlannedTimeProgressCalculator.GetSplitParentPercent(children, intervalsByChild, now);
+
+        Assert.Equal(40, percent, 1);
+    }
+
+    [Fact]
+    public void GetSplitParentPercent_WhenBothStarted_UsesCappedSumOverTotalEstimate()
+    {
+        var children = new List<ProductionTask>
+        {
+            new() { Id = 1, EstimateHours = 2, Status = JobStatus.InProgress },
+            new() { Id = 2, EstimateHours = 3, Status = JobStatus.InProgress }
+        };
+        var now = new DateTime(2026, 5, 22, 13, 30, 0);
+        var intervalsByChild = new Dictionary<int, IReadOnlyList<WorkInterval>>
+        {
+            [1] = new List<WorkInterval>
+            {
+                new()
+                {
+                    StartTime = new DateTime(2026, 5, 22, 11, 0, 0),
+                    EndTime = new DateTime(2026, 5, 22, 12, 0, 0)
+                }
+            },
+            [2] = new List<WorkInterval>
+            {
+                new()
+                {
+                    StartTime = new DateTime(2026, 5, 22, 12, 0, 0),
+                    EndTime = null
+                }
+            }
+        };
+
+        var percent = PlannedTimeProgressCalculator.GetSplitParentPercent(children, intervalsByChild, now);
+
+        Assert.Equal(50, percent, 1);
+    }
+
+    [Fact]
     public void ShouldShowSplitParent_WhenAnyChildStarted_ReturnsTrue()
     {
         var children = new List<ProductionTask>
