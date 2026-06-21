@@ -359,10 +359,19 @@ function AuthenticatedAppContent() {
         <Container maxWidth="xl">
           <Paper sx={{ p: 2, mb: 3, borderRadius: 2.5 }}>
             <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                <Today color="primary" sx={{ fontSize: 36 }} />
-                <Typography variant="h1" component="h1">Mainstream Assistant</Typography>
-              </Box>
+              <Box
+                component="img"
+                src="/sprites/logo.svg"
+                alt="Production Planner"
+                sx={{
+                  height: 36,
+                  width: 'auto',
+                  maxWidth: { xs: 220, sm: 280 },
+                  objectFit: 'contain',
+                  display: 'block',
+                  ml: { md: 1 },
+                }}
+              />
 
               <CurrentDateTime />
 

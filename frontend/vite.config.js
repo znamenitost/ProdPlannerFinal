@@ -6,7 +6,7 @@ import { cpSync, createReadStream, existsSync, mkdirSync, readFileSync } from 'f
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const spritesDir = resolve(__dirname, '../sprites')
-const spriteFiles = ['fon1.svg', 'fon2.svg', 'fon3.svg', 'fon5.svg', 'sun.svg']
+const spriteFiles = ['fon1.svg', 'fon2.svg', 'fon3.svg', 'fon5.svg', 'sun.svg', 'logo.svg']
 
 function buildLoginBootstrapInjection(bootstrapJson) {
   const lines = [
