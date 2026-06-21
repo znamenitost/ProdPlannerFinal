@@ -1,15 +1,31 @@
-/** Обработчики строки таблицы: превью .cdr по удержанию ПКМ. */
+/** ПКМ или Ctrl+клик (macOS) — открыть превью .cdr из БД. */
+export function isCdrPreviewSecondaryClick(event) {
+  if (!event) return false;
+  if (event.button === 2) return true;
+  return event.button === 0 && Boolean(event.ctrlKey);
+}
+
+/** Обработчики строки таблицы: превью .cdr по ПКМ (Windows — удержание, macOS — клик). */
 export function getCdrPreviewRowHandlers({ task, onShowCdrPreview }) {
   if (!onShowCdrPreview) return {};
 
+  let lastTriggerMs = 0;
+
+  const triggerPreview = (event) => {
+    const now = Date.now();
+    if (now - lastTriggerMs < 400) return;
+    lastTriggerMs = now;
+    event.preventDefault();
+    onShowCdrPreview(task, { x: event.clientX, y: event.clientY });
+  };
+
   return {
     onContextMenu: (event) => {
-      event.preventDefault();
+      triggerPreview(event);
     },
     onPointerDownCapture: (event) => {
-      if (event.button !== 2) return;
-      event.preventDefault();
-      onShowCdrPreview(task, { x: event.clientX, y: event.clientY });
+      if (!isCdrPreviewSecondaryClick(event)) return;
+      triggerPreview(event);
     }
   };
 }

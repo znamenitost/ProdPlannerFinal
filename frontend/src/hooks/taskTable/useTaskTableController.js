@@ -14,6 +14,7 @@ import { loadTaskCdrPreview } from '../../utils/devCdrPreviewService';
 import { getCdrPathValidationError } from '../../utils/cdrPreviewErrors';
 import { cdrPreviewCacheKey } from '../../utils/cdrPreviewRowHandlers';
 import { setCdrPreviewBuildHooks, getActiveCdrPreviewBuildTaskIds } from '../../utils/cdrAutoSearch';
+import { detectClientPlatform } from '../../utils/filePathForOpen';
 
 export default function useTaskTableController({
   onCalendarRefresh,
@@ -75,10 +76,13 @@ export default function useTaskTableController({
   const detachCdrPreviewRmbListeners = useCallback(() => {
     const listeners = cdrPreviewRmbListenersRef.current;
     if (!listeners) return;
-    window.removeEventListener('pointerup', listeners.onPointerUp, true);
-    window.removeEventListener('mouseup', listeners.onMouseUp, true);
-    window.removeEventListener('pointermove', listeners.onPointerMove, true);
-    window.removeEventListener('contextmenu', listeners.onContextMenu, true);
+    if (listeners.onPointerUp) window.removeEventListener('pointerup', listeners.onPointerUp, true);
+    if (listeners.onMouseUp) window.removeEventListener('mouseup', listeners.onMouseUp, true);
+    if (listeners.onPointerMove) window.removeEventListener('pointermove', listeners.onPointerMove, true);
+    if (listeners.onPointerDown) window.removeEventListener('pointerdown', listeners.onPointerDown, true);
+    if (listeners.onKeyDown) window.removeEventListener('keydown', listeners.onKeyDown, true);
+    if (listeners.onScroll) window.removeEventListener('scroll', listeners.onScroll, true);
+    if (listeners.onContextMenu) window.removeEventListener('contextmenu', listeners.onContextMenu, true);
     if (listeners.openTimer) window.clearTimeout(listeners.openTimer);
     cdrPreviewRmbListenersRef.current = null;
   }, []);
@@ -164,6 +168,40 @@ export default function useTaskTableController({
       closeAllowed = true;
     }, 0);
 
+    const onContextMenu = (event) => {
+      event.preventDefault();
+    };
+
+    const isMacClient = detectClientPlatform() === 'mac';
+
+    if (isMacClient) {
+      const onPointerDown = (event) => {
+        if (!closeAllowed) return;
+        if (event.button === 0 && !event.ctrlKey) onRelease();
+      };
+
+      const onKeyDown = (event) => {
+        if (event.key === 'Escape') onRelease();
+      };
+
+      const onScroll = () => {
+        if (closeAllowed) onRelease();
+      };
+
+      cdrPreviewRmbListenersRef.current = {
+        onPointerDown,
+        onKeyDown,
+        onScroll,
+        onContextMenu,
+        openTimer
+      };
+      window.addEventListener('pointerdown', onPointerDown, true);
+      window.addEventListener('keydown', onKeyDown, true);
+      window.addEventListener('scroll', onScroll, true);
+      window.addEventListener('contextmenu', onContextMenu, true);
+      return;
+    }
+
     const shouldClose = (event) => {
       if (!closeAllowed) return false;
       if (event.pointerType && event.pointerType !== 'mouse') return false;
@@ -182,10 +220,6 @@ export default function useTaskTableController({
       if (!closeAllowed) return;
       if (event.pointerType && event.pointerType !== 'mouse') return;
       if ((event.buttons & 2) === 0) onRelease();
-    };
-
-    const onContextMenu = (event) => {
-      event.preventDefault();
     };
 
     cdrPreviewRmbListenersRef.current = {
