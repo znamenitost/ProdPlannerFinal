@@ -69,6 +69,8 @@ export function areParentRowPropsEqual(prev, next) {
   if (prev.textLimit !== next.textLimit) return false;
   if (prev.canEdit !== next.canEdit || prev.canDelete !== next.canDelete || prev.canChangeStatus !== next.canChangeStatus) return false;
   if (!sameChildren(prev.childrenTasks, next.childrenTasks)) return false;
+  if ((prev.maxSubscribedTaskIds || []).join(',') !== (next.maxSubscribedTaskIds || []).join(',')) return false;
+  if (prev.maxCanSubscribe !== next.maxCanSubscribe) return false;
   return (
     prev.onToggleExpand === next.onToggleExpand &&
     prev.onOpenFile === next.onOpenFile &&
@@ -116,6 +118,8 @@ export function areChildRowPropsEqual(prev, next) {
   if (prev.sharedGroupParentTask?.supplyMode !== next.sharedGroupParentTask?.supplyMode) return false;
   if (prev.sharedGroupParentTask?.statusText !== next.sharedGroupParentTask?.statusText) return false;
   if (prev.isLastInSharedGroup !== next.isLastInSharedGroup) return false;
+  if (prev.maxSubscribed !== next.maxSubscribed) return false;
+  if (prev.maxCanSubscribe !== next.maxCanSubscribe) return false;
   return (
     prev.onOpenFile === next.onOpenFile &&
     prev.onShowCdrPreview === next.onShowCdrPreview &&

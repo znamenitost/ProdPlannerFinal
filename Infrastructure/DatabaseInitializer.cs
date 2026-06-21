@@ -99,6 +99,7 @@ public static class DatabaseInitializer
             await EnsureLunchIntervalsTableSqliteAsync(connection, logger);
             await EnsureTaskCdrPreviewsTableSqliteAsync(connection, logger);
             await EnsureAppSettingsTableSqliteAsync(connection, logger);
+            await EnsureMaxMessengerTablesSqliteAsync(connection, logger);
             await ApplyPhase2PerformanceIndexesSqliteAsync(connection, logger);
             await connection.CloseAsync();
         }
@@ -239,5 +240,38 @@ public static class DatabaseInitializer
             """;
         await createSettings.ExecuteNonQueryAsync();
         logger.LogInformation("Таблица AppSettings проверена/создана.");
+    }
+
+    private static async Task EnsureMaxMessengerTablesSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS UserMaxLinks (
+                UserId TEXT NOT NULL PRIMARY KEY,
+                MaxUserId INTEGER NOT NULL,
+                IsActive INTEGER NOT NULL DEFAULT 1,
+                LinkedAt TEXT NOT NULL DEFAULT '2024-01-01 00:00:00',
+                FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS IX_UserMaxLinks_MaxUserId ON UserMaxLinks(MaxUserId);
+
+            CREATE TABLE IF NOT EXISTS TaskMaxSubscriptions (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId TEXT NOT NULL,
+                TaskId INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL DEFAULT '2024-01-01 00:00:00'
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_TaskMaxSubscriptions_UserId_TaskId
+                ON TaskMaxSubscriptions(UserId, TaskId);
+            CREATE INDEX IF NOT EXISTS IX_TaskMaxSubscriptions_TaskId ON TaskMaxSubscriptions(TaskId);
+
+            CREATE TABLE IF NOT EXISTS MaxLinkTokens (
+                Code TEXT NOT NULL PRIMARY KEY,
+                UserId TEXT NOT NULL,
+                ExpiresAt TEXT NOT NULL
+            );
+            """;
+        await cmd.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблицы MAX Messenger проверены/созданы.");
     }
 }

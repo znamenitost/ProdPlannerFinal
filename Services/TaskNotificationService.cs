@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Hubs;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services.MaxMessenger;
 
 namespace ProductionPlanner.Services;
 
@@ -12,6 +13,7 @@ public class TaskNotificationService : ITaskNotificationService
     private readonly ITaskDataSyncHubBroadcaster _dataSync;
     private readonly UserManager<User> _userManager;
     private readonly INotificationInboxService _inbox;
+    private readonly IMaxMessengerService _maxMessenger;
     private readonly ILogger<TaskNotificationService> _logger;
 
     public TaskNotificationService(
@@ -19,12 +21,14 @@ public class TaskNotificationService : ITaskNotificationService
         ITaskDataSyncHubBroadcaster dataSync,
         UserManager<User> userManager,
         INotificationInboxService inbox,
+        IMaxMessengerService maxMessenger,
         ILogger<TaskNotificationService> logger)
     {
         _hubContext = hubContext;
         _dataSync = dataSync;
         _userManager = userManager;
         _inbox = inbox;
+        _maxMessenger = maxMessenger;
         _logger = logger;
     }
 
@@ -79,13 +83,24 @@ public class TaskNotificationService : ITaskNotificationService
             taskId,
             AffectedEmployees(employeeNames));
 
-    public Task NotifyStatusChangedAsync(ProductionTask task, string newStatus) =>
-        _dataSync.BroadcastAsync(
+    public async Task NotifyStatusChangedAsync(ProductionTask task, string newStatus)
+    {
+        await _dataSync.BroadcastAsync(
             "TaskStatusChanged",
             AffectedEmployees(task.EmployeeName),
             task.Id,
             newStatus,
             AffectedEmployees(task.EmployeeName));
+
+        try
+        {
+            await _maxMessenger.NotifyTaskStatusChangedAsync(task, newStatus);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "MAX: не удалось отправить уведомление о статусе задачи {TaskId}", task.Id);
+        }
+    }
 
     public Task NotifyProgressChangedAsync(ProductionTask task, double progress)
     {

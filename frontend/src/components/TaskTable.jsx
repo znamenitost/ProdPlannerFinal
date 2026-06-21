@@ -96,7 +96,10 @@ export default function TaskTable({
   onRegisterHubHandler,
   userRole,
   currentUser,
-  selectedEmployeeForHighlight
+  selectedEmployeeForHighlight,
+  maxSubscribedTaskIds = [],
+  maxCanSubscribe = false,
+  onMaxSubscribeToggle
 }) {
   const isAdmin = userRole === 'Admin';
   const tableContainerRef = useRef(null);
@@ -320,6 +323,9 @@ export default function TaskTable({
         textLimit={columnSettings.textLimit}
         showPlannedProgress={showPlannedProgress}
         isCdrPreviewBuilding={table.isCdrPreviewBuilding}
+        maxSubscribedTaskIds={maxSubscribedTaskIds}
+        maxCanSubscribe={maxCanSubscribe}
+        onMaxSubscribeToggle={onMaxSubscribeToggle}
       />
     );
   };

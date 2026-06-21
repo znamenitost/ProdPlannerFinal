@@ -1,4 +1,4 @@
-import { Fragment, memo } from 'react';
+import { Fragment, memo, useMemo } from 'react';
 import { areParentRowPropsEqual } from '../utils/taskTableRowMemo';
 import { getCdrPreviewRowHandlers } from '../utils/cdrPreviewRowHandlers';
 import {
@@ -29,6 +29,7 @@ import EmployeeStatusButtons from './EmployeeStatusButtons';
 import LazyTooltip from './common/LazyTooltip';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import TaskFileNameCell from './taskTable/TaskFileNameCell';
+import TaskMaxSubscribeButton from './taskTable/TaskMaxSubscribeButton';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import { alpha } from '@mui/material/styles';
@@ -79,8 +80,15 @@ function ParentTaskRow({
   columnVisibility,
   textLimit: limit = 23,
   showPlannedProgress = false,
-  isCdrPreviewBuilding = () => false
+  isCdrPreviewBuilding = () => false,
+  maxSubscribedTaskIds = [],
+  maxCanSubscribe = false,
+  onMaxSubscribeToggle
 }) {
+  const maxSubscribedSet = useMemo(
+    () => new Set((maxSubscribedTaskIds || []).map(Number)),
+    [maxSubscribedTaskIds]
+  );
   const hasChildren = task.isSplitTask || (childrenTasks && childrenTasks.length > 0);
   const lifecycleBusy = pendingLifecycleTaskId != null;
 
@@ -277,6 +285,12 @@ function ParentTaskRow({
 
         <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start' }}>
+            <TaskMaxSubscribeButton
+              taskId={task.id}
+              subscribed={maxSubscribedSet.has(task.id)}
+              disabled={!maxCanSubscribe && !maxSubscribedSet.has(task.id)}
+              onToggle={onMaxSubscribeToggle}
+            />
             {canEdit && canDelete && (
               <TaskAdminActionStacks
                 task={task}
@@ -344,6 +358,9 @@ function ParentTaskRow({
           textLimit={limit}
           showPlannedProgress={showPlannedProgress}
           cdrPreviewBuilding={isCdrPreviewBuilding(child.id)}
+          maxSubscribed={maxSubscribedSet.has(child.id)}
+          maxCanSubscribe={maxCanSubscribe}
+          onMaxSubscribeToggle={onMaxSubscribeToggle}
         />
       ))}
     </Fragment>

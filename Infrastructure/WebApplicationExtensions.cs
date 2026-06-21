@@ -9,6 +9,7 @@ using ProductionPlanner.Services.TaskLists;
 using ProductionPlanner.Services.AppSettings;
 using ProductionPlanner.Services.TaskCdrPreview;
 using ProductionPlanner.Services.TaskTable;
+using ProductionPlanner.Services.MaxMessenger;
 
 namespace ProductionPlanner.Infrastructure;
 
@@ -45,6 +46,14 @@ public static class WebApplicationExtensions
         services.AddScoped<IAppTimeService, AppTimeService>();
         services.AddHostedService<EndOfWorkDayBackgroundService>();
         services.AddHostedService<CdrPreviewRetryBackgroundService>();
+
+        services.AddHttpClient<IMaxApiClient, MaxApiClient>(client =>
+        {
+            client.BaseAddress = new Uri("https://platform-api.max.ru/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddScoped<IMaxMessengerService, MaxMessengerService>();
+
         return services;
     }
 

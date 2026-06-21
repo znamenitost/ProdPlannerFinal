@@ -32,6 +32,8 @@ import {
   Restaurant,
   TaskAlt,
   Download,
+  Notifications,
+  LinkOff,
 } from '@mui/icons-material';
 import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
@@ -42,6 +44,8 @@ import TaskTable from './components/TaskTable';
 import LunchBreakOverlay from './components/LunchBreakOverlay';
 import DeployMaintenanceOverlay from './components/DeployMaintenanceOverlay';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
+import MaxLinkDialog from './components/MaxLinkDialog';
+import useMaxMessenger from './hooks/useMaxMessenger';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { UiFeedbackProvider, useUiFeedback } from './context/UiFeedbackContext';
 import { ClockProvider } from './context/ClockContext';
@@ -76,7 +80,10 @@ function AuthenticatedAppContent() {
   const [deployMaintenanceActive, setDeployMaintenanceActive] = useState(false);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [avatarKey, setAvatarKey] = useState(Date.now());
+  const [maxLinkDialogOpen, setMaxLinkDialogOpen] = useState(false);
+  const [maxLinkToken, setMaxLinkToken] = useState(null);
   const fileInputRef = useRef(null);
+  const maxMessenger = useMaxMessenger(user);
   const {
     refreshActiveTasks,
     refreshCalendar,
@@ -276,6 +283,41 @@ function AuthenticatedAppContent() {
     }
   };
 
+  const handleMaxLink = async () => {
+    if (!maxMessenger.linkStatus.botConfigured) {
+      showWarning('MAX-бот не настроен на сервере (MaxBot:AccessToken).');
+      return;
+    }
+    handleCloseUserMenu();
+    setMaxLinkDialogOpen(true);
+    setMaxLinkToken(null);
+    try {
+      const token = await maxMessenger.requestLinkToken();
+      setMaxLinkToken(token);
+    } catch (err) {
+      setMaxLinkDialogOpen(false);
+      showError(err.message || 'Не удалось получить код привязки');
+    }
+  };
+
+  const handleMaxUnlink = async () => {
+    handleCloseUserMenu();
+    try {
+      await maxMessenger.unlink();
+      showSuccess('MAX отвязан');
+    } catch (err) {
+      showError(err.message || 'Не удалось отвязать MAX');
+    }
+  };
+
+  const handleMaxSubscribeToggle = async (taskId, nextSubscribed) => {
+    try {
+      await maxMessenger.toggleTaskSubscription(taskId, nextSubscribed);
+    } catch (err) {
+      showError(err.message || 'Не удалось изменить подписку MAX');
+    }
+  };
+
   const handleStartLunch = async () => {
     if (!targetLunchEmployee || lunchPending) return;
     handleCloseUserMenu();
@@ -450,6 +492,9 @@ function AuthenticatedAppContent() {
                 userRole={user?.role}
                 currentUser={user}
                 selectedEmployeeForHighlight={employee}
+                maxSubscribedTaskIds={maxMessenger.subscribedTaskIds}
+                maxCanSubscribe={maxMessenger.canSubscribe}
+                onMaxSubscribeToggle={handleMaxSubscribeToggle}
               />
             )}
           </MotionSwitch>
@@ -509,6 +554,28 @@ function AuthenticatedAppContent() {
             <ListItemText>Удалить фото</ListItemText>
           </MenuItem>
         )}
+        {maxMessenger.linkStatus.botConfigured && (
+          <>
+            <Divider />
+            {maxMessenger.linkStatus.linked ? (
+              <MenuItem onClick={handleMaxUnlink}>
+                <ListItemIcon><LinkOff fontSize="small" color="primary" /></ListItemIcon>
+                <ListItemText
+                  primary="Отвязать MAX"
+                  secondary="Уведомления о подписках на задачи"
+                />
+              </MenuItem>
+            ) : (
+              <MenuItem onClick={handleMaxLink}>
+                <ListItemIcon><Notifications fontSize="small" color="primary" /></ListItemIcon>
+                <ListItemText
+                  primary="Привязать MAX"
+                  secondary="Получать статус задач в мессенджере"
+                />
+              </MenuItem>
+            )}
+          </>
+        )}
         <Divider />
         <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
           <ListItemIcon><Logout fontSize="small" color="error" /></ListItemIcon>
@@ -536,6 +603,15 @@ function AuthenticatedAppContent() {
           lunchPending={lunchPending}
         />
       )}
+
+      <MaxLinkDialog
+        open={maxLinkDialogOpen}
+        token={maxLinkToken}
+        onClose={() => {
+          setMaxLinkDialogOpen(false);
+          void maxMessenger.refresh();
+        }}
+      />
 
       <PushNotificationSnackbars
         notifications={notifications}

@@ -25,6 +25,7 @@ import TaskStatusCell from './taskTable/TaskStatusCell';
 import ThroughApprovalChip from './taskTable/ThroughApprovalChip';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
+import TaskMaxSubscribeButton from './taskTable/TaskMaxSubscribeButton';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { childRowSx, highlightedTaskRowSx } from '../theme/surfaces';
@@ -57,7 +58,10 @@ function ChildTaskRow({
   columnVisibility,
   textLimit,
   showPlannedProgress = false,
-  cdrPreviewBuilding = false
+  cdrPreviewBuilding = false,
+  maxSubscribed = false,
+  maxCanSubscribe = false,
+  onMaxSubscribeToggle
 }) {
   const supplyMode = getSplitSupplyMode(task, sharedGroupParentTask);
   const isSequentialChild = supplyMode === SUPPLY_MODE_INTERNAL;
@@ -208,6 +212,12 @@ function ChildTaskRow({
 
       <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
+          <TaskMaxSubscribeButton
+            taskId={task.id}
+            subscribed={maxSubscribed}
+            disabled={!maxCanSubscribe && !maxSubscribed}
+            onToggle={onMaxSubscribeToggle}
+          />
           {isAdmin && onEdit && onDelete && (
             <TaskAdminActionStacks
               task={task}

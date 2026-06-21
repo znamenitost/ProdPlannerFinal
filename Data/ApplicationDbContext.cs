@@ -60,6 +60,9 @@ namespace ProductionPlanner.Data
         public DbSet<UserNotification> UserNotifications { get; set; }
         public DbSet<TaskCdrPreview> TaskCdrPreviews { get; set; }
         public DbSet<AppSetting> AppSettings { get; set; }
+        public DbSet<UserMaxLink> UserMaxLinks { get; set; }
+        public DbSet<TaskMaxSubscription> TaskMaxSubscriptions { get; set; }
+        public DbSet<MaxLinkToken> MaxLinkTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -101,6 +104,25 @@ namespace ProductionPlanner.Data
                 entity.ToTable("AppSettings");
                 entity.Property(s => s.Key).HasMaxLength(128);
                 entity.Property(s => s.Json).HasColumnType("text");
+            });
+
+            modelBuilder.Entity<UserMaxLink>(entity =>
+            {
+                entity.ToTable("UserMaxLinks");
+                entity.HasOne(l => l.User)
+                    .WithMany()
+                    .HasForeignKey(l => l.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<TaskMaxSubscription>(entity =>
+            {
+                entity.ToTable("TaskMaxSubscriptions");
+            });
+
+            modelBuilder.Entity<MaxLinkToken>(entity =>
+            {
+                entity.ToTable("MaxLinkTokens");
             });
 
             modelBuilder.Entity<WorkInterval>()

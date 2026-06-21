@@ -1,5 +1,10 @@
 {
   "ConnectionStrings": {
     "DefaultConnection": "Host=postgres82.1gb.ru;Port=5432;Database=xgb_xgb_bdmain;Username=xgb_xgb_bdmain;Password=ВАШ_ПАРОЛЬ;SSL Mode=Disable;Timeout=30;Command Timeout=60"
+  },
+  "MaxBot": {
+    "AccessToken": "ВАШ_ТОКЕН_БОТА_MAX",
+    "WebhookSecret": "случайная_строка_5_256",
+    "BotUsername": "имя_бота_без_@"
   }
 }
