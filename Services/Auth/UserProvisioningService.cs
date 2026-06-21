@@ -43,7 +43,9 @@ public class UserProvisioningService : IUserProvisioningService
 
     public async Task InitializeDefaultUsersAsync()
     {
-        await EnsureAdminAsync("pavel@admin.com", "Павел", "2960040");
+        foreach (var (email, fullName) in AuthAdmins.Accounts)
+            await EnsureAdminAsync(email, fullName, AuthAdmins.DefaultPassword);
+
         await EnsureEmployeeAsync("dima@employee.local", "Дима");
         await EnsureEmployeeAsync("yaromer@employee.local", "Яромир");
         await RemoveUnauthorizedEmployeesAsync();

@@ -23,13 +23,13 @@ import TaskHoursCell from './taskTable/TaskHoursCell';
 import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 import ThroughApprovalChip from './taskTable/ThroughApprovalChip';
+import MaxSubscribeChip from './taskTable/MaxSubscribeChip';
 import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
 import LazyTooltip from './common/LazyTooltip';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import TaskFileNameCell from './taskTable/TaskFileNameCell';
-import TaskMaxSubscribeButton from './taskTable/TaskMaxSubscribeButton';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import { alpha } from '@mui/material/styles';
@@ -280,17 +280,12 @@ function ParentTaskRow({
               label={hasChildren ? displayStatus : undefined}
             />
             <ThroughApprovalChip task={task} childrenTasks={childrenTasks} />
+            {canEdit && <MaxSubscribeChip subscribed={maxSubscribedSet.has(task.id)} />}
           </Box>
         </TableCell>
 
         <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start' }}>
-            <TaskMaxSubscribeButton
-              taskId={task.id}
-              subscribed={maxSubscribedSet.has(task.id)}
-              disabled={!maxCanSubscribe && !maxSubscribedSet.has(task.id)}
-              onToggle={onMaxSubscribeToggle}
-            />
             {canEdit && canDelete && (
               <TaskAdminActionStacks
                 task={task}
@@ -305,6 +300,9 @@ function ParentTaskRow({
                 onComplete={onComplete}
                 onSetStatus={hasChildren ? null : onSetStatus}
                 showWorkflow={!hasChildren}
+                maxSubscribed={maxSubscribedSet.has(task.id)}
+                maxCanSubscribe={maxCanSubscribe}
+                onMaxSubscribeToggle={onMaxSubscribeToggle}
               />
             )}
             {showActionButtons && (

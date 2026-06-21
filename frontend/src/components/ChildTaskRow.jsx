@@ -23,9 +23,9 @@ import TaskHoursCell from './taskTable/TaskHoursCell';
 import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 import ThroughApprovalChip from './taskTable/ThroughApprovalChip';
+import MaxSubscribeChip from './taskTable/MaxSubscribeChip';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
-import TaskMaxSubscribeButton from './taskTable/TaskMaxSubscribeButton';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { childRowSx, highlightedTaskRowSx } from '../theme/surfaces';
@@ -207,17 +207,12 @@ function ChildTaskRow({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
           <TaskStatusCell statusText={task.statusText} />
           <ThroughApprovalChip task={task} />
+          {isAdmin && <MaxSubscribeChip subscribed={maxSubscribed} />}
         </Box>
       </TableCell>
 
       <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
-          <TaskMaxSubscribeButton
-            taskId={task.id}
-            subscribed={maxSubscribed}
-            disabled={!maxCanSubscribe && !maxSubscribed}
-            onToggle={onMaxSubscribeToggle}
-          />
           {isAdmin && onEdit && onDelete && (
             <TaskAdminActionStacks
               task={task}
@@ -232,6 +227,9 @@ function ChildTaskRow({
               onComplete={onComplete}
               onSetStatus={onSetStatus}
               showEdit={false}
+              maxSubscribed={maxSubscribed}
+              maxCanSubscribe={maxCanSubscribe}
+              onMaxSubscribeToggle={onMaxSubscribeToggle}
             />
           )}
           {showActionButtons && (

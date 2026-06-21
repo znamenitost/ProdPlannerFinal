@@ -21,17 +21,20 @@ import {
   parseLoginEmployeesBootstrap,
 } from '../utils/loginEmployeesBootstrap';
 import ParallaxPage from './ParallaxPage';
+import { ADMIN_LOGIN_ACCOUNTS } from '../constants/adminLoginAccounts';
 import './LoginForm.css';
 
 export default function LoginForm({ onLogin }) {
   const [loginType, setLoginType] = useState('employee'); // 'employee' or 'admin'
   const [selectedEmployee, setSelectedEmployee] = useState('Дима');
   const [employees, setEmployees] = useState(() => parseLoginEmployeesBootstrap());
+  const [selectedAdmin, setSelectedAdmin] = useState(ADMIN_LOGIN_ACCOUNTS[0].fullName);
   const [adminPassword, setAdminPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const adminEmail = 'pavel@admin.com';
+  const selectedAdminAccount = ADMIN_LOGIN_ACCOUNTS.find((a) => a.fullName === selectedAdmin)
+    ?? ADMIN_LOGIN_ACCOUNTS[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -114,7 +117,7 @@ export default function LoginForm({ onLogin }) {
       const response = await fetch('/api/auth/login-admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: adminEmail, password: adminPassword }),
+        body: JSON.stringify({ email: selectedAdminAccount.email, password: adminPassword }),
         credentials: 'include'
       });
 
@@ -247,14 +250,69 @@ export default function LoginForm({ onLogin }) {
                     </Box>
                   </>
                 ) : (
-                  <TextField
-                    label="Пароль администратора"
-                    type="password"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    required
-                    fullWidth
-                  />
+                  <>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Выберите администратора:
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 2 }}>
+                      {ADMIN_LOGIN_ACCOUNTS.map((admin) => (
+                        <Card
+                          key={admin.email}
+                          sx={(theme) => ({
+                            flex: '1 1 calc(50% - 8px)',
+                            minWidth: 120,
+                            border: selectedAdmin === admin.fullName
+                              ? `2px solid ${theme.palette.primary.main}`
+                              : `1px solid ${alpha(theme.palette.divider, 1)}`,
+                            bgcolor: selectedAdmin === admin.fullName
+                              ? alpha(theme.palette.primary.main, 0.08)
+                              : alpha('#ffffff', 0.5),
+                            transition: createMuiTransition(theme, [
+                              'box-shadow',
+                              'border-color',
+                              'background-color'
+                            ]),
+                            '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.light }
+                          })}
+                        >
+                          <CardActionArea
+                            onClick={() => setSelectedAdmin(admin.fullName)}
+                            aria-pressed={selectedAdmin === admin.fullName}
+                          >
+                            <CardContent sx={{ textAlign: 'center', py: 2 }}>
+                              <Avatar
+                                sx={{
+                                  width: 56,
+                                  height: 56,
+                                  fontSize: '1.25rem',
+                                  mx: 'auto',
+                                  mb: 1,
+                                  bgcolor: 'warning.light',
+                                  color: 'warning.contrastText'
+                                }}
+                              >
+                                {admin.fullName[0]}
+                              </Avatar>
+                              <Typography
+                                variant="body2"
+                                sx={{ fontWeight: selectedAdmin === admin.fullName ? 600 : 400 }}
+                              >
+                                {admin.fullName}
+                              </Typography>
+                            </CardContent>
+                          </CardActionArea>
+                        </Card>
+                      ))}
+                    </Box>
+                    <TextField
+                      label="Пароль"
+                      type="password"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      required
+                      fullWidth
+                    />
+                  </>
                 )}
                 
                 <Button

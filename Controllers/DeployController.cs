@@ -1,7 +1,10 @@
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using ProductionPlanner.Infrastructure;
+using ProductionPlanner.Models;
+using ProductionPlanner.Services.Auth;
 
 namespace ProductionPlanner.Controllers;
 
@@ -12,16 +15,24 @@ public class DeployController : ControllerBase
 {
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<DeployController> _logger;
+    private readonly UserManager<User> _userManager;
 
-    public DeployController(IWebHostEnvironment environment, ILogger<DeployController> logger)
+    public DeployController(
+        IWebHostEnvironment environment,
+        ILogger<DeployController> logger,
+        UserManager<User> userManager)
     {
         _environment = environment;
         _logger = logger;
+        _userManager = userManager;
     }
 
     [HttpPost("prepare")]
-    public IActionResult PrepareMaintenance()
+    public async Task<IActionResult> PrepareMaintenance()
     {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null || !AuthAdmins.CanPrepareDeploy(user))
+            return Forbid();
         var spritesDir = AppOfflineSpritePaths.Resolve(_environment);
         if (!Directory.Exists(spritesDir))
             return BadRequest(new { message = "Не найдены спрайты для страницы обновления." });

@@ -59,6 +59,7 @@ import { endLunch, getCurrentLunch, prepareDeploy, startLunch } from './services
 import { avatarDisplayUrl } from './utils/avatarUrl';
 import { detectClientPlatform } from './utils/filePathForOpen';
 import { pageShellSx } from './theme/surfaces';
+import { DEPLOY_PREPARE_ADMIN_FULL_NAME } from './constants/adminLoginAccounts';
 import { MotionSwitch } from './components/ui/MotionSection';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -389,6 +390,7 @@ function AuthenticatedAppContent() {
 
   const handleTabChange = (_event, newValue) => setActiveTab(newValue);
   const isAdmin = user?.role === 'Admin';
+  const canPrepareDeploy = isAdmin && user?.fullName === DEPLOY_PREPARE_ADMIN_FULL_NAME;
   const isWindowsClient = detectClientPlatform() === 'Win32';
   const isOnLunchBreak = Boolean(currentLunch);
   const avatarUrl = user?.avatarUrl && user?.id
@@ -432,7 +434,7 @@ function AuthenticatedAppContent() {
                   />
                 )}
                 {isAdmin && <Divider orientation="vertical" flexItem sx={{ height: 30 }} />}
-                {isAdmin && (
+                {canPrepareDeploy && (
                   <Button
                     variant="outlined"
                     startIcon={<SystemUpdateAlt />}

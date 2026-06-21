@@ -18,7 +18,9 @@ import {
   FactCheck,
   Inventory2,
   TaskAlt,
-  AccessTime
+  AccessTime,
+  Notifications,
+  NotificationsActive
 } from '@mui/icons-material';
 import {
   ACTION_RESUME,
@@ -53,7 +55,10 @@ export default function TaskAdminActionStacks({
   onComplete,
   onSetStatus,
   showEdit = true,
-  showWorkflow = true
+  showWorkflow = true,
+  maxSubscribed = false,
+  maxCanSubscribe = false,
+  onMaxSubscribeToggle
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
@@ -162,6 +167,30 @@ export default function TaskAdminActionStacks({
               <AccessTime fontSize="small" />
             </ListItemIcon>
             <ListItemText>Интервалы</ListItemText>
+          </MenuItem>
+        )}
+
+        {onMaxSubscribeToggle && (
+          <MenuItem
+            disabled={!maxCanSubscribe && !maxSubscribed}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleClose();
+              void Promise.resolve(onMaxSubscribeToggle(task.id, !maxSubscribed)).catch((err) => {
+                console.error('Ошибка подписки MAX:', err);
+              });
+            }}
+          >
+            <ListItemIcon>
+              {maxSubscribed ? (
+                <NotificationsActive fontSize="small" />
+              ) : (
+                <Notifications fontSize="small" />
+              )}
+            </ListItemIcon>
+            <ListItemText>
+              {maxSubscribed ? 'Отписаться от MAX' : 'Подписаться на MAX'}
+            </ListItemText>
           </MenuItem>
         )}
 

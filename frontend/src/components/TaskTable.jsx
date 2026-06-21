@@ -323,9 +323,9 @@ export default function TaskTable({
         textLimit={columnSettings.textLimit}
         showPlannedProgress={showPlannedProgress}
         isCdrPreviewBuilding={table.isCdrPreviewBuilding}
-        maxSubscribedTaskIds={maxSubscribedTaskIds}
-        maxCanSubscribe={maxCanSubscribe}
-        onMaxSubscribeToggle={onMaxSubscribeToggle}
+        maxSubscribedTaskIds={isAdmin ? maxSubscribedTaskIds : []}
+        maxCanSubscribe={isAdmin && maxCanSubscribe}
+        onMaxSubscribeToggle={isAdmin ? onMaxSubscribeToggle : undefined}
       />
     );
   };
