@@ -100,6 +100,70 @@ public class TaskSplitRemovalTests
         Assert.Equal(0, report.Checks.First(c => c.Id == "split_child_without_record").Count);
     }
 
+    [Fact]
+    public async Task UpdateSplitAsync_preserves_through_test_second_phase_for_original_employee_child()
+    {
+        await using var provider = BuildServices();
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var splitService = scope.ServiceProvider.GetRequiredService<ITaskSplitService>();
+
+        var testCompletedAt = DateTime.UtcNow.AddHours(-3);
+        var parent = new ProductionTask
+        {
+            DisplayOrder = 1,
+            FolderPath = "C:/clients",
+            FileName = "phase.cdr",
+            Comment = "",
+            Deadline = DateTime.UtcNow.AddDays(1),
+            EstimateHours = 6,
+            Type = "Резка",
+            EmployeeName = "Иван",
+            Status = JobStatus.Approved,
+            IsSplitTask = false,
+            RequiresTestBeforeProduction = true,
+            TestEstimateHours = 2,
+            ProductionEstimateHours = 4,
+            WorkPhase = TaskWorkPhase.Production,
+            TestPhaseCompletedAt = testCompletedAt,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.ProductionTasks.Add(parent);
+        await db.SaveChangesAsync();
+
+        await splitService.UpdateSplitAsync(
+            parent.Id,
+            [
+                new SplitPart
+                {
+                    EmployeeName = "Иван",
+                    TaskType = "Резка",
+                    AllocatedHours = 4,
+                    RequiresTestBeforeProduction = true,
+                    TestEstimateHours = 1.5,
+                    ProductionEstimateHours = 2.5
+                },
+                new SplitPart
+                {
+                    EmployeeName = "Петр",
+                    TaskType = "Сборка",
+                    AllocatedHours = 2
+                }
+            ],
+            SupplyMode.Cooperative);
+
+        var children = await db.ProductionTasks
+            .AsNoTracking()
+            .Where(t => t.ParentRowNumber == parent.Id)
+            .ToListAsync();
+
+        var ivanChild = Assert.Single(children, c => c.EmployeeName == "Иван");
+        Assert.Equal(JobStatus.Approved, ivanChild.Status);
+        Assert.Equal(TaskWorkPhase.Production, ivanChild.WorkPhase);
+        Assert.Equal(testCompletedAt, ivanChild.TestPhaseCompletedAt);
+    }
+
     private static ServiceProvider BuildServices()
     {
         var dbName = $"split-removal-{Guid.NewGuid():N}";

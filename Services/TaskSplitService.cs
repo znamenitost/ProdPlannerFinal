@@ -60,7 +60,7 @@ namespace ProductionPlanner.Services
                 .FirstOrDefaultAsync(t => t.Id == parentTaskId, cancellationToken)
                 ?? parentTask;
 
-            var parentHasWorkHistory = HasWorkHistory(parentWithWork);
+            var parentStateShouldBeMigrated = ShouldCarryParentStateToChild(parentWithWork);
             var workMigratedToChild = false;
 
             var totalAllocated = parts.Sum(p => p.AllocatedHours);
@@ -74,7 +74,7 @@ namespace ProductionPlanner.Services
                 ValidateTestPart(part);
                 var sequenceOrder = part.SequenceOrder > 0 ? part.SequenceOrder : index + 1;
 
-                var migrateParentWork = parentHasWorkHistory
+                var migrateParentWork = parentStateShouldBeMigrated
                     && !workMigratedToChild
                     && ShouldMigratePartFromParent(parentWithWork, part, parts);
 
@@ -539,7 +539,18 @@ namespace ProductionPlanner.Services
             child.Progress = parent.Progress;
             child.ActualHours = parent.ActualHours;
             child.CompletedAt = parent.CompletedAt;
+            if (child.RequiresTestBeforeProduction)
+            {
+                child.WorkPhase = parent.WorkPhase;
+                child.TestPhaseCompletedAt = parent.TestPhaseCompletedAt;
+            }
         }
+
+        private static bool ShouldCarryParentStateToChild(ProductionTask task) =>
+            HasWorkHistory(task)
+            || task.Status is JobStatus.PendingApproval or JobStatus.Approved or JobStatus.InStock
+            || task.WorkPhase is TaskWorkPhase.AwaitingApproval or TaskWorkPhase.Production
+            || task.TestPhaseCompletedAt.HasValue;
 
         private static void ClearParentWorkState(ProductionTask parent)
         {

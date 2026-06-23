@@ -12,14 +12,11 @@ export async function handleTaskTableHubEvent(event, ctx) {
     childrenCache,
     expandedRows,
     api,
-    selectedEmployeeForHighlight,
     patchRow,
     removeRow,
     setChildrenForParent,
     loadChildrenForParent
   } = ctx;
-
-  const employee = selectedEmployeeForHighlight || '';
 
   const isNotFound = (err) => err?.status === 404 || String(err?.message || '').includes('"status":404');
 
@@ -34,7 +31,9 @@ export async function handleTaskTableHubEvent(event, ctx) {
 
   const patchParentIfVisible = async (parentId) => {
     if (!rows.some((r) => r.id === parentId)) return false;
-    const parentDto = await api.fetchTableRow(parentId, employee);
+    // Live table updates should not depend on the selected employee filter.
+    // Otherwise events for other employees can be dropped by backend filtering.
+    const parentDto = await api.fetchTableRow(parentId);
     if (parentDto) patchRow(parentId, parentDto);
     return true;
   };
@@ -66,7 +65,7 @@ export async function handleTaskTableHubEvent(event, ctx) {
 
   if (type === 'TaskStatusChanged' || type === 'TaskProgressChanged' || type === 'TaskUpdated') {
     try {
-      const updated = await api.fetchTableRow(taskId, employee);
+      const updated = await api.fetchTableRow(taskId);
       if (!updated) return false;
 
       const parentId = updated.parentRowNumber;

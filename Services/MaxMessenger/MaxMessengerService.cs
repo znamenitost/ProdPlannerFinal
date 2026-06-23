@@ -165,6 +165,10 @@ public sealed class MaxMessengerService : IMaxMessengerService
         if (!_options.IsConfigured || task.Id <= 0)
             return;
 
+        // MAX subscription notifications are sent only when the task is completed.
+        if (!IsCompletedStatus(newStatus))
+            return;
+
         var statusText = FormatStatusLabel(newStatus);
         if (string.IsNullOrWhiteSpace(statusText))
             return;
@@ -447,6 +451,17 @@ public sealed class MaxMessengerService : IMaxMessengerService
             return TaskStatusMapper.ToText(parsed);
 
         return TaskStatusMapper.ToText(TaskStatusMapper.FromText(newStatus));
+    }
+
+    private static bool IsCompletedStatus(string status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+            return false;
+
+        if (Enum.TryParse<JobStatus>(status, ignoreCase: true, out var parsed))
+            return parsed == JobStatus.Completed;
+
+        return TaskStatusMapper.FromText(status) == JobStatus.Completed;
     }
 
     private static string EscapeMarkdown(string value) =>
