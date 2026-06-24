@@ -10,6 +10,7 @@ namespace ProductionPlanner.Services.Auth;
 public class AuthSessionService : IAuthSessionService
 {
     private const string LoginEmployeesCacheKey = "auth:login-employees";
+    private const string LoginAdminsCacheKey = "auth:login-admins";
     private static readonly TimeSpan LoginEmployeesCacheDuration = TimeSpan.FromMinutes(5);
 
     private readonly SignInManager<User> _signInManager;
@@ -86,6 +87,15 @@ public class AuthSessionService : IAuthSessionService
         }) ?? Array.Empty<LoginEmployeeDto>();
     }
 
+    public async Task<IReadOnlyList<LoginAdminDto>> GetLoginAdminsAsync()
+    {
+        return await _cache.GetOrCreateAsync(LoginAdminsCacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = LoginEmployeesCacheDuration;
+            return await LoadLoginAdminsAsync();
+        }) ?? Array.Empty<LoginAdminDto>();
+    }
+
     public void InvalidateLoginEmployeesCache() => _cache.Remove(LoginEmployeesCacheKey);
 
     private async Task<IReadOnlyList<LoginEmployeeDto>> LoadLoginEmployeesAsync()
@@ -98,6 +108,22 @@ public class AuthSessionService : IAuthSessionService
             {
                 Id = u.Id,
                 FullName = u.FullName,
+                AvatarUrl = u.AvatarUrl
+            })
+            .ToListAsync();
+    }
+
+    private async Task<IReadOnlyList<LoginAdminDto>> LoadLoginAdminsAsync()
+    {
+        return await _userManager.Users
+            .AsNoTracking()
+            .Where(u => u.Role == "Admin" && u.IsActive)
+            .OrderBy(u => u.FullName)
+            .Select(u => new LoginAdminDto
+            {
+                Id = u.Id,
+                FullName = u.FullName,
+                Email = u.Email ?? "",
                 AvatarUrl = u.AvatarUrl
             })
             .ToListAsync();

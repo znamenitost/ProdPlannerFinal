@@ -94,20 +94,36 @@ function ParentTaskRow({
 
   const displayStatus = task.statusText || 'Назначена';
 
+  const hasActiveSubtaskForEmployee = (employeeName) => {
+    if (!employeeName) return false;
+
+    if (Array.isArray(childrenTasks) && childrenTasks.length > 0) {
+      return childrenTasks.some(
+        (child) => child.employeeName === employeeName && child.statusText !== 'Готово'
+      );
+    }
+
+    const splitEmployees = String(task.splitEmployeeNames || '')
+      .split('/')
+      .map((name) => name.trim())
+      .filter(Boolean);
+    return splitEmployees.includes(employeeName);
+  };
+
   // ========== ПОДСВЕТКА ДЛЯ АДМИНИСТРАТОРА И СОТРУДНИКА ==========
   let isMine = false;
 
   if (highlightMyTasks) {
     if (currentUser?.role === 'Admin' && selectedEmployeeForHighlight) {
       if (hasChildren) {
-        isMine = !isExpanded && task.hasCurrentUserSubtask === true;
+        isMine = !isExpanded && hasActiveSubtaskForEmployee(selectedEmployeeForHighlight);
       } else {
         isMine = task.employeeName === selectedEmployeeForHighlight && task.statusText !== 'Готово';
       }
     }
     else if (currentUser?.role !== 'Admin') {
       if (hasChildren) {
-        isMine = !isExpanded && task.hasCurrentUserSubtask === true;
+        isMine = !isExpanded && hasActiveSubtaskForEmployee(currentUser?.fullName);
       } else {
         isMine = task.employeeName === currentUser?.fullName && task.statusText !== 'Готово';
       }

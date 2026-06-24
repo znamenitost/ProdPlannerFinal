@@ -28,12 +28,14 @@ export default function LoginForm({ onLogin }) {
   const [loginType, setLoginType] = useState('employee'); // 'employee' or 'admin'
   const [selectedEmployee, setSelectedEmployee] = useState('Дима');
   const [employees, setEmployees] = useState(() => parseLoginEmployeesBootstrap());
+  const [admins, setAdmins] = useState(() => ADMIN_LOGIN_ACCOUNTS);
   const [selectedAdmin, setSelectedAdmin] = useState(ADMIN_LOGIN_ACCOUNTS[0].fullName);
   const [adminPassword, setAdminPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const selectedAdminAccount = ADMIN_LOGIN_ACCOUNTS.find((a) => a.fullName === selectedAdmin)
+  const selectedAdminAccount = admins.find((a) => a.fullName === selectedAdmin)
+    ?? admins[0]
     ?? ADMIN_LOGIN_ACCOUNTS[0];
 
   useEffect(() => {
@@ -76,6 +78,62 @@ export default function LoginForm({ onLogin }) {
     };
 
     loadEmployees();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const normalizeLoginAdmins = (list) => {
+      if (!Array.isArray(list)) return [];
+
+      return list
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+
+          const fullName = String(item.fullName ?? '').trim();
+          const email = String(item.email ?? '').trim().toLowerCase();
+          if (!fullName || !email) return null;
+
+          return {
+            id: item.id != null ? String(item.id).trim() : '',
+            fullName,
+            email,
+            avatarUrl: typeof item.avatarUrl === 'string' ? item.avatarUrl.trim() : undefined,
+          };
+        })
+        .filter(Boolean);
+    };
+
+    const loadAdmins = async () => {
+      try {
+        const response = await fetch('/api/auth/login-admins', {
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        if (cancelled) return;
+
+        const normalized = normalizeLoginAdmins(payload);
+        if (normalized.length === 0) return;
+
+        setAdmins(normalized);
+        setSelectedAdmin((prev) =>
+          normalized.some((admin) => admin.fullName === prev) ? prev : normalized[0].fullName
+        );
+      } catch {
+        // fallback to static admin list
+      }
+    };
+
+    loadAdmins();
 
     return () => {
       cancelled = true;
@@ -255,7 +313,9 @@ export default function LoginForm({ onLogin }) {
                       Выберите администратора:
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 2 }}>
-                      {ADMIN_LOGIN_ACCOUNTS.map((admin) => (
+                      {admins.map((admin) => {
+                        const avatarSrc = admin.id ? avatarThumbUrl(admin.id) : admin.avatarUrl;
+                        return (
                         <Card
                           key={admin.email}
                           sx={(theme) => ({
@@ -281,6 +341,14 @@ export default function LoginForm({ onLogin }) {
                           >
                             <CardContent sx={{ textAlign: 'center', py: 2 }}>
                               <Avatar
+                                src={avatarSrc}
+                                slotProps={{
+                                  img: {
+                                    loading: 'lazy',
+                                    decoding: 'async',
+                                    fetchpriority: 'low',
+                                  },
+                                }}
                                 sx={{
                                   width: 56,
                                   height: 56,
@@ -302,7 +370,8 @@ export default function LoginForm({ onLogin }) {
                             </CardContent>
                           </CardActionArea>
                         </Card>
-                      ))}
+                        );
+                      })}
                     </Box>
                     <TextField
                       label="Пароль"

@@ -32,6 +32,15 @@ public class AuthController : ControllerBase
         return Ok(employees);
     }
 
+    [HttpGet("login-admins")]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Any)]
+    public async Task<IActionResult> GetLoginAdmins()
+    {
+        var admins = await _authSession.GetLoginAdminsAsync();
+        Response.Headers.CacheControl = "public, max-age=300";
+        return Ok(admins);
+    }
+
     [HttpPost("login-employee")]
     public async Task<IActionResult> LoginEmployee([FromBody] EmployeeLoginRequest request)
     {
