@@ -15,7 +15,8 @@ import {
   CheckCircle,
   FactCheck,
   Inventory2,
-  TaskAlt
+  TaskAlt,
+  LocalFireDepartment
 } from '@mui/icons-material';
 import {
   ACTION_RESUME,
@@ -44,10 +45,12 @@ export default function EmployeeStatusButtons({
   onPause,
   onResume,
   onComplete,
-  onSetStatus
+  onSetStatus,
+  onTogglePriority
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
+  const menuDisabled = pending;
   const statusActionsDisabled = pending || lifecycleBusy;
 
   const status = task.statusText || 'Назначена';
@@ -66,11 +69,18 @@ export default function EmployeeStatusButtons({
 
   const handleOpen = (event) => {
     event.stopPropagation();
-    if (statusActionsDisabled) return;
+    if (menuDisabled) return;
+    event.currentTarget?.blur?.();
     setAnchorEl(event.currentTarget);
   };
 
-  const handleClose = () => setAnchorEl(null);
+  const handleClose = () => {
+    const active = document.activeElement;
+    if (active && typeof active.blur === 'function') {
+      active.blur();
+    }
+    setAnchorEl(null);
+  };
 
   const runWorkflow = (lifecycleAction) => (event) => {
     event?.stopPropagation?.();
@@ -90,11 +100,21 @@ export default function EmployeeStatusButtons({
     });
   };
 
+  const runPriorityMark = (marked) => (event) => {
+    event?.stopPropagation?.();
+    handleClose();
+    if (menuDisabled || !onTogglePriority) return;
+    void Promise.resolve(onTogglePriority(task, marked)).catch((err) => {
+      console.error('Ошибка смены пометки задачи:', err);
+    });
+  };
+
   if (isDone) return null;
 
   const hasWorkflow = canStart || canPause || canResume || canComplete || isInfo;
   const hasInfo = Boolean(onSetStatus);
-  if (!hasWorkflow && !hasInfo) return null;
+  const hasPriorityMark = Boolean(onTogglePriority);
+  if (!hasWorkflow && !hasInfo && !hasPriorityMark) return null;
 
   const infoMenuItems = getInfoMenuItems(status);
 
@@ -105,7 +125,7 @@ export default function EmployeeStatusButtons({
         variant="soft"
         color="primary"
         onClick={handleOpen}
-        disabled={statusActionsDisabled}
+        disabled={menuDisabled}
         aria-label="Действия с задачей"
       >
         {pending ? <CircularProgress size={18} /> : <MoreVert fontSize="small" />}
@@ -157,6 +177,14 @@ export default function EmployeeStatusButtons({
               <CheckCircle fontSize="small" color="primary" />
             </ListItemIcon>
             <ListItemText>{STATUS_COMPLETED}</ListItemText>
+          </MenuItem>
+        )}
+        {hasPriorityMark && (
+          <MenuItem onClick={runPriorityMark(!task?.isPriorityMarked)}>
+            <ListItemIcon>
+              <LocalFireDepartment fontSize="small" color="warning" />
+            </ListItemIcon>
+            <ListItemText>{task?.isPriorityMarked ? 'Убрать пометку' : 'Пометить'}</ListItemText>
           </MenuItem>
         )}
         {hasWorkflow && hasInfo && infoMenuItems.length > 0 && <Divider sx={{ my: 0.5 }} />}

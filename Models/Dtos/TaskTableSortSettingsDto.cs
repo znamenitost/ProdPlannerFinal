@@ -7,4 +7,6 @@ public class TaskTableSortSettingsDto
     public bool CompletedBottomSort { get; set; } = true;
 
     public bool HideCompletedSort { get; set; }
+
+    public bool HideCompletedInSharedSort { get; set; }
 }

@@ -186,4 +186,52 @@ public class SplitTaskStatusAggregatorTests
 
         Assert.Equal(JobStatus.Paused, resolved);
     }
+
+    [Fact]
+    public void AggregatePriorityMarked_false_when_parent_and_children_unmarked()
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Assigned),
+            Child("Яромир", JobStatus.InProgress)
+        };
+
+        Assert.False(SplitTaskStatusAggregator.AggregatePriorityMarked(parent, children));
+    }
+
+    [Fact]
+    public void AggregatePriorityMarked_true_when_any_child_marked()
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Assigned) { IsPriorityMarked = true },
+            Child("Яромир", JobStatus.InProgress)
+        };
+
+        Assert.True(SplitTaskStatusAggregator.AggregatePriorityMarked(parent, children));
+    }
+
+    [Fact]
+    public void AggregatePriorityMarked_true_when_parent_marked()
+    {
+        var parent = Parent();
+        parent.IsPriorityMarked = true;
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Assigned)
+        };
+
+        Assert.True(SplitTaskStatusAggregator.AggregatePriorityMarked(parent, children));
+    }
+
+    [Fact]
+    public void AggregatePriorityMarked_uses_parent_flag_when_children_not_loaded()
+    {
+        var parent = Parent();
+        parent.IsPriorityMarked = true;
+
+        Assert.True(SplitTaskStatusAggregator.AggregatePriorityMarked(parent, null));
+    }
 }

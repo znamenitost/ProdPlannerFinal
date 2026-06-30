@@ -74,6 +74,23 @@ function filterCompletedRows(rows, hideCompleted) {
   return rows.filter((row) => !isCompletedRow(row));
 }
 
+function prepareParentChildren({
+  parent,
+  childrenCache,
+  sortOptions,
+  allowedChildIds,
+  hideCompletedInSharedSort
+}) {
+  let children = sortRowsWithStableOrder(childrenCache.get(parent.id) || [], sortOptions);
+  if (allowedChildIds) {
+    children = children.filter((child) => allowedChildIds.has(child.id));
+  }
+  if (hideCompletedInSharedSort && parent.isSplitTask && !isCompletedRow(parent)) {
+    children = children.filter((child) => !isCompletedRow(child));
+  }
+  return children;
+}
+
 function hasProgressFooter(row, showPlannedProgressEnabled) {
   return hasPlannedProgressFooter(row, showPlannedProgressEnabled);
 }
@@ -113,7 +130,9 @@ export default function TaskTable({
     completedBottomSort,
     setCompletedBottomSort,
     hideCompletedSort,
-    setHideCompletedSort
+    setHideCompletedSort,
+    hideCompletedInSharedSort,
+    setHideCompletedInSharedSort
   } = useTaskTableSortSettings(currentUser);
   const [searchQuery, setSearchQuery] = useUserPreference(currentUser, 'taskTable.searchQuery', '');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
@@ -188,6 +207,21 @@ export default function TaskTable({
     return () => window.clearTimeout(timer);
   }, [debouncedSearchQuery, table.rows, table.loadChildrenForParent]);
 
+  useEffect(() => {
+    if (!hideCompletedInSharedSort) return undefined;
+    if (visibleRows.length === 0) return undefined;
+
+    const timer = window.setTimeout(() => {
+      visibleRows
+        .filter((row) => row.isSplitTask)
+        .forEach((row) => {
+          table.loadChildrenForParent(row.id);
+        });
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [hideCompletedInSharedSort, visibleRows, table.loadChildrenForParent]);
+
   const tableColSpan = taskTableColumnCount(
     columnSettings.visibility,
     table.showHoursTypeColumns
@@ -197,11 +231,21 @@ export default function TaskTable({
     (index) => {
       const row = visibleRows[index];
       if (!row) return ROW_GROUP_BASE_HEIGHT;
-      if (table.editingId === row.id) return EDIT_ROW_HEIGHT;
 
-      const children = table.childrenCache.get(row.id) || [];
-      const hasChildren = row.isSplitTask || children.length > 0;
-      const parentFooter = hasProgressFooter(row, showPlannedProgress) ? ROW_PROGRESS_HEIGHT : 0;
+      const allowedChildIds = searchResult.childrenFilter?.get(row.id);
+      const children = prepareParentChildren({
+        parent: row,
+        childrenCache: table.childrenCache,
+        sortOptions,
+        allowedChildIds,
+        hideCompletedInSharedSort
+      });
+      const shouldPromoteSingleChild =
+        hideCompletedInSharedSort && row.isSplitTask && !isCompletedRow(row) && children.length === 1;
+      const displayTask = shouldPromoteSingleChild ? children[0] : row;
+      if (table.editingId === displayTask.id) return EDIT_ROW_HEIGHT;
+      const hasChildren = !shouldPromoteSingleChild && (row.isSplitTask || children.length > 0);
+      const parentFooter = hasProgressFooter(displayTask, showPlannedProgress) ? ROW_PROGRESS_HEIGHT : 0;
 
       if (!hasChildren || !table.expandedRows.has(row.id)) {
         return ROW_GROUP_BASE_HEIGHT + parentFooter;
@@ -215,7 +259,16 @@ export default function TaskTable({
 
       return ROW_GROUP_BASE_HEIGHT + parentFooter + childrenHeight;
     },
-    [table.childrenCache, table.editingId, table.expandedRows, visibleRows, showPlannedProgress]
+    [
+      hideCompletedInSharedSort,
+      searchResult.childrenFilter,
+      showPlannedProgress,
+      sortOptions,
+      table.childrenCache,
+      table.editingId,
+      table.expandedRows,
+      visibleRows
+    ]
   );
 
   const shouldVirtualize = visibleRows.length > 30;
@@ -272,20 +325,26 @@ export default function TaskTable({
       : 0;
 
   const renderTaskRow = (parent) => {
-    let children = sortRowsWithStableOrder(
-      table.childrenCache.get(parent.id) || [],
-      sortOptions
-    );
     const allowedChildIds = searchResult.childrenFilter?.get(parent.id);
-    if (allowedChildIds) {
-      children = children.filter((child) => allowedChildIds.has(child.id));
-    }
+    const children = prepareParentChildren({
+      parent,
+      childrenCache: table.childrenCache,
+      sortOptions,
+      allowedChildIds,
+      hideCompletedInSharedSort
+    });
+    const shouldPromoteSingleChild =
+      hideCompletedInSharedSort && parent.isSplitTask && !isCompletedRow(parent) && children.length === 1;
+    const displayTask = shouldPromoteSingleChild
+      ? { ...children[0], isSplitTask: false }
+      : parent;
+    const displayChildren = shouldPromoteSingleChild ? [] : children;
     const isExpanded = table.expandedRows.has(parent.id)
-      || searchResult.autoExpandIds.has(parent.id);
-    return table.editingId === parent.id ? (
+      || (searchResult.autoExpandIds.has(parent.id) && !shouldPromoteSingleChild);
+    return table.editingId === displayTask.id ? (
       <EditTaskRow
-        key={parent.id}
-        task={parent}
+        key={`edit-${displayTask.id}`}
+        task={displayTask}
         onUpdate={table.handleUpdateRow}
         onCancel={() => table.setEditingId(null)}
         onOpenAssigneeModal={table.handleOpenAssigneeModal}
@@ -295,11 +354,11 @@ export default function TaskTable({
       />
     ) : (
       <ParentTaskRow
-        key={parent.id}
-        task={parent}
-        childrenTasks={children}
+        key={displayTask.id}
+        task={displayTask}
+        childrenTasks={displayChildren}
         isExpanded={isExpanded}
-        onToggleExpand={table.toggleExpand}
+        onToggleExpand={shouldPromoteSingleChild ? () => {} : table.toggleExpand}
         onOpenFile={table.handleOpenFile}
         onShowCdrPreview={DEV_CDR_PREVIEW_ENABLED ? table.handleShowCdrPreview : undefined}
         onStart={table.handleStartTask}
@@ -307,6 +366,7 @@ export default function TaskTable({
         onResume={table.handleResumeTask}
         onComplete={table.handleCompleteTask}
         onSetStatus={table.handleSetStatus}
+        onTogglePriority={table.handleTogglePriority}
         pendingLifecycleTaskId={table.pendingLifecycleTaskId}
         onEdit={table.handleEditRow}
         onDelete={table.handleDeleteRow}
@@ -355,6 +415,8 @@ export default function TaskTable({
         onCompletedBottomSortChange={setCompletedBottomSort}
         hideCompletedSort={hideCompletedSort}
         onHideCompletedSortChange={setHideCompletedSort}
+        hideCompletedInSharedSort={hideCompletedInSharedSort}
+        onHideCompletedInSharedSortChange={setHideCompletedInSharedSort}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         showPlannedProgress={plannedProgressPref.showPlannedProgress}

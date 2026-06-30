@@ -113,6 +113,10 @@ export default function SplitTaskModal({
   onSuccess,
   onDraftApply
 }) {
+  const selectMenuProps = useMemo(
+    () => ({ disablePortal: true }),
+    []
+  );
   const { user } = useAuth();
   const {
     autoAssignEnabled,
@@ -593,6 +597,7 @@ export default function SplitTaskModal({
                     autoWidth
                     value={part.employeeName || ''}
                     label="Сотрудник"
+                    MenuProps={selectMenuProps}
                     disabled={employeeLocked}
                     renderValue={(selected) => selected || part.employeeName || ''}
                     onChange={(e) => updatePart(idx, 'employeeName', e.target.value)}
@@ -639,6 +644,7 @@ export default function SplitTaskModal({
                     multiple
                     value={part.taskTypes}
                     label="Тип работы"
+                    MenuProps={selectMenuProps}
                     disabled={taskTypesLocked}
                     open={
                       employeeLocked

@@ -1,0 +1,44 @@
+---
+description: Редактирование задач в таблице, смена сотрудника, удаление, права Admin vs Employee
+globs: "**/{TaskTable*,ProductionTasksController,useTaskTable*,ParentTaskRow,ChildTaskRow,SplitTask*}*"
+alwaysApply: false
+---
+
+# Редактирование задач
+
+## Admin
+- `POST/DELETE /table/row`, reorder — только Admin.
+- `PUT /table/row/{id}` — любые поля: путь, файл, комментарий, дедлайн, часы, тип, сотрудник, статус.
+- Просмотр от имени сотрудника: query `employee=`.
+
+## Сотрудник
+- `PUT /table/row/{id}` — **только StatusText** (+ SequenceOverride); остальное сервер берёт из текущей записи.
+- Разрешённые статусы: PendingApproval, NoItems, Approved, InStock, Assigned+SequenceOverride.
+- Только свои задачи (`EmployeeName` или `HasCurrentUserSubtask`).
+
+## Смена статуса через PUT (TaskTableService)
+- Инфостатус закрывает открытые интервалы.
+- Готово через PUT → `CompleteTaskAsync`, не просто запись.
+- Из инфостатуса в Готово: сброс в Assigned, затем complete.
+- Инфостатусы на split-parent запрещены.
+
+## Смена сотрудника (admin)
+| Состояние | Действие |
+|-----------|----------|
+| Completed | Reattribute: та же запись, перенос saved hours |
+| Есть история (интервалы / InProgress / Paused) | Clone: старую завершить, новую Assigned без истории |
+| Без истории | Смена EmployeeName |
+| Часть split | Только через модалку разделения |
+
+## Удаление (admin)
+Была работа → soft-complete + hide from table. Без истории → физическое удаление. Split-parent: дети с историей отсоединяются и завершаются.
+
+## Редактирование сплита (модалка, TaskSplitService)
+Те же инварианты, что при удалении из таблицы: **не оставлять** `ProductionTasks` с `ParentRowNumber` без строки в `TaskSplits` («призраки»).
+
+| Ситуация | Действие |
+|----------|----------|
+| Убрана подзадача без истории (`Assigned`/`Waiting`, без часов) | Физическое удаление + снос `TaskSplits` по `ChildTaskId` |
+| Убрана начатая / с историей (интервалы, InProgress, Paused, Completed) | `CompleteTaskAsync` (если ещё не Готово) → `HideTaskFromTableAsync` (если была работа) → `DetachTasksFromSplitAsync` |
+| Сведение общей задачи к одному исполнителю (`ConvertToRegularTaskAsync`) | Лишние дети — по таблице выше; **только у оставляемой** дочери интервалы переносятся на родителя (`ProductionTaskId`), затем дочерняя строка удаляется |
+| Интервалы | На родителя **не** переносятся при простом убирании этапа из сплита; merge интервалов — только при явном сведении к одной задаче для выбранной дочери |

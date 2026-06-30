@@ -355,8 +355,7 @@ export default function LoginForm({ onLogin }) {
                                   fontSize: '1.25rem',
                                   mx: 'auto',
                                   mb: 1,
-                                  bgcolor: 'warning.light',
-                                  color: 'warning.contrastText'
+                                  bgcolor: 'primary.light'
                                 }}
                               >
                                 {admin.fullName[0]}

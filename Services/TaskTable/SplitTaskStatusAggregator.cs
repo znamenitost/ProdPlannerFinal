@@ -76,4 +76,17 @@ public static class SplitTaskStatusAggregator
 
         return (statusText, hasCurrentUserSubtask);
     }
+
+    public static bool AggregatePriorityMarked(
+        ProductionTask parent,
+        IReadOnlyList<ProductionTask>? children)
+    {
+        if (parent.IsPriorityMarked)
+            return true;
+
+        if (!parent.IsSplitTask || children is not { Count: > 0 })
+            return parent.IsPriorityMarked;
+
+        return children.Any(c => c.IsPriorityMarked);
+    }
 }

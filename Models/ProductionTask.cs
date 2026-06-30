@@ -55,6 +55,7 @@ namespace ProductionPlanner.Models
         }
         
         public JobStatus Status { get; set; }
+        public bool IsPriorityMarked { get; set; }
         public double Progress { get; set; }
         public double ActualHours { get; set; }
         public DateTime? CompletedAt { get; set; }

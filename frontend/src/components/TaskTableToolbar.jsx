@@ -33,6 +33,8 @@ export default function TaskTableToolbar({
   onCompletedBottomSortChange,
   hideCompletedSort,
   onHideCompletedSortChange,
+  hideCompletedInSharedSort,
+  onHideCompletedInSharedSortChange,
   searchQuery,
   onSearchQueryChange,
   showPlannedProgress,
@@ -111,6 +113,7 @@ export default function TaskTableToolbar({
             aria-label="Сортировка таблицы задач"
             sx={
               deadlineSort || completedBottomSort || hideCompletedSort
+              || hideCompletedInSharedSort
                 ? { border: '1px solid', borderColor: 'primary.main' }
                 : undefined
             }
@@ -154,6 +157,16 @@ export default function TaskTableToolbar({
               sx={{ pointerEvents: 'none' }}
             />
             <ListItemText primary="Готовые не показывать" />
+          </MenuItem>
+          <MenuItem onClick={() => onHideCompletedInSharedSortChange(!hideCompletedInSharedSort)}>
+            <Checkbox
+              size="small"
+              checked={hideCompletedInSharedSort}
+              disableRipple
+              tabIndex={-1}
+              sx={{ pointerEvents: 'none' }}
+            />
+            <ListItemText primary="Скрыть готовые в общих" />
           </MenuItem>
         </Menu>
         <TaskTableColumnSettings

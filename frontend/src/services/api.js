@@ -149,6 +149,7 @@ export function buildTaskUpdatePayload(task, employeeName, statusText, extra) {
     employeeName: task.employeeName ?? employeeName ?? '',
     parentRowNumber: task.parentRowNumber ?? null,
     statusText: statusText ?? task.statusText,
+    priorityMarked: extra?.priorityMarked ?? task.isPriorityMarked ?? null,
     sequenceOverride: extra?.sequenceOverride ?? false,
     expectedUpdatedAt: task.updatedAt ?? null
   };
@@ -170,6 +171,7 @@ export async function updateTaskRow(id, rowData) {
       employeeName: rowData.employeeName,
       parentRowNumber: rowData.parentRowNumber,
       statusText: rowData.statusText,
+      priorityMarked: rowData.priorityMarked ?? null,
       sequenceOverride: rowData.sequenceOverride ?? false,
       expectedUpdatedAt: rowData.expectedUpdatedAt ?? null
     })

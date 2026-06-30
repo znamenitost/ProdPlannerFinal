@@ -23,6 +23,7 @@ import TaskHoursCell from './taskTable/TaskHoursCell';
 import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 import ThroughApprovalChip from './taskTable/ThroughApprovalChip';
+import TaskPriorityChip from './taskTable/TaskPriorityChip';
 import MaxSubscribeChip from './taskTable/MaxSubscribeChip';
 import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
@@ -65,6 +66,7 @@ function ParentTaskRow({
   onResume,
   onComplete,
   onSetStatus,
+  onTogglePriority,
   pendingLifecycleTaskId = null,
   onEdit,
   onDelete,
@@ -296,6 +298,7 @@ function ParentTaskRow({
               label={hasChildren ? displayStatus : undefined}
             />
             <ThroughApprovalChip task={task} childrenTasks={childrenTasks} />
+            <TaskPriorityChip task={task} childrenTasks={childrenTasks} />
             {canEdit && <MaxSubscribeChip subscribed={maxSubscribedSet.has(task.id)} />}
           </Box>
         </TableCell>
@@ -315,6 +318,7 @@ function ParentTaskRow({
                 onResume={onResume}
                 onComplete={onComplete}
                 onSetStatus={hasChildren ? null : onSetStatus}
+                onTogglePriority={hasChildren ? null : onTogglePriority}
                 showWorkflow={!hasChildren}
                 maxSubscribed={maxSubscribedSet.has(task.id)}
                 maxCanSubscribe={maxCanSubscribe}
@@ -331,6 +335,7 @@ function ParentTaskRow({
                 onResume={onResume}
                 onComplete={onComplete}
                 onSetStatus={onSetStatus}
+                onTogglePriority={onTogglePriority}
               />
             )}
           </Box>
@@ -357,6 +362,7 @@ function ParentTaskRow({
           onResume={onResume}
           onComplete={onComplete}
           onSetStatus={onSetStatus}
+          onTogglePriority={onTogglePriority}
           pendingLifecycleTaskId={pendingLifecycleTaskId}
           onEdit={onEdit}
           onDelete={onDelete}

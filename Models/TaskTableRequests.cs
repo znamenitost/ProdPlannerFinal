@@ -106,6 +106,7 @@ public class UpdateTaskRequest
 
     public int? ParentRowNumber { get; set; }
     public string? StatusText { get; set; }
+    public bool? PriorityMarked { get; set; }
 
     /// <summary>Ручной обход очереди этапов (Waiting → Assigned).</summary>
     public bool SequenceOverride { get; set; }

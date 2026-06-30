@@ -19,6 +19,7 @@ import {
   Inventory2,
   TaskAlt,
   AccessTime,
+  LocalFireDepartment,
   Notifications,
   NotificationsActive
 } from '@mui/icons-material';
@@ -54,6 +55,7 @@ export default function TaskAdminActionStacks({
   onResume,
   onComplete,
   onSetStatus,
+  onTogglePriority,
   showEdit = true,
   showWorkflow = true,
   maxSubscribed = false,
@@ -63,6 +65,7 @@ export default function TaskAdminActionStacks({
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
   const statusWorkflowDisabled = pending || lifecycleBusy;
+  const priorityMarkDisabled = pending;
 
   const status = task?.statusText || 'Назначена';
   const isDone = status === STATUS_COMPLETED;
@@ -74,10 +77,17 @@ export default function TaskAdminActionStacks({
 
   const handleOpen = (event) => {
     event.stopPropagation();
+    event.currentTarget?.blur?.();
     setAnchorEl(event.currentTarget);
   };
 
-  const handleClose = () => setAnchorEl(null);
+  const handleClose = () => {
+    const active = document.activeElement;
+    if (active && typeof active.blur === 'function') {
+      active.blur();
+    }
+    setAnchorEl(null);
+  };
 
   const canStart = !isStarted && !isPaused;
   const canPause = isStarted;
@@ -101,6 +111,15 @@ export default function TaskAdminActionStacks({
     if (statusWorkflowDisabled || !onSetStatus) return;
     void Promise.resolve(onSetStatus(task, statusText)).catch((err) => {
       console.error('Ошибка смены статуса задачи:', err);
+    });
+  };
+
+  const runPriorityMark = (marked) => (event) => {
+    event.stopPropagation();
+    handleClose();
+    if (priorityMarkDisabled || !onTogglePriority) return;
+    void Promise.resolve(onTogglePriority(task, marked)).catch((err) => {
+      console.error('Ошибка смены пометки задачи:', err);
     });
   };
 
@@ -190,6 +209,19 @@ export default function TaskAdminActionStacks({
             </ListItemIcon>
             <ListItemText>
               {maxSubscribed ? 'Отписаться от MAX' : 'Подписаться на MAX'}
+            </ListItemText>
+          </MenuItem>
+        )}
+        {onTogglePriority && (
+          <MenuItem
+            disabled={priorityMarkDisabled}
+            onClick={runPriorityMark(!task?.isPriorityMarked)}
+          >
+            <ListItemIcon>
+              <LocalFireDepartment fontSize="small" color="warning" />
+            </ListItemIcon>
+            <ListItemText>
+              {task?.isPriorityMarked ? 'Убрать пометку' : 'Пометить'}
             </ListItemText>
           </MenuItem>
         )}

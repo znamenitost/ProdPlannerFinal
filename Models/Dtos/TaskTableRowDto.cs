@@ -12,6 +12,7 @@ public class TaskTableRowDto
     public string Comment { get; set; } = "";
     public string StatusText { get; set; } = "";
     public JobStatus Status { get; set; }
+    public bool IsPriorityMarked { get; set; }
     public DateTime Deadline { get; set; }
     public double EstimateHours { get; set; }
     public string Type { get; set; } = "";
@@ -87,6 +88,7 @@ public class TaskTableRowDto
             Comment = parent.Comment,
             StatusText = statusText,
             Status = parent.Status,
+            IsPriorityMarked = SplitTaskStatusAggregator.AggregatePriorityMarked(parent, children),
             Deadline = parent.Deadline,
             EstimateHours = parent.EstimateHours,
             Type = parent.Type,

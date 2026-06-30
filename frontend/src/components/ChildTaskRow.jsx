@@ -23,6 +23,7 @@ import TaskHoursCell from './taskTable/TaskHoursCell';
 import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 import ThroughApprovalChip from './taskTable/ThroughApprovalChip';
+import TaskPriorityChip from './taskTable/TaskPriorityChip';
 import MaxSubscribeChip from './taskTable/MaxSubscribeChip';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
@@ -44,6 +45,7 @@ function ChildTaskRow({
   onResume,
   onComplete,
   onSetStatus,
+  onTogglePriority,
   pendingLifecycleTaskId = null,
   onEdit,
   onDelete,
@@ -207,6 +209,7 @@ function ChildTaskRow({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
           <TaskStatusCell statusText={task.statusText} />
           <ThroughApprovalChip task={task} />
+          <TaskPriorityChip task={task} />
           {isAdmin && <MaxSubscribeChip subscribed={maxSubscribed} />}
         </Box>
       </TableCell>
@@ -226,6 +229,7 @@ function ChildTaskRow({
               onResume={onResume}
               onComplete={onComplete}
               onSetStatus={onSetStatus}
+              onTogglePriority={onTogglePriority}
               showEdit={false}
               maxSubscribed={maxSubscribed}
               maxCanSubscribe={maxCanSubscribe}
@@ -242,6 +246,7 @@ function ChildTaskRow({
             onResume={onResume}
             onComplete={onComplete}
             onSetStatus={onSetStatus}
+            onTogglePriority={onTogglePriority}
           />
           )}
         </Box>

@@ -31,7 +31,8 @@ public class TaskTableSortSettingsServiceTests
         {
             DeadlineSort = true,
             CompletedBottomSort = false,
-            HideCompletedSort = true
+            HideCompletedSort = true,
+            HideCompletedInSharedSort = true
         };
 
         await svc.SaveForUserAsync("user-1", payload);
@@ -43,6 +44,7 @@ public class TaskTableSortSettingsServiceTests
         Assert.True(user1!.DeadlineSort);
         Assert.False(user1.CompletedBottomSort);
         Assert.True(user1.HideCompletedSort);
+        Assert.True(user1.HideCompletedInSharedSort);
         Assert.False(user2!.DeadlineSort);
     }
 

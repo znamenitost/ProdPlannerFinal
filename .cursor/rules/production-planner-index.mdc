@@ -1,0 +1,10 @@
+---
+description: Указатель на бизнес-правила ProductionPlanner
+alwaysApply: true
+---
+
+# ProductionPlanner
+
+Детальная логика задач — в project rules `task-lifecycle`, `task-table-edit`, `task-intervals` (подтягиваются по globs или описанию).
+
+Источник истины на бэкенде: `TaskLifecycleService`, `TaskTableService`. Не дублировать lifecycle на фронте.

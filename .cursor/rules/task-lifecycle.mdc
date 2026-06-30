@@ -1,0 +1,43 @@
+---
+description: Статусы задач, lifecycle (start/pause/resume/complete), инфостатусы, последовательные этапы, роли Admin/Employee
+globs: "**/{TaskLifecycle*,TaskStatusMapper,SupplyWorkflow,ActiveTasks*,EmployeeStatus*,TaskAdminAction*,infoStatusWorkflow,supplyStatusWorkflow,taskStatuses}*"
+alwaysApply: false
+---
+
+# Lifecycle и статусы
+
+Тексты статусов = `TaskStatusMapper` / `frontend/src/constants/taskStatuses.js`.
+
+## Workflow
+`Назначена | Согласовано | В наличии` → **Начал** → **Пауза** ↔ **Начал** → **Готово**.
+
+- **Готово** только после **Начал** (или из **Пауза**).
+- **Progress > 0** у Assigned/Approved/InStock → авто `StartTaskAsync`.
+- **Return** (admin): Готово → Назначена, progress=0.
+
+## Инфостатусы (блокируют workflow)
+| Сотрудник ставит | Снимает блок |
+|------------------|--------------|
+| Согласование | Согласовано (только из Согласование) |
+| Нет изделий | В наличии (только из Нет изделий) |
+
+UI перед действием: `runWorkflowWithInfoGuard` / `runWorkflowWithSequenceGuard`.
+
+## Последовательное производство (InternalProduction)
+- Этап order>1 → **Ожидание**; старт после завершения предыдущего.
+- Обход: `Assigned` + `SequenceOverride=true` только из **Ожидание**.
+- Approved/InStock при незавершённых предыдущих этапах → **Ожидание** (без override).
+
+## Split-parent
+Инфостатусы только на дочерних/обычных. Статус родителя из детей: все Готово → Готово; есть Готово/Начал/Пауза → Начал; иначе Назначена.
+
+## Роли — lifecycle API
+- **Сотрудник:** `POST /tasks/{id}/start|pause|resume|complete|progress` — только свои задачи (UI + PUT ограничения).
+- **Admin:** те же эндпоинты + query `employee=` для контекста сотрудника.
+
+## Переходы (TaskLifecycleService)
+- **Start:** Assigned/Approved/InStock → InProgress + новый WorkInterval.
+- **Pause:** InProgress → Paused, закрыть интервал.
+- **Resume:** Paused → InProgress + новый интервал.
+- **Complete:** закрыть интервалы; saved = EstimateHours (без работы) или Estimate − ActualHours.
+- Переходы через `TryTransitionStatusAsync`; конфликт → 409.

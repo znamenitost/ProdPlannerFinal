@@ -368,6 +368,8 @@ public class TaskTableService : ITaskTableService
         task.Deadline = request.Deadline;
         task.EstimateHours = request.EstimateHours;
         task.Type = request.Type ?? task.Type;
+        if (request.PriorityMarked.HasValue)
+            task.IsPriorityMarked = request.PriorityMarked.Value;
         if (!isSplitParent)
             task.EmployeeName = request.EmployeeName ?? task.EmployeeName;
         else
@@ -859,6 +861,8 @@ public class TaskTableService : ITaskTableService
         original.Deadline = request.Deadline;
         original.EstimateHours = request.EstimateHours;
         original.Type = request.Type ?? original.Type;
+        if (request.PriorityMarked.HasValue)
+            original.IsPriorityMarked = request.PriorityMarked.Value;
         original.EmployeeName = newEmployeeName;
         original.UpdatedAt = now;
 
@@ -949,6 +953,7 @@ public class TaskTableService : ITaskTableService
             Deadline = request.Deadline,
             EstimateHours = request.EstimateHours,
             Type = request.Type ?? original.Type,
+            IsPriorityMarked = request.PriorityMarked ?? original.IsPriorityMarked,
             EmployeeName = request.EmployeeName!,
             Status = JobStatus.Assigned,
             Progress = 0,
@@ -990,6 +995,8 @@ public class TaskTableService : ITaskTableService
         task.Deadline = request.Deadline;
         task.EstimateHours = request.EstimateHours;
         task.Type = request.Type ?? task.Type;
+        if (request.PriorityMarked.HasValue)
+            task.IsPriorityMarked = request.PriorityMarked.Value;
         if (!isSplitParent)
             task.EmployeeName = request.EmployeeName ?? task.EmployeeName;
         else

@@ -38,6 +38,7 @@ import { getTaskFileLabel, getTaskHeading, getTaskStatusLine } from './TaskTitle
 import TaskStatusCell from './taskTable/TaskStatusCell';
 import { taskShowsThroughApproval } from '../utils/throughApproval';
 import { ThroughApprovalMark } from './taskTable/ThroughApprovalChip';
+import { TaskPriorityMark } from './taskTable/TaskPriorityChip';
 
 const blockedButtonSx = { opacity: 0.5 };
 const PROGRESS_MARKS = [0.3, 0.6, 0.9];
@@ -135,6 +136,13 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
               <Tooltip title="Через согласование" arrow>
                 <Box component="span" aria-label="Через согласование">
                   <ThroughApprovalMark />
+                </Box>
+              </Tooltip>
+            )}
+            {task?.isPriorityMarked && (
+              <Tooltip title="В приоритете" arrow>
+                <Box component="span" aria-label="В приоритете">
+                  <TaskPriorityMark />
                 </Box>
               </Tooltip>
             )}

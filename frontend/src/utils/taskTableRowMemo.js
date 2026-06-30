@@ -21,6 +21,7 @@ function sameChildren(a, b) {
     if (a[i].id !== b[i].id) return false;
     if (a[i].updatedAt !== b[i].updatedAt) return false;
     if (a[i].statusText !== b[i].statusText) return false;
+    if (a[i].isPriorityMarked !== b[i].isPriorityMarked) return false;
     if (workIntervalsKey(a[i]) !== workIntervalsKey(b[i])) return false;
     if (a[i].plannedTimeProgress !== b[i].plannedTimeProgress) return false;
     if (a[i].requiresTestBeforeProduction !== b[i].requiresTestBeforeProduction) return false;
@@ -42,6 +43,7 @@ export function areParentRowPropsEqual(prev, next) {
   if (prev.task.id !== next.task.id) return false;
   if (prev.task.updatedAt !== next.task.updatedAt) return false;
   if (prev.task.statusText !== next.task.statusText) return false;
+  if (prev.task.isPriorityMarked !== next.task.isPriorityMarked) return false;
   if (prev.task.fileName !== next.task.fileName) return false;
   if (prev.task.folderPath !== next.task.folderPath) return false;
   if (prev.task.hasCdrPreview !== next.task.hasCdrPreview) return false;
@@ -92,6 +94,7 @@ export function areChildRowPropsEqual(prev, next) {
   if (prev.task.id !== next.task.id) return false;
   if (prev.task.updatedAt !== next.task.updatedAt) return false;
   if (prev.task.statusText !== next.task.statusText) return false;
+  if (prev.task.isPriorityMarked !== next.task.isPriorityMarked) return false;
   if ((prev.task.workIntervals?.length ?? 0) !== (next.task.workIntervals?.length ?? 0)) return false;
   if (workIntervalsKey(prev.task) !== workIntervalsKey(next.task)) return false;
   if (prev.task.requiresTestBeforeProduction !== next.task.requiresTestBeforeProduction) return false;

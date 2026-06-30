@@ -8,14 +8,16 @@ import useUserPreference from '../useUserPreference';
 export const TASK_TABLE_SORT_DEFAULTS = {
   deadlineSort: false,
   completedBottomSort: true,
-  hideCompletedSort: false
+  hideCompletedSort: false,
+  hideCompletedInSharedSort: false
 };
 
 function normalizeSortSettings(raw) {
   return {
     deadlineSort: Boolean(raw?.deadlineSort),
     completedBottomSort: raw?.completedBottomSort !== false,
-    hideCompletedSort: Boolean(raw?.hideCompletedSort)
+    hideCompletedSort: Boolean(raw?.hideCompletedSort),
+    hideCompletedInSharedSort: Boolean(raw?.hideCompletedInSharedSort)
   };
 }
 
@@ -35,6 +37,11 @@ export default function useTaskTableSortSettings(currentUser) {
     'taskTable.hideCompletedSort',
     TASK_TABLE_SORT_DEFAULTS.hideCompletedSort
   );
+  const [hideCompletedInSharedSort, setHideCompletedInSharedSort] = useUserPreference(
+    currentUser,
+    'taskTable.hideCompletedInSharedSort',
+    TASK_TABLE_SORT_DEFAULTS.hideCompletedInSharedSort
+  );
   const [settingsReady, setSettingsReady] = useState(false);
   const saveTimerRef = useRef(null);
   const hydratedRef = useRef(false);
@@ -43,7 +50,8 @@ export default function useTaskTableSortSettings(currentUser) {
   snapshotRef.current = normalizeSortSettings({
     deadlineSort,
     completedBottomSort,
-    hideCompletedSort
+    hideCompletedSort,
+    hideCompletedInSharedSort
   });
 
   const applySettings = useCallback((next) => {
@@ -51,8 +59,9 @@ export default function useTaskTableSortSettings(currentUser) {
     setDeadlineSort(normalized.deadlineSort);
     setCompletedBottomSort(normalized.completedBottomSort);
     setHideCompletedSort(normalized.hideCompletedSort);
+    setHideCompletedInSharedSort(normalized.hideCompletedInSharedSort);
     return normalized;
-  }, [setCompletedBottomSort, setDeadlineSort, setHideCompletedSort]);
+  }, [setCompletedBottomSort, setDeadlineSort, setHideCompletedSort, setHideCompletedInSharedSort]);
 
   const scheduleRemoteSave = useCallback((settings) => {
     if (!currentUser?.id || !hydratedRef.current) return;
@@ -62,7 +71,8 @@ export default function useTaskTableSortSettings(currentUser) {
       void saveTaskTableSortSettings({
         deadlineSort: settings.deadlineSort,
         completedBottomSort: settings.completedBottomSort,
-        hideCompletedSort: settings.hideCompletedSort
+        hideCompletedSort: settings.hideCompletedSort,
+        hideCompletedInSharedSort: settings.hideCompletedInSharedSort
       }).catch(() => {});
     }, 300);
   }, [currentUser?.id]);
@@ -72,7 +82,9 @@ export default function useTaskTableSortSettings(currentUser) {
       ? setDeadlineSort
       : key === 'completedBottomSort'
         ? setCompletedBottomSort
-        : setHideCompletedSort;
+        : key === 'hideCompletedSort'
+          ? setHideCompletedSort
+          : setHideCompletedInSharedSort;
 
     setter((prev) => {
       const resolved = typeof next === 'function' ? next(prev) : next;
@@ -83,7 +95,7 @@ export default function useTaskTableSortSettings(currentUser) {
       scheduleRemoteSave(settings);
       return resolved;
     });
-  }, [scheduleRemoteSave, setCompletedBottomSort, setDeadlineSort, setHideCompletedSort]);
+  }, [scheduleRemoteSave, setCompletedBottomSort, setDeadlineSort, setHideCompletedSort, setHideCompletedInSharedSort]);
 
   useEffect(() => {
     if (!currentUser?.id) {
@@ -107,7 +119,8 @@ export default function useTaskTableSortSettings(currentUser) {
           await saveTaskTableSortSettings({
             deadlineSort: local.deadlineSort,
             completedBottomSort: local.completedBottomSort,
-            hideCompletedSort: local.hideCompletedSort
+            hideCompletedSort: local.hideCompletedSort,
+            hideCompletedInSharedSort: local.hideCompletedInSharedSort
           });
         }
       } catch {
@@ -138,6 +151,8 @@ export default function useTaskTableSortSettings(currentUser) {
     setCompletedBottomSort: (next) => updateSetting('completedBottomSort', next),
     hideCompletedSort,
     setHideCompletedSort: (next) => updateSetting('hideCompletedSort', next),
+    hideCompletedInSharedSort,
+    setHideCompletedInSharedSort: (next) => updateSetting('hideCompletedInSharedSort', next),
     settingsReady
   };
 }

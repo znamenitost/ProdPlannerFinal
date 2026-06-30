@@ -50,6 +50,7 @@ export default function useTaskTableActions({
 }) {
   const [pendingLifecycleTaskId, setPendingLifecycleTaskId] = useState(null);
   const pendingLifecycleTaskIdRef = useRef(null);
+  const pendingPriorityTaskIdRef = useRef(null);
   const savingNewRowRef = useRef(false);
   const savingRowIdRef = useRef(null);
   const deletingRowIdRef = useRef(null);
@@ -400,6 +401,31 @@ export default function useTaskTableActions({
     }
   }, [api, syncRowFromServer, showError, setPendingLifecycleTask, selectedEmployeeForHighlight]);
 
+  const handleTogglePriority = useCallback(async (row, marked) => {
+    if (pendingPriorityTaskIdRef.current === row.id) return;
+    pendingPriorityTaskIdRef.current = row.id;
+    try {
+      await api.updateRow(
+        row.id,
+        buildTaskUpdatePayload(
+          row,
+          selectedEmployeeForHighlight || row.employeeName,
+          row.statusText,
+          { priorityMarked: marked }
+        )
+      );
+      await syncRowFromServer(row);
+    } catch (err) {
+      console.error(err);
+      if (err?.code === 'concurrency_conflict') {
+        await syncRowFromServer(row);
+      }
+      showError(err.message || 'Не удалось изменить пометку задачи');
+    } finally {
+      pendingPriorityTaskIdRef.current = null;
+    }
+  }, [api, selectedEmployeeForHighlight, showError, syncRowFromServer]);
+
   const handleDeleteRow = useCallback(async (id) => {
     if (deletingRowIdRef.current != null) return;
     if (pendingLifecycleTaskIdRef.current != null) {
@@ -463,6 +489,7 @@ export default function useTaskTableActions({
     handleResumeTask,
     handleCompleteTask,
     handleSetStatus,
+    handleTogglePriority,
     handleDeleteRow,
     handleAddNewRow,
     handleEditRow
