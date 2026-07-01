@@ -21,6 +21,9 @@ namespace ProductionPlanner.Data
         Task<List<WorkInterval>> GetWorkIntervalsForTaskIdsAsync(
             IReadOnlyList<int> taskIds,
             CancellationToken cancellationToken = default);
+        Task<List<ProductionTask>> GetTasksByIdsAsync(
+            IReadOnlyList<int> taskIds,
+            CancellationToken cancellationToken = default);
         Task<List<ProductionTask>> GetEmployeeTasksForCalendarWeekAsync(
             string employeeName,
             DateTime weekStart,

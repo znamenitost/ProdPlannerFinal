@@ -39,7 +39,8 @@ import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
 import DeadlineWarnings from './components/DeadlineWarnings';
 import ActiveTasksList from './components/ActiveTasksList';
-import CompletedTasksList from './components/CompletedTasksList';
+import DayReportList from './components/DayReportList';
+import CompletedTasksSection from './components/CompletedTasksSection';
 import TaskTable from './components/TaskTable';
 import LunchBreakOverlay from './components/LunchBreakOverlay';
 import DeployMaintenanceOverlay from './components/DeployMaintenanceOverlay';
@@ -484,7 +485,8 @@ function AuthenticatedAppContent() {
                   employee={employee}
                   isAdmin={isAdmin}
                 />
-                <CompletedTasksList employee={employee} />
+                <DayReportList employee={employee} />
+                <CompletedTasksSection employee={employee} />
               </>
             )}
             {activeTab === 1 && (

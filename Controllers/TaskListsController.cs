@@ -76,6 +76,20 @@ public class TaskListsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("daily-report")]
+    public async Task<IActionResult> GetDailyWorkReport(
+        [FromQuery] string employee,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(employee))
+            return BadRequest(new { error = "Employee name is required" });
+
+        if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
+
+        var result = await _taskLists.GetDailyWorkReportAsync(employee, _timeService.Now, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("deadline-risks")]
     public async Task<IActionResult> GetDeadlineRisks(
         [FromQuery] string employee,

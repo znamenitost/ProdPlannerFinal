@@ -114,6 +114,19 @@ namespace ProductionPlanner.Data
                 .ToListAsync(cancellationToken);
         }
 
+        public async Task<List<ProductionTask>> GetTasksByIdsAsync(
+            IReadOnlyList<int> taskIds,
+            CancellationToken cancellationToken = default)
+        {
+            if (taskIds.Count == 0)
+                return [];
+
+            return await _context.ProductionTasks
+                .AsNoTracking()
+                .Where(t => taskIds.Contains(t.Id))
+                .ToListAsync(cancellationToken);
+        }
+
         public async Task<List<ProductionTask>> GetEmployeeTasksForCalendarWeekAsync(
             string employeeName,
             DateTime weekStart,

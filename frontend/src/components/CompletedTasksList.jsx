@@ -50,7 +50,7 @@ const STATS_PERIOD_OPTIONS = [
   { value: 'all', label: 'За все время' }
 ];
 
-export default function CompletedTasksList({ employee }) {
+export default function CompletedTasksList({ employee, embedded = false }) {
   const { showError } = useUiFeedback();
   const { user } = useAuth();
   const [page, setPage] = useUserPreference(user, 'completedTasks.page', 0);
@@ -116,50 +116,88 @@ export default function CompletedTasksList({ employee }) {
     return periods.join(', ');
   };
 
-  return (
-    <Paper variant="section">
-      <Box sx={{ ...sectionTitleRowSx, mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Assessment color="primary" />
-          <Typography variant="h2" component="h2">
-            Выполненные задачи
-          </Typography>
-        </Box>
-        <Tooltip title="Период статистики">
-          <IconButton
-            size="small"
-            onClick={handleOpenPeriodMenu}
-            color={statsPeriod !== 'week' ? 'primary' : 'default'}
-            aria-label="Период статистики"
-            sx={[
-              { ml: 'auto' },
-              statsPeriod !== 'week' && { border: '1px solid', borderColor: 'primary.main' }
-            ]}
+  const content = (
+    <>
+      {!embedded && (
+        <Box sx={{ ...sectionTitleRowSx, mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Assessment color="primary" />
+            <Typography variant="h2" component="h2">
+              Выполненные задачи
+            </Typography>
+          </Box>
+          <Tooltip title="Период статистики">
+            <IconButton
+              size="small"
+              onClick={handleOpenPeriodMenu}
+              color={statsPeriod !== 'week' ? 'primary' : 'default'}
+              aria-label="Период статистики"
+              sx={[
+                { ml: 'auto' },
+                statsPeriod !== 'week' && { border: '1px solid', borderColor: 'primary.main' }
+              ]}
+            >
+              <Sort fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Menu
+            anchorEl={periodAnchorEl}
+            open={periodMenuOpen}
+            onClose={handleClosePeriodMenu}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
           >
-            <Sort fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Menu
-          anchorEl={periodAnchorEl}
-          open={periodMenuOpen}
-          onClose={handleClosePeriodMenu}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        >
-          {STATS_PERIOD_OPTIONS.map((option) => (
-            <MenuItem key={option.value} onClick={() => handleSelectStatsPeriod(option.value)}>
-              <Checkbox
-                size="small"
-                checked={statsPeriod === option.value}
-                disableRipple
-                tabIndex={-1}
-                sx={{ pointerEvents: 'none' }}
-              />
-              <ListItemText primary={option.label} />
-            </MenuItem>
-          ))}
-        </Menu>
-      </Box>
+            {STATS_PERIOD_OPTIONS.map((option) => (
+              <MenuItem key={option.value} onClick={() => handleSelectStatsPeriod(option.value)}>
+                <Checkbox
+                  size="small"
+                  checked={statsPeriod === option.value}
+                  disableRipple
+                  tabIndex={-1}
+                  sx={{ pointerEvents: 'none' }}
+                />
+                <ListItemText primary={option.label} />
+              </MenuItem>
+            ))}
+          </Menu>
+        </Box>
+      )}
+
+      {embedded && (
+        <Box sx={{ ...sectionTitleRowSx, mb: 2, justifyContent: 'flex-end' }}>
+          <Tooltip title="Период статистики">
+            <IconButton
+              size="small"
+              onClick={handleOpenPeriodMenu}
+              color={statsPeriod !== 'week' ? 'primary' : 'default'}
+              aria-label="Период статистики"
+              sx={statsPeriod !== 'week' ? { border: '1px solid', borderColor: 'primary.main' } : undefined}
+            >
+              <Sort fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Menu
+            anchorEl={periodAnchorEl}
+            open={periodMenuOpen}
+            onClose={handleClosePeriodMenu}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          >
+            {STATS_PERIOD_OPTIONS.map((option) => (
+              <MenuItem key={option.value} onClick={() => handleSelectStatsPeriod(option.value)}>
+                <Checkbox
+                  size="small"
+                  checked={statsPeriod === option.value}
+                  disableRipple
+                  tabIndex={-1}
+                  sx={{ pointerEvents: 'none' }}
+                />
+                <ListItemText primary={option.label} />
+              </MenuItem>
+            ))}
+          </Menu>
+        </Box>
+      )}
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -363,6 +401,16 @@ export default function CompletedTasksList({ employee }) {
           </Box>
         </Box>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <Paper variant="section">
+      {content}
     </Paper>
   );
 }

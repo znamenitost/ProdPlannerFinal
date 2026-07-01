@@ -76,6 +76,17 @@ export async function getCompletedTasks(employee, page = 1, pageSize = 25, stats
   return res.json();
 }
 
+// Отчёт за сегодня по интервалам работы
+export async function getDailyReport(employee, options = {}) {
+  const res = await fetch(`${API_BASE}/tasks/daily-report?employee=${encodeURIComponent(employee)}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    signal: options.signal
+  });
+  if (!res.ok) throw new Error('Ошибка загрузки отчёта за день');
+  return res.json();
+}
+
 // Действия над задачами
 async function throwApiError(res, fallback) {
   const text = await res.text();
