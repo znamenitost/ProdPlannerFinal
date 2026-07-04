@@ -16,7 +16,15 @@ const commentTooltipSx = {
 
 export default function TaskCommentCell({ task, onOpenComment, iconButtonColor = 'primary' }) {
   const limit = useTextLimit();
-  const sx = useMemo(() => ({ color: 'text.secondary', ...getCommentDisplaySx(limit), cursor: 'default' }), [limit]);
+  const sx = useMemo(
+    () => ({
+      color: 'text.secondary',
+      ...getCommentDisplaySx(limit),
+      maxWidth: '100%',
+      cursor: 'default'
+    }),
+    [limit]
+  );
   const comment = String(task.comment || '').trim();
   const displayText = formatCommentForDisplay(comment, limit);
   const commentEditedViaDialog = Boolean(task.commentEditedViaDialog);
@@ -27,17 +35,19 @@ export default function TaskCommentCell({ task, onOpenComment, iconButtonColor =
   );
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
-      {comment.length > limit ? (
-        <LazyTooltip
-          title={comment}
-          arrow
-          placement="top"
-          slotProps={{ tooltip: { sx: commentTooltipSx } }}
-        >
-          {text}
-        </LazyTooltip>
-      ) : text}
+    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0, gap: 0.5 }}>
+      <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+        {comment.length > limit ? (
+          <LazyTooltip
+            title={comment}
+            arrow
+            placement="top"
+            slotProps={{ tooltip: { sx: commentTooltipSx } }}
+          >
+            {text}
+          </LazyTooltip>
+        ) : text}
+      </Box>
       <IconButton
         size="small"
         color={commentEditedViaDialog ? 'inherit' : iconButtonColor}
