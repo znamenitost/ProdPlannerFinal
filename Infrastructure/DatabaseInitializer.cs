@@ -87,6 +87,8 @@ public static class DatabaseInitializer
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN TestPhaseCompletedAt TEXT NULL");
             if (!columns.Contains("IsPriorityMarked"))
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN IsPriorityMarked INTEGER NOT NULL DEFAULT 0");
+            if (!columns.Contains("CommentEditedViaDialog"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN CommentEditedViaDialog INTEGER NOT NULL DEFAULT 0");
 
             foreach (var alterCmd in alterCommands)
             {
