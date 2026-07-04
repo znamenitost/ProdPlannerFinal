@@ -365,6 +365,8 @@ public class TaskTableService : ITaskTableService
         task.FolderPath = newFolderPath;
         task.FileName = newFileName;
         task.Comment = request.Comment ?? task.Comment;
+        if (request.CommentEditedViaDialog == true)
+            task.CommentEditedViaDialog = true;
         task.Deadline = request.Deadline;
         task.EstimateHours = request.EstimateHours;
         task.Type = request.Type ?? task.Type;
@@ -950,6 +952,8 @@ public class TaskTableService : ITaskTableService
             FolderPath = request.FolderPath ?? original.FolderPath,
             FileName = request.FileName ?? original.FileName,
             Comment = request.Comment ?? original.Comment,
+            CommentEditedViaDialog = original.CommentEditedViaDialog
+                || request.CommentEditedViaDialog == true,
             Deadline = request.Deadline,
             EstimateHours = request.EstimateHours,
             Type = request.Type ?? original.Type,
@@ -992,6 +996,8 @@ public class TaskTableService : ITaskTableService
         task.FolderPath = request.FolderPath ?? task.FolderPath;
         task.FileName = request.FileName ?? task.FileName;
         task.Comment = request.Comment ?? task.Comment;
+        if (request.CommentEditedViaDialog == true)
+            task.CommentEditedViaDialog = true;
         task.Deadline = request.Deadline;
         task.EstimateHours = request.EstimateHours;
         task.Type = request.Type ?? task.Type;

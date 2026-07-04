@@ -175,6 +175,8 @@ export default function useTaskTableModals({
     savingCommentRef.current = true;
     setCommentSaving(true);
     const task = selectedCommentTask;
+    const previousComment = String(task.comment || '');
+    const commentChanged = String(newComment || '') !== previousComment;
     try {
       await api.updateRow(task.id, {
         folderPath: task.folderPath ?? '',
@@ -185,17 +187,23 @@ export default function useTaskTableModals({
         type: task.type ?? '',
         employeeName: task.employeeName ?? '',
         parentRowNumber: task.parentRowNumber ?? null,
-        expectedUpdatedAt: task.updatedAt ?? null
+        expectedUpdatedAt: task.updatedAt ?? null,
+        commentEditedViaDialog: commentChanged
       });
+
+      const commentPatch = { comment: newComment };
+      if (commentChanged || task.commentEditedViaDialog) {
+        commentPatch.commentEditedViaDialog = true;
+      }
 
       const parentId = task.parentRowNumber;
       if (parentId) {
-        patchChildInCache(task.id, { comment: newComment });
+        patchChildInCache(task.id, commentPatch);
         invalidateChildCache(parentId);
         const children = await api.loadChildren(parentId);
         setChildrenForParent(parentId, children);
       } else {
-        patchRow(task.id, { comment: newComment });
+        patchRow(task.id, commentPatch);
       }
 
       setCommentDialogOpen(false);

@@ -169,7 +169,8 @@ export function buildTaskUpdatePayload(task, employeeName, statusText, extra) {
     statusText: statusText ?? task.statusText,
     priorityMarked: extra?.priorityMarked ?? task.isPriorityMarked ?? null,
     sequenceOverride: extra?.sequenceOverride ?? false,
-    expectedUpdatedAt: task.updatedAt ?? null
+    expectedUpdatedAt: task.updatedAt ?? null,
+    commentEditedViaDialog: extra?.commentEditedViaDialog ?? null
   };
 }
 
@@ -191,7 +192,8 @@ export async function updateTaskRow(id, rowData) {
       statusText: rowData.statusText,
       priorityMarked: rowData.priorityMarked ?? null,
       sequenceOverride: rowData.sequenceOverride ?? false,
-      expectedUpdatedAt: rowData.expectedUpdatedAt ?? null
+      expectedUpdatedAt: rowData.expectedUpdatedAt ?? null,
+      commentEditedViaDialog: rowData.commentEditedViaDialog ?? null
     })
   });
   if (!res.ok) await throwApiError(res, 'Не удалось обновить задачу');

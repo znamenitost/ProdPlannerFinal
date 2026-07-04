@@ -19,6 +19,7 @@ export default function TaskCommentCell({ task, onOpenComment, iconButtonColor =
   const sx = useMemo(() => ({ color: 'text.secondary', ...getCommentDisplaySx(limit), cursor: 'default' }), [limit]);
   const comment = String(task.comment || '').trim();
   const displayText = formatCommentForDisplay(comment, limit);
+  const commentEditedViaDialog = Boolean(task.commentEditedViaDialog);
   const text = (
     <Typography variant="body2" sx={sx}>
       {displayText}
@@ -39,10 +40,14 @@ export default function TaskCommentCell({ task, onOpenComment, iconButtonColor =
       ) : text}
       <IconButton
         size="small"
-        color={iconButtonColor}
+        color={commentEditedViaDialog ? 'inherit' : iconButtonColor}
         onClick={() => onOpenComment(task)}
         aria-label="Редактировать комментарий"
-        sx={{ p: 0.5, flexShrink: 0 }}
+        sx={{
+          p: 0.5,
+          flexShrink: 0,
+          ...(commentEditedViaDialog ? { color: 'grey.700' } : null)
+        }}
       >
         <CommentIcon fontSize="small" sx={{ fontSize: 14 }} />
       </IconButton>

@@ -238,6 +238,7 @@ public class ProductionTasksController : ControllerBase
                     StatusText = (commentOnly || priorityMarkOnly) ? null : request.StatusText,
                     PriorityMarked = priorityMarkOnly ? request.PriorityMarked : null,
                     SequenceOverride = (commentOnly || priorityMarkOnly) ? false : request.SequenceOverride,
+                    CommentEditedViaDialog = commentOnly ? request.CommentEditedViaDialog : null,
                     ExpectedUpdatedAt = expectedUpdatedAt
                 };
             }

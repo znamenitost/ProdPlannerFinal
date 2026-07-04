@@ -36,6 +36,9 @@ namespace ProductionPlanner.Models
             get => _comment ?? string.Empty;
             set => _comment = value;
         }
+
+        /// <summary>Комментарий хотя бы раз сохраняли через диалог (иконка в таблице).</summary>
+        public bool CommentEditedViaDialog { get; set; }
         
         public DateTime Deadline { get; set; }
         public double EstimateHours { get; set; }

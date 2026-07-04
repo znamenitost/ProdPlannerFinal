@@ -247,6 +247,9 @@ namespace ProductionPlanner.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("CommentEditedViaDialog")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 

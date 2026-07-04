@@ -113,6 +113,9 @@ public class UpdateTaskRequest
 
     /// <summary>Оптимистичная блокировка: метка версии строки с клиента (<see cref="TaskTableRowDto.UpdatedAt"/>).</summary>
     public DateTime? ExpectedUpdatedAt { get; set; }
+
+    /// <summary>Комментарий сохранён через диалог (иконка в таблице).</summary>
+    public bool? CommentEditedViaDialog { get; set; }
 }
 
 public class UpdateWorkIntervalsRequest

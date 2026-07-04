@@ -52,6 +52,9 @@ public class TaskTableRowDto
     /// <summary>Маркер «через согласование» (для родителя split — агрегат по детям).</summary>
     public bool ShowsThroughApproval { get; set; }
 
+    /// <summary>Комментарий хотя бы раз сохраняли через диалог (иконка в таблице).</summary>
+    public bool CommentEditedViaDialog { get; set; }
+
     public static TaskTableRowDto FromParent(
         ProductionTask parent,
         string statusText,
@@ -86,6 +89,7 @@ public class TaskTableRowDto
             FolderPath = parent.FolderPath,
             FileName = parent.FileName,
             Comment = parent.Comment,
+            CommentEditedViaDialog = parent.CommentEditedViaDialog,
             StatusText = statusText,
             Status = parent.Status,
             IsPriorityMarked = SplitTaskStatusAggregator.AggregatePriorityMarked(parent, children),

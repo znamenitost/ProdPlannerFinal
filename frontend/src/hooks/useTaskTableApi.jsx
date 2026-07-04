@@ -111,7 +111,8 @@ export default function useTaskTableApi() {
         statusText: rowData.statusText,
         priorityMarked: rowData.priorityMarked ?? null,
         sequenceOverride: rowData.sequenceOverride ?? false,
-        expectedUpdatedAt: rowData.expectedUpdatedAt ?? null
+        expectedUpdatedAt: rowData.expectedUpdatedAt ?? null,
+        commentEditedViaDialog: rowData.commentEditedViaDialog ?? null
       })
     });
     return await handleResponse(response);
