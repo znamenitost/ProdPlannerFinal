@@ -93,10 +93,14 @@ public class TaskListQueryService : ITaskListQueryService
     public async Task<object> GetDailyWorkReportAsync(
         string employee,
         DateTime now,
+        DateTime? reportDate = null,
         CancellationToken cancellationToken = default)
     {
         var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
-        var dayStart = nowMoscow.Date;
+        var dayMoscow = reportDate.HasValue
+            ? AppDateTime.ToMoscowWallClockFromApp(reportDate.Value).Date
+            : nowMoscow.Date;
+        var dayStart = dayMoscow;
         var dayEnd = dayStart.AddDays(1);
 
         var intervals = await _repo.GetWorkIntervalsForDateRangeAsync(employee, dayStart, dayEnd, cancellationToken);
@@ -104,7 +108,7 @@ public class TaskListQueryService : ITaskListQueryService
         var tasks = await _repo.GetTasksByIdsAsync(taskIds, cancellationToken);
         var tasksById = tasks.ToDictionary(t => t.Id);
 
-        var report = DailyWorkReportBuilder.Build(now, intervals, tasksById, _workHours);
+        var report = DailyWorkReportBuilder.Build(dayMoscow, nowMoscow, intervals, tasksById, _workHours);
 
         return new
         {

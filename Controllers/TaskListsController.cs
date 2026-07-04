@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -79,6 +80,7 @@ public class TaskListsController : ControllerBase
     [HttpGet("daily-report")]
     public async Task<IActionResult> GetDailyWorkReport(
         [FromQuery] string employee,
+        [FromQuery] string? date,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(employee))
@@ -86,7 +88,27 @@ public class TaskListsController : ControllerBase
 
         if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
 
-        var result = await _taskLists.GetDailyWorkReportAsync(employee, _timeService.Now, cancellationToken);
+        DateTime? reportDate = null;
+        if (!string.IsNullOrWhiteSpace(date))
+        {
+            if (!DateTime.TryParseExact(
+                    date.Trim(),
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var parsed))
+            {
+                return BadRequest(new { error = "date must be yyyy-MM-dd" });
+            }
+
+            reportDate = parsed;
+        }
+
+        var result = await _taskLists.GetDailyWorkReportAsync(
+            employee,
+            _timeService.Now,
+            reportDate,
+            cancellationToken);
         return Ok(result);
     }
 

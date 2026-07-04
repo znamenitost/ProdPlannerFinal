@@ -13,7 +13,7 @@ export default function useAppDataRefresh(employee) {
   const refreshCalendar = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: queryKeys.weekCalendarAll(employee) });
     queryClient.invalidateQueries({ queryKey: queryKeys.completedAll(employee) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.dailyReport(employee) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.dailyReportAll(employee) });
     refreshActiveTasks();
   }, [queryClient, employee, refreshActiveTasks]);
 

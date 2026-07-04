@@ -76,9 +76,11 @@ export async function getCompletedTasks(employee, page = 1, pageSize = 25, stats
   return res.json();
 }
 
-// Отчёт за сегодня по интервалам работы
+// Отчёт за день по интервалам работы (date: YYYY-MM-DD, по умолчанию — сегодня)
 export async function getDailyReport(employee, options = {}) {
-  const res = await fetch(`${API_BASE}/tasks/daily-report?employee=${encodeURIComponent(employee)}`, {
+  const params = new URLSearchParams({ employee });
+  if (options.date) params.set('date', options.date);
+  const res = await fetch(`${API_BASE}/tasks/daily-report?${params}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     signal: options.signal

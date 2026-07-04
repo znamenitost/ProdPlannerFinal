@@ -12,7 +12,8 @@ export const queryKeys = {
     statsPeriod
   ],
   completedAll: (employee) => ['app', 'completedTasks', employee],
-  dailyReport: (employee) => ['app', 'dailyReport', employee],
+  dailyReport: (employee, dateKey = 'today') => ['app', 'dailyReport', employee, dateKey],
+  dailyReportAll: (employee) => ['app', 'dailyReport', employee],
   taskTable: (page, pageSize, employeeFilter, excludeCompleted = false, search = '') => [
     'app',
     'taskTable',

@@ -22,6 +22,7 @@ public class DailyWorkReportBuilderTests
         };
 
         var report = Services.TaskLists.DailyWorkReportBuilder.Build(
+            day,
             now,
             intervals,
             new Dictionary<int, ProductionTask> { [1] = task },
@@ -48,6 +49,7 @@ public class DailyWorkReportBuilderTests
         };
 
         var report = Services.TaskLists.DailyWorkReportBuilder.Build(
+            day,
             now,
             intervals,
             new Dictionary<int, ProductionTask> { [2] = task },
@@ -72,6 +74,7 @@ public class DailyWorkReportBuilderTests
         };
 
         var report = Services.TaskLists.DailyWorkReportBuilder.Build(
+            day,
             now,
             intervals,
             new Dictionary<int, ProductionTask> { [3] = parent },
@@ -93,6 +96,7 @@ public class DailyWorkReportBuilderTests
         };
 
         var report = Services.TaskLists.DailyWorkReportBuilder.Build(
+            day,
             now,
             intervals,
             new Dictionary<int, ProductionTask> { [4] = task },
@@ -100,6 +104,29 @@ public class DailyWorkReportBuilderTests
 
         Assert.Single(report.Items);
         Assert.Equal(1.5, report.Items[0].TotalHours);
+    }
+
+    [Fact]
+    public void Build_past_day_counts_open_interval_through_end_of_workday()
+    {
+        var reportDay = new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Unspecified);
+        var asOf = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Unspecified);
+        var task = CreateTask(5, "Вчера", JobStatus.InProgress);
+
+        var intervals = new List<WorkInterval>
+        {
+            CreateInterval(5, reportDay.AddHours(10), null)
+        };
+
+        var report = Services.TaskLists.DailyWorkReportBuilder.Build(
+            reportDay,
+            asOf,
+            intervals,
+            new Dictionary<int, ProductionTask> { [5] = task },
+            WorkHours);
+
+        Assert.Single(report.Items);
+        Assert.Equal(9, report.Items[0].TotalHours);
     }
 
     private static ProductionTask CreateTask(

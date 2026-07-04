@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatDailyReportLine, formatHoursRu } from '../src/utils/dailyReportFormat.js';
+import { formatDailyReportLine, formatHoursRu, formatPersonHoursRu } from '../src/utils/dailyReportFormat.js';
 
 describe('dailyReportFormat', () => {
   it('formats single interval completed task', () => {
@@ -27,5 +27,11 @@ describe('dailyReportFormat', () => {
     assert.equal(formatHoursRu(1), '1 час');
     assert.equal(formatHoursRu(2), '2 часа');
     assert.equal(formatHoursRu(5), '5 часов');
+  });
+
+  it('pluralizes person-hours correctly', () => {
+    assert.equal(formatPersonHoursRu(1), '1 человекочас');
+    assert.equal(formatPersonHoursRu(3), '3 человекочаса');
+    assert.equal(formatPersonHoursRu(6), '6 человекочасов');
   });
 });

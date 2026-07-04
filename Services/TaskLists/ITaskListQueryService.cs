@@ -10,7 +10,11 @@ public interface ITaskListQueryService
         string statsPeriod,
         DateTime now,
         CancellationToken cancellationToken = default);
-    Task<object> GetDailyWorkReportAsync(string employee, DateTime now, CancellationToken cancellationToken = default);
+    Task<object> GetDailyWorkReportAsync(
+        string employee,
+        DateTime now,
+        DateTime? reportDate = null,
+        CancellationToken cancellationToken = default);
     Task<List<DeadlineRisk>> GetDeadlineRisksAsync(string employee, DateTime now, CancellationToken cancellationToken = default);
     Task<List<QueueOverloadAlert>> GetQueueOverloadsAsync(string employee, DateTime now, CancellationToken cancellationToken = default);
 }

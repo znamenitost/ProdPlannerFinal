@@ -11,16 +11,16 @@ public static class DailyWorkReportBuilder
     private const int WorkDayEndHour = 19;
 
     public static DailyWorkReportDto Build(
-        DateTime now,
+        DateTime reportDayMoscow,
+        DateTime asOfMoscow,
         IReadOnlyList<WorkInterval> intervals,
         IReadOnlyDictionary<int, ProductionTask> tasksById,
         IWorkHoursCalculator workHours)
     {
-        var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(now);
-        var dayDate = nowMoscow.Date;
+        var dayDate = reportDayMoscow.Date;
         var dayStartTime = dayDate.AddHours(WorkDayStartHour);
         var dayEndTime = dayDate.AddHours(WorkDayEndHour);
-        var timelineEnd = nowMoscow > dayEndTime ? dayEndTime : nowMoscow;
+        var timelineEnd = ResolveTimelineEnd(asOfMoscow, dayDate, dayStartTime, dayEndTime);
 
         var items = new List<DailyWorkReportItemDto>();
 
@@ -105,6 +105,21 @@ public static class DailyWorkReportBuilder
             return 0;
 
         return RoundHours(workHours.GetWorkHoursBetween(startInDay, endInDay));
+    }
+
+    private static DateTime ResolveTimelineEnd(
+        DateTime asOfMoscow,
+        DateTime dayDate,
+        DateTime dayStartTime,
+        DateTime dayEndTime)
+    {
+        if (asOfMoscow.Date < dayDate)
+            return dayStartTime;
+
+        if (asOfMoscow.Date > dayDate)
+            return dayEndTime;
+
+        return asOfMoscow > dayEndTime ? dayEndTime : asOfMoscow;
     }
 
     private static double RoundHours(double hours) => Math.Round(hours, 1);

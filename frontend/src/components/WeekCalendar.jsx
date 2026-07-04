@@ -14,6 +14,7 @@ import { ChevronLeft, ChevronRight, CalendarMonth, Today } from '@mui/icons-mate
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import useWeekCalendarQuery from '../hooks/queries/useWeekCalendarQuery';
 import DayColumn from './DayColumn';
+import DayReportList from './DayReportList';
 import { CalendarLoadingState } from './LoadingState';
 import { MotionSwitch } from './ui/MotionSection';
 import { buildTaskBlocksMap, isSameCalendarDay, toCalendarDayKey } from '../utils/calendarDayUtils';
@@ -66,9 +67,11 @@ export default function WeekCalendar({ employee }) {
   }, [isError, showError]);
 
   useEffect(() => {
-    const currentDate = new Date();
-    setAnchorDate(getWorkdayOrPrevious(currentDate));
-  }, [setAnchorDate]);
+    if (!anchorDateKey) {
+      const currentDate = new Date();
+      setAnchorDate(getWorkdayOrPrevious(currentDate));
+    }
+  }, [anchorDateKey, setAnchorDate]);
 
   useEffect(() => {
     if (!weekData?.start) return;
@@ -137,6 +140,7 @@ export default function WeekCalendar({ employee }) {
 
   const navLabel = effectiveViewMode === 'day' ? 'день' : 'неделю';
   const isAnchorToday = isSameCalendarDay(anchorDate, currentWorkday);
+  const selectedDayKey = anchorDateKey ?? toCalendarDayKey(anchorDate);
 
   return (
     <Paper variant="section" sx={{ mb: 3 }}>
@@ -229,6 +233,14 @@ export default function WeekCalendar({ employee }) {
               />
             ))}
           </Box>
+        )}
+        {effectiveViewMode === 'day' && (
+          <DayReportList
+            key={selectedDayKey}
+            employee={employee}
+            dateKey={selectedDayKey}
+            embedded
+          />
         )}
       </MotionSwitch>
     </Paper>

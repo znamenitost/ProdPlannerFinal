@@ -68,6 +68,18 @@ export function toCalendarDayKey(value) {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
+/** Разбор YYYY-MM-DD в локальную полночь (без UTC-сдвига). */
+export function parseCalendarDayKey(key) {
+  if (!key || typeof key !== 'string') return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 /** Позиция «сейчас» на шкале 10–19; до/после рабочего окна — у края. */
 export function getNowMarkerPercent(now, range = getTimelineRange(true)) {
   const hours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
