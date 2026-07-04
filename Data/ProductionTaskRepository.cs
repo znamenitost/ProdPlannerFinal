@@ -273,6 +273,7 @@ namespace ProductionPlanner.Data
                         .SetProperty(t => t.ParentRowNumber, task.ParentRowNumber)
                         .SetProperty(t => t.Status, task.Status)
                         .SetProperty(t => t.IsPriorityMarked, task.IsPriorityMarked)
+                        .SetProperty(t => t.CommentEditedViaDialog, task.CommentEditedViaDialog)
                         .SetProperty(t => t.Progress, task.Progress)
                         .SetProperty(t => t.ActualHours, task.ActualHours)
                         .SetProperty(t => t.CompletedAt, completedAt)
@@ -293,6 +294,7 @@ namespace ProductionPlanner.Data
                     .SetProperty(t => t.EmployeeName, task.EmployeeName)
                     .SetProperty(t => t.ParentRowNumber, task.ParentRowNumber)
                     .SetProperty(t => t.IsPriorityMarked, task.IsPriorityMarked)
+                    .SetProperty(t => t.CommentEditedViaDialog, task.CommentEditedViaDialog)
                     .SetProperty(t => t.UpdatedAt, updatedAt),
                 cancellationToken);
         }

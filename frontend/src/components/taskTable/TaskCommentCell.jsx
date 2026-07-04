@@ -49,7 +49,13 @@ export default function TaskCommentCell({ task, onOpenComment, iconButtonColor =
           ...(commentEditedViaDialog ? { color: 'grey.700' } : null)
         }}
       >
-        <CommentIcon fontSize="small" sx={{ fontSize: 14 }} />
+        <CommentIcon
+          fontSize="small"
+          sx={{
+            fontSize: 14,
+            color: commentEditedViaDialog ? 'grey.700' : 'inherit'
+          }}
+        />
       </IconButton>
     </Box>
   );
