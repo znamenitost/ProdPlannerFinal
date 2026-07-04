@@ -156,18 +156,62 @@ export default function WeekCalendar({ employee }) {
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-          <IconButton variant="soft" color="primary" onClick={goPrev} aria-label={`Предыдущая ${navLabel}`}>
-            <ChevronLeft />
-          </IconButton>
-          <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-            <CalendarMonth color="primary" />
-            <Typography variant="subtitle1" sx={{ textTransform: effectiveViewMode === 'day' ? 'capitalize' : 'none' }}>
-              {headerTitle}
-            </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
+            <IconButton variant="soft" color="primary" onClick={goPrev} aria-label={`Предыдущая ${navLabel}`}>
+              <ChevronLeft />
+            </IconButton>
+            <Box
+              sx={{
+                position: 'relative',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                px: 1.5
+              }}
+            >
+              <Box
+                aria-hidden
+                sx={{
+                  visibility: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  pointerEvents: 'none',
+                  userSelect: 'none'
+                }}
+              >
+                <CalendarMonth />
+                <Typography variant="subtitle1" component="span">
+                  {CALENDAR_NAV_TITLE_PLACEHOLDER}
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1,
+                  px: 1.5
+                }}
+              >
+                <CalendarMonth color="primary" />
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    textTransform: effectiveViewMode === 'day' ? 'capitalize' : 'none',
+                    textAlign: 'center'
+                  }}
+                >
+                  {headerTitle}
+                </Typography>
+              </Box>
+            </Box>
+            <IconButton variant="soft" color="primary" onClick={goNext} aria-label={`Следующая ${navLabel}`}>
+              <ChevronRight />
+            </IconButton>
           </Box>
-          <IconButton variant="soft" color="primary" onClick={goNext} aria-label={`Следующая ${navLabel}`}>
-            <ChevronRight />
-          </IconButton>
           {!isMobile && (
             <ToggleButtonGroup
               value={viewMode}
@@ -253,6 +297,34 @@ function formatCalendarNavDate(date) {
     month: 'long'
   });
 }
+
+function computeCalendarNavTitlePlaceholder() {
+  let maxDay = '';
+  let maxWeek = '';
+
+  for (let month = 0; month < 12; month += 1) {
+    for (let day = 1; day <= 31; day += 1) {
+      const date = new Date(2026, month, day);
+      if (date.getMonth() !== month) continue;
+
+      const dayTitle = date.toLocaleDateString('ru-RU', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long'
+      });
+      if (dayTitle.length > maxDay.length) maxDay = dayTitle;
+
+      const weekEnd = new Date(date);
+      weekEnd.setDate(date.getDate() + 6);
+      const weekTitle = `${formatCalendarNavDate(date)} - ${formatCalendarNavDate(weekEnd)}`;
+      if (weekTitle.length > maxWeek.length) maxWeek = weekTitle;
+    }
+  }
+
+  return maxDay.length >= maxWeek.length ? maxDay : maxWeek;
+}
+
+const CALENDAR_NAV_TITLE_PLACEHOLDER = computeCalendarNavTitlePlaceholder();
 
 function startOfDay(date) {
   const d = new Date(date);
