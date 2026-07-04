@@ -1,18 +1,34 @@
+import { notifyDeployMaintenanceIfNeeded } from '../utils/deployMaintenance';
+
 //const API_BASE = 'http://localhost:5234/api';  // Раскомментировать если нужно явно указать порт
 const API_BASE = '/api';
 
-async function throwIfNotOk(res, fallbackMessage) {
-  if (res.ok) return;
+async function failResponse(res, fallbackMessage) {
   const text = await res.text();
+  if (notifyDeployMaintenanceIfNeeded(text)) {
+    throw new Error('Приложение обновляется');
+  }
   let message = fallbackMessage;
   try {
     const body = JSON.parse(text);
     if (body?.error) message = body.error;
     else if (body?.message) message = body.message;
   } catch {
-    if (text) message = text;
+    if (text && text.length < 500) message = text;
   }
-  throw new Error(message);
+  const err = new Error(message);
+  if (res.status === 409) err.code = 'concurrency_conflict';
+  throw err;
+}
+
+async function throwIfNotOk(res, fallbackMessage) {
+  if (res.ok) return;
+  await failResponse(res, fallbackMessage);
+}
+
+async function ensureOk(res, fallbackMessage) {
+  if (res.ok) return;
+  await failResponse(res, fallbackMessage);
 }
 
 // Число активных незаблокированных задач по сотрудникам (авто-выбор в модалке назначений)
@@ -37,7 +53,7 @@ export async function getActiveTasks(employee, options = {}) {
     headers: { 'Content-Type': 'application/json' },
     signal: options.signal
   });
-  if (!res.ok) throw new Error('Ошибка загрузки активных задач');
+  await ensureOk(res, 'Ошибка загрузки активных задач');
   return res.json();
 }
 
@@ -55,7 +71,7 @@ export async function getWeekCalendar(employee, startDate, options = {}) {
     headers: { 'Content-Type': 'application/json' },
     signal: options.signal
   });
-  if (!res.ok) throw new Error('Ошибка загрузки календаря');
+  await ensureOk(res, 'Ошибка загрузки календаря');
   return res.json();
 }
 
@@ -72,7 +88,7 @@ export async function getCompletedTasks(employee, page = 1, pageSize = 25, stats
     headers: { 'Content-Type': 'application/json' },
     signal: options.signal
   });
-  if (!res.ok) throw new Error('Ошибка загрузки выполненных задач');
+  await ensureOk(res, 'Ошибка загрузки выполненных задач');
   return res.json();
 }
 
@@ -85,24 +101,13 @@ export async function getDailyReport(employee, options = {}) {
     headers: { 'Content-Type': 'application/json' },
     signal: options.signal
   });
-  if (!res.ok) throw new Error('Ошибка загрузки отчёта за день');
+  await ensureOk(res, 'Ошибка загрузки отчёта за день');
   return res.json();
 }
 
 // Действия над задачами
 async function throwApiError(res, fallback) {
-  const text = await res.text();
-  let message = fallback;
-  try {
-    const body = JSON.parse(text);
-    if (body?.error) message = body.error;
-    if (body?.message) message = body.message;
-  } catch {
-    if (text) message = text;
-  }
-  const err = new Error(message);
-  if (res.status === 409) err.code = 'concurrency_conflict';
-  throw err;
+  await failResponse(res, fallback);
 }
 
 export async function startTask(id) {
@@ -256,7 +261,7 @@ export async function getDeadlineRisks(employee, options = {}) {
       signal: options.signal
     }
   );
-  if (!res.ok) throw new Error('Ошибка загрузки предупреждений по дедлайнам');
+  await ensureOk(res, 'Ошибка загрузки предупреждений по дедлайнам');
   const data = await res.json();
   return Array.isArray(data) ? data.filter((r) => r.riskLevel !== 'ok') : [];
 }
@@ -270,7 +275,7 @@ export async function getQueueOverloads(employee, options = {}) {
       signal: options.signal
     }
   );
-  if (!res.ok) throw new Error('Ошибка загрузки перегруза очереди');
+  await ensureOk(res, 'Ошибка загрузки перегруза очереди');
   return res.json();
 }
 

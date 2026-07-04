@@ -39,7 +39,6 @@ import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
 import DeadlineWarnings from './components/DeadlineWarnings';
 import ActiveTasksList from './components/ActiveTasksList';
-import DayReportList from './components/DayReportList';
 import CompletedTasksSection from './components/CompletedTasksSection';
 import TaskTable from './components/TaskTable';
 import LunchBreakOverlay from './components/LunchBreakOverlay';
@@ -66,6 +65,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { ruRU } from '@mui/x-date-pickers/locales';
 import 'dayjs/locale/ru';
+import { DEPLOY_MAINTENANCE_EVENT } from './utils/deployMaintenance';
 import './App.css';
 
 function AuthenticatedAppContent() {
@@ -173,9 +173,19 @@ function AuthenticatedAppContent() {
     ]
   );
 
+  const handleDeployMaintenanceDetected = useCallback(() => {
+    setDeployMaintenanceActive(true);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener(DEPLOY_MAINTENANCE_EVENT, handleDeployMaintenanceDetected);
+    return () => window.removeEventListener(DEPLOY_MAINTENANCE_EVENT, handleDeployMaintenanceDetected);
+  }, [handleDeployMaintenanceDetected]);
+
   const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers, {
-    enabled: Boolean(user?.isAuthenticated),
-    viewSubscription
+    enabled: Boolean(user?.isAuthenticated) && !deployMaintenanceActive,
+    viewSubscription,
+    onMaintenanceDetected: handleDeployMaintenanceDetected
   });
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
@@ -485,7 +495,6 @@ function AuthenticatedAppContent() {
                   employee={employee}
                   isAdmin={isAdmin}
                 />
-                <DayReportList employee={employee} />
                 <CompletedTasksSection employee={employee} />
               </>
             )}

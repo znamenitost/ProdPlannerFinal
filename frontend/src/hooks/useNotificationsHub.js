@@ -1,6 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as signalR from '@microsoft/signalr';
 import { buildViewSubscriptionState, syncHubViewGroups } from '../utils/hubViewSubscription';
+import {
+  isDeployMaintenanceMessage,
+  notifyDeployMaintenanceIfNeeded,
+  shortenHubLogMessage
+} from '../utils/deployMaintenance';
+
+function buildHubLogger(onMaintenanceDetected) {
+  return (logLevel, message) => {
+    const text = String(message ?? '');
+    if (notifyDeployMaintenanceIfNeeded(text) || isDeployMaintenanceMessage(text)) {
+      onMaintenanceDetected?.();
+      return;
+    }
+    if (logLevel >= signalR.LogLevel.Warning) {
+      console.warn(shortenHubLogMessage(text));
+    }
+  };
+}
 
 function formatNotificationDeadline(deadline) {
   if (deadline == null || deadline === '') return 'не указан';
@@ -56,9 +74,10 @@ function shouldRefreshCalendar(event) {
  * @param {() => void} [handlers.onFullRefresh] — reconnect и т.п.
  * @param {() => void} [handlers.onCdrPreviewRetryDue] — повторный поиск превью .cdr
  * @param {object} [options.viewSubscription] — { activeTab, employee, userFullName, isAdmin }
+ * @param {() => void} [options.onMaintenanceDetected] — сервер в режиме деплоя (503 / app_offline)
  */
 export default function useNotificationsHub(user, handlers = {}, options = {}) {
-  const { enabled = true, viewSubscription } = options;
+  const { enabled = true, viewSubscription, onMaintenanceDetected } = options;
   const [notifications, setNotifications] = useState([]);
   const refreshTimeoutRef = useRef(null);
   const taskEventChainRef = useRef(Promise.resolve());
@@ -68,7 +87,21 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
   const connectionRef = useRef(null);
   const prevViewRef = useRef(null);
   const viewSubscriptionRef = useRef(viewSubscription);
+  const onMaintenanceDetectedRef = useRef(onMaintenanceDetected);
   viewSubscriptionRef.current = viewSubscription;
+  onMaintenanceDetectedRef.current = onMaintenanceDetected;
+
+  const handleMaintenanceDetected = useCallback(async (connection) => {
+    onMaintenanceDetectedRef.current?.();
+    if (connection?.state !== signalR.HubConnectionState.Disconnected
+      && connection?.state !== signalR.HubConnectionState.Disconnecting) {
+      try {
+        await connection.stop();
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
 
   const applyViewSubscription = useCallback(async () => {
     const conn = connectionRef.current;
@@ -196,7 +229,11 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
         credentials: 'include',
         signal,
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        notifyDeployMaintenanceIfNeeded(text);
+        return;
+      }
       const pending = await response.json();
       pending.forEach((dto) => offerNotification(mapPendingDto(dto)));
     } catch (err) {
@@ -217,6 +254,9 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     const connection = new signalR.HubConnectionBuilder()
       .withUrl('/notificationHub', { withCredentials: true })
       .withAutomaticReconnect()
+      .configureLogging(buildHubLogger(() => {
+        handleMaintenanceDetected(connection);
+      }))
       .build();
 
     const handleNewTask = (notificationId, taskId, taskTitle, deadline, type) => {
@@ -318,7 +358,11 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
         if (!isMounted) return;
         const message = err?.message ?? String(err);
         if (message.includes('stopped during negotiation')) return;
-        console.warn('SignalR start error:', message);
+        if (isDeployMaintenanceMessage(message)) {
+          await handleMaintenanceDetected(connection);
+          return;
+        }
+        console.warn('SignalR start error:', shortenHubLogMessage(message));
         await fetchPendingNotifications(abort.signal);
       }
     };
@@ -383,7 +427,8 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     flushHiddenQueue,
     scheduleCalendarRefresh,
     scheduleTaskEvent,
-    applyViewSubscription
+    applyViewSubscription,
+    handleMaintenanceDetected
   ]);
 
   const closeNotification = useCallback((id) => {
