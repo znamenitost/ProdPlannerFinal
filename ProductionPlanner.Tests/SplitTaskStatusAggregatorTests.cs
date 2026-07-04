@@ -12,12 +12,13 @@ public class SplitTaskStatusAggregatorTests
         Status = JobStatus.Assigned
     };
 
-    private static ProductionTask Child(string employee, JobStatus status) => new()
+    private static ProductionTask Child(string employee, JobStatus status, bool priorityMarked = false) => new()
     {
         EmployeeName = employee,
         Status = status,
         IsSplitTask = true,
-        ParentRowNumber = 1
+        ParentRowNumber = 1,
+        IsPriorityMarked = priorityMarked
     };
 
     [Fact]
@@ -79,6 +80,24 @@ public class SplitTaskStatusAggregatorTests
     }
 
     [Fact]
+    public void CompletedPausedAndAssigned_ShowsPauza()
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Completed),
+            Child("Яромир", JobStatus.Paused),
+            Child("Олег", JobStatus.Assigned)
+        };
+
+        var (statusText, _) = SplitTaskStatusAggregator.Aggregate(parent, children, "Дима");
+        var resolved = SplitTaskStatusAggregator.ResolveParentStatus(children);
+
+        Assert.Equal("Пауза", statusText);
+        Assert.Equal(JobStatus.Paused, resolved);
+    }
+
+    [Fact]
     public void NoChildrenStarted_ShowsNaznachena()
     {
         var parent = Parent();
@@ -94,9 +113,9 @@ public class SplitTaskStatusAggregatorTests
     }
 
     [Theory]
-    [InlineData(JobStatus.Approved)]
-    [InlineData(JobStatus.InStock)]
-    public void ResolvedInfoStatusWithoutWork_DoesNotStartParent(JobStatus childStatus)
+    [InlineData(JobStatus.Approved, "Согласовано")]
+    [InlineData(JobStatus.InStock, "В наличии")]
+    public void ResolvedInfoStatus_ElevatesParent(JobStatus childStatus, string expectedText)
     {
         var parent = Parent();
         var children = new List<ProductionTask>
@@ -107,7 +126,39 @@ public class SplitTaskStatusAggregatorTests
 
         var (statusText, _) = SplitTaskStatusAggregator.Aggregate(parent, children, "Дима");
 
+        Assert.Equal(expectedText, statusText);
+    }
+
+    [Fact]
+    public void PendingApprovalOverridesInProgress_OnParentDisplay()
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.InProgress),
+            Child("Яромир", JobStatus.PendingApproval)
+        };
+
+        var (statusText, _) = SplitTaskStatusAggregator.Aggregate(parent, children, "Дима");
+
+        Assert.Equal("Согласование", statusText);
+    }
+
+    [Fact]
+    public void SingleActiveChildWaiting_ShowsNaznachena()
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Completed),
+            Child("Яромир", JobStatus.Waiting)
+        };
+
+        var (statusText, _) = SplitTaskStatusAggregator.Aggregate(parent, children, "Яромир");
+        var resolved = SplitTaskStatusAggregator.ResolveParentStatus(children);
+
         Assert.Equal("Назначена", statusText);
+        Assert.Equal(JobStatus.Assigned, resolved);
     }
 
     [Fact]
@@ -159,6 +210,8 @@ public class SplitTaskStatusAggregatorTests
     [InlineData(JobStatus.Paused, JobStatus.Paused)]
     [InlineData(JobStatus.InProgress, JobStatus.InProgress)]
     [InlineData(JobStatus.Assigned, JobStatus.Assigned)]
+    [InlineData(JobStatus.Waiting, JobStatus.Assigned)]
+    [InlineData(JobStatus.Approved, JobStatus.Assigned)]
     public void ResolveParentStatus_WithSingleActiveChild_MirrorsChildStatus(
         JobStatus childStatus,
         JobStatus expectedParentStatus)
@@ -188,6 +241,21 @@ public class SplitTaskStatusAggregatorTests
     }
 
     [Fact]
+    public void ResolveParentStatus_PausedAndAssignedWithoutInProgress_ReturnsPaused()
+    {
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Paused),
+            Child("Яромир", JobStatus.Assigned),
+            Child("Олег", JobStatus.Waiting)
+        };
+
+        var resolved = SplitTaskStatusAggregator.ResolveParentStatus(children);
+
+        Assert.Equal(JobStatus.Paused, resolved);
+    }
+
+    [Fact]
     public void AggregatePriorityMarked_false_when_parent_and_children_unmarked()
     {
         var parent = Parent();
@@ -206,7 +274,7 @@ public class SplitTaskStatusAggregatorTests
         var parent = Parent();
         var children = new List<ProductionTask>
         {
-            Child("Дима", JobStatus.Assigned) { IsPriorityMarked = true },
+            Child("Дима", JobStatus.Assigned, priorityMarked: true),
             Child("Яромир", JobStatus.InProgress)
         };
 

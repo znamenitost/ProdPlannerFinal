@@ -5,22 +5,118 @@ namespace ProductionPlanner.Services.TaskTable;
 
 public static class SplitTaskStatusAggregator
 {
+    /// <summary>
+    /// Вес статуса среди дочерних (слабее → сильнее). «Начал» — отдельное правило, не в списке.
+    /// «Ожидание» только у дочерних; на родителе отображается как «Назначена».
+    /// </summary>
+    private static readonly JobStatus[] StatusWeightOrder =
+    [
+        JobStatus.Assigned,
+        JobStatus.Waiting,
+        JobStatus.Paused,
+        JobStatus.Approved,
+        JobStatus.PendingApproval,
+        JobStatus.InStock,
+        JobStatus.NoItems,
+        JobStatus.Completed,
+    ];
+
+    private static readonly HashSet<JobStatus> InfoStatuses =
+    [
+        JobStatus.Approved,
+        JobStatus.PendingApproval,
+        JobStatus.InStock,
+        JobStatus.NoItems,
+    ];
+
+    private static int GetWeight(JobStatus status)
+    {
+        for (var i = 0; i < StatusWeightOrder.Length; i++)
+        {
+            if (StatusWeightOrder[i] == status)
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static JobStatus StrongestByWeight(IEnumerable<JobStatus> statuses)
+    {
+        return statuses.OrderByDescending(GetWeight).First();
+    }
+
+    private static JobStatus? StrongestInfoStatus(IEnumerable<ProductionTask> children)
+    {
+        var infoStatuses = children
+            .Select(c => c.Status)
+            .Where(InfoStatuses.Contains)
+            .ToList();
+
+        if (infoStatuses.Count == 0)
+            return null;
+
+        return StrongestByWeight(infoStatuses);
+    }
+
+    /// <summary>Текст статуса родителя: «Ожидание» у ребёнка → «Назначена».</summary>
+    private static string ToParentDisplayText(JobStatus status) =>
+        status == JobStatus.Waiting
+            ? TaskStatusMapper.ToText(JobStatus.Assigned)
+            : TaskStatusMapper.ToText(status);
+
+    /// <summary>Статус в БД: только workflow; инфо и «Ожидание» → Assigned.</summary>
+    private static JobStatus ToParentDbStatus(JobStatus status) =>
+        status is JobStatus.InProgress or JobStatus.Paused or JobStatus.Completed
+            ? status
+            : JobStatus.Assigned;
+
+    /// <summary>
+    /// Статус split-родителя для записи в БД.
+    /// Инфостатусы на родителя не пишутся — только Assigned / InProgress / Paused / Completed.
+    /// </summary>
     public static JobStatus ResolveParentStatus(IReadOnlyList<ProductionTask> children)
     {
         if (children.Count == 0)
             return JobStatus.Assigned;
 
-        var activeChildren = children.Where(c => c.Status != JobStatus.Completed).ToList();
-        if (activeChildren.Count == 1)
-            return activeChildren[0].Status;
-
         if (children.All(c => c.Status == JobStatus.Completed))
             return JobStatus.Completed;
 
-        if (children.Any(c => c.Status is JobStatus.Completed or JobStatus.InProgress or JobStatus.Paused))
+        var activeChildren = children.Where(c => c.Status != JobStatus.Completed).ToList();
+
+        if (activeChildren.Any(c => c.Status == JobStatus.InProgress))
             return JobStatus.InProgress;
 
-        return JobStatus.Assigned;
+        if (activeChildren.Count == 1)
+            return ToParentDbStatus(activeChildren[0].Status);
+
+        var strongest = StrongestByWeight(activeChildren.Select(c => c.Status));
+        return ToParentDbStatus(strongest);
+    }
+
+    /// <summary>Текст статуса split-родителя для отображения (учитывает инфостатусы детей).</summary>
+    public static string ResolveParentDisplayStatus(IReadOnlyList<ProductionTask> children)
+    {
+        if (children.Count == 0)
+            return TaskStatusMapper.ToText(JobStatus.Assigned);
+
+        if (children.All(c => c.Status == JobStatus.Completed))
+            return TaskStatusMapper.ToText(JobStatus.Completed);
+
+        var infoStatus = StrongestInfoStatus(children);
+        if (infoStatus.HasValue)
+            return ToParentDisplayText(infoStatus.Value);
+
+        if (children.Any(c => c.Status == JobStatus.InProgress))
+            return TaskStatusMapper.ToText(JobStatus.InProgress);
+
+        var activeChildren = children.Where(c => c.Status != JobStatus.Completed).ToList();
+
+        if (activeChildren.Count == 1)
+            return ToParentDisplayText(activeChildren[0].Status);
+
+        var strongest = StrongestByWeight(activeChildren.Select(c => c.Status));
+        return ToParentDisplayText(strongest);
     }
 
     public static TaskStatusPatch? BuildParentStatusPatch(
@@ -54,25 +150,7 @@ public static class SplitTaskStatusAggregator
         hasCurrentUserSubtask = children.Any(c =>
             c.EmployeeName == targetEmployeeName && c.Status != JobStatus.Completed);
 
-        var activeChildren = children.Where(c => c.Status != JobStatus.Completed).ToList();
-        if (activeChildren.Count == 1)
-            statusText = TaskStatusMapper.ToText(activeChildren[0].Status);
-        else if (children.Any(c => c.Status == JobStatus.PendingApproval))
-            statusText = TaskStatusMapper.ToText(JobStatus.PendingApproval);
-        else if (children.Any(c => c.Status == JobStatus.NoItems))
-            statusText = "Нет изделий";
-        else if (children.All(c => c.Status == JobStatus.Completed))
-            statusText = "Готово";
-        else if (children.Any(c => c.Status == JobStatus.Paused)
-                 && children.All(c => c.Status is JobStatus.Paused or JobStatus.Assigned or JobStatus.Waiting))
-            statusText = "Пауза";
-        else if (children.Any(c =>
-                     c.Status == JobStatus.Completed
-                     || c.Status == JobStatus.InProgress
-                     || c.Status == JobStatus.Paused))
-            statusText = "Начал";
-        else
-            statusText = "Назначена";
+        statusText = ResolveParentDisplayStatus(children);
 
         return (statusText, hasCurrentUserSubtask);
     }
