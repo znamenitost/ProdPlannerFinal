@@ -302,4 +302,34 @@ public class SplitTaskStatusAggregatorTests
 
         Assert.True(SplitTaskStatusAggregator.AggregatePriorityMarked(parent, null));
     }
+
+    [Fact]
+    public void AggregatePriorityMarked_scoped_true_only_for_viewer_child()
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Assigned, priorityMarked: true),
+            Child("Яромир", JobStatus.InProgress)
+        };
+
+        Assert.True(SplitTaskStatusAggregator.AggregatePriorityMarked(
+            parent, children, "Дима", restrictToViewer: true));
+        Assert.False(SplitTaskStatusAggregator.AggregatePriorityMarked(
+            parent, children, "Яромир", restrictToViewer: true));
+    }
+
+    [Fact]
+    public void AggregatePriorityMarked_scoped_false_when_only_colleague_marked()
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Assigned),
+            Child("Яромир", JobStatus.InProgress, priorityMarked: true)
+        };
+
+        Assert.False(SplitTaskStatusAggregator.AggregatePriorityMarked(
+            parent, children, "Дима", restrictToViewer: true));
+    }
 }

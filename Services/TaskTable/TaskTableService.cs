@@ -50,12 +50,20 @@ public class TaskTableService : ITaskTableService
         (task.WorkIntervals?.Count ?? 0) > 0
         || task.Status is not (JobStatus.Assigned or JobStatus.Waiting);
 
+    private static (string? ViewerEmployeeName, bool RestrictToViewer) GetPriorityMarkScope(
+        string targetEmployeeName,
+        bool viewerIsAdmin) =>
+        viewerIsAdmin
+            ? (null, false)
+            : (targetEmployeeName, true);
+
     public async Task<PaginatedResult<TaskTableRowDto>> GetRowsAsync(
         int page,
         int pageSize,
         string targetEmployeeName,
         bool excludeCompleted = false,
         string? search = null,
+        bool viewerIsAdmin = true,
         CancellationToken cancellationToken = default)
     {
         var pageResult = await _repo.GetRootTasksPaginatedAsync(
@@ -92,6 +100,7 @@ public class TaskTableService : ITaskTableService
                 .ToDictionary(g => g.Key, g => (IReadOnlyList<WorkInterval>)g.ToList());
         var now = _timeService.Now;
         var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync(parentIds, cancellationToken);
+        var (priorityMarkViewer, restrictPriorityMark) = GetPriorityMarkScope(targetEmployeeName, viewerIsAdmin);
 
         var rows = pageResult.Items.Select(parent =>
         {
@@ -103,7 +112,15 @@ public class TaskTableService : ITaskTableService
             intervalsByTask.TryGetValue(parent.Id, out var intervals);
             intervals ??= Array.Empty<WorkInterval>();
             var dto = TaskTableRowDto.FromParent(
-                parent, statusText, hasSubtask, children, intervals, now, childIntervalsByTask);
+                parent,
+                statusText,
+                hasSubtask,
+                children,
+                intervals,
+                now,
+                childIntervalsByTask,
+                priorityMarkViewer,
+                restrictPriorityMark);
             dto.HasCdrPreview = previewIds.Contains(parent.Id);
             return dto;
         }).ToList();
@@ -120,6 +137,7 @@ public class TaskTableService : ITaskTableService
     public async Task<TaskTableRowDto?> GetRowDtoAsync(
         int id,
         string targetEmployeeName,
+        bool viewerIsAdmin = true,
         CancellationToken cancellationToken = default)
     {
         var task = await _repo.GetTaskByIdAsync(id, cancellationToken, includeIntervals: true);
@@ -133,6 +151,7 @@ public class TaskTableService : ITaskTableService
         var hasCdrPreview = previewIds.Contains(id);
         var now = _timeService.Now;
         var intervals = (IReadOnlyList<WorkInterval>)(task.WorkIntervals ?? []);
+        var (priorityMarkViewer, restrictPriorityMark) = GetPriorityMarkScope(targetEmployeeName, viewerIsAdmin);
 
         if (task.ParentRowNumber != null)
         {
@@ -145,7 +164,9 @@ public class TaskTableService : ITaskTableService
                 TaskStatusMapper.ToText(task.Status),
                 hasCurrentUserSubtask: false,
                 workIntervals: intervals,
-                now: now);
+                now: now,
+                priorityMarkViewerEmployeeName: priorityMarkViewer,
+                restrictPriorityMarkToViewer: restrictPriorityMark);
             dto.SupplyMode = parent?.SupplyMode ?? SupplyMode.None;
             dto.SequenceOrder = sequenceOrder;
             dto.SequenceStartBlocked = parent?.SupplyMode == SupplyMode.InternalProduction
@@ -173,7 +194,15 @@ public class TaskTableService : ITaskTableService
         }
 
         var parentDto = TaskTableRowDto.FromParent(
-            task, statusText, hasSubtask, children, intervals, now, childIntervalsByTask);
+            task,
+            statusText,
+            hasSubtask,
+            children,
+            intervals,
+            now,
+            childIntervalsByTask,
+            priorityMarkViewer,
+            restrictPriorityMark);
         parentDto.HasCdrPreview = hasCdrPreview;
         return parentDto;
     }

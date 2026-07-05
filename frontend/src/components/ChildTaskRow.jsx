@@ -33,6 +33,7 @@ import { childRowSx, highlightedTaskRowSx } from '../theme/surfaces';
 import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
 import { getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
 import { getSplitSupplyMode } from '../utils/throughApproval';
+import { getPriorityMarkViewerEmployeeName } from '../utils/taskPriorityMark';
 
 function ChildTaskRow({
   task,
@@ -82,6 +83,8 @@ function ChildTaskRow({
     if (currentUser.role === 'Admin') return true;
     return task.employeeName === currentUser.fullName && task.statusText !== 'Готово';
   };
+
+  const priorityMarkViewer = getPriorityMarkViewerEmployeeName(currentUser);
 
   const getRowStyle = (theme) => {
     let style = {
@@ -209,7 +212,7 @@ function ChildTaskRow({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
           <TaskStatusCell statusText={task.statusText} />
           <ThroughApprovalChip task={task} />
-          <TaskPriorityChip task={task} />
+          <TaskPriorityChip task={task} viewerEmployeeName={priorityMarkViewer} />
           {isAdmin && <MaxSubscribeChip subscribed={maxSubscribed} />}
         </Box>
       </TableCell>

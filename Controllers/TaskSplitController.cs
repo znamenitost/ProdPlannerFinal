@@ -133,6 +133,7 @@ namespace ProductionPlanner.Controllers
                     c.Comment,
                     StatusText = TaskStatusMapper.ToText(c.Status),
                     status = (int)c.Status,
+                    isPriorityMarked = c.IsPriorityMarked,
                     c.Deadline,
                     c.EstimateHours,
                     c.ActualHours,

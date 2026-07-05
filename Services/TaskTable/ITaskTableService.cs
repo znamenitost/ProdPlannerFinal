@@ -11,10 +11,12 @@ public interface ITaskTableService
         string targetEmployeeName,
         bool excludeCompleted = false,
         string? search = null,
+        bool viewerIsAdmin = true,
         CancellationToken cancellationToken = default);
     Task<TaskTableRowDto?> GetRowDtoAsync(
         int id,
         string targetEmployeeName,
+        bool viewerIsAdmin = true,
         CancellationToken cancellationToken = default);
     Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(
         CreateTaskRequest request,

@@ -27,8 +27,12 @@ export function TaskPriorityMark({ size = 22, iconSize = 14 }) {
   );
 }
 
-export default function TaskPriorityChip({ task, childrenTasks = null }) {
-  if (!taskShowsPriorityMark(task, childrenTasks)) return null;
+export default function TaskPriorityChip({
+  task,
+  childrenTasks = null,
+  viewerEmployeeName = null
+}) {
+  if (!taskShowsPriorityMark(task, childrenTasks, { viewerEmployeeName })) return null;
 
   return (
     <LazyTooltip title="В приоритете" arrow>

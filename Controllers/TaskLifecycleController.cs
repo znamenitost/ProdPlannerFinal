@@ -165,7 +165,7 @@ public class TaskLifecycleController : ControllerBase
         var removedFromTable = taskEntity == null || taskEntity.HiddenFromTaskTable;
         TaskTableRowDto? row = null;
         if (!removedFromTable)
-            row = await _tableService.GetRowDtoAsync(taskId, targetEmployeeName, cancellationToken);
+            row = await _tableService.GetRowDtoAsync(taskId, targetEmployeeName, isAdmin, cancellationToken);
 
         TaskTableRowDto? parentRow = null;
         var parentRemovedFromTable = false;
@@ -178,6 +178,7 @@ public class TaskLifecycleController : ControllerBase
                 parentRow = await _tableService.GetRowDtoAsync(
                     parentRowId.Value,
                     targetEmployeeName,
+                    isAdmin,
                     cancellationToken);
             }
         }

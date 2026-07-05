@@ -54,6 +54,7 @@ import {
 } from '../utils/taskTableStyles';
 import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
 import { getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
+import { getPriorityMarkViewerEmployeeName } from '../utils/taskPriorityMark';
 
 function ParentTaskRow({
   task,
@@ -152,6 +153,7 @@ function ParentTaskRow({
   };
 
   const childCount = childrenTasks?.length ?? 0;
+  const priorityMarkViewer = getPriorityMarkViewerEmployeeName(currentUser);
   const showSharedGroupStripe = hasChildren && isExpanded;
   const sharedGroupExpanded = showSharedGroupStripe && childCount > 0;
 
@@ -295,7 +297,11 @@ function ParentTaskRow({
               label={hasChildren ? displayStatus : undefined}
             />
             <ThroughApprovalChip task={task} childrenTasks={childrenTasks} />
-            <TaskPriorityChip task={task} childrenTasks={childrenTasks} />
+            <TaskPriorityChip
+              task={task}
+              childrenTasks={childrenTasks}
+              viewerEmployeeName={priorityMarkViewer}
+            />
             {canEdit && <MaxSubscribeChip subscribed={maxSubscribedSet.has(task.id)} />}
           </Box>
         </TableCell>

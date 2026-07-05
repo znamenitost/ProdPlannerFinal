@@ -62,7 +62,9 @@ public class TaskTableRowDto
         IReadOnlyList<ProductionTask>? children = null,
         IReadOnlyList<WorkInterval>? workIntervals = null,
         DateTime? now = null,
-        IReadOnlyDictionary<int, IReadOnlyList<WorkInterval>>? childIntervalsByTaskId = null)
+        IReadOnlyDictionary<int, IReadOnlyList<WorkInterval>>? childIntervalsByTaskId = null,
+        string? priorityMarkViewerEmployeeName = null,
+        bool restrictPriorityMarkToViewer = false)
     {
         var splitEmployeeNames = "";
         if (parent.IsSplitTask && children is { Count: > 0 })
@@ -92,7 +94,11 @@ public class TaskTableRowDto
             CommentEditedViaDialog = parent.CommentEditedViaDialog,
             StatusText = statusText,
             Status = parent.Status,
-            IsPriorityMarked = SplitTaskStatusAggregator.AggregatePriorityMarked(parent, children),
+            IsPriorityMarked = SplitTaskStatusAggregator.AggregatePriorityMarked(
+                parent,
+                children,
+                priorityMarkViewerEmployeeName,
+                restrictPriorityMarkToViewer),
             Deadline = parent.Deadline,
             EstimateHours = parent.EstimateHours,
             Type = parent.Type,

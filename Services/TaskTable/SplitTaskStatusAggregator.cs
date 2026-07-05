@@ -157,8 +157,23 @@ public static class SplitTaskStatusAggregator
 
     public static bool AggregatePriorityMarked(
         ProductionTask parent,
-        IReadOnlyList<ProductionTask>? children)
+        IReadOnlyList<ProductionTask>? children,
+        string? viewerEmployeeName = null,
+        bool restrictToViewer = false)
     {
+        if (restrictToViewer && !string.IsNullOrWhiteSpace(viewerEmployeeName))
+        {
+            if (!parent.IsSplitTask || children is not { Count: > 0 })
+            {
+                return parent.IsPriorityMarked
+                    && string.Equals(parent.EmployeeName, viewerEmployeeName, StringComparison.Ordinal);
+            }
+
+            return children.Any(c =>
+                c.IsPriorityMarked
+                && string.Equals(c.EmployeeName, viewerEmployeeName, StringComparison.Ordinal));
+        }
+
         if (parent.IsPriorityMarked)
             return true;
 

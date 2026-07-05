@@ -69,6 +69,7 @@ public class ProductionTasksController : ControllerBase
         {
             var (currentUser, targetEmployeeName) = await ResolveViewerAsync(employee, cancellationToken);
             if (currentUser == null) return Unauthorized();
+            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
 
             var result = await _tableService.GetRowsAsync(
                 page,
@@ -76,6 +77,7 @@ public class ProductionTasksController : ControllerBase
                 targetEmployeeName!,
                 excludeCompleted,
                 search,
+                isAdmin,
                 cancellationToken);
             return Ok(result);
         }
@@ -96,8 +98,9 @@ public class ProductionTasksController : ControllerBase
         {
             var (currentUser, targetEmployeeName) = await ResolveViewerAsync(employee, cancellationToken);
             if (currentUser == null) return Unauthorized();
+            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
 
-            var row = await _tableService.GetRowDtoAsync(id, targetEmployeeName!, cancellationToken);
+            var row = await _tableService.GetRowDtoAsync(id, targetEmployeeName!, isAdmin, cancellationToken);
             if (row == null)
                 return NotFound();
 
@@ -208,7 +211,7 @@ public class ProductionTasksController : ControllerBase
 
             if (!isAdmin)
             {
-                var task = await _tableService.GetRowDtoAsync(id, currentUser.FullName, cancellationToken);
+                var task = await _tableService.GetRowDtoAsync(id, currentUser.FullName, viewerIsAdmin: false, cancellationToken);
                 if (task == null) return NotFound();
 
                 var isOwnTask = string.Equals(task.EmployeeName, currentUser.FullName, StringComparison.Ordinal)

@@ -73,11 +73,31 @@ public static class PlannedTimeProgressCalculator
             intervalsByChildId.TryGetValue(child.Id, out var intervals);
             intervals ??= Array.Empty<WorkInterval>();
             var progressIntervals = TestPhaseWorkflow.GetIntervalsForProgress(child, intervals.ToList());
-            var elapsed = GetElapsedWorkHours(progressIntervals, now);
-            fraction += estimate / totalEstimate * Math.Min(elapsed / estimate, 1.0);
+            var childFraction = GetChildSegmentFraction(child, progressIntervals, estimate, now);
+            fraction += estimate / totalEstimate * childFraction;
         }
 
         return Math.Clamp(Math.Round(fraction * 100), 0, 100);
+    }
+
+    /// <summary>
+    /// Доля заполнения сегмента ребёнка на родительской полосе: 0–1.
+    /// Готово — всегда 100% своей доли; не начато — 0%; в работе — по отработанным часам.
+    /// </summary>
+    private static double GetChildSegmentFraction(
+        ProductionTask child,
+        IReadOnlyList<WorkInterval> intervals,
+        double estimateHours,
+        DateTime now)
+    {
+        if (child.Status == JobStatus.Completed)
+            return 1.0;
+
+        if (!HasWorkStarted(child.Status, intervals))
+            return 0;
+
+        var elapsed = GetElapsedWorkHours(intervals, now);
+        return Math.Min(elapsed / estimateHours, 1.0);
     }
 
     public static bool ShouldShowSplitParent(
