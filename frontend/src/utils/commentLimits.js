@@ -11,6 +11,13 @@ export function formatCommentForDisplay(value, max = COMMENT_DISPLAY_MAX_LENGTH)
   return `${text.slice(0, max)}…`;
 }
 
+/** Tooltip only when the table text-limit setting truncates the comment preview. */
+export function commentNeedsTooltip(value, max = COMMENT_DISPLAY_MAX_LENGTH) {
+  const text = String(value ?? '').trim();
+  if (!text) return false;
+  return text.length > max;
+}
+
 export function getCommentDisplaySx(max = COMMENT_DISPLAY_MAX_LENGTH) {
   return {
     fontSize: '0.875rem',
