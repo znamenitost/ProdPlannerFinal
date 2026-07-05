@@ -1,5 +1,5 @@
 import { Box, CircularProgress, Typography } from '@mui/material';
-import LazyTooltip from '../common/LazyTooltip';
+import TableTruncatedTooltip from './TableTruncatedTooltip';
 import { needsTooltip, truncateText, cellDisplayTextSx } from '../../utils/taskTableStyles';
 
 export function taskFileShowsOnlineDot(task) {
@@ -41,22 +41,14 @@ export default function TaskFileNameCell({
     />
   );
 
-  const content = (
-    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, maxWidth: '100%' }}>
-      {dotSlot}
-      <Typography variant="body2" component="span" sx={cellDisplayTextSx}>
-        {needsTooltip(name, limit) ? truncateText(name, limit) : name}
-      </Typography>
-    </Box>
+  return (
+    <TableTruncatedTooltip fullText={fileName} limit={limit}>
+      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, maxWidth: '100%' }}>
+        {dotSlot}
+        <Typography variant="body2" component="span" sx={cellDisplayTextSx}>
+          {needsTooltip(name, limit) ? truncateText(name, limit) : name}
+        </Typography>
+      </Box>
+    </TableTruncatedTooltip>
   );
-
-  if (needsTooltip(name, limit)) {
-    return (
-      <LazyTooltip title={fileName} arrow>
-        {content}
-      </LazyTooltip>
-    );
-  }
-
-  return content;
 }

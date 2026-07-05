@@ -28,6 +28,7 @@ import MaxSubscribeChip from './taskTable/MaxSubscribeChip';
 import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
+import TableTruncatedTooltip from './taskTable/TableTruncatedTooltip';
 import LazyTooltip from './common/LazyTooltip';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import TaskFileNameCell from './taskTable/TaskFileNameCell';
@@ -244,17 +245,13 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)}>
-          {needsTooltip(shortFolderPath || task.folderPath, limit) ? (
-            <LazyTooltip title={task.folderPath || ''} arrow>
-              <Typography variant="body2" sx={{ fontWeight: 600, ...cellDisplayTextSx }}>
-                {truncateText(shortFolderPath || task.folderPath, limit)}
-              </Typography>
-            </LazyTooltip>
-          ) : (
+          <TableTruncatedTooltip fullText={task.folderPath || ''} limit={limit}>
             <Typography variant="body2" sx={{ fontWeight: 600, ...cellDisplayTextSx }}>
-              {shortFolderPath || task.folderPath || '—'}
+              {needsTooltip(shortFolderPath || task.folderPath, limit)
+                ? truncateText(shortFolderPath || task.folderPath, limit)
+                : shortFolderPath || task.folderPath || '—'}
             </Typography>
-          )}
+          </TableTruncatedTooltip>
         </TableCell>
 
         <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>

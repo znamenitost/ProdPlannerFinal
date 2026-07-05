@@ -1,4 +1,4 @@
-import { isValidElement, useState } from 'react';
+import { cloneElement, isValidElement, useState } from 'react';
 import { Tooltip } from '@mui/material';
 
 function callHandler(handler, event) {
@@ -6,12 +6,6 @@ function callHandler(handler, event) {
     handler(event);
   }
 }
-
-const triggerWrapStyle = {
-  display: 'block',
-  minWidth: 0,
-  maxWidth: '100%'
-};
 
 export default function LazyTooltip({ children, title, ...tooltipProps }) {
   const [mounted, setMounted] = useState(false);
@@ -30,32 +24,27 @@ export default function LazyTooltip({ children, title, ...tooltipProps }) {
     setOpen(false);
   };
 
-  const trigger = (
-    <span
-      style={triggerWrapStyle}
-      onMouseEnter={(event) => {
-        callHandler(children.props.onMouseEnter, event);
-        openTooltip();
-      }}
-      onFocus={(event) => {
-        callHandler(children.props.onFocus, event);
-        openTooltip();
-      }}
-      onMouseLeave={(event) => {
-        callHandler(children.props.onMouseLeave, event);
-        closeTooltip();
-      }}
-      onBlur={(event) => {
-        callHandler(children.props.onBlur, event);
-        closeTooltip();
-      }}
-    >
-      {children}
-    </span>
-  );
+  const child = cloneElement(children, {
+    onMouseEnter: (event) => {
+      callHandler(children.props.onMouseEnter, event);
+      openTooltip();
+    },
+    onFocus: (event) => {
+      callHandler(children.props.onFocus, event);
+      openTooltip();
+    },
+    onMouseLeave: (event) => {
+      callHandler(children.props.onMouseLeave, event);
+      closeTooltip();
+    },
+    onBlur: (event) => {
+      callHandler(children.props.onBlur, event);
+      closeTooltip();
+    }
+  });
 
   if (!mounted) {
-    return trigger;
+    return child;
   }
 
   return (
@@ -66,7 +55,7 @@ export default function LazyTooltip({ children, title, ...tooltipProps }) {
       onOpen={() => setOpen(true)}
       onClose={() => setOpen(false)}
     >
-      {trigger}
+      {child}
     </Tooltip>
   );
 }
