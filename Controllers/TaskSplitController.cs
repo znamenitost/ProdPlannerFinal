@@ -131,6 +131,7 @@ namespace ProductionPlanner.Controllers
                     c.FolderPath,
                     c.FileName,
                     c.Comment,
+                    commentEditedViaDialog = c.CommentEditedViaDialog,
                     StatusText = TaskStatusMapper.ToText(c.Status),
                     status = (int)c.Status,
                     isPriorityMarked = c.IsPriorityMarked,
