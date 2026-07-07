@@ -32,7 +32,7 @@ export default function CompletedTasksSection({ employee }) {
         </Typography>
       </AccordionSummary>
       <AccordionDetails sx={{ px: 2, pb: 2, pt: 0 }}>
-        <CompletedTasksList employee={employee} embedded />
+        {expanded && <CompletedTasksList employee={employee} embedded />}
       </AccordionDetails>
     </Accordion>
   );

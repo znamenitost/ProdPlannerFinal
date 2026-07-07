@@ -336,8 +336,15 @@ export default function TaskTable({
     const shouldPromoteSingleChild =
       hideCompletedInSharedSort && parent.isSplitTask && !isCompletedRow(parent) && children.length === 1;
     const displayTask = shouldPromoteSingleChild
-      ? { ...children[0], isSplitTask: false }
+      ? {
+          ...children[0],
+          isSplitTask: false,
+          hasCdrPreview: Boolean(children[0]?.hasCdrPreview || parent?.hasCdrPreview)
+        }
       : parent;
+    const displayPreviewBuilding = shouldPromoteSingleChild
+      ? table.isCdrPreviewBuilding(children[0].id) || table.isCdrPreviewBuilding(parent.id)
+      : table.isCdrPreviewBuilding(parent.id);
     const displayChildren = shouldPromoteSingleChild ? [] : children;
     const isExpanded = table.expandedRows.has(parent.id)
       || (searchResult.autoExpandIds.has(parent.id) && !shouldPromoteSingleChild);
@@ -350,7 +357,7 @@ export default function TaskTable({
         onOpenAssigneeModal={table.handleOpenAssigneeModal}
         showHoursTypeColumns={table.showHoursTypeColumns}
         columnVisibility={columnSettings.visibility}
-        cdrPreviewBuilding={table.isCdrPreviewBuilding(parent.id)}
+        cdrPreviewBuilding={displayPreviewBuilding}
       />
     ) : (
       <ParentTaskRow
@@ -382,7 +389,9 @@ export default function TaskTable({
         columnVisibility={columnSettings.visibility}
         textLimit={columnSettings.textLimit}
         showPlannedProgress={showPlannedProgress}
-        isCdrPreviewBuilding={table.isCdrPreviewBuilding}
+        isCdrPreviewBuilding={(taskId) =>
+          taskId === displayTask.id ? displayPreviewBuilding : table.isCdrPreviewBuilding(taskId)
+        }
         maxSubscribedTaskIds={isAdmin ? maxSubscribedTaskIds : []}
         maxCanSubscribe={isAdmin && maxCanSubscribe}
         onMaxSubscribeToggle={isAdmin ? onMaxSubscribeToggle : undefined}
