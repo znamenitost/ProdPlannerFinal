@@ -47,26 +47,40 @@ const notificationVariants = {
 const getNotificationVariant = (type) => notificationVariants[type] || notificationVariants.NewTask;
 
 export default function PushNotificationSnackbars({ notifications, onClose, onOpen }) {
+  let chatStackIndex = 0;
+  let taskStackIndex = 0;
+
   return (
     <>
-      {notifications.map((notification, index) => {
+      {notifications.map((notification) => {
         const variant = getNotificationVariant(notification.type);
         const isChat = notification.type === 'ChatMessage';
+        const stackIndex = isChat ? chatStackIndex++ : taskStackIndex++;
+
         return (
           <Snackbar
             key={notification.id}
             open
-            autoHideDuration={isChat ? 10000 : 8000}
+            autoHideDuration={isChat ? null : 8000}
             onClose={(_event, reason) => {
               if (reason === 'clickaway') return;
+              // Chat toasts stay until explicit close / open — ignore timeout just in case.
+              if (isChat && reason === 'timeout') return;
               onClose(notification.id);
             }}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: isChat ? 'left' : 'right'
+            }}
             sx={{
-              bottom: { xs: 16 + index * SNACKBAR_HEIGHT, sm: 24 + index * SNACKBAR_HEIGHT },
-              right: { xs: 16, sm: 24 },
-              left: 'auto',
-              zIndex: (theme) => theme.zIndex.snackbar + index
+              bottom: {
+                xs: 16 + stackIndex * SNACKBAR_HEIGHT,
+                sm: 24 + stackIndex * SNACKBAR_HEIGHT
+              },
+              ...(isChat
+                ? { left: { xs: 16, sm: 24 }, right: 'auto' }
+                : { right: { xs: 16, sm: 24 }, left: 'auto' }),
+              zIndex: (theme) => theme.zIndex.snackbar + stackIndex
             }}
           >
             <Alert
