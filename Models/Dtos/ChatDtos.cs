@@ -27,6 +27,8 @@ public sealed class ChatMessageDto
     public string? SenderAvatarUrl { get; set; }
     public string Text { get; set; } = "";
     public DateTime CreatedAt { get; set; }
+    /// <summary>For the current user's own messages: "sent" or "read". Null for incoming.</summary>
+    public string? Status { get; set; }
     public IReadOnlyList<ChatAttachmentDto> Attachments { get; set; } = Array.Empty<ChatAttachmentDto>();
 }
 

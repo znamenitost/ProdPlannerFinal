@@ -1,10 +1,11 @@
 import { alpha, Box, Link } from '@mui/material';
 import { InsertDriveFile } from '@mui/icons-material';
 import ChatImagePreview from './ChatImagePreview';
+import { isChatImageAttachment } from './chatAttachmentUtils';
 
 export function renderChatFilePart({ part }) {
   const filename = part.filename || 'Файл';
-  const isImage = part.mediaType?.startsWith('image/');
+  const isImage = isChatImageAttachment(part.mediaType, filename);
 
   if (isImage && part.url) {
     return (
@@ -24,6 +25,7 @@ export function renderChatFilePart({ part }) {
       target="_blank"
       rel="noopener noreferrer"
       underline="none"
+      download={filename}
       sx={{
         display: 'inline-flex',
         alignItems: 'center',

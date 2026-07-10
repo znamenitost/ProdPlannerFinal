@@ -23,8 +23,19 @@ import {
 import { ChatBox } from '@mui/x-chat';
 import { createProductionChatAdapter } from './createProductionChatAdapter';
 import ChatComposerAttachments from './ChatComposerAttachments';
+import ChatConversationOnlineAvatar from './ChatConversationOnlineAvatar';
 import { renderChatFilePart } from './renderChatFilePart';
 import { avatarDisplayUrl } from '../../utils/avatarUrl';
+
+const messageStatusLabels = {
+  pending: 'Ожидание',
+  sending: 'Отправка…',
+  streaming: 'Печатает…',
+  sent: 'Отправлено',
+  read: 'Прочитано',
+  error: 'Ошибка',
+  cancelled: 'Отменено'
+};
 
 const ruLocaleText = {
   composerInputPlaceholder: 'Сообщение…',
@@ -49,7 +60,8 @@ const ruLocaleText = {
   composerLandmarkLabel: 'Написать сообщение',
   conversationHeaderMenuLabel: 'Чаты',
   conversationHeaderBackLabel: 'Назад',
-  conversationHeaderCloseLabel: 'Закрыть'
+  conversationHeaderCloseLabel: 'Закрыть',
+  messageStatusLabel: (status) => messageStatusLabels[status] || status
 };
 
 function NewChatMenu({ contacts, onPick, disabled }) {
@@ -84,16 +96,33 @@ function NewChatMenu({ contacts, onPick, disabled }) {
             }}
           >
             <ListItemIcon>
-              <Avatar
-                src={avatarDisplayUrl(c.userId, { size: 64 })}
-                sx={{ width: 28, height: 28, fontSize: '0.75rem' }}
+              <Badge
+                overlap="circular"
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                variant="dot"
+                sx={{
+                  '& .MuiBadge-badge': {
+                    width: 10,
+                    height: 10,
+                    borderRadius: '50%',
+                    bgcolor: c.isOnline ? 'success.main' : 'grey.400',
+                    boxShadow: (t) => `0 0 0 2px ${t.palette.background.paper}`
+                  }
+                }}
               >
-                {(c.fullName || '?')[0]}
-              </Avatar>
+                <Avatar
+                  src={avatarDisplayUrl(c.userId, { size: 64 })}
+                  sx={{ width: 28, height: 28, fontSize: '0.75rem' }}
+                >
+                  {(c.fullName || '?')[0]}
+                </Avatar>
+              </Badge>
             </ListItemIcon>
             <ListItemText
               primary={c.fullName}
-              secondary={c.role === 'Admin' ? 'Администратор' : 'Сотрудник'}
+              secondary={c.isOnline
+                ? 'В сети'
+                : (c.role === 'Admin' ? 'Администратор' : 'Сотрудник')}
             />
           </MenuItem>
         ))}
@@ -170,6 +199,23 @@ export default function ChatDrawer({
       cancelled = true;
     };
   }, [open, adapter]);
+
+  // Live online/offline dots in the "new chat" contact menu.
+  useEffect(() => {
+    if (!open || !hubConnection) return undefined;
+    const onPresence = (userId, isOnline) => {
+      setContacts((prev) => {
+        if (!prev.some((c) => c.userId === userId)) return prev;
+        return prev.map((c) => (
+          c.userId === userId ? { ...c, isOnline: Boolean(isOnline) } : c
+        ));
+      });
+    };
+    hubConnection.on('ChatPresence', onPresence);
+    return () => {
+      hubConnection.off('ChatPresence', onPresence);
+    };
+  }, [open, hubConnection]);
 
   useEffect(() => {
     if (!open || !adapter) return undefined;
@@ -307,23 +353,19 @@ export default function ChatDrawer({
             layoutMode={isMobile ? 'split' : 'standard'}
             partRenderers={{ file: renderChatFilePart }}
             slots={{ composerAttachmentList: ChatComposerAttachments }}
+            slotProps={{
+              conversationList: {
+                slots: {
+                  itemAvatar: ChatConversationOnlineAvatar
+                }
+              }
+            }}
             features={{
               conversationList: true,
               attachments: {
                 maxFileCount: 5,
-                maxFileSize: 10 * 1024 * 1024,
-                acceptedMimeTypes: [
-                  'image/*',
-                  'application/pdf',
-                  'text/plain',
-                  'text/csv',
-                  'application/msword',
-                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                  'application/vnd.ms-excel',
-                  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                  'application/zip',
-                  'application/x-zip-compressed'
-                ]
+                maxFileSize: 10 * 1024 * 1024
+                // No acceptedMimeTypes — any file type is allowed.
               },
               dateDivider: true,
               unreadMarker: true,
@@ -341,6 +383,13 @@ export default function ChatDrawer({
               borderRadius: 0,
               '--ChatBox-conversationListWidth': '300px',
               bgcolor: (t) => alpha(t.palette.grey[100], 0.45),
+              // Telegram-like blue double-check for read own messages.
+              '& .MuiChatMessage-inlineMetaStatus .MuiSvgIcon-root': {
+                fontSize: '1.05em'
+              },
+              '& .MuiChatMessage-bubble[data-role="user"] .MuiChatMessage-inlineMetaStatus': {
+                color: 'rgba(255,255,255,0.85)'
+              },
               '& .MuiChatBox-root': {
                 height: '100%',
                 width: '100%'

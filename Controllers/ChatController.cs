@@ -148,16 +148,46 @@ public class ChatController : ControllerBase
             if (file == null)
                 return NotFound();
 
-            if (file.Value.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-                return File(file.Value.Stream, file.Value.ContentType);
+            var contentType = file.Value.ContentType;
+            var fileName = file.Value.FileName;
+            var isImage = contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                || IsCommonImageExtension(fileName);
 
-            return File(file.Value.Stream, file.Value.ContentType, file.Value.FileName);
+            if (isImage)
+            {
+                if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                    contentType = GuessImageContentType(fileName) ?? contentType;
+                return File(file.Value.Stream, contentType);
+            }
+
+            return File(file.Value.Stream, contentType, fileName);
         }
         catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
     }
+
+    private static bool IsCommonImageExtension(string fileName)
+    {
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp" or ".svg" or ".avif" or ".heic" or ".heif";
+    }
+
+    private static string? GuessImageContentType(string fileName) =>
+        Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".bmp" => "image/bmp",
+            ".svg" => "image/svg+xml",
+            ".avif" => "image/avif",
+            ".heic" => "image/heic",
+            ".heif" => "image/heif",
+            _ => null
+        };
 
     private string? CurrentUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier);
 }

@@ -43,19 +43,6 @@ public sealed class ChatService : IChatService
     public const int MaxAttachmentsPerMessage = 5;
     public const long MaxAttachmentBytes = 10 * 1024 * 1024;
 
-    private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
-        "application/pdf",
-        "text/plain", "text/csv",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "application/zip",
-        "application/x-zip-compressed"
-    };
-
     private readonly ApplicationDbContext _db;
     private readonly UserManager<User> _userManager;
     private readonly IAppTimeService _time;
@@ -228,6 +215,10 @@ public sealed class ChatService : IChatService
         await EnsureCanAccessAsync(currentUserId, conversationId, ct);
 
         take = Math.Clamp(take, 1, MaxPageSize);
+        var conv = await _db.ChatConversations.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == conversationId, ct)
+            ?? throw new ArgumentException("Диалог не найден.");
+
         var query = _db.ChatMessages.AsNoTracking()
             .Where(m => m.ConversationId == conversationId);
 
@@ -262,12 +253,31 @@ public sealed class ChatService : IChatService
             .Select(u => new { u.Id, u.FullName, u.AvatarUrl })
             .ToDictionaryAsync(u => u.Id, ct);
 
+        // Peer last-read for Direct chats → Telegram-style sent/read ticks on own messages.
+        long peerLastRead = 0;
+        if (conv.Type == ChatConversationType.Direct)
+        {
+            var peerId = conv.UserIdLow == currentUserId ? conv.UserIdHigh! : conv.UserIdLow!;
+            peerLastRead = await _db.ChatReadStates.AsNoTracking()
+                .Where(r => r.UserId == peerId && r.ConversationId == conversationId)
+                .Select(r => (long?)r.LastReadMessageId)
+                .FirstOrDefaultAsync(ct) ?? 0;
+        }
+
         return rows
             .OrderBy(r => r.Id)
             .Select(r =>
             {
                 senders.TryGetValue(r.SenderUserId, out var sender);
                 attachmentsByMessage.TryGetValue(r.Id, out var files);
+                string? status = null;
+                if (r.SenderUserId == currentUserId)
+                {
+                    status = conv.Type == ChatConversationType.Direct && r.Id <= peerLastRead
+                        ? "read"
+                        : "sent";
+                }
+
                 return new ChatMessageDto
                 {
                     Id = r.Id,
@@ -277,6 +287,7 @@ public sealed class ChatService : IChatService
                     SenderAvatarUrl = sender?.AvatarUrl,
                     Text = r.Text,
                     CreatedAt = r.CreatedAt,
+                    Status = status,
                     Attachments = files ?? []
                 };
             })
@@ -358,9 +369,7 @@ public sealed class ChatService : IChatService
                 {
                     MessageId = message.Id,
                     FileName = safeName,
-                    ContentType = string.IsNullOrWhiteSpace(file.ContentType)
-                        ? "application/octet-stream"
-                        : file.ContentType,
+                    ContentType = ResolveContentType(file.ContentType, safeName),
                     SizeBytes = file.Length,
                     StoragePath = Path.Combine("chat-uploads", message.Id.ToString(), storedName)
                         .Replace('\\', '/'),
@@ -386,6 +395,7 @@ public sealed class ChatService : IChatService
             SenderAvatarUrl = sender.AvatarUrl,
             Text = message.Text,
             CreatedAt = message.CreatedAt,
+            Status = "sent",
             Attachments = savedAttachments.Select(MapAttachmentDto).ToList()
         };
 
@@ -502,6 +512,21 @@ public sealed class ChatService : IChatService
         await _db.SaveChangesAsync(ct);
         // Notify the reader so header badge / conversation list refresh across tabs.
         await _hub.Clients.Group(currentUserId).SendAsync("ChatConversationUpdated", conversationId, ct);
+
+        // Direct only: peer flips own messages sent → read (Telegram ticks).
+        // Team chats keep "sent" — no per-member read receipts.
+        var conv = await _db.ChatConversations.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == conversationId, ct);
+        if (conv is not { Type: ChatConversationType.Direct })
+            return;
+
+        var peerId = conv.UserIdLow == currentUserId ? conv.UserIdHigh! : conv.UserIdLow!;
+        await _hub.Clients.Group(peerId).SendAsync(
+            "ChatMessagesRead",
+            conversationId,
+            lastMessageId,
+            currentUserId,
+            ct);
     }
 
     public async Task<(Stream Stream, string ContentType, string FileName)?> OpenAttachmentAsync(
@@ -613,12 +638,33 @@ public sealed class ChatService : IChatService
 
     private void ValidateAttachment(IFormFile file)
     {
+        if (file.Length <= 0)
+            throw new ArgumentException($"Файл «{file.FileName}» пустой.");
+
         if (file.Length > MaxAttachmentBytes)
             throw new ArgumentException($"Файл «{file.FileName}» больше 10 МБ.");
+    }
 
-        var contentType = file.ContentType ?? "";
-        if (!AllowedContentTypes.Contains(contentType))
-            throw new ArgumentException($"Тип файла «{file.FileName}» не поддерживается.");
+    private static string ResolveContentType(string? contentType, string fileName)
+    {
+        if (!string.IsNullOrWhiteSpace(contentType)
+            && !string.Equals(contentType, "application/octet-stream", StringComparison.OrdinalIgnoreCase))
+            return contentType;
+
+        return Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".bmp" => "image/bmp",
+            ".svg" => "image/svg+xml",
+            ".avif" => "image/avif",
+            ".heic" => "image/heic",
+            ".heif" => "image/heif",
+            ".pdf" => "application/pdf",
+            _ => string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType
+        };
     }
 
     private string GetMessageUploadFolder(long messageId)

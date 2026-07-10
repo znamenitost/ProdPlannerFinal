@@ -48,11 +48,16 @@ export function mapServerMessage(dto, currentUserId) {
     parts.push({ type: 'text', text: '' });
   }
 
+  let status;
+  if (isOwn) {
+    status = dto.status === 'read' ? 'read' : 'sent';
+  }
+
   return {
     id: String(dto.id),
     conversationId: String(dto.conversationId),
     role: isOwn ? 'user' : 'assistant',
-    status: 'sent',
+    status,
     createdAt: dto.createdAt,
     author: {
       id: dto.senderUserId,
@@ -118,9 +123,27 @@ export function createProductionChatAdapter({
   const locallyReadIds = new Set();
   /** Last known conversation objects for optimistic patches. */
   const conversationCache = new Map();
+  /** Cached messages for read-receipt updates (id → message). */
+  const messageCache = new Map();
+  /** Own message ids per conversation for sent→read flips. */
+  const ownMessageIdsByConversation = new Map();
 
   const emit = (event) => {
     eventHandler?.(event);
+  };
+
+  const rememberMessage = (message) => {
+    messageCache.set(String(message.id), message);
+    if (message.role === 'user' && message.conversationId) {
+      const key = String(message.conversationId);
+      let set = ownMessageIdsByConversation.get(key);
+      if (!set) {
+        set = new Set();
+        ownMessageIdsByConversation.set(key, set);
+      }
+      set.add(String(message.id));
+    }
+    return message;
   };
 
   const rememberConversation = (conversation) => {
@@ -185,33 +208,84 @@ export function createProductionChatAdapter({
 
   const handleHubMessage = (dto) => {
     if (!dto?.id) return;
+
+    const conversationId = String(dto.conversationId);
+    const id = String(dto.id);
+
+    // Own message echo (other tabs) — add once if not already present from sendMessage.
     if (dto.senderUserId === currentUserId) {
+      if (!messageCache.has(id)) {
+        emit({
+          type: 'message-added',
+          message: rememberMessage(mapServerMessage(dto, currentUserId))
+        });
+      }
       onUnreadMaybeChanged?.();
       return;
     }
 
-    const conversationId = String(dto.conversationId);
     const viewingThisThread = chatOpen
       && viewingConversationId != null
       && viewingConversationId === conversationId
       && document.visibilityState === 'visible';
 
     if (!viewingThisThread) {
-      // New unread message — allow badge to show again for this thread.
       locallyReadIds.delete(conversationId);
     }
 
     emit({
       type: 'message-added',
-      message: mapServerMessage(dto, currentUserId)
+      message: rememberMessage(mapServerMessage(dto, currentUserId))
     });
     onUnreadMaybeChanged?.();
 
     if (viewingThisThread) {
       void markReadUpTo(conversationId, dto.id);
     } else {
-      // Refresh conversation row (unreadCount) from server.
       void handleHubConversationUpdated(conversationId);
+    }
+  };
+
+  const handleHubMessagesRead = (conversationId, lastMessageId, readerUserId) => {
+    if (!conversationId || readerUserId === currentUserId) return;
+    const convId = String(conversationId);
+    const upTo = Number(lastMessageId);
+    if (!Number.isFinite(upTo) || upTo <= 0) return;
+
+    // Read receipts only for direct chats (team stays "sent").
+    const conv = conversationCache.get(convId);
+    if (conv?.metadata?.type === 'Team') return;
+
+    const ownIds = ownMessageIdsByConversation.get(convId);
+    if (!ownIds?.size) return;
+
+    for (const messageId of ownIds) {
+      if (Number(messageId) > upTo) continue;
+      const cached = messageCache.get(String(messageId));
+      if (!cached || cached.status === 'read') continue;
+      const updated = { ...cached, status: 'read' };
+      rememberMessage(updated);
+      emit({ type: 'message-updated', message: updated });
+    }
+  };
+
+  const handleHubPresence = (userId, isOnline) => {
+    if (!userId) return;
+    const online = Boolean(isOnline);
+    emit({ type: 'presence', userId: String(userId), isOnline: online });
+
+    for (const conv of conversationCache.values()) {
+      if (conv.metadata?.peerUserId !== String(userId)) continue;
+      const next = rememberConversation({
+        ...conv,
+        subtitle: online
+          ? 'В сети'
+          : (conv.metadata?.lastPreview || 'Личные сообщения'),
+        participants: (conv.participants || []).map((p) => (
+          p.id === String(userId) ? { ...p, isOnline: online } : p
+        ))
+      });
+      emit({ type: 'conversation-updated', conversation: next });
     }
   };
 
@@ -237,6 +311,8 @@ export function createProductionChatAdapter({
     if (!boundConnection) return;
     boundConnection.off('ChatMessage', handleHubMessage);
     boundConnection.off('ChatConversationUpdated', handleHubConversationUpdated);
+    boundConnection.off('ChatMessagesRead', handleHubMessagesRead);
+    boundConnection.off('ChatPresence', handleHubPresence);
     boundConnection = null;
   };
 
@@ -247,6 +323,8 @@ export function createProductionChatAdapter({
     boundConnection = connection;
     connection.on('ChatMessage', handleHubMessage);
     connection.on('ChatConversationUpdated', handleHubConversationUpdated);
+    connection.on('ChatMessagesRead', handleHubMessagesRead);
+    connection.on('ChatPresence', handleHubPresence);
   };
 
   return {
@@ -315,7 +393,7 @@ export function createProductionChatAdapter({
         beforeId: Number.isFinite(beforeId) ? beforeId : undefined,
         take: 50
       });
-      const messages = rows.map((m) => mapServerMessage(m, currentUserId));
+      const messages = rows.map((m) => rememberMessage(mapServerMessage(m, currentUserId)));
       const nextCursor = rows.length ? String(rows[0].id) : cursor;
 
       const isInitialPage = direction === 'backward' && !cursor;
@@ -342,6 +420,18 @@ export function createProductionChatAdapter({
       const files = (attachments || []).map((a) => a.file).filter(Boolean);
       const dto = await sendChatMessage(Number(conversationId), text, files);
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+      // Replace optimistic client id with server message so read receipts can match.
+      const serverMessage = rememberMessage(mapServerMessage(dto, currentUserId));
+      if (message?.id && String(message.id) !== serverMessage.id) {
+        emit({
+          type: 'message-removed',
+          messageId: String(message.id),
+          conversationId: String(conversationId)
+        });
+      }
+      emit({ type: 'message-added', message: serverMessage });
+
       handleHubConversationUpdated(dto.conversationId).catch(() => {});
       return emptyStream();
     },

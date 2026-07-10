@@ -44,6 +44,13 @@ public class NotificationHub : Hub
 
             await Groups.AddToGroupAsync(Context.ConnectionId, userId);
             await Groups.AddToGroupAsync(Context.ConnectionId, ChatGroups.Team);
+
+            // First connection for this user → broadcast online presence.
+            if (_connections.CountForUser(userId) == 1)
+            {
+                await Clients.OthersInGroup(ChatGroups.Team)
+                    .SendAsync("ChatPresence", userId, true);
+            }
         }
 
         _logger.LogDebug(
@@ -63,6 +70,13 @@ public class NotificationHub : Hub
             _connections.Unregister(userId, Context.ConnectionId);
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, userId);
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, ChatGroups.Team);
+
+            // Last connection closed → broadcast offline.
+            if (_connections.CountForUser(userId) == 0)
+            {
+                await Clients.OthersInGroup(ChatGroups.Team)
+                    .SendAsync("ChatPresence", userId, false);
+            }
         }
 
         if (exception != null)

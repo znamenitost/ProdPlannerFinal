@@ -3,6 +3,7 @@ import { Close, InsertDriveFile } from '@mui/icons-material';
 import { useChatComposer, useChatLocaleText } from '@mui/x-chat-headless';
 import { ChatComposerAttachmentList } from '@mui/x-chat';
 import ChatImagePreview from './ChatImagePreview';
+import { isChatImageAttachment } from './chatAttachmentUtils';
 
 function ChatComposerAttachmentsContent() {
   const composer = useChatComposer();
@@ -21,7 +22,8 @@ function ChatComposerAttachmentsContent() {
     >
       {composer.attachments.map((attachment) => {
         const fileName = attachment.file.name || localeText.composerAttachmentFallbackLabel;
-        const isImage = attachment.file.type?.startsWith('image/') && attachment.previewUrl;
+        const isImage = isChatImageAttachment(attachment.file.type, fileName)
+          && Boolean(attachment.previewUrl);
 
         if (isImage) {
           return (
