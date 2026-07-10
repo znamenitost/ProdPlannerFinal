@@ -1,4 +1,5 @@
 import {
+  editChatMessage,
   getChatContacts,
   getChatConversations,
   getChatMessages,
@@ -7,6 +8,7 @@ import {
   sendChatMessage
 } from '../../services/api';
 import { avatarDisplayUrl } from '../../utils/avatarUrl';
+import { textFromChatMessage } from './ChatEditSessionContext';
 
 function emptyStream() {
   return new ReadableStream({
@@ -59,6 +61,7 @@ export function mapServerMessage(dto, currentUserId) {
     role: isOwn ? 'user' : 'assistant',
     status,
     createdAt: dto.createdAt,
+    editedAt: dto.editedAt || undefined,
     author: {
       id: dto.senderUserId,
       displayName: dto.senderFullName,
@@ -113,7 +116,9 @@ export function mapServerConversation(dto, currentUserId) {
  */
 export function createProductionChatAdapter({
   currentUserId,
-  onUnreadMaybeChanged
+  onUnreadMaybeChanged,
+  getEditingMessage,
+  clearEditingMessage
 }) {
   let eventHandler = null;
   let boundConnection = null;
@@ -144,6 +149,32 @@ export function createProductionChatAdapter({
       set.add(String(message.id));
     }
     return message;
+  };
+
+  const applyMessageUpdate = (dto) => {
+    if (!dto?.id) return;
+    const mapped = rememberMessage(mapServerMessage(dto, currentUserId));
+    emit({ type: 'message-updated', message: mapped });
+
+    const convId = String(dto.conversationId);
+    const cached = conversationCache.get(convId);
+    if (!cached) return;
+
+    const preview = previewFromMessage(dto);
+    const next = rememberConversation({
+      ...cached,
+      lastMessageAt: dto.createdAt || cached.lastMessageAt,
+      subtitle: cached.metadata?.type === 'Team'
+        ? cached.subtitle
+        : (cached.participants?.some((p) => p.isOnline)
+          ? 'В сети'
+          : (preview || cached.metadata?.lastPreview || 'Личные сообщения')),
+      metadata: {
+        ...cached.metadata,
+        lastPreview: preview || cached.metadata?.lastPreview
+      }
+    });
+    emit({ type: 'conversation-updated', conversation: next });
   };
 
   const rememberConversation = (conversation) => {
@@ -246,6 +277,10 @@ export function createProductionChatAdapter({
     }
   };
 
+  const handleHubMessageUpdated = (dto) => {
+    applyMessageUpdate(dto);
+  };
+
   const handleHubMessagesRead = (conversationId, lastMessageId, readerUserId) => {
     if (!conversationId || readerUserId === currentUserId) return;
     const convId = String(conversationId);
@@ -310,6 +345,7 @@ export function createProductionChatAdapter({
   const unbindHub = () => {
     if (!boundConnection) return;
     boundConnection.off('ChatMessage', handleHubMessage);
+    boundConnection.off('ChatMessageUpdated', handleHubMessageUpdated);
     boundConnection.off('ChatConversationUpdated', handleHubConversationUpdated);
     boundConnection.off('ChatMessagesRead', handleHubMessagesRead);
     boundConnection.off('ChatPresence', handleHubPresence);
@@ -322,6 +358,7 @@ export function createProductionChatAdapter({
     if (!connection) return;
     boundConnection = connection;
     connection.on('ChatMessage', handleHubMessage);
+    connection.on('ChatMessageUpdated', handleHubMessageUpdated);
     connection.on('ChatConversationUpdated', handleHubConversationUpdated);
     connection.on('ChatMessagesRead', handleHubMessagesRead);
     connection.on('ChatPresence', handleHubPresence);
@@ -418,6 +455,38 @@ export function createProductionChatAdapter({
         .map((p) => p.text)
         .join('');
       const files = (attachments || []).map((a) => a.file).filter(Boolean);
+
+      const editing = getEditingMessage?.();
+      if (editing && String(editing.conversationId) === String(conversationId)) {
+        try {
+          const dto = await editChatMessage(Number(conversationId), Number(editing.id), text);
+          if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+          // MUI always inserts an optimistic new message before sendMessage —
+          // remove it and patch the real edited message instead.
+          if (message?.id) {
+            emit({
+              type: 'message-removed',
+              messageId: String(message.id),
+              conversationId: String(conversationId)
+            });
+          }
+          applyMessageUpdate(dto);
+          clearEditingMessage?.();
+          handleHubConversationUpdated(dto.conversationId).catch(() => {});
+          return emptyStream();
+        } catch (err) {
+          if (message?.id) {
+            emit({
+              type: 'message-removed',
+              messageId: String(message.id),
+              conversationId: String(conversationId)
+            });
+          }
+          throw err;
+        }
+      }
+
       const dto = await sendChatMessage(Number(conversationId), text, files);
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -434,6 +503,16 @@ export function createProductionChatAdapter({
 
       handleHubConversationUpdated(dto.conversationId).catch(() => {});
       return emptyStream();
+    },
+
+    /** Start Telegram-style edit for an own message (UI fills composer). */
+    beginEdit(message) {
+      if (!message || message.role !== 'user') return null;
+      return {
+        id: String(message.id),
+        conversationId: String(message.conversationId || viewingConversationId || ''),
+        text: textFromChatMessage(message)
+      };
     },
 
     async markRead({ conversationId, messageId }) {

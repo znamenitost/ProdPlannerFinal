@@ -27,6 +27,12 @@ public interface IChatService
         string? text,
         IReadOnlyList<IFormFile>? files,
         CancellationToken ct = default);
+    Task<ChatMessageDto> EditMessageAsync(
+        string currentUserId,
+        long conversationId,
+        long messageId,
+        string? text,
+        CancellationToken ct = default);
     Task MarkReadAsync(string currentUserId, long conversationId, long lastMessageId, CancellationToken ct = default);
     Task EnsureCanAccessAsync(string currentUserId, long conversationId, CancellationToken ct = default);
     Task<(Stream Stream, string ContentType, string FileName)?> OpenAttachmentAsync(
@@ -234,7 +240,8 @@ public sealed class ChatService : IChatService
                 m.ConversationId,
                 m.SenderUserId,
                 m.Text,
-                m.CreatedAt
+                m.CreatedAt,
+                m.EditedAt
             })
             .ToListAsync(ct);
 
@@ -287,11 +294,69 @@ public sealed class ChatService : IChatService
                     SenderAvatarUrl = sender?.AvatarUrl,
                     Text = r.Text,
                     CreatedAt = r.CreatedAt,
+                    EditedAt = r.EditedAt,
                     Status = status,
                     Attachments = files ?? []
                 };
             })
             .ToList();
+    }
+
+    public async Task<ChatMessageDto> EditMessageAsync(
+        string currentUserId,
+        long conversationId,
+        long messageId,
+        string? text,
+        CancellationToken ct = default)
+    {
+        var trimmed = (text ?? "").Trim();
+        if (trimmed.Length > MaxMessageLength)
+            throw new ArgumentException($"Сообщение длиннее {MaxMessageLength} символов.");
+
+        var conv = await _db.ChatConversations
+            .FirstOrDefaultAsync(c => c.Id == conversationId, ct)
+            ?? throw new ArgumentException("Диалог не найден.");
+
+        if (!CanAccess(conv, currentUserId))
+            throw new UnauthorizedAccessException("Нет доступа к диалогу.");
+
+        var message = await _db.ChatMessages
+            .Include(m => m.Attachments)
+            .FirstOrDefaultAsync(m => m.Id == messageId && m.ConversationId == conversationId, ct)
+            ?? throw new ArgumentException("Сообщение не найдено.");
+
+        if (message.SenderUserId != currentUserId)
+            throw new UnauthorizedAccessException("Можно редактировать только свои сообщения.");
+
+        var hasAttachments = message.Attachments.Count > 0;
+        if (string.IsNullOrEmpty(trimmed) && !hasAttachments)
+            throw new ArgumentException("Сообщение пустое.");
+
+        if (string.Equals(message.Text, trimmed, StringComparison.Ordinal))
+        {
+            return await ToMessageDtoAsync(message, currentUserId, conv, ct);
+        }
+
+        message.Text = trimmed;
+        message.EditedAt = _time.Now;
+        await _db.SaveChangesAsync(ct);
+
+        var dto = await ToMessageDtoAsync(message, currentUserId, conv, ct);
+        await BroadcastMessageUpdatedAsync(conv, currentUserId, dto, ct);
+
+        if (conv.Type == ChatConversationType.Team)
+        {
+            await _hub.Clients.Group(ChatGroups.Team)
+                .SendAsync("ChatConversationUpdated", conversationId, ct);
+        }
+        else
+        {
+            var peerId = conv.UserIdLow == currentUserId ? conv.UserIdHigh! : conv.UserIdLow!;
+            await _hub.Clients.Groups(currentUserId, peerId)
+                .SendAsync("ChatConversationUpdated", conversationId, ct);
+        }
+
+        return dto;
     }
 
     public async Task<ChatMessageDto> SendMessageAsync(
@@ -562,7 +627,7 @@ public sealed class ChatService : IChatService
         var last = await _db.ChatMessages.AsNoTracking()
             .Where(m => m.ConversationId == conv.Id)
             .OrderByDescending(m => m.Id)
-            .Select(m => new { m.Id, m.ConversationId, m.SenderUserId, m.Text, m.CreatedAt })
+            .Select(m => new { m.Id, m.ConversationId, m.SenderUserId, m.Text, m.CreatedAt, m.EditedAt })
             .FirstOrDefaultAsync(ct);
 
         ChatMessageDto? lastDto = null;
@@ -585,6 +650,7 @@ public sealed class ChatService : IChatService
                 SenderAvatarUrl = sender?.AvatarUrl,
                 Text = last.Text,
                 CreatedAt = last.CreatedAt,
+                EditedAt = last.EditedAt,
                 Attachments = files.Select(MapAttachmentDto).ToList()
             };
         }
@@ -635,6 +701,81 @@ public sealed class ChatService : IChatService
         SizeBytes = a.SizeBytes,
         Url = $"/api/chat/attachments/{a.Id}"
     };
+
+    private async Task<ChatMessageDto> ToMessageDtoAsync(
+        ChatMessage message,
+        string currentUserId,
+        ChatConversation conv,
+        CancellationToken ct)
+    {
+        var sender = await _userManager.Users.AsNoTracking()
+            .Where(u => u.Id == message.SenderUserId)
+            .Select(u => new { u.FullName, u.AvatarUrl })
+            .FirstOrDefaultAsync(ct);
+
+        string? status = null;
+        if (message.SenderUserId == currentUserId)
+        {
+            status = "sent";
+            if (conv.Type == ChatConversationType.Direct)
+            {
+                var peerId = conv.UserIdLow == currentUserId ? conv.UserIdHigh! : conv.UserIdLow!;
+                var peerLastRead = await _db.ChatReadStates.AsNoTracking()
+                    .Where(r => r.UserId == peerId && r.ConversationId == conv.Id)
+                    .Select(r => (long?)r.LastReadMessageId)
+                    .FirstOrDefaultAsync(ct) ?? 0;
+                if (message.Id <= peerLastRead)
+                    status = "read";
+            }
+        }
+
+        List<ChatAttachmentDto> attachments;
+        if (message.Attachments != null && message.Attachments.Count > 0)
+        {
+            attachments = message.Attachments
+                .OrderBy(a => a.Id)
+                .Select(MapAttachmentDto)
+                .ToList();
+        }
+        else
+        {
+            var rows = await _db.ChatAttachments.AsNoTracking()
+                .Where(a => a.MessageId == message.Id)
+                .OrderBy(a => a.Id)
+                .ToListAsync(ct);
+            attachments = rows.Select(MapAttachmentDto).ToList();
+        }
+
+        return new ChatMessageDto
+        {
+            Id = message.Id,
+            ConversationId = message.ConversationId,
+            SenderUserId = message.SenderUserId,
+            SenderFullName = sender?.FullName ?? "?",
+            SenderAvatarUrl = sender?.AvatarUrl,
+            Text = message.Text,
+            CreatedAt = message.CreatedAt,
+            EditedAt = message.EditedAt,
+            Status = status,
+            Attachments = attachments
+        };
+    }
+
+    private async Task BroadcastMessageUpdatedAsync(
+        ChatConversation conv,
+        string currentUserId,
+        ChatMessageDto dto,
+        CancellationToken ct)
+    {
+        if (conv.Type == ChatConversationType.Team)
+        {
+            await _hub.Clients.Group(ChatGroups.Team).SendAsync("ChatMessageUpdated", dto, ct);
+            return;
+        }
+
+        var peerId = conv.UserIdLow == currentUserId ? conv.UserIdHigh! : conv.UserIdLow!;
+        await _hub.Clients.Groups(currentUserId, peerId).SendAsync("ChatMessageUpdated", dto, ct);
+    }
 
     private void ValidateAttachment(IFormFile file)
     {

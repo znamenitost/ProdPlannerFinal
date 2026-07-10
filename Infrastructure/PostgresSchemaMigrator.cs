@@ -288,6 +288,7 @@ public static class PostgresSchemaMigrator
                     "SenderUserId" character varying(450) NOT NULL,
                     "Text" character varying(4000) NOT NULL,
                     "CreatedAt" timestamp with time zone NOT NULL,
+                    "EditedAt" timestamp with time zone NULL,
                     CONSTRAINT "FK_ChatMessages_ChatConversations_ConversationId"
                         FOREIGN KEY ("ConversationId") REFERENCES "ChatConversations" ("Id") ON DELETE CASCADE
                 );
@@ -321,6 +322,11 @@ public static class PostgresSchemaMigrator
                     ON "ChatAttachments" ("MessageId");
                 """, cancellationToken);
 
+            await db.Database.ExecuteSqlRawAsync("""
+                ALTER TABLE "ChatMessages"
+                    ADD COLUMN IF NOT EXISTS "EditedAt" timestamp with time zone NULL;
+                """, cancellationToken);
+
             // Keep __EFMigrationsHistory in sync when only startup patches ran (no apply-migrations yet).
             await db.Database.ExecuteSqlRawAsync("""
                 INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
@@ -332,6 +338,19 @@ public static class PostgresSchemaMigrator
                 AND NOT EXISTS (
                     SELECT 1 FROM "__EFMigrationsHistory"
                     WHERE "MigrationId" = '20260710120000_AddChatTables'
+                );
+                """, cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                SELECT '20260710170000_AddChatMessageEditedAt', '10.0.7'
+                WHERE EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '__EFMigrationsHistory'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM "__EFMigrationsHistory"
+                    WHERE "MigrationId" = '20260710170000_AddChatMessageEditedAt'
                 );
                 """, cancellationToken);
 

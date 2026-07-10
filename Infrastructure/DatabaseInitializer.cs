@@ -303,6 +303,7 @@ public static class DatabaseInitializer
                 SenderUserId TEXT NOT NULL,
                 Text TEXT NOT NULL,
                 CreatedAt TEXT NOT NULL,
+                EditedAt TEXT NULL,
                 FOREIGN KEY (ConversationId) REFERENCES ChatConversations(Id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS IX_ChatMessages_ConversationId_Id
@@ -333,6 +334,24 @@ public static class DatabaseInitializer
                 ON ChatAttachments(MessageId);
             """;
         await cmd.ExecuteNonQueryAsync();
+
+        // Existing DBs created before EditedAt — add column if missing.
+        var chatMessageColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = connection.CreateCommand())
+        {
+            info.CommandText = "PRAGMA table_info(ChatMessages)";
+            using var reader = await info.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                chatMessageColumns.Add(reader.GetString(1));
+        }
+
+        if (!chatMessageColumns.Contains("EditedAt"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE ChatMessages ADD COLUMN EditedAt TEXT NULL";
+            await alter.ExecuteNonQueryAsync();
+        }
+
         logger.LogInformation("Таблицы чата проверены/созданы.");
     }
 

@@ -390,6 +390,20 @@ export async function sendChatMessage(conversationId, text, files = []) {
   return res.json();
 }
 
+export async function editChatMessage(conversationId, messageId, text) {
+  const res = await fetch(
+    `${API_BASE}/chat/conversations/${conversationId}/messages/${messageId}`,
+    {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text ?? '' })
+    }
+  );
+  await throwIfNotOk(res, 'Не удалось изменить сообщение');
+  return res.json();
+}
+
 export async function markChatRead(conversationId, lastMessageId) {
   const res = await fetch(`${API_BASE}/chat/conversations/${conversationId}/read`, {
     method: 'POST',

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   alpha,
   Avatar,
@@ -18,12 +18,21 @@ import { useTheme } from '@mui/material/styles';
 import {
   Chat as ChatIcon,
   Close,
+  Edit as EditIcon,
   PersonAdd
 } from '@mui/icons-material';
 import { ChatBox } from '@mui/x-chat';
 import { createProductionChatAdapter } from './createProductionChatAdapter';
 import ChatComposerAttachments from './ChatComposerAttachments';
+import {
+  ChatComposerEditHelperText,
+  ChatComposerInputWithEdit
+} from './ChatComposerEdit';
 import ChatConversationOnlineAvatar from './ChatConversationOnlineAvatar';
+import {
+  ChatEditSessionContext,
+  textFromChatMessage
+} from './ChatEditSessionContext';
 import { renderChatFilePart } from './renderChatFilePart';
 import { avatarDisplayUrl } from '../../utils/avatarUrl';
 
@@ -37,7 +46,7 @@ const messageStatusLabels = {
   cancelled: 'Отменено'
 };
 
-const ruLocaleText = {
+const ruLocaleTextBase = {
   composerInputPlaceholder: 'Сообщение…',
   composerInputAriaLabel: 'Сообщение',
   composerSendButtonLabel: 'Отправить',
@@ -61,6 +70,7 @@ const ruLocaleText = {
   conversationHeaderMenuLabel: 'Чаты',
   conversationHeaderBackLabel: 'Назад',
   conversationHeaderCloseLabel: 'Закрыть',
+  messageEditedLabel: 'изм.',
   messageStatusLabel: (status) => messageStatusLabels[status] || status
 };
 
@@ -146,6 +156,9 @@ export default function ChatDrawer({
 
   const [activeConversationId, setActiveConversationId] = useState(undefined);
   const [contacts, setContacts] = useState([]);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const editingMessageRef = useRef(null);
+  editingMessageRef.current = editingMessage;
 
   const currentUser = useMemo(() => {
     if (!user?.id) return undefined;
@@ -161,15 +174,67 @@ export default function ChatDrawer({
     if (!currentUserId) return null;
     return createProductionChatAdapter({
       currentUserId,
-      onUnreadMaybeChanged
+      onUnreadMaybeChanged,
+      getEditingMessage: () => editingMessageRef.current,
+      clearEditingMessage: () => {
+        editingMessageRef.current = null;
+        setEditingMessage(null);
+      }
     });
   }, [currentUserId, onUnreadMaybeChanged]);
+
+  const editSession = useMemo(() => ({
+    editing: editingMessage,
+    startEdit: (message) => {
+      if (!message || message.role !== 'user') return;
+      const next = {
+        id: String(message.id),
+        conversationId: String(message.conversationId || activeConversationId || ''),
+        text: textFromChatMessage(message)
+      };
+      editingMessageRef.current = next;
+      setEditingMessage(next);
+    },
+    cancelEdit: () => {
+      editingMessageRef.current = null;
+      setEditingMessage(null);
+    }
+  }), [editingMessage, activeConversationId]);
+
+  const ruLocaleText = useMemo(() => ({
+    ...ruLocaleTextBase,
+    composerSendButtonLabel: editingMessage ? 'Сохранить' : 'Отправить',
+    composerInputPlaceholder: editingMessage ? 'Изменить сообщение…' : 'Сообщение…'
+  }), [editingMessage]);
+
+  const messageActionsSlotProps = useMemo(() => (context) => {
+    const message = context?.message;
+    if (!message || message.role !== 'user') return {};
+    return {
+      extraActions: [
+        {
+          id: 'edit',
+          label: 'Изменить',
+          icon: <EditIcon fontSize="inherit" />,
+          onClick: () => {
+            editSession.startEdit(message);
+          }
+        }
+      ]
+    };
+  }, [editSession]);
 
   useEffect(() => {
     if (!adapter) return undefined;
     adapter.bindHub(hubConnection);
     return () => adapter.unbindHub();
   }, [adapter, hubConnection]);
+
+  useEffect(() => {
+    // Leaving a thread cancels in-progress edit.
+    editingMessageRef.current = null;
+    setEditingMessage(null);
+  }, [activeConversationId]);
 
   useEffect(() => {
     if (!adapter) return;
@@ -341,79 +406,89 @@ export default function ChatDrawer({
 
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
         {open && adapter && currentUser ? (
-          <ChatBox
-            key={currentUserId}
-            adapter={adapter}
-            currentUser={currentUser}
-            activeConversationId={activeConversationId}
-            onActiveConversationChange={handleActiveConversationChange}
-            variant="default"
-            density="comfortable"
-            localeText={ruLocaleText}
-            layoutMode={isMobile ? 'split' : 'standard'}
-            partRenderers={{ file: renderChatFilePart }}
-            slots={{ composerAttachmentList: ChatComposerAttachments }}
-            slotProps={{
-              conversationList: {
-                slots: {
-                  itemAvatar: ChatConversationOnlineAvatar
-                }
-              }
-            }}
-            features={{
-              conversationList: true,
-              attachments: {
-                maxFileCount: 5,
-                maxFileSize: 10 * 1024 * 1024
-                // No acceptedMimeTypes — any file type is allowed.
-              },
-              dateDivider: true,
-              unreadMarker: true,
-              scrollToBottom: true,
-              suggestions: false,
-              streamingIndicator: false,
-              helperText: false
-            }}
-            sx={{
-              height: '100%',
-              width: '100%',
-              minWidth: 0,
-              flex: 1,
-              border: 'none',
-              borderRadius: 0,
-              '--ChatBox-conversationListWidth': '300px',
-              bgcolor: (t) => alpha(t.palette.grey[100], 0.45),
-              // Telegram-like blue double-check for read own messages.
-              '& .MuiChatMessage-inlineMetaStatus .MuiSvgIcon-root': {
-                fontSize: '1.05em'
-              },
-              '& .MuiChatMessage-bubble[data-role="user"] .MuiChatMessage-inlineMetaStatus': {
-                color: 'rgba(255,255,255,0.85)'
-              },
-              '& .MuiChatBox-root': {
-                height: '100%',
-                width: '100%'
-              },
-              '& .MuiChatBox-layout': {
-                minHeight: 0,
+          <ChatEditSessionContext.Provider value={editSession}>
+            <ChatBox
+              key={currentUserId}
+              adapter={adapter}
+              currentUser={currentUser}
+              activeConversationId={activeConversationId}
+              onActiveConversationChange={handleActiveConversationChange}
+              variant="default"
+              density="comfortable"
+              localeText={ruLocaleText}
+              layoutMode={isMobile ? 'split' : 'standard'}
+              partRenderers={{ file: renderChatFilePart }}
+              slots={{
+                composerAttachmentList: ChatComposerAttachments,
+                composerInput: ChatComposerInputWithEdit,
+                composerHelperText: ChatComposerEditHelperText,
+                composerAttachButton: editingMessage ? null : undefined
+              }}
+              slotProps={{
+                conversationList: {
+                  slots: {
+                    itemAvatar: ChatConversationOnlineAvatar
+                  }
+                },
+                messageActions: messageActionsSlotProps
+              }}
+              features={{
+                conversationList: true,
+                attachments: editingMessage
+                  ? false
+                  : {
+                    maxFileCount: 5,
+                    maxFileSize: 10 * 1024 * 1024
+                    // No acceptedMimeTypes — any file type is allowed.
+                  },
+                dateDivider: true,
+                unreadMarker: true,
+                scrollToBottom: true,
+                suggestions: false,
+                streamingIndicator: false,
+                helperText: true
+              }}
+              sx={{
                 height: '100%',
                 width: '100%',
-                display: 'flex',
-                flexDirection: 'row'
-              },
-              '& .MuiChatBox-conversationsPane': {
-                borderRight: (t) => `1px solid ${t.palette.divider}`,
-                bgcolor: 'background.paper',
-                flexShrink: 0
-              },
-              '& .MuiChatBox-threadPane': {
-                bgcolor: 'transparent',
-                flex: '1 1 auto',
                 minWidth: 0,
-                width: 'auto'
-              }
-            }}
-          />
+                flex: 1,
+                border: 'none',
+                borderRadius: 0,
+                '--ChatBox-conversationListWidth': '300px',
+                bgcolor: (t) => alpha(t.palette.grey[100], 0.45),
+                // Telegram-like blue double-check for read own messages.
+                '& .MuiChatMessage-inlineMetaStatus .MuiSvgIcon-root': {
+                  fontSize: '1.05em'
+                },
+                '& .MuiChatMessage-bubble[data-role="user"] .MuiChatMessage-inlineMetaStatus': {
+                  color: 'rgba(255,255,255,0.85)'
+                },
+                '& .MuiChatBox-root': {
+                  height: '100%',
+                  width: '100%'
+                },
+                '& .MuiChatBox-layout': {
+                  minHeight: 0,
+                  height: '100%',
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'row'
+                },
+                '& .MuiChatBox-conversationsPane': {
+                  borderRight: (t) => `1px solid ${t.palette.divider}`,
+                  bgcolor: 'background.paper',
+                  flexShrink: 0
+                },
+                '& .MuiChatBox-threadPane': {
+                  bgcolor: 'transparent',
+                  flex: '1 1 auto',
+                  minWidth: 0,
+                  width: 'auto'
+                }
+              }}
+            />
+          </ChatEditSessionContext.Provider>
         ) : (
           <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Typography color="text.secondary">Загрузка чата…</Typography>

@@ -113,6 +113,29 @@ public class ChatController : ControllerBase
         }
     }
 
+    [HttpPatch("conversations/{id:long}/messages/{messageId:long}")]
+    public async Task<IActionResult> EditMessage(
+        long id,
+        long messageId,
+        [FromBody] EditChatMessageRequest request,
+        CancellationToken ct)
+    {
+        var userId = CurrentUserId();
+        if (userId == null) return Unauthorized();
+        try
+        {
+            return Ok(await _chat.EditMessageAsync(userId, id, messageId, request?.Text, ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
     [HttpPost("conversations/{id:long}/read")]
     public async Task<IActionResult> MarkRead(
         long id,

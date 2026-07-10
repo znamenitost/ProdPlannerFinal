@@ -20,5 +20,8 @@ public class ChatMessage
 
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>Set when the sender edits the message text (Telegram-style).</summary>
+    public DateTime? EditedAt { get; set; }
+
     public ICollection<ChatAttachment> Attachments { get; set; } = new List<ChatAttachment>();
 }
