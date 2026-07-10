@@ -322,6 +322,110 @@ export async function prepareDeploy() {
   return text ? JSON.parse(text) : null;
 }
 
+export async function getChatContacts(options = {}) {
+  const res = await fetch(`${API_BASE}/chat/contacts`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    signal: options.signal
+  });
+  await throwIfNotOk(res, 'Ошибка загрузки контактов');
+  return res.json();
+}
+
+export async function getChatConversations(options = {}) {
+  const res = await fetch(`${API_BASE}/chat/conversations`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    signal: options.signal
+  });
+  await throwIfNotOk(res, 'Ошибка загрузки диалогов');
+  return res.json();
+}
+
+export async function openDirectChat(userId) {
+  const res = await fetch(`${API_BASE}/chat/conversations/direct`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId })
+  });
+  await throwIfNotOk(res, 'Не удалось открыть личный чат');
+  return res.json();
+}
+
+export async function getChatMessages(conversationId, { beforeId, take = 50, signal } = {}) {
+  const params = new URLSearchParams({ take: String(take) });
+  if (beforeId) params.set('beforeId', String(beforeId));
+  const res = await fetch(`${API_BASE}/chat/conversations/${conversationId}/messages?${params}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    signal
+  });
+  await throwIfNotOk(res, 'Ошибка загрузки сообщений');
+  return res.json();
+}
+
+export async function sendChatMessage(conversationId, text, files = []) {
+  const hasFiles = Array.isArray(files) && files.length > 0;
+  if (hasFiles) {
+    const form = new FormData();
+    if (text) form.append('text', text);
+    for (const file of files) form.append('files', file);
+    const res = await fetch(`${API_BASE}/chat/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      credentials: 'include',
+      body: form
+    });
+    await throwIfNotOk(res, 'Не удалось отправить сообщение');
+    return res.json();
+  }
+
+  const res = await fetch(`${API_BASE}/chat/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: text ?? '' })
+  });
+  await throwIfNotOk(res, 'Не удалось отправить сообщение');
+  return res.json();
+}
+
+export async function markChatRead(conversationId, lastMessageId) {
+  const res = await fetch(`${API_BASE}/chat/conversations/${conversationId}/read`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lastMessageId })
+  });
+  await throwIfNotOk(res, 'Не удалось отметить прочтение');
+}
+
+export async function getPushConfig() {
+  const res = await fetch(`${API_BASE}/push/config`, { credentials: 'include' });
+  await throwIfNotOk(res, 'Не удалось получить настройки push');
+  return res.json();
+}
+
+export async function subscribePush({ endpoint, p256dh, auth }) {
+  const res = await fetch(`${API_BASE}/push/subscribe`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint, p256dh, auth })
+  });
+  await throwIfNotOk(res, 'Не удалось подписаться на push');
+}
+
+export async function unsubscribePush({ endpoint }) {
+  const res = await fetch(`${API_BASE}/push/unsubscribe`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint })
+  });
+  await throwIfNotOk(res, 'Не удалось отписаться от push');
+}
+
 // Эндпоинты dev-панели (роль Admin). Мок-время и интервалы — на проде тоже.
 async function debugFetch(url, init = {}) {
   const res = await fetch(`${API_BASE}/debug${url}`, {

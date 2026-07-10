@@ -27,6 +27,8 @@ public static class WebApplicationExtensions
         services.AddSingleton<ITaskDataSyncHubBroadcaster, TaskDataSyncHubBroadcaster>();
         services.AddScoped<ITaskNotificationService, TaskNotificationService>();
         services.AddScoped<INotificationInboxService, NotificationInboxService>();
+        services.AddScoped<IChatService, ChatService>();
+        services.AddScoped<IWebPushService, WebPushService>();
         services.AddScoped<ITaskTableService, TaskTableService>();
         services.AddScoped<ITaskCdrPreviewService, TaskCdrPreviewService>();
         services.AddScoped<ICdrPreviewRetryService, CdrPreviewRetryService>();
@@ -110,7 +112,8 @@ public static class WebApplicationExtensions
         {
             var path = context.Request.Path.Value ?? "";
             if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
-                || path.StartsWith("/notificationHub", StringComparison.OrdinalIgnoreCase))
+                || path.StartsWith("/notificationHub", StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith("/chatHub", StringComparison.OrdinalIgnoreCase))
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
                 return;

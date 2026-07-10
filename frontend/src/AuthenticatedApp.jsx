@@ -45,7 +45,11 @@ import LunchBreakOverlay from './components/LunchBreakOverlay';
 import DeployMaintenanceOverlay from './components/DeployMaintenanceOverlay';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
 import MaxLinkDialog from './components/MaxLinkDialog';
+import ChatDrawer, { ChatHeaderButton } from './components/chat/ChatDrawer';
 import useMaxMessenger from './hooks/useMaxMessenger';
+import useChatUnread from './hooks/useChatUnread';
+import useChatMessageToasts from './hooks/useChatMessageToasts';
+import useWebPush from './hooks/useWebPush';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { UiFeedbackProvider, useUiFeedback } from './context/UiFeedbackContext';
 import { ClockProvider } from './context/ClockContext';
@@ -84,6 +88,8 @@ function AuthenticatedAppContent() {
   const [avatarKey, setAvatarKey] = useState(Date.now());
   const [maxLinkDialogOpen, setMaxLinkDialogOpen] = useState(false);
   const [maxLinkToken, setMaxLinkToken] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatFocusConversationId, setChatFocusConversationId] = useState(null);
   const fileInputRef = useRef(null);
   const maxMessenger = useMaxMessenger(user);
   const {
@@ -182,11 +188,65 @@ function AuthenticatedAppContent() {
     return () => window.removeEventListener(DEPLOY_MAINTENANCE_EVENT, handleDeployMaintenanceDetected);
   }, [handleDeployMaintenanceDetected]);
 
-  const { notifications, closeNotification } = useNotificationsHub(user, notificationHandlers, {
+  const { notifications, closeNotification, hubConnection } = useNotificationsHub(user, notificationHandlers, {
     enabled: Boolean(user?.isAuthenticated) && !deployMaintenanceActive,
     viewSubscription,
     onMaintenanceDetected: handleDeployMaintenanceDetected
   });
+
+  const { unreadCount, refreshUnread } = useChatUnread(user, hubConnection, {
+    enabled: Boolean(user?.isAuthenticated) && !deployMaintenanceActive
+  });
+
+  const { chatToasts, closeChatToast } = useChatMessageToasts(user, hubConnection, {
+    enabled: Boolean(user?.isAuthenticated) && !deployMaintenanceActive,
+    chatOpen,
+    activeConversationId: chatFocusConversationId
+  });
+
+  useWebPush(user, {
+    enabled: Boolean(user?.isAuthenticated) && !deployMaintenanceActive
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const chatId = params.get('chat');
+    if (!chatId) return;
+    setChatFocusConversationId(String(chatId));
+    setChatOpen(true);
+    params.delete('chat');
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`;
+    window.history.replaceState({}, '', next);
+  }, []);
+
+  const allPushNotifications = useMemo(
+    () => [...notifications, ...chatToasts],
+    [notifications, chatToasts]
+  );
+
+  const handleClosePushNotification = useCallback((id) => {
+    if (String(id).startsWith('chat-')) closeChatToast(id);
+    else closeNotification(id);
+  }, [closeChatToast, closeNotification]);
+
+  const handleOpenChatFromToast = useCallback((notification) => {
+    if (notification?.conversationId) {
+      setChatFocusConversationId(String(notification.conversationId));
+    }
+    closeChatToast(notification.id);
+    setChatOpen(true);
+  }, [closeChatToast]);
+
+  const handleOpenChat = useCallback(() => {
+    setChatFocusConversationId(null);
+    setChatOpen(true);
+  }, []);
+
+  const handleCloseChat = useCallback(() => {
+    setChatOpen(false);
+    setChatFocusConversationId(null);
+    void refreshUnread();
+  }, [refreshUnread]);
 
   useEffect(() => { setAnchorElUser(null); }, [user]);
 
@@ -445,6 +505,10 @@ function AuthenticatedAppContent() {
                   />
                 )}
                 {isAdmin && <Divider orientation="vertical" flexItem sx={{ height: 30 }} />}
+                <ChatHeaderButton
+                  unreadCount={unreadCount}
+                  onClick={handleOpenChat}
+                />
                 {canPrepareDeploy && (
                   <Button
                     variant="outlined"
@@ -626,9 +690,20 @@ function AuthenticatedAppContent() {
         }}
       />
 
+      <ChatDrawer
+        open={chatOpen}
+        onClose={handleCloseChat}
+        user={user}
+        hubConnection={hubConnection}
+        onUnreadMaybeChanged={refreshUnread}
+        initialConversationId={chatFocusConversationId}
+        onActiveConversationChange={setChatFocusConversationId}
+      />
+
       <PushNotificationSnackbars
-        notifications={notifications}
-        onClose={closeNotification}
+        notifications={allPushNotifications}
+        onClose={handleClosePushNotification}
+        onOpen={handleOpenChatFromToast}
       />
     </>
   );

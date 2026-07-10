@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using ProductionPlanner.Models;
+using ProductionPlanner.Services;
 using System.Security.Claims;
 
 namespace ProductionPlanner.Hubs;
@@ -13,15 +14,18 @@ public class NotificationHub : Hub
 
     private readonly UserManager<User> _userManager;
     private readonly NotificationConnectionRegistry _connections;
+    private readonly IChatService _chat;
     private readonly ILogger<NotificationHub> _logger;
 
     public NotificationHub(
         UserManager<User> userManager,
         NotificationConnectionRegistry connections,
+        IChatService chat,
         ILogger<NotificationHub> logger)
     {
         _userManager = userManager;
         _connections = connections;
+        _chat = chat;
         _logger = logger;
     }
 
@@ -34,10 +38,12 @@ public class NotificationHub : Hub
             foreach (var staleId in stale)
             {
                 await Groups.RemoveFromGroupAsync(staleId, userId);
+                await Groups.RemoveFromGroupAsync(staleId, ChatGroups.Team);
                 await Clients.Client(staleId).SendAsync(ForceDisconnectMethod);
             }
 
             await Groups.AddToGroupAsync(Context.ConnectionId, userId);
+            await Groups.AddToGroupAsync(Context.ConnectionId, ChatGroups.Team);
         }
 
         _logger.LogDebug(
@@ -56,6 +62,7 @@ public class NotificationHub : Hub
         {
             _connections.Unregister(userId, Context.ConnectionId);
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, userId);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, ChatGroups.Team);
         }
 
         if (exception != null)
@@ -65,6 +72,27 @@ public class NotificationHub : Hub
 
         await base.OnDisconnectedAsync(exception);
     }
+
+    public async Task JoinChatConversation(long conversationId)
+    {
+        var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            throw new HubException("Unauthorized.");
+
+        try
+        {
+            await _chat.EnsureCanAccessAsync(userId, conversationId);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new HubException(ex.Message);
+        }
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, ChatGroups.ForDirect(conversationId));
+    }
+
+    public Task LeaveChatConversation(long conversationId) =>
+        Groups.RemoveFromGroupAsync(Context.ConnectionId, ChatGroups.ForDirect(conversationId));
 
     public Task JoinTableViewers() =>
         Groups.AddToGroupAsync(Context.ConnectionId, NotificationGroups.TableViewers);

@@ -104,6 +104,8 @@ public static class DatabaseInitializer
             await EnsureTaskCdrPreviewsTableSqliteAsync(connection, logger);
             await EnsureAppSettingsTableSqliteAsync(connection, logger);
             await EnsureMaxMessengerTablesSqliteAsync(connection, logger);
+            await EnsureChatTablesSqliteAsync(connection, logger);
+            await EnsureWebPushSubscriptionsSqliteAsync(connection, logger);
             await ApplyPhase2PerformanceIndexesSqliteAsync(connection, logger);
             await connection.CloseAsync();
         }
@@ -277,5 +279,82 @@ public static class DatabaseInitializer
             """;
         await cmd.ExecuteNonQueryAsync();
         logger.LogInformation("Таблицы MAX Messenger проверены/созданы.");
+    }
+
+    private static async Task EnsureChatTablesSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS ChatConversations (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Type INTEGER NOT NULL,
+                UserIdLow TEXT NULL,
+                UserIdHigh TEXT NULL,
+                CreatedAt TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS IX_ChatConversations_Type
+                ON ChatConversations(Type);
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_ChatConversations_UserIdLow_UserIdHigh
+                ON ChatConversations(UserIdLow, UserIdHigh);
+
+            CREATE TABLE IF NOT EXISTS ChatMessages (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ConversationId INTEGER NOT NULL,
+                SenderUserId TEXT NOT NULL,
+                Text TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                FOREIGN KEY (ConversationId) REFERENCES ChatConversations(Id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS IX_ChatMessages_ConversationId_Id
+                ON ChatMessages(ConversationId, Id);
+
+            CREATE TABLE IF NOT EXISTS ChatReadStates (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId TEXT NOT NULL,
+                ConversationId INTEGER NOT NULL,
+                LastReadMessageId INTEGER NOT NULL,
+                UpdatedAt TEXT NOT NULL,
+                FOREIGN KEY (ConversationId) REFERENCES ChatConversations(Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_ChatReadStates_UserId_ConversationId
+                ON ChatReadStates(UserId, ConversationId);
+
+            CREATE TABLE IF NOT EXISTS ChatAttachments (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                MessageId INTEGER NOT NULL,
+                FileName TEXT NOT NULL,
+                ContentType TEXT NOT NULL,
+                SizeBytes INTEGER NOT NULL,
+                StoragePath TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                FOREIGN KEY (MessageId) REFERENCES ChatMessages(Id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS IX_ChatAttachments_MessageId
+                ON ChatAttachments(MessageId);
+            """;
+        await cmd.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблицы чата проверены/созданы.");
+    }
+
+    private static async Task EnsureWebPushSubscriptionsSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS WebPushSubscriptions (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId TEXT NOT NULL,
+                Endpoint TEXT NOT NULL,
+                P256dh TEXT NOT NULL,
+                Auth TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_WebPushSubscriptions_Endpoint
+                ON WebPushSubscriptions(Endpoint);
+            CREATE INDEX IF NOT EXISTS IX_WebPushSubscriptions_UserId
+                ON WebPushSubscriptions(UserId);
+            """;
+        await cmd.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблица WebPushSubscriptions проверена/создана.");
     }
 }

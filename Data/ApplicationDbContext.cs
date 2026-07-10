@@ -63,6 +63,11 @@ namespace ProductionPlanner.Data
         public DbSet<UserMaxLink> UserMaxLinks { get; set; }
         public DbSet<TaskMaxSubscription> TaskMaxSubscriptions { get; set; }
         public DbSet<MaxLinkToken> MaxLinkTokens { get; set; }
+        public DbSet<ChatConversation> ChatConversations { get; set; }
+        public DbSet<ChatMessage> ChatMessages { get; set; }
+        public DbSet<ChatReadState> ChatReadStates { get; set; }
+        public DbSet<ChatAttachment> ChatAttachments { get; set; }
+        public DbSet<WebPushSubscription> WebPushSubscriptions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -123,6 +128,62 @@ namespace ProductionPlanner.Data
             modelBuilder.Entity<MaxLinkToken>(entity =>
             {
                 entity.ToTable("MaxLinkTokens");
+            });
+
+            modelBuilder.Entity<ChatConversation>(entity =>
+            {
+                entity.ToTable("ChatConversations");
+                entity.Property(c => c.UserIdLow).HasMaxLength(450);
+                entity.Property(c => c.UserIdHigh).HasMaxLength(450);
+                entity.HasIndex(c => c.Type);
+                entity.HasIndex(c => new { c.UserIdLow, c.UserIdHigh }).IsUnique();
+            });
+
+            modelBuilder.Entity<ChatMessage>(entity =>
+            {
+                entity.ToTable("ChatMessages");
+                entity.HasOne(m => m.Conversation)
+                    .WithMany(c => c.Messages)
+                    .HasForeignKey(m => m.ConversationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(m => new { m.ConversationId, m.Id });
+                entity.Property(m => m.SenderUserId).HasMaxLength(450);
+                entity.Property(m => m.Text).HasMaxLength(4000);
+            });
+
+            modelBuilder.Entity<ChatReadState>(entity =>
+            {
+                entity.ToTable("ChatReadStates");
+                entity.HasOne(r => r.Conversation)
+                    .WithMany()
+                    .HasForeignKey(r => r.ConversationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(r => new { r.UserId, r.ConversationId }).IsUnique();
+                entity.Property(r => r.UserId).HasMaxLength(450);
+            });
+
+            modelBuilder.Entity<ChatAttachment>(entity =>
+            {
+                entity.ToTable("ChatAttachments");
+                entity.HasOne(a => a.Message)
+                    .WithMany(m => m.Attachments)
+                    .HasForeignKey(a => a.MessageId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(a => a.MessageId);
+                entity.Property(a => a.FileName).HasMaxLength(260);
+                entity.Property(a => a.ContentType).HasMaxLength(120);
+                entity.Property(a => a.StoragePath).HasMaxLength(500);
+            });
+
+            modelBuilder.Entity<WebPushSubscription>(entity =>
+            {
+                entity.ToTable("WebPushSubscriptions");
+                entity.HasIndex(s => s.Endpoint).IsUnique();
+                entity.HasIndex(s => s.UserId);
+                entity.Property(s => s.UserId).HasMaxLength(450);
+                entity.Property(s => s.Endpoint).HasMaxLength(2048);
+                entity.Property(s => s.P256dh).HasMaxLength(256);
+                entity.Property(s => s.Auth).HasMaxLength(128);
             });
 
             modelBuilder.Entity<WorkInterval>()

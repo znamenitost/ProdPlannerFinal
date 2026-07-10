@@ -91,6 +91,8 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
   viewSubscriptionRef.current = viewSubscription;
   onMaintenanceDetectedRef.current = onMaintenanceDetected;
 
+  const [hubConnection, setHubConnection] = useState(null);
+
   const handleMaintenanceDetected = useCallback(async (connection) => {
     onMaintenanceDetectedRef.current?.();
     if (connection?.state !== signalR.HubConnectionState.Disconnected
@@ -351,6 +353,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
         }
         await connection.invoke('JoinUserGroup', user.id).catch(() => {});
         connectionRef.current = connection;
+        setHubConnection(connection);
         prevViewRef.current = null;
         await applyViewSubscription();
         await fetchPendingNotifications(abort.signal);
@@ -377,6 +380,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       if (!isMounted) return;
       await connection.invoke('JoinUserGroup', user.id).catch(() => {});
       connectionRef.current = connection;
+      setHubConnection(connection);
       prevViewRef.current = null;
       await applyViewSubscription();
       await fetchPendingNotifications(abort.signal);
@@ -413,6 +417,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       connection.off('CdrPreviewRetryDue', handleCdrPreviewRetryDue);
       connection.off('ForceDisconnect', handleForceDisconnect);
       connectionRef.current = null;
+      setHubConnection(null);
       prevViewRef.current = null;
       if (connection.state !== 'Disconnected' && connection.state !== 'Disconnecting') {
         connection.stop().catch((err) => console.error('SignalR stop error:', err));
@@ -435,5 +440,5 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
-  return { notifications, closeNotification };
+  return { notifications, closeNotification, hubConnection };
 }

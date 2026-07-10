@@ -1,0 +1,654 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using ProductionPlanner.Data;
+using ProductionPlanner.Hubs;
+using ProductionPlanner.Models;
+using ProductionPlanner.Models.Dtos;
+
+namespace ProductionPlanner.Services;
+
+public interface IChatService
+{
+    Task<IReadOnlyList<ChatContactDto>> GetContactsAsync(string currentUserId, CancellationToken ct = default);
+    Task<IReadOnlyList<ChatConversationDto>> GetConversationsAsync(string currentUserId, CancellationToken ct = default);
+    Task<ChatConversationDto> GetOrCreateTeamAsync(string currentUserId, CancellationToken ct = default);
+    Task<ChatConversationDto> GetOrCreateDirectAsync(string currentUserId, string peerUserId, CancellationToken ct = default);
+    Task<IReadOnlyList<ChatMessageDto>> GetMessagesAsync(
+        string currentUserId,
+        long conversationId,
+        long? beforeId,
+        int take,
+        CancellationToken ct = default);
+    Task<ChatMessageDto> SendMessageAsync(
+        string currentUserId,
+        long conversationId,
+        string? text,
+        IReadOnlyList<IFormFile>? files,
+        CancellationToken ct = default);
+    Task MarkReadAsync(string currentUserId, long conversationId, long lastMessageId, CancellationToken ct = default);
+    Task EnsureCanAccessAsync(string currentUserId, long conversationId, CancellationToken ct = default);
+    Task<(Stream Stream, string ContentType, string FileName)?> OpenAttachmentAsync(
+        string currentUserId,
+        long attachmentId,
+        CancellationToken ct = default);
+}
+
+public sealed class ChatService : IChatService
+{
+    public const int MaxMessageLength = 4000;
+    public const int DefaultPageSize = 50;
+    public const int MaxPageSize = 100;
+    public const int MaxAttachmentsPerMessage = 5;
+    public const long MaxAttachmentBytes = 10 * 1024 * 1024;
+
+    private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
+        "application/pdf",
+        "text/plain", "text/csv",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/zip",
+        "application/x-zip-compressed"
+    };
+
+    private readonly ApplicationDbContext _db;
+    private readonly UserManager<User> _userManager;
+    private readonly IAppTimeService _time;
+    private readonly IHubContext<NotificationHub> _hub;
+    private readonly NotificationConnectionRegistry _connections;
+    private readonly IWebHostEnvironment _env;
+    private readonly IWebPushService _webPush;
+
+    public ChatService(
+        ApplicationDbContext db,
+        UserManager<User> userManager,
+        IAppTimeService time,
+        IHubContext<NotificationHub> hub,
+        NotificationConnectionRegistry connections,
+        IWebHostEnvironment env,
+        IWebPushService webPush)
+    {
+        _db = db;
+        _userManager = userManager;
+        _time = time;
+        _hub = hub;
+        _connections = connections;
+        _env = env;
+        _webPush = webPush;
+    }
+
+    public async Task<IReadOnlyList<ChatContactDto>> GetContactsAsync(string currentUserId, CancellationToken ct = default)
+    {
+        var users = await _userManager.Users
+            .AsNoTracking()
+            .Where(u => u.IsActive && u.Id != currentUserId)
+            .OrderBy(u => u.FullName)
+            .Select(u => new { u.Id, u.FullName, u.AvatarUrl, u.Role })
+            .ToListAsync(ct);
+
+        return users
+            .Select(u => new ChatContactDto
+            {
+                UserId = u.Id,
+                FullName = u.FullName,
+                AvatarUrl = u.AvatarUrl,
+                Role = u.Role,
+                IsOnline = _connections.CountForUser(u.Id) > 0
+            })
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<ChatConversationDto>> GetConversationsAsync(
+        string currentUserId,
+        CancellationToken ct = default)
+    {
+        var team = await GetOrCreateTeamAsync(currentUserId, ct);
+        var directs = await _db.ChatConversations
+            .AsNoTracking()
+            .Where(c =>
+                c.Type == ChatConversationType.Direct
+                && (c.UserIdLow == currentUserId || c.UserIdHigh == currentUserId))
+            .OrderByDescending(c => c.Id)
+            .ToListAsync(ct);
+
+        var result = new List<ChatConversationDto> { team };
+        foreach (var conv in directs)
+            result.Add(await MapConversationAsync(conv, currentUserId, ct));
+
+        return result
+            .OrderByDescending(c => c.Type == "Team")
+            .ThenByDescending(c => c.LastMessage?.CreatedAt ?? DateTime.MinValue)
+            .ToList();
+    }
+
+    public async Task<ChatConversationDto> GetOrCreateTeamAsync(string currentUserId, CancellationToken ct = default)
+    {
+        var team = await _db.ChatConversations
+            .FirstOrDefaultAsync(c => c.Type == ChatConversationType.Team, ct);
+
+        if (team == null)
+        {
+            team = new ChatConversation
+            {
+                Type = ChatConversationType.Team,
+                CreatedAt = _time.Now
+            };
+            _db.ChatConversations.Add(team);
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                _db.Entry(team).State = EntityState.Detached;
+                team = await _db.ChatConversations
+                    .FirstAsync(c => c.Type == ChatConversationType.Team, ct);
+            }
+        }
+
+        return await MapConversationAsync(team, currentUserId, ct);
+    }
+
+    public async Task<ChatConversationDto> GetOrCreateDirectAsync(
+        string currentUserId,
+        string peerUserId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(peerUserId))
+            throw new ArgumentException("Укажите собеседника.");
+
+        peerUserId = peerUserId.Trim();
+        if (peerUserId == currentUserId)
+            throw new ArgumentException("Нельзя открыть чат с собой.");
+
+        var peer = await _userManager.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == peerUserId && u.IsActive, ct);
+        if (peer == null)
+            throw new ArgumentException("Сотрудник не найден.");
+
+        var (low, high) = OrderUserIds(currentUserId, peerUserId);
+        var existing = await _db.ChatConversations
+            .FirstOrDefaultAsync(
+                c => c.Type == ChatConversationType.Direct
+                    && c.UserIdLow == low
+                    && c.UserIdHigh == high,
+                ct);
+
+        if (existing != null)
+            return await MapConversationAsync(existing, currentUserId, ct);
+
+        var created = new ChatConversation
+        {
+            Type = ChatConversationType.Direct,
+            UserIdLow = low,
+            UserIdHigh = high,
+            CreatedAt = _time.Now
+        };
+        _db.ChatConversations.Add(created);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            _db.Entry(created).State = EntityState.Detached;
+            created = await _db.ChatConversations.FirstAsync(
+                c => c.Type == ChatConversationType.Direct
+                    && c.UserIdLow == low
+                    && c.UserIdHigh == high,
+                ct);
+        }
+
+        return await MapConversationAsync(created, currentUserId, ct);
+    }
+
+    public async Task EnsureCanAccessAsync(string currentUserId, long conversationId, CancellationToken ct = default)
+    {
+        var conv = await _db.ChatConversations.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == conversationId, ct)
+            ?? throw new UnauthorizedAccessException("Диалог не найден.");
+
+        if (!CanAccess(conv, currentUserId))
+            throw new UnauthorizedAccessException("Нет доступа к диалогу.");
+    }
+
+    public async Task<IReadOnlyList<ChatMessageDto>> GetMessagesAsync(
+        string currentUserId,
+        long conversationId,
+        long? beforeId,
+        int take,
+        CancellationToken ct = default)
+    {
+        await EnsureCanAccessAsync(currentUserId, conversationId, ct);
+
+        take = Math.Clamp(take, 1, MaxPageSize);
+        var query = _db.ChatMessages.AsNoTracking()
+            .Where(m => m.ConversationId == conversationId);
+
+        if (beforeId is > 0)
+            query = query.Where(m => m.Id < beforeId.Value);
+
+        var rows = await query
+            .OrderByDescending(m => m.Id)
+            .Take(take)
+            .Select(m => new
+            {
+                m.Id,
+                m.ConversationId,
+                m.SenderUserId,
+                m.Text,
+                m.CreatedAt
+            })
+            .ToListAsync(ct);
+
+        var messageIds = rows.Select(r => r.Id).ToList();
+        var attachments = await _db.ChatAttachments.AsNoTracking()
+            .Where(a => messageIds.Contains(a.MessageId))
+            .OrderBy(a => a.Id)
+            .ToListAsync(ct);
+        var attachmentsByMessage = attachments
+            .GroupBy(a => a.MessageId)
+            .ToDictionary(g => g.Key, g => g.Select(MapAttachmentDto).ToList());
+
+        var senderIds = rows.Select(r => r.SenderUserId).Distinct().ToList();
+        var senders = await _userManager.Users.AsNoTracking()
+            .Where(u => senderIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.FullName, u.AvatarUrl })
+            .ToDictionaryAsync(u => u.Id, ct);
+
+        return rows
+            .OrderBy(r => r.Id)
+            .Select(r =>
+            {
+                senders.TryGetValue(r.SenderUserId, out var sender);
+                attachmentsByMessage.TryGetValue(r.Id, out var files);
+                return new ChatMessageDto
+                {
+                    Id = r.Id,
+                    ConversationId = r.ConversationId,
+                    SenderUserId = r.SenderUserId,
+                    SenderFullName = sender?.FullName ?? "?",
+                    SenderAvatarUrl = sender?.AvatarUrl,
+                    Text = r.Text,
+                    CreatedAt = r.CreatedAt,
+                    Attachments = files ?? []
+                };
+            })
+            .ToList();
+    }
+
+    public async Task<ChatMessageDto> SendMessageAsync(
+        string currentUserId,
+        long conversationId,
+        string? text,
+        IReadOnlyList<IFormFile>? files,
+        CancellationToken ct = default)
+    {
+        var trimmed = (text ?? "").Trim();
+        var fileList = (files ?? Array.Empty<IFormFile>())
+            .Where(f => f is { Length: > 0 })
+            .ToList();
+
+        if (string.IsNullOrEmpty(trimmed) && fileList.Count == 0)
+            throw new ArgumentException("Сообщение пустое.");
+        if (trimmed.Length > MaxMessageLength)
+            throw new ArgumentException($"Сообщение длиннее {MaxMessageLength} символов.");
+        if (fileList.Count > MaxAttachmentsPerMessage)
+            throw new ArgumentException($"Не больше {MaxAttachmentsPerMessage} файлов.");
+
+        foreach (var file in fileList)
+            ValidateAttachment(file);
+
+        var conv = await _db.ChatConversations
+            .FirstOrDefaultAsync(c => c.Id == conversationId, ct)
+            ?? throw new ArgumentException("Диалог не найден.");
+
+        if (!CanAccess(conv, currentUserId))
+            throw new UnauthorizedAccessException("Нет доступа к диалогу.");
+
+        var sender = await _userManager.FindByIdAsync(currentUserId)
+            ?? throw new UnauthorizedAccessException("Пользователь не найден.");
+
+        var message = new ChatMessage
+        {
+            ConversationId = conversationId,
+            SenderUserId = currentUserId,
+            Text = trimmed,
+            CreatedAt = _time.Now
+        };
+        _db.ChatMessages.Add(message);
+
+        var read = await _db.ChatReadStates
+            .FirstOrDefaultAsync(r => r.UserId == currentUserId && r.ConversationId == conversationId, ct);
+        if (read == null)
+        {
+            read = new ChatReadState
+            {
+                UserId = currentUserId,
+                ConversationId = conversationId,
+                LastReadMessageId = 0,
+                UpdatedAt = _time.Now
+            };
+            _db.ChatReadStates.Add(read);
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        var savedAttachments = new List<ChatAttachment>();
+        if (fileList.Count > 0)
+        {
+            var folder = GetMessageUploadFolder(message.Id);
+            Directory.CreateDirectory(folder);
+
+            foreach (var file in fileList)
+            {
+                var safeName = SanitizeFileName(file.FileName);
+                var storedName = $"{Guid.NewGuid():N}_{safeName}";
+                var fullPath = Path.Combine(folder, storedName);
+                await using (var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write))
+                    await file.CopyToAsync(stream, ct);
+
+                var attachment = new ChatAttachment
+                {
+                    MessageId = message.Id,
+                    FileName = safeName,
+                    ContentType = string.IsNullOrWhiteSpace(file.ContentType)
+                        ? "application/octet-stream"
+                        : file.ContentType,
+                    SizeBytes = file.Length,
+                    StoragePath = Path.Combine("chat-uploads", message.Id.ToString(), storedName)
+                        .Replace('\\', '/'),
+                    CreatedAt = _time.Now
+                };
+                _db.ChatAttachments.Add(attachment);
+                savedAttachments.Add(attachment);
+            }
+
+            await _db.SaveChangesAsync(ct);
+        }
+
+        read.LastReadMessageId = message.Id;
+        read.UpdatedAt = _time.Now;
+        await _db.SaveChangesAsync(ct);
+
+        var dto = new ChatMessageDto
+        {
+            Id = message.Id,
+            ConversationId = conversationId,
+            SenderUserId = currentUserId,
+            SenderFullName = sender.FullName,
+            SenderAvatarUrl = sender.AvatarUrl,
+            Text = message.Text,
+            CreatedAt = message.CreatedAt,
+            Attachments = savedAttachments.Select(MapAttachmentDto).ToList()
+        };
+
+        if (conv.Type == ChatConversationType.Team)
+        {
+            await _hub.Clients.Group(ChatGroups.Team).SendAsync("ChatMessage", dto, ct);
+            await _hub.Clients.Group(ChatGroups.Team).SendAsync("ChatConversationUpdated", conversationId, ct);
+        }
+        else
+        {
+            var peerId = conv.UserIdLow == currentUserId ? conv.UserIdHigh! : conv.UserIdLow!;
+            await _hub.Clients.Groups(currentUserId, peerId).SendAsync("ChatMessage", dto, ct);
+            await _hub.Clients.Groups(currentUserId, peerId).SendAsync("ChatConversationUpdated", conversationId, ct);
+        }
+
+        await SendChatPushAsync(conv, currentUserId, dto, ct);
+
+        return dto;
+    }
+
+    private async Task SendChatPushAsync(
+        ChatConversation conv,
+        string senderUserId,
+        ChatMessageDto dto,
+        CancellationToken ct)
+    {
+        var recipientIds = new List<string>();
+        if (conv.Type == ChatConversationType.Team)
+        {
+            var teamRecipients = await _userManager.Users
+                .AsNoTracking()
+                .Where(u => u.IsActive && u.Id != senderUserId)
+                .Select(u => u.Id)
+                .ToListAsync(ct);
+            recipientIds.AddRange(teamRecipients);
+        }
+        else
+        {
+            var peerId = conv.UserIdLow == senderUserId ? conv.UserIdHigh! : conv.UserIdLow!;
+            recipientIds.Add(peerId);
+        }
+
+        var offlineRecipients = recipientIds
+            .Where(id => _connections.CountForUser(id) == 0)
+            .ToList();
+        if (offlineRecipients.Count == 0)
+            return;
+
+        var body = BuildChatPushBody(dto);
+        await _webPush.SendChatMessageAsync(
+            offlineRecipients,
+            dto.SenderFullName,
+            body,
+            dto.ConversationId,
+            ct);
+    }
+
+    private static string BuildChatPushBody(ChatMessageDto dto)
+    {
+        var text = (dto.Text ?? "").Trim();
+        if (!string.IsNullOrEmpty(text))
+            return text.Length > 120 ? $"{text[..119]}…" : text;
+
+        var files = dto.Attachments ?? Array.Empty<ChatAttachmentDto>();
+        if (files.Count == 1)
+            return $"Файл: {files[0].FileName}";
+        if (files.Count > 1)
+            return $"{files.Count} файла";
+
+        return "Новое сообщение";
+    }
+
+    public async Task MarkReadAsync(
+        string currentUserId,
+        long conversationId,
+        long lastMessageId,
+        CancellationToken ct = default)
+    {
+        await EnsureCanAccessAsync(currentUserId, conversationId, ct);
+
+        if (lastMessageId <= 0)
+            return;
+
+        var belongs = await _db.ChatMessages.AsNoTracking()
+            .AnyAsync(m => m.Id == lastMessageId && m.ConversationId == conversationId, ct);
+        if (!belongs)
+            throw new ArgumentException("Сообщение не найдено в диалоге.");
+
+        var read = await _db.ChatReadStates
+            .FirstOrDefaultAsync(r => r.UserId == currentUserId && r.ConversationId == conversationId, ct);
+
+        var changed = false;
+        if (read == null)
+        {
+            _db.ChatReadStates.Add(new ChatReadState
+            {
+                UserId = currentUserId,
+                ConversationId = conversationId,
+                LastReadMessageId = lastMessageId,
+                UpdatedAt = _time.Now
+            });
+            changed = true;
+        }
+        else if (lastMessageId > read.LastReadMessageId)
+        {
+            read.LastReadMessageId = lastMessageId;
+            read.UpdatedAt = _time.Now;
+            changed = true;
+        }
+
+        if (!changed)
+            return;
+
+        await _db.SaveChangesAsync(ct);
+        // Notify the reader so header badge / conversation list refresh across tabs.
+        await _hub.Clients.Group(currentUserId).SendAsync("ChatConversationUpdated", conversationId, ct);
+    }
+
+    public async Task<(Stream Stream, string ContentType, string FileName)?> OpenAttachmentAsync(
+        string currentUserId,
+        long attachmentId,
+        CancellationToken ct = default)
+    {
+        var attachment = await _db.ChatAttachments.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == attachmentId, ct);
+        if (attachment == null)
+            return null;
+
+        var message = await _db.ChatMessages.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == attachment.MessageId, ct);
+        if (message == null)
+            return null;
+
+        await EnsureCanAccessAsync(currentUserId, message.ConversationId, ct);
+
+        var fullPath = MapStoragePath(attachment.StoragePath);
+        if (!File.Exists(fullPath))
+            return null;
+
+        Stream stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return (stream, attachment.ContentType, attachment.FileName);
+    }
+
+    private async Task<ChatConversationDto> MapConversationAsync(
+        ChatConversation conv,
+        string currentUserId,
+        CancellationToken ct)
+    {
+        var last = await _db.ChatMessages.AsNoTracking()
+            .Where(m => m.ConversationId == conv.Id)
+            .OrderByDescending(m => m.Id)
+            .Select(m => new { m.Id, m.ConversationId, m.SenderUserId, m.Text, m.CreatedAt })
+            .FirstOrDefaultAsync(ct);
+
+        ChatMessageDto? lastDto = null;
+        if (last != null)
+        {
+            var sender = await _userManager.Users.AsNoTracking()
+                .Where(u => u.Id == last.SenderUserId)
+                .Select(u => new { u.FullName, u.AvatarUrl })
+                .FirstOrDefaultAsync(ct);
+            var files = await _db.ChatAttachments.AsNoTracking()
+                .Where(a => a.MessageId == last.Id)
+                .OrderBy(a => a.Id)
+                .ToListAsync(ct);
+            lastDto = new ChatMessageDto
+            {
+                Id = last.Id,
+                ConversationId = last.ConversationId,
+                SenderUserId = last.SenderUserId,
+                SenderFullName = sender?.FullName ?? "?",
+                SenderAvatarUrl = sender?.AvatarUrl,
+                Text = last.Text,
+                CreatedAt = last.CreatedAt,
+                Attachments = files.Select(MapAttachmentDto).ToList()
+            };
+        }
+
+        var lastRead = await _db.ChatReadStates.AsNoTracking()
+            .Where(r => r.UserId == currentUserId && r.ConversationId == conv.Id)
+            .Select(r => (long?)r.LastReadMessageId)
+            .FirstOrDefaultAsync(ct) ?? 0;
+
+        var unread = await _db.ChatMessages.AsNoTracking()
+            .CountAsync(
+                m => m.ConversationId == conv.Id
+                    && m.Id > lastRead
+                    && m.SenderUserId != currentUserId,
+                ct);
+
+        var dto = new ChatConversationDto
+        {
+            Id = conv.Id,
+            Type = conv.Type == ChatConversationType.Team ? "Team" : "Direct",
+            Title = conv.Type == ChatConversationType.Team ? "Общий чат" : "",
+            LastMessage = lastDto,
+            UnreadCount = unread
+        };
+
+        if (conv.Type == ChatConversationType.Direct)
+        {
+            var peerId = conv.UserIdLow == currentUserId ? conv.UserIdHigh! : conv.UserIdLow!;
+            var peer = await _userManager.Users.AsNoTracking()
+                .Where(u => u.Id == peerId)
+                .Select(u => new { u.Id, u.FullName, u.AvatarUrl })
+                .FirstOrDefaultAsync(ct);
+            dto.PeerUserId = peerId;
+            dto.PeerFullName = peer?.FullName ?? "?";
+            dto.PeerAvatarUrl = peer?.AvatarUrl;
+            dto.PeerIsOnline = _connections.CountForUser(peerId) > 0;
+            dto.Title = dto.PeerFullName;
+        }
+
+        return dto;
+    }
+
+    private static ChatAttachmentDto MapAttachmentDto(ChatAttachment a) => new()
+    {
+        Id = a.Id,
+        FileName = a.FileName,
+        ContentType = a.ContentType,
+        SizeBytes = a.SizeBytes,
+        Url = $"/api/chat/attachments/{a.Id}"
+    };
+
+    private void ValidateAttachment(IFormFile file)
+    {
+        if (file.Length > MaxAttachmentBytes)
+            throw new ArgumentException($"Файл «{file.FileName}» больше 10 МБ.");
+
+        var contentType = file.ContentType ?? "";
+        if (!AllowedContentTypes.Contains(contentType))
+            throw new ArgumentException($"Тип файла «{file.FileName}» не поддерживается.");
+    }
+
+    private string GetMessageUploadFolder(long messageId)
+    {
+        var webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+        return Path.Combine(webRoot, "chat-uploads", messageId.ToString());
+    }
+
+    private string MapStoragePath(string storagePath)
+    {
+        var webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+        var relative = storagePath.Replace('/', Path.DirectorySeparatorChar);
+        return Path.Combine(webRoot, relative);
+    }
+
+    private static string SanitizeFileName(string fileName)
+    {
+        var name = Path.GetFileName(fileName);
+        if (string.IsNullOrWhiteSpace(name))
+            name = "file";
+        foreach (var c in Path.GetInvalidFileNameChars())
+            name = name.Replace(c, '_');
+        return name.Length > 180 ? name[..180] : name;
+    }
+
+    private static bool CanAccess(ChatConversation conv, string userId) =>
+        conv.Type == ChatConversationType.Team
+        || conv.UserIdLow == userId
+        || conv.UserIdHigh == userId;
+
+    private static (string Low, string High) OrderUserIds(string a, string b) =>
+        string.CompareOrdinal(a, b) <= 0 ? (a, b) : (b, a);
+}

@@ -1,7 +1,7 @@
-import { Snackbar, Alert, Box, Chip, Typography } from '@mui/material';
+import { Snackbar, Alert, Box, Chip, Typography, Button } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { toastAlertThemeStyles } from '../theme/componentVariants';
-import { Assignment, AccessTime, CheckCircle, Inventory2, PlayArrow } from '@mui/icons-material';
+import { Assignment, AccessTime, CheckCircle, Inventory2, PlayArrow, Chat } from '@mui/icons-material';
 
 const SNACKBAR_HEIGHT = 108;
 
@@ -35,21 +35,28 @@ const notificationVariants = {
     severity: 'info',
     color: 'secondary',
     icon: <PlayArrow fontSize="small" />
+  },
+  ChatMessage: {
+    chip: 'Сообщение',
+    severity: 'info',
+    color: 'info',
+    icon: <Chat fontSize="small" />
   }
 };
 
 const getNotificationVariant = (type) => notificationVariants[type] || notificationVariants.NewTask;
 
-export default function PushNotificationSnackbars({ notifications, onClose }) {
+export default function PushNotificationSnackbars({ notifications, onClose, onOpen }) {
   return (
     <>
       {notifications.map((notification, index) => {
         const variant = getNotificationVariant(notification.type);
+        const isChat = notification.type === 'ChatMessage';
         return (
           <Snackbar
             key={notification.id}
             open
-            autoHideDuration={8000}
+            autoHideDuration={isChat ? 10000 : 8000}
             onClose={(_event, reason) => {
               if (reason === 'clickaway') return;
               onClose(notification.id);
@@ -67,12 +74,14 @@ export default function PushNotificationSnackbars({ notifications, onClose }) {
               variant="toast"
               onClose={() => onClose(notification.id)}
               icon={variant.icon}
+              onClick={isChat && onOpen ? () => onOpen(notification) : undefined}
               sx={(theme) => ({
                 ...toastAlertThemeStyles(theme, variant.color),
                 minWidth: 280,
-                maxWidth: 360,
+                maxWidth: 380,
                 alignItems: 'flex-start',
-                '& .MuiAlert-message': { padding: 0 },
+                cursor: isChat && onOpen ? 'pointer' : 'default',
+                '& .MuiAlert-message': { padding: 0, width: '100%' },
                 '& .MuiAlert-icon': { mt: 0.25 }
               })}
             >
@@ -95,12 +104,46 @@ export default function PushNotificationSnackbars({ notifications, onClose }) {
               <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
                 {notification.title}
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'rgba(255, 255, 255, 0.78)' }}>
-                <AccessTime sx={{ fontSize: 14, color: 'inherit' }} />
-                <Typography variant="caption" sx={{ color: 'inherit' }}>
-                  Дедлайн: {notification.deadline}
-                </Typography>
-              </Box>
+              {isChat ? (
+                <>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: 'rgba(255, 255, 255, 0.82)', display: 'block', mb: 1 }}
+                  >
+                    {notification.body}
+                  </Typography>
+                  {onOpen && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="inherit"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpen(notification);
+                      }}
+                      sx={{
+                        borderColor: 'rgba(255,255,255,0.35)',
+                        color: 'common.white',
+                        fontSize: '0.72rem',
+                        py: 0.25,
+                        '&:hover': {
+                          borderColor: 'rgba(255,255,255,0.6)',
+                          bgcolor: 'rgba(255,255,255,0.08)'
+                        }
+                      }}
+                    >
+                      Открыть чат
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'rgba(255, 255, 255, 0.78)' }}>
+                  <AccessTime sx={{ fontSize: 14, color: 'inherit' }} />
+                  <Typography variant="caption" sx={{ color: 'inherit' }}>
+                    Дедлайн: {notification.deadline}
+                  </Typography>
+                </Box>
+              )}
             </Alert>
           </Snackbar>
         );
