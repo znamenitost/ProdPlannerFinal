@@ -40,6 +40,18 @@ public class TaskDataSyncHubBroadcasterTests
     }
 
     [Fact]
+    public void ResolveGroups_LunchStateChanged_includes_only_calendar_viewers()
+    {
+        var groups = TaskDataSyncHubBroadcaster.ResolveGroups(
+            "LunchStateChanged",
+            ["Яромир"]);
+
+        Assert.DoesNotContain(NotificationGroups.TableViewers, groups);
+        Assert.Contains(NotificationGroups.ForCalendarViewer("Яромир"), groups);
+        Assert.Single(groups);
+    }
+
+    [Fact]
     public void ResolveGroups_skips_empty_employee_names()
     {
         var groups = TaskDataSyncHubBroadcaster.ResolveGroups(

@@ -73,6 +73,7 @@ function shouldRefreshCalendar(event) {
  * @param {(event?: { type: string, taskId?: number, affectedEmployees?: string[] }) => void} [handlers.onCalendarRefresh] — календарь / completed
  * @param {() => void} [handlers.onFullRefresh] — reconnect и т.п.
  * @param {() => void} [handlers.onCdrPreviewRetryDue] — повторный поиск превью .cdr
+ * @param {(payload: { employeeName: string, interval: object|null }) => void} [handlers.onLunchStateChanged]
  * @param {object} [options.viewSubscription] — { activeTab, employee, userFullName, isAdmin }
  * @param {() => void} [options.onMaintenanceDetected] — сервер в режиме деплоя (503 / app_offline)
  */
@@ -334,12 +335,21 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       handlersRef.current.onCdrPreviewRetryDue?.();
     };
 
+    const handleLunchStateChanged = (employeeName, interval) => {
+      if (!isMounted) return;
+      handlersRef.current.onLunchStateChanged?.({
+        employeeName: String(employeeName || '').trim(),
+        interval: interval ?? null
+      });
+    };
+
     connection.on('NewTask', handleNewTask);
     connection.on('TaskDeleted', handleTaskDeleted);
     connection.on('TaskUpdated', handleTaskUpdated);
     connection.on('TaskStatusChanged', handleTaskStatusChanged);
     connection.on('TaskProgressChanged', handleTaskProgressChanged);
     connection.on('CdrPreviewRetryDue', handleCdrPreviewRetryDue);
+    connection.on('LunchStateChanged', handleLunchStateChanged);
     connection.on('ForceDisconnect', handleForceDisconnect);
 
     const startConnection = async () => {
@@ -415,6 +425,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       connection.off('TaskStatusChanged', handleTaskStatusChanged);
       connection.off('TaskProgressChanged', handleTaskProgressChanged);
       connection.off('CdrPreviewRetryDue', handleCdrPreviewRetryDue);
+      connection.off('LunchStateChanged', handleLunchStateChanged);
       connection.off('ForceDisconnect', handleForceDisconnect);
       connectionRef.current = null;
       setHubConnection(null);

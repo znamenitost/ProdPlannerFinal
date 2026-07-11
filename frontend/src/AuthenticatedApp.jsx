@@ -150,6 +150,17 @@ function AuthenticatedAppContent() {
     if (activeTab === 0) refreshCalendar();
   }, [activeTab, refreshCalendar]);
 
+  const handleHubLunchStateChanged = useCallback(({ employeeName, interval }) => {
+    const lunchTarget = String(user?.fullName || employee || '').trim();
+    if (employeeName !== lunchTarget) return;
+
+    setCurrentLunch(interval?.endTime ? null : interval);
+
+    if (activeTab === 0 && String(employee || '').trim() === employeeName) {
+      refreshCalendar();
+    }
+  }, [user?.fullName, employee, activeTab, refreshCalendar]);
+
   const viewSubscription = useMemo(
     () => ({
       activeTab,
@@ -167,7 +178,8 @@ function AuthenticatedAppContent() {
       onTableFallbackRefresh: handleHubTableFallbackRefresh,
       onCalendarRefresh: handleHubCalendarRefresh,
       onFullRefresh: handleHubFullRefresh,
-      onCdrPreviewRetryDue: handleCdrPreviewRetryDue
+      onCdrPreviewRetryDue: handleCdrPreviewRetryDue,
+      onLunchStateChanged: handleHubLunchStateChanged
     }),
     [
       handleHubTaskEventForTab,
@@ -175,7 +187,8 @@ function AuthenticatedAppContent() {
       handleHubTableFallbackRefresh,
       handleHubCalendarRefresh,
       handleHubFullRefresh,
-      handleCdrPreviewRetryDue
+      handleCdrPreviewRetryDue,
+      handleHubLunchStateChanged
     ]
   );
 

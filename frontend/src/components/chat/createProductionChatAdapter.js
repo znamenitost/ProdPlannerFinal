@@ -111,6 +111,18 @@ export function mapServerConversation(dto, currentUserId) {
   };
 }
 
+function conversationVisualKey(conversation) {
+  if (!conversation) return '';
+  return [
+    conversation.title,
+    conversation.subtitle,
+    conversation.unreadCount,
+    conversation.readState,
+    conversation.lastMessageAt,
+    conversation.metadata?.lastPreview
+  ].join('\0');
+}
+
 /**
  * Adapter bridging ProductionPlanner chat API + SignalR to MUI X Chat.
  */
@@ -132,9 +144,24 @@ export function createProductionChatAdapter({
   const messageCache = new Map();
   /** Own message ids per conversation for sent→read flips. */
   const ownMessageIdsByConversation = new Map();
+  /** Avoid duplicate mark-read API calls per conversation. */
+  const lastMarkedReadByConversation = new Map();
+  let conversationRefreshTimer = null;
+  const pendingConversationRefreshIds = new Set();
 
   const emit = (event) => {
     eventHandler?.(event);
+  };
+
+  const emitConversationUpdated = (conversation) => {
+    const id = String(conversation.id);
+    const cached = conversationCache.get(id);
+    const next = rememberConversation(conversation);
+    if (cached && conversationVisualKey(cached) === conversationVisualKey(next)) {
+      return next;
+    }
+    emit({ type: 'conversation-updated', conversation: next });
+    return next;
   };
 
   const rememberMessage = (message) => {
@@ -165,7 +192,7 @@ export function createProductionChatAdapter({
       ...cached,
       lastMessageAt: dto.createdAt || cached.lastMessageAt,
       subtitle: cached.metadata?.type === 'Team'
-        ? cached.subtitle
+        ? 'Вся команда'
         : (cached.participants?.some((p) => p.isOnline)
           ? 'В сети'
           : (preview || cached.metadata?.lastPreview || 'Личные сообщения')),
@@ -174,7 +201,7 @@ export function createProductionChatAdapter({
         lastPreview: preview || cached.metadata?.lastPreview
       }
     });
-    emit({ type: 'conversation-updated', conversation: next });
+    emitConversationUpdated(next);
   };
 
   const rememberConversation = (conversation) => {
@@ -197,27 +224,56 @@ export function createProductionChatAdapter({
 
   const pushUnreadCleared = (conversationId) => {
     const id = String(conversationId);
-    locallyReadIds.add(id);
-
-    // MUI applies this immediately to the conversation list badge.
-    emit({
-      type: 'read',
-      conversationId: id
-    });
-
     const cached = conversationCache.get(id);
-    if (cached) {
-      emit({
-        type: 'conversation-updated',
-        conversation: rememberConversation({
-          ...cached,
-          unreadCount: 0,
-          readState: 'read'
-        })
+    const alreadyCleared = locallyReadIds.has(id)
+      && (!cached || (cached.unreadCount === 0 && cached.readState === 'read'));
+
+    locallyReadIds.add(id);
+    if (alreadyCleared) return;
+
+    emit({ type: 'read', conversationId: id });
+
+    if (cached && (cached.unreadCount > 0 || cached.readState !== 'read')) {
+      emitConversationUpdated({
+        ...cached,
+        unreadCount: 0,
+        readState: 'read'
       });
     }
 
     onUnreadMaybeChanged?.();
+  };
+
+  const flushConversationRefresh = async () => {
+    const ids = [...pendingConversationRefreshIds];
+    pendingConversationRefreshIds.clear();
+    if (!ids.length) return;
+
+    try {
+      const list = await getChatConversations();
+      for (const convId of ids) {
+        const found = list.find((c) => String(c.id) === convId);
+        if (found) {
+          emitConversationUpdated(withLocalReadState(mapServerConversation(found, currentUserId)));
+        }
+      }
+      onUnreadMaybeChanged?.();
+    } catch {
+      onUnreadMaybeChanged?.();
+    }
+  };
+
+  const scheduleConversationRefresh = (conversationId) => {
+    if (conversationId != null) {
+      pendingConversationRefreshIds.add(String(conversationId));
+    }
+    if (conversationRefreshTimer) {
+      clearTimeout(conversationRefreshTimer);
+    }
+    conversationRefreshTimer = setTimeout(() => {
+      conversationRefreshTimer = null;
+      void flushConversationRefresh();
+    }, 350);
   };
 
   const markReadUpTo = async (conversationId, messageId) => {
@@ -225,11 +281,14 @@ export function createProductionChatAdapter({
     const id = Number(messageId);
     if (!Number.isFinite(id) || id <= 0) return;
 
+    const convKey = String(conversationId);
+    const prevMarked = lastMarkedReadByConversation.get(convKey) ?? 0;
     pushUnreadCleared(conversationId);
+    if (id <= prevMarked) return;
 
     try {
       await markChatRead(Number(conversationId), id);
-      await handleHubConversationUpdated(conversationId);
+      lastMarkedReadByConversation.set(convKey, id);
       onUnreadMaybeChanged?.();
     } catch (err) {
       console.warn('Chat markRead failed:', err?.message ?? err);
@@ -273,7 +332,7 @@ export function createProductionChatAdapter({
     if (viewingThisThread) {
       void markReadUpTo(conversationId, dto.id);
     } else {
-      void handleHubConversationUpdated(conversationId);
+      scheduleConversationRefresh(conversationId);
     }
   };
 
@@ -311,7 +370,7 @@ export function createProductionChatAdapter({
 
     for (const conv of conversationCache.values()) {
       if (conv.metadata?.peerUserId !== String(userId)) continue;
-      const next = rememberConversation({
+      emitConversationUpdated({
         ...conv,
         subtitle: online
           ? 'В сети'
@@ -320,26 +379,11 @@ export function createProductionChatAdapter({
           p.id === String(userId) ? { ...p, isOnline: online } : p
         ))
       });
-      emit({ type: 'conversation-updated', conversation: next });
     }
   };
 
-  const handleHubConversationUpdated = async (conversationId) => {
-    try {
-      const list = await getChatConversations();
-      const found = list.find((c) => String(c.id) === String(conversationId));
-      if (found) {
-        emit({
-          type: 'conversation-updated',
-          conversation: withLocalReadState(mapServerConversation(found, currentUserId))
-        });
-        onUnreadMaybeChanged?.();
-      } else {
-        onUnreadMaybeChanged?.();
-      }
-    } catch {
-      onUnreadMaybeChanged?.();
-    }
+  const handleHubConversationUpdated = (conversationId) => {
+    scheduleConversationRefresh(conversationId);
   };
 
   const unbindHub = () => {
@@ -383,38 +427,25 @@ export function createProductionChatAdapter({
     clearUnread(conversationId) {
       if (!conversationId) return;
       pushUnreadCleared(conversationId);
-      // Again after MUI has applied any in-flight setConversations.
-      setTimeout(() => {
-        if (String(viewingConversationId) === String(conversationId)) {
-          pushUnreadCleared(conversationId);
-        }
-      }, 0);
     },
 
     async listConversations() {
       const list = await getChatConversations();
-      const conversations = list.map((c) => withLocalReadState(mapServerConversation(c, currentUserId)));
+      const conversations = list
+        .map((c) => withLocalReadState(mapServerConversation(c, currentUserId)))
+        .sort((a, b) => {
+          if (a.metadata?.type === 'Team' && b.metadata?.type !== 'Team') return -1;
+          if (b.metadata?.type === 'Team' && a.metadata?.type !== 'Team') return 1;
+          return 0;
+        });
 
-      // MUI does: listConversations().then(r => store.setConversations(r.conversations)).
-      // If we emitted `read` before that, applyReadUpdate was a no-op (conversation missing).
-      // Re-assert cleared badges on the next macrotask, after setConversations.
+      // Re-assert read badges after MUI applies setConversations (no extra conversation-updated).
       setTimeout(() => {
         if (chatOpen && viewingConversationId) {
-          pushUnreadCleared(viewingConversationId);
+          emit({ type: 'read', conversationId: String(viewingConversationId) });
         }
         for (const id of locallyReadIds) {
           emit({ type: 'read', conversationId: id });
-          const cached = conversationCache.get(id);
-          if (cached) {
-            emit({
-              type: 'conversation-updated',
-              conversation: rememberConversation({
-                ...cached,
-                unreadCount: 0,
-                readState: 'read'
-              })
-            });
-          }
         }
       }, 0);
 
@@ -434,12 +465,9 @@ export function createProductionChatAdapter({
       const nextCursor = rows.length ? String(rows[0].id) : cursor;
 
       const isInitialPage = direction === 'backward' && !cursor;
-      if (isInitialPage) {
-        pushUnreadCleared(conversationId);
-        if (rows.length > 0) {
-          const latestId = rows.reduce((max, m) => (m.id > max ? m.id : max), rows[0].id);
-          void markReadUpTo(conversationId, latestId);
-        }
+      if (isInitialPage && rows.length > 0) {
+        const latestId = rows.reduce((max, m) => (m.id > max ? m.id : max), rows[0].id);
+        void markReadUpTo(conversationId, latestId);
       }
 
       return {
@@ -473,7 +501,7 @@ export function createProductionChatAdapter({
           }
           applyMessageUpdate(dto);
           clearEditingMessage?.();
-          handleHubConversationUpdated(dto.conversationId).catch(() => {});
+          scheduleConversationRefresh(dto.conversationId);
           return emptyStream();
         } catch (err) {
           if (message?.id) {
@@ -501,7 +529,7 @@ export function createProductionChatAdapter({
       }
       emit({ type: 'message-added', message: serverMessage });
 
-      handleHubConversationUpdated(dto.conversationId).catch(() => {});
+      scheduleConversationRefresh(dto.conversationId);
       return emptyStream();
     },
 
@@ -521,10 +549,6 @@ export function createProductionChatAdapter({
 
     async subscribe({ onEvent }) {
       eventHandler = onEvent;
-      // If a thread is already open when subscribe attaches, clear its badge now.
-      if (chatOpen && viewingConversationId) {
-        pushUnreadCleared(viewingConversationId);
-      }
       return () => {
         if (eventHandler === onEvent) eventHandler = null;
       };

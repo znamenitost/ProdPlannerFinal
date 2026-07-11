@@ -32,7 +32,8 @@ public sealed class TaskDataSyncHubBroadcaster : ITaskDataSyncHubBroadcaster, ID
         "TaskUpdated",
         "TaskDeleted",
         "TaskStatusChanged",
-        "TaskProgressChanged"
+        "TaskProgressChanged",
+        "LunchStateChanged"
     };
 
     private readonly IHubContext<NotificationHub> _hubContext;

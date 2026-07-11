@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
+using ProductionPlanner.Hubs;
 using ProductionPlanner.Models;
 using ProductionPlanner.Models.Dtos;
 using ProductionPlanner.Services;
@@ -17,17 +20,23 @@ public class LunchController : ControllerBase
     private readonly ITaskLifecycleService _lifecycle;
     private readonly IAppTimeService _timeService;
     private readonly UserManager<User> _userManager;
+    private readonly ITaskDataSyncHubBroadcaster _dataSync;
+    private readonly IHubContext<NotificationHub> _hubContext;
 
     public LunchController(
         IProductionTaskRepository repo,
         ITaskLifecycleService lifecycle,
         IAppTimeService timeService,
-        UserManager<User> userManager)
+        UserManager<User> userManager,
+        ITaskDataSyncHubBroadcaster dataSync,
+        IHubContext<NotificationHub> hubContext)
     {
         _repo = repo;
         _lifecycle = lifecycle;
         _timeService = timeService;
         _userManager = userManager;
+        _dataSync = dataSync;
+        _hubContext = hubContext;
     }
 
     [HttpGet("current")]
@@ -70,7 +79,9 @@ public class LunchController : ControllerBase
             EndTime = null
         };
         await _repo.AddLunchIntervalAsync(interval, cancellationToken);
-        return Ok(LunchIntervalDto.FromEntity(interval));
+        var dto = LunchIntervalDto.FromEntity(interval);
+        await NotifyLunchStateChangedAsync(targetEmployee, dto, cancellationToken);
+        return Ok(dto);
     }
 
     [HttpPost("end")]
@@ -83,7 +94,31 @@ public class LunchController : ControllerBase
             return Forbid();
 
         await _repo.CloseOpenLunchIntervalsAsync(targetEmployee, _timeService.Now, cancellationToken);
+        await NotifyLunchStateChangedAsync(targetEmployee, null, cancellationToken);
         return Ok();
+    }
+
+    private async Task NotifyLunchStateChangedAsync(
+        string employeeName,
+        LunchIntervalDto? interval,
+        CancellationToken cancellationToken)
+    {
+        await _dataSync.BroadcastAsync(
+            "LunchStateChanged",
+            [employeeName],
+            employeeName,
+            interval);
+
+        var user = await _userManager.Users.FirstOrDefaultAsync(
+            u => u.FullName == employeeName,
+            cancellationToken);
+        if (user == null)
+            return;
+
+        await _hubContext.Clients.Group(user.Id).SendAsync(
+            "LunchStateChanged",
+            employeeName,
+            interval);
     }
 
     private async Task<string?> ResolveTargetEmployeeAsync(string? employee)

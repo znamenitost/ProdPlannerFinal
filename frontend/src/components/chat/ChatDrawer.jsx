@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   alpha,
   Avatar,
@@ -29,6 +29,7 @@ import {
   ChatComposerInputWithEdit
 } from './ChatComposerEdit';
 import ChatConversationOnlineAvatar from './ChatConversationOnlineAvatar';
+import ChatMessageListWithScroll from './ChatMessageListWithScroll';
 import {
   ChatEditSessionContext,
   textFromChatMessage
@@ -154,10 +155,13 @@ export default function ChatDrawer({
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const currentUserId = user?.id;
 
-  const [activeConversationId, setActiveConversationId] = useState(undefined);
+  const [activeConversationId, setActiveConversationId] = useState(() => (
+    initialConversationId ? String(initialConversationId) : undefined
+  ));
   const [contacts, setContacts] = useState([]);
   const [editingMessage, setEditingMessage] = useState(null);
   const editingMessageRef = useRef(null);
+  const pickedDefaultConversationRef = useRef(false);
   editingMessageRef.current = editingMessage;
 
   const currentUser = useMemo(() => {
@@ -224,6 +228,20 @@ export default function ChatDrawer({
     };
   }, [editSession]);
 
+  const handleConversationsChange = useCallback((conversations) => {
+    if (initialConversationId || pickedDefaultConversationRef.current) return;
+    const team = conversations.find((c) => c.metadata?.type === 'Team') || conversations[0];
+    if (!team?.id) return;
+    pickedDefaultConversationRef.current = true;
+    setActiveConversationId(String(team.id));
+  }, [initialConversationId]);
+
+  useEffect(() => {
+    if (!open) {
+      pickedDefaultConversationRef.current = false;
+    }
+  }, [open]);
+
   useEffect(() => {
     if (!adapter) return undefined;
     adapter.bindHub(hubConnection);
@@ -243,12 +261,6 @@ export default function ChatDrawer({
       conversationId: open ? (activeConversationId ?? null) : null
     });
   }, [adapter, open, activeConversationId]);
-
-  // Explicitly clear the left-pane badge as soon as the user selects a thread.
-  useEffect(() => {
-    if (!open || !adapter || !activeConversationId) return;
-    adapter.clearUnread?.(activeConversationId);
-  }, [open, adapter, activeConversationId]);
 
   useEffect(() => {
     if (!open || !adapter) return undefined;
@@ -281,29 +293,6 @@ export default function ChatDrawer({
       hubConnection.off('ChatPresence', onPresence);
     };
   }, [open, hubConnection]);
-
-  useEffect(() => {
-    if (!open || !adapter) return undefined;
-    let cancelled = false;
-
-    adapter.listConversations()
-      .then((result) => {
-        if (cancelled) return;
-        if (initialConversationId) {
-          setActiveConversationId(String(initialConversationId));
-          return;
-        }
-        const team = result.conversations.find((c) => c.metadata?.type === 'Team')
-          || result.conversations[0];
-        if (team) {
-          setActiveConversationId((prev) => prev || team.id);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [open, adapter, initialConversationId]);
 
   useEffect(() => {
     if (!open || !initialConversationId) return;
@@ -413,6 +402,7 @@ export default function ChatDrawer({
               currentUser={currentUser}
               activeConversationId={activeConversationId}
               onActiveConversationChange={handleActiveConversationChange}
+              onConversationsChange={handleConversationsChange}
               variant="default"
               density="comfortable"
               localeText={ruLocaleText}
@@ -422,7 +412,8 @@ export default function ChatDrawer({
                 composerAttachmentList: ChatComposerAttachments,
                 composerInput: ChatComposerInputWithEdit,
                 composerHelperText: ChatComposerEditHelperText,
-                composerAttachButton: editingMessage ? null : undefined
+                composerAttachButton: editingMessage ? null : undefined,
+                messageList: ChatMessageListWithScroll
               }}
               slotProps={{
                 conversationList: {
@@ -444,6 +435,7 @@ export default function ChatDrawer({
                 dateDivider: true,
                 unreadMarker: true,
                 scrollToBottom: true,
+                autoScroll: true,
                 suggestions: false,
                 streamingIndicator: false,
                 helperText: true
