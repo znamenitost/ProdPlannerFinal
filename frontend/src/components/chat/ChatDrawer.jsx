@@ -448,7 +448,7 @@ export default function ChatDrawer({
                 border: 'none',
                 borderRadius: 0,
                 '--ChatBox-conversationListWidth': '300px',
-                bgcolor: (t) => alpha(t.palette.grey[100], 0.45),
+                bgcolor: 'background.default',
                 // Telegram-like blue double-check for read own messages.
                 '& .MuiChatMessage-inlineMetaStatus .MuiSvgIcon-root': {
                   fontSize: '1.05em'

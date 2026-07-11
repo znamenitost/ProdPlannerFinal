@@ -352,6 +352,39 @@ export const appTheme = createTheme({
         })
       }
     },
+    MuiChatBox: {
+      styleOverrides: {
+        root: {
+          backgroundColor: neutral[100]
+        }
+      }
+    },
+    MuiChatMessageList: {
+      styleOverrides: {
+        root: {
+          backgroundColor: neutral[100]
+        }
+      }
+    },
+    MuiChatMessage: {
+      styleOverrides: {
+        bubble: ({ theme, ownerState }) => {
+          const isOwn = ownerState?.isOwnMessage ?? ownerState?.role === 'user';
+          if (isOwn) {
+            return {
+              backgroundColor: theme.palette.primary.main,
+              color: theme.palette.primary.contrastText
+            };
+          }
+          return {
+            backgroundColor: theme.palette.background.paper,
+            color: theme.palette.text.primary,
+            border: `1px solid ${borderSubtle}`,
+            boxShadow: `0 1px 2px ${alpha(neutral[600], 0.045)}`
+          };
+        }
+      }
+    },
     MuiSnackbar: {
       styleOverrides: {
         root: { '& .MuiPaper-root': { borderRadius: 10 } }
