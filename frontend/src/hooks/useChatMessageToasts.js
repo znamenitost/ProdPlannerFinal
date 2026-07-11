@@ -1,4 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getChatConversations } from '../services/api';
+
+function pluralizeRu(value, one, few, many) {
+  const mod10 = value % 10;
+  const mod100 = value % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
 
 function previewFromDto(dto) {
   const text = String(dto?.text || '').trim().replace(/\s+/g, ' ');
@@ -21,6 +30,31 @@ function toastFromDto(dto) {
   };
 }
 
+function unreadSummaryToast(userId, unreadConversations) {
+  const total = unreadConversations.reduce((sum, conversation) => sum + (conversation.unreadCount || 0), 0);
+  const latest = unreadConversations
+    .map((conversation) => conversation.lastMessage)
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+  const conversationsCount = unreadConversations.length;
+  const messageWord = pluralizeRu(total, 'сообщение', 'сообщения', 'сообщений');
+  const chatWord = pluralizeRu(conversationsCount, 'чате', 'чатах', 'чатах');
+  const signature = `${userId}-${total}-${latest?.id || 'none'}`;
+
+  return {
+    id: `chat-pending-${signature}`,
+    serverId: `pending-${signature}`,
+    type: 'ChatMessage',
+    title: 'Неотвеченные сообщения',
+    body: conversationsCount > 1
+      ? `У вас ${total} ${messageWord} в ${conversationsCount} ${chatWord}.`
+      : `У вас ${total} ${messageWord}.`,
+    conversationId: conversationsCount === 1 ? String(unreadConversations[0].id) : undefined,
+    isUnreadSummary: true,
+    createdAt: latest?.createdAt
+  };
+}
+
 /**
  * Toast notifications for incoming chat messages (when chat is closed or another thread is active).
  * Queues toasts while the browser tab is hidden (same pattern as task push notifications).
@@ -32,6 +66,7 @@ export default function useChatMessageToasts(user, hubConnection, {
 } = {}) {
   const [toasts, setToasts] = useState([]);
   const hiddenQueueRef = useRef([]);
+  const pendingSummaryShownRef = useRef(new Set());
   const chatOpenRef = useRef(chatOpen);
   const activeConversationIdRef = useRef(activeConversationId);
   chatOpenRef.current = chatOpen;
@@ -64,6 +99,19 @@ export default function useChatMessageToasts(user, hubConnection, {
     commitToast(toast);
   }, [commitToast]);
 
+  const offerPreparedToast = useCallback((toast) => {
+    if (!toast?.serverId) return;
+
+    if (document.visibilityState === 'hidden') {
+      if (!hiddenQueueRef.current.some((t) => t.serverId === toast.serverId)) {
+        hiddenQueueRef.current.push(toast);
+      }
+      return;
+    }
+
+    commitToast(toast);
+  }, [commitToast]);
+
   const flushHiddenQueue = useCallback(() => {
     if (document.visibilityState === 'hidden') return;
     const queued = [...hiddenQueueRef.current];
@@ -75,6 +123,31 @@ export default function useChatMessageToasts(user, hubConnection, {
       commitToast(toast);
     });
   }, [commitToast]);
+
+  useEffect(() => {
+    if (!enabled || !user?.id || !user?.isAuthenticated) return undefined;
+
+    const abort = new AbortController();
+    const userId = user.id;
+
+    getChatConversations({ signal: abort.signal })
+      .then((conversations) => {
+        const unreadConversations = conversations.filter((conversation) => (conversation.unreadCount || 0) > 0);
+        if (unreadConversations.length === 0) return;
+
+        const toast = unreadSummaryToast(userId, unreadConversations);
+        if (pendingSummaryShownRef.current.has(toast.serverId)) return;
+
+        pendingSummaryShownRef.current.add(toast.serverId);
+        offerPreparedToast(toast);
+      })
+      .catch((err) => {
+        if (abort.signal.aborted || err?.name === 'AbortError') return;
+        console.warn('Pending chat notifications unavailable:', err?.message ?? err);
+      });
+
+    return () => abort.abort();
+  }, [enabled, user?.id, user?.isAuthenticated, offerPreparedToast]);
 
   useEffect(() => {
     if (!enabled || !hubConnection || !user?.id) return undefined;
@@ -105,13 +178,18 @@ export default function useChatMessageToasts(user, hubConnection, {
     };
   }, [enabled, hubConnection, user?.id, offerToast, flushHiddenQueue]);
 
-  // Drop toasts for the conversation once user opens it.
+  // Drop stale chat prompts once the user opens the relevant chat surface.
   useEffect(() => {
-    if (!chatOpen || !activeConversationId) return;
+    if (!chatOpen) return;
+    if (!activeConversationId) {
+      setToasts((prev) => prev.filter((t) => !t.isUnreadSummary));
+      hiddenQueueRef.current = hiddenQueueRef.current.filter((t) => !t.isUnreadSummary);
+      return;
+    }
     const id = String(activeConversationId);
-    setToasts((prev) => prev.filter((t) => String(t.conversationId) !== id));
+    setToasts((prev) => prev.filter((t) => !t.isUnreadSummary && String(t.conversationId) !== id));
     hiddenQueueRef.current = hiddenQueueRef.current.filter(
-      (t) => String(t.conversationId) !== id
+      (t) => !t.isUnreadSummary && String(t.conversationId) !== id
     );
   }, [chatOpen, activeConversationId]);
 
