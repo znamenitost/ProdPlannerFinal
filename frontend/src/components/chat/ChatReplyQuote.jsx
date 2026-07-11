@@ -1,9 +1,12 @@
 import { alpha, Box, Typography } from '@mui/material';
+import { truncateReplyPreview } from './chatReplyPreview';
 import { scrollToChatMessage } from './scrollToChatMessage';
 
 export default function ChatReplyQuote({ replyTo, isOwnBubble = false }) {
   if (!replyTo) return null;
 
+  const senderName = replyTo.senderFullName || 'Сообщение';
+  const preview = truncateReplyPreview(replyTo.preview) || 'Сообщение';
   const accent = isOwnBubble ? 'rgba(255,255,255,0.95)' : 'primary.main';
   const previewColor = isOwnBubble ? 'rgba(255,255,255,0.78)' : 'text.secondary';
   const barColor = isOwnBubble ? 'rgba(255,255,255,0.85)' : 'primary.main';
@@ -24,17 +27,18 @@ export default function ChatReplyQuote({ replyTo, isOwnBubble = false }) {
           handleClick();
         }
       }}
-      aria-label={`Перейти к сообщению: ${replyTo.senderFullName || 'Сообщение'}`}
+      aria-label={`Перейти к сообщению: ${senderName}`}
       sx={{
         mb: 0.75,
         px: 1,
         py: 0.5,
         borderRadius: 1,
-        borderLeft: `3px solid`,
+        borderLeft: '3px solid',
         borderLeftColor: barColor,
         bgcolor: bg,
         maxWidth: '100%',
         cursor: 'pointer',
+        userSelect: 'none',
         transition: (t) => t.transitions.create('background-color', {
           duration: t.transitions.duration.shortest
         }),
@@ -50,21 +54,26 @@ export default function ChatReplyQuote({ replyTo, isOwnBubble = false }) {
           color: accent,
           display: 'block',
           lineHeight: 1.2,
-          mb: 0.15
+          mb: 0.15,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
         }}
       >
-        {replyTo.senderFullName || 'Сообщение'}
+        {senderName}
       </Typography>
       <Typography
         variant="caption"
-        noWrap
         sx={{
           color: previewColor,
           display: 'block',
-          lineHeight: 1.25
+          lineHeight: 1.25,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
         }}
       >
-        {replyTo.preview || 'Сообщение'}
+        {preview}
       </Typography>
     </Box>
   );

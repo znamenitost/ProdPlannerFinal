@@ -478,7 +478,9 @@ export default function ChatDrawer({
                 '& [role="article"][data-chat-highlight="true"]': {
                   animation: 'chatMessageHighlight 1.1s ease-out'
                 },
-                // Telegram-like blue double-check for read own messages.
+                '& .MuiChatMessage-bubble': {
+                  overflow: 'visible'
+                },
                 '& .MuiChatMessage-inlineMetaStatus .MuiSvgIcon-root': {
                   fontSize: '1.05em'
                 },

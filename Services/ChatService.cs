@@ -849,13 +849,23 @@ public sealed class ChatService : IChatService
         };
     }
 
+    private const int ReplyPreviewMaxLength = 24;
+
     private static string BuildReplyPreview(string text, IReadOnlyList<ChatAttachmentDto> attachments)
     {
         var trimmed = (text ?? "").Trim();
         if (!string.IsNullOrEmpty(trimmed))
-            return trimmed.Length > 120 ? $"{trimmed[..119]}…" : trimmed;
+            return trimmed.Length > ReplyPreviewMaxLength
+                ? $"{trimmed[..ReplyPreviewMaxLength]}…"
+                : trimmed;
         if (attachments.Count == 1)
-            return attachments[0].FileName;
+        {
+            var fileName = attachments[0].FileName;
+            var withIcon = $"📎 {fileName}";
+            return withIcon.Length > ReplyPreviewMaxLength
+                ? $"{withIcon[..ReplyPreviewMaxLength]}…"
+                : withIcon;
+        }
         if (attachments.Count > 1)
             return $"{attachments.Count} файла";
         return "Сообщение";

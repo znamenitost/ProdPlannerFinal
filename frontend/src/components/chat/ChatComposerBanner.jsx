@@ -4,6 +4,7 @@ import { Close, Edit as EditIcon, Reply as ReplyIcon } from '@mui/icons-material
 import { useChatComposer } from '@mui/x-chat-headless';
 import { useChatEditSession } from './ChatEditSessionContext';
 import { useChatReplySession } from './ChatReplySessionContext';
+import { truncateReplyPreview } from './chatReplyPreview';
 
 /**
  * Banner above the composer while editing or replying to a message.
@@ -70,6 +71,7 @@ export default function ChatComposerBanner() {
   }
 
   if (replying) {
+    const preview = truncateReplyPreview(replying.preview) || 'Сообщение';
     return (
       <Box
         sx={{
@@ -77,20 +79,41 @@ export default function ChatComposerBanner() {
           alignItems: 'center',
           gap: 1,
           px: 0.5,
-          py: 0.25,
+          py: 0.5,
           mb: 0.25,
           borderLeft: (t) => `3px solid ${t.palette.primary.main}`,
           bgcolor: (t) => alpha(t.palette.primary.main, 0.06),
           borderRadius: 1
         }}
       >
-        <ReplyIcon sx={{ fontSize: 16, color: 'primary.main', ml: 0.75 }} />
+        <ReplyIcon sx={{ fontSize: 16, color: 'primary.main', ml: 0.75, flexShrink: 0 }} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', display: 'block', lineHeight: 1.2 }}>
-            Ответ для {replying.senderFullName}
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 700,
+              color: 'primary.main',
+              display: 'block',
+              lineHeight: 1.2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {replying.senderFullName}
           </Typography>
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', lineHeight: 1.2 }}>
-            {replying.preview || 'Сообщение'}
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{
+              display: 'block',
+              lineHeight: 1.2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {preview}
           </Typography>
         </Box>
         <IconButton

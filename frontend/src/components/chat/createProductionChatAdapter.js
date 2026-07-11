@@ -9,6 +9,7 @@ import {
 } from '../../services/api';
 import { avatarDisplayUrl } from '../../utils/avatarUrl';
 import { textFromChatMessage } from './ChatEditSessionContext';
+import { truncateReplyPreview } from './chatReplyPreview';
 
 export const TEAM_CHAT_AVATAR_URL = '/sprites/favicon2.svg';
 
@@ -70,7 +71,7 @@ export function mapServerMessage(dto, currentUserId) {
           id: String(dto.replyTo.id),
           senderUserId: dto.replyTo.senderUserId,
           senderFullName: dto.replyTo.senderFullName,
-          preview: dto.replyTo.preview
+          preview: truncateReplyPreview(dto.replyTo.preview)
         }
       }
       : undefined,
@@ -546,7 +547,7 @@ export function createProductionChatAdapter({
                 id: String(replying.id),
                 senderUserId: replying.senderUserId,
                 senderFullName: replying.senderFullName,
-                preview: replying.preview
+                preview: truncateReplyPreview(replying.preview)
               }
             }
           }

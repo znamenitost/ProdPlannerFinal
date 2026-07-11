@@ -44,6 +44,7 @@ export default function ChatMessageContentWithReply(props) {
         position: 'relative',
         minWidth: 0,
         maxWidth: '100%',
+        overflow: 'visible',
         '& [data-chat-hover-actions]': {
           opacity: 0,
           pointerEvents: 'none',
@@ -70,13 +71,14 @@ export default function ChatMessageContentWithReply(props) {
           data-chat-hover-actions
           sx={{
             position: 'absolute',
-            top: 4,
-            right: isOwnMessage ? 4 : undefined,
-            left: isOwnMessage ? undefined : 4,
+            top: 2,
             display: 'flex',
             flexDirection: 'column',
             gap: 0.25,
-            zIndex: 1
+            zIndex: 2,
+            ...(isOwnMessage
+              ? { right: 'calc(100% + 4px)' }
+              : { left: 'calc(100% + 4px)' })
           }}
         >
           <Tooltip title="Ответить" placement={isOwnMessage ? 'left' : 'right'}>
