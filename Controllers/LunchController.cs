@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Hubs;
+using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Models.Dtos;
 using ProductionPlanner.Services;
@@ -48,7 +49,7 @@ public class LunchController : ControllerBase
         if (targetEmployee == null)
             return Forbid();
 
-        var openInterval = await _repo.GetOpenLunchIntervalAsync(targetEmployee, cancellationToken);
+        var openInterval = await GetOpenLunchOrAutoCloseStaleAsync(targetEmployee, cancellationToken);
         return Ok(openInterval == null ? null : LunchIntervalDto.FromEntity(openInterval));
     }
 
@@ -61,7 +62,8 @@ public class LunchController : ControllerBase
         if (targetEmployee == null)
             return Forbid();
 
-        var openInterval = await _repo.GetOpenLunchIntervalAsync(targetEmployee, cancellationToken);
+        // Сначала снимем «залипший» обед после 19:00, иначе Start вернёт старый интервал.
+        var openInterval = await GetOpenLunchOrAutoCloseStaleAsync(targetEmployee, cancellationToken);
         if (openInterval != null)
             return Ok(LunchIntervalDto.FromEntity(openInterval));
 
@@ -93,9 +95,34 @@ public class LunchController : ControllerBase
         if (targetEmployee == null)
             return Forbid();
 
+        // Задачи, поставленные на паузу при старте обеда, остаются на паузе —
+        // сотрудник сам нажимает «Начал» / «Продолжить».
         await _repo.CloseOpenLunchIntervalsAsync(targetEmployee, _timeService.Now, cancellationToken);
         await NotifyLunchStateChangedAsync(targetEmployee, null, cancellationToken);
         return Ok();
+    }
+
+    /// <summary>
+    /// Если обед не закрыт пользователем до 19:00 дня начала — закрываем сами
+    /// (страховка на случай простоя background-сервиса).
+    /// </summary>
+    private async Task<LunchInterval?> GetOpenLunchOrAutoCloseStaleAsync(
+        string employeeName,
+        CancellationToken cancellationToken)
+    {
+        var openInterval = await _repo.GetOpenLunchIntervalAsync(employeeName, cancellationToken);
+        if (openInterval == null)
+            return null;
+
+        var now = _timeService.Now;
+        var start = AppDateTime.ToMoscowWallClockFromDb(openInterval.StartTime);
+        if (!EndOfWorkDaySchedule.IsOpenLunchPastWorkDayEnd(start, now))
+            return openInterval;
+
+        var closedAt = EndOfWorkDaySchedule.GetWorkDayEnd(start);
+        await _repo.CloseOpenLunchIntervalsAsync(employeeName, closedAt, cancellationToken);
+        await NotifyLunchStateChangedAsync(employeeName, null, cancellationToken);
+        return null;
     }
 
     private async Task NotifyLunchStateChangedAsync(

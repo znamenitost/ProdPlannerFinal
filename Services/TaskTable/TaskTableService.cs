@@ -596,6 +596,16 @@ public class TaskTableService : ITaskTableService
             _repo.StageWorkIntervalForUpdate(interval);
         }
 
+        // Закрытие последнего открытого интервала у «Начал» → «Пауза»
+        // (иначе статус и интервалы расходятся: in_progress_without_open_interval).
+        var pausedDueToClosedInterval = false;
+        var hasOpenAfterSave = byId.Values.Any(i => i.EndTime == null);
+        if (task.Status == JobStatus.InProgress && !hasOpenAfterSave)
+        {
+            task.Status = JobStatus.Paused;
+            pausedDueToClosedInterval = true;
+        }
+
         if (task.Status == JobStatus.Completed)
         {
             var now = _timeService.Now;
@@ -632,6 +642,13 @@ public class TaskTableService : ITaskTableService
         {
             task.UpdatedAt = _timeService.Now;
             await _repo.UpdateTaskAsync(task, cancellationToken);
+        }
+
+        if (pausedDueToClosedInterval)
+        {
+            if (task.ParentRowNumber.HasValue && task.IsSplitTask)
+                await _lifecycle.SyncSplitParentStatusAsync(task.Id, cancellationToken);
+            await _notificationService.NotifyStatusChangedAsync(task, "Paused");
         }
 
         var updated = (await _repo.GetWorkIntervalsForTaskIdsAsync([taskId], cancellationToken))

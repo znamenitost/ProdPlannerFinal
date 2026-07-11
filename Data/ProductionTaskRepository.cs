@@ -812,6 +812,25 @@ namespace ProductionPlanner.Data
                 .ExecuteUpdateAsync(s => s.SetProperty(i => i.EndTime, end), cancellationToken);
         }
 
+        public async Task<IReadOnlyList<string>> CloseAllOpenLunchIntervalsAsync(
+            DateTime closedAt,
+            CancellationToken cancellationToken = default)
+        {
+            var employees = await _context.LunchIntervals
+                .Where(i => i.EndTime == null)
+                .Select(i => i.EmployeeName)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+            if (employees.Count == 0)
+                return employees;
+
+            var end = ToDbDateTime(closedAt);
+            await _context.LunchIntervals
+                .Where(i => i.EndTime == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(i => i.EndTime, end), cancellationToken);
+            return employees;
+        }
+
         public async Task<int> TryTransitionStatusAsync(
             int taskId,
             JobStatus newStatus,

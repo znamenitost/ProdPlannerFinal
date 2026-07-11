@@ -27,6 +27,7 @@ import { createProductionChatAdapter } from './createProductionChatAdapter';
 import ChatComposerAttachments from './ChatComposerAttachments';
 import { ChatComposerInputWithEdit } from './ChatComposerEdit';
 import ChatComposerBanner from './ChatComposerBanner';
+import ChatComposerToolbarWithEmoji from './ChatComposerToolbarWithEmoji';
 import ChatMessageContentWithReply from './ChatMessageContentWithReply';
 import ChatConversationOnlineAvatar from './ChatConversationOnlineAvatar';
 import ChatMessageListWithScroll from './ChatMessageListWithScroll';
@@ -461,6 +462,7 @@ export default function ChatDrawer({
                 composerAttachmentList: ChatComposerAttachments,
                 composerInput: ChatComposerInputWithEdit,
                 composerHelperText: ChatComposerBanner,
+                composerToolbar: ChatComposerToolbarWithEmoji,
                 composerAttachButton: editingMessage ? null : undefined,
                 messageList: ChatMessageListWithScroll,
                 messageContent: ChatMessageContentWithReply

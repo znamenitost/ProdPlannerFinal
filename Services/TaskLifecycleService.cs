@@ -383,14 +383,26 @@ public class TaskLifecycleService : ITaskLifecycleService
         DateTime now,
         CancellationToken cancellationToken)
     {
-        var actualHours = 0.0;
+        var completed = false;
+        var testSaved = 0.0;
+        string? employeeName = null;
 
+        // Статус + WorkPhase меняем под lifecycle-lock, иначе два параллельных
+        // «Готово» оба проходят IsActiveTestPhase и дважды начисляют saved hours.
         await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
+            var task = await _repo.GetTaskByIdAsync(taskId, ct, includeIntervals: true);
+            if (task == null || !TestPhaseWorkflow.IsActiveTestPhase(task))
+                return;
+
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
-            var intervals = (await _repo.GetTaskByIdAsync(taskId, ct, includeIntervals: true))?.WorkIntervals ?? [];
-            foreach (var interval in intervals)
+            task = await _repo.GetTaskByIdAsync(taskId, ct, includeIntervals: true);
+            if (task == null || !TestPhaseWorkflow.IsActiveTestPhase(task))
+                return;
+
+            var actualHours = 0.0;
+            foreach (var interval in task.WorkIntervals ?? [])
             {
                 if (interval.EndTime.HasValue)
                 {
@@ -399,27 +411,33 @@ public class TaskLifecycleService : ITaskLifecycleService
                         AppDateTime.ToMoscowWallClockFromDb(interval.EndTime.Value));
                 }
             }
+
+            testSaved = task.TestEstimateHours - actualHours;
+            employeeName = task.EmployeeName;
+
+            task.Status = JobStatus.PendingApproval;
+            task.WorkPhase = TaskWorkPhase.AwaitingApproval;
+            task.Progress = 0;
+            task.ActualHours = actualHours;
+            task.TestPhaseCompletedAt = now;
+            task.CompletedAt = null;
+            task.UpdatedAt = now;
+            await _repo.UpdateTaskAsync(task, ct);
+            completed = true;
         }, cancellationToken);
 
-        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
-        if (task == null) return;
+        if (!completed || employeeName == null)
+            return;
 
-        var testSaved = task.TestEstimateHours - actualHours;
-        await _statsService.AddSavedHoursAsync(task.EmployeeName, testSaved, now);
+        await _statsService.AddSavedHoursAsync(employeeName, testSaved, now);
 
-        task.Status = JobStatus.PendingApproval;
-        task.WorkPhase = TaskWorkPhase.AwaitingApproval;
-        task.Progress = 0;
-        task.ActualHours = actualHours;
-        task.TestPhaseCompletedAt = now;
-        task.CompletedAt = null;
-        task.UpdatedAt = now;
-        await _repo.UpdateTaskAsync(task, cancellationToken);
+        var updatedTask = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
+        if (updatedTask == null) return;
 
-        if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-            await UpdateParentStatusAsync(task.Id, cancellationToken);
+        if (updatedTask.ParentRowNumber.HasValue && updatedTask.IsSplitTask)
+            await UpdateParentStatusAsync(updatedTask.Id, cancellationToken);
 
-        await _notificationService.NotifyStatusChangedAsync(task, "PendingApproval");
+        await _notificationService.NotifyStatusChangedAsync(updatedTask, "PendingApproval");
     }
 
     private async Task TryAdvanceSequentialStageAsync(

@@ -1,7 +1,15 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using ProductionPlanner.Data;
+using ProductionPlanner.Hubs;
+using ProductionPlanner.Models;
+
 namespace ProductionPlanner.Services;
 
 /// <summary>
-/// В 19:00 (московское, пн–пт) закрывает все открытые интервалы и ставит задачи «В работе» на паузу.
+/// В 19:00 (московское, пн–пт) закрывает все открытые интервалы, ставит задачи «В работе» на паузу
+/// и закрывает незавершённые обеды (задачи после обеда остаются на паузе).
 /// </summary>
 public sealed class EndOfWorkDayBackgroundService : BackgroundService
 {
@@ -47,5 +55,47 @@ public sealed class EndOfWorkDayBackgroundService : BackgroundService
 
         var workDayEnd = EndOfWorkDaySchedule.GetWorkDayEnd(now);
         await lifecycle.PauseOpenTasksAtEndOfWorkDayAsync(workDayEnd, cancellationToken);
+        await CloseOpenLunchesAtEndOfDayAsync(scope.ServiceProvider, workDayEnd, cancellationToken);
+    }
+
+    private async Task CloseOpenLunchesAtEndOfDayAsync(
+        IServiceProvider services,
+        DateTime workDayEnd,
+        CancellationToken cancellationToken)
+    {
+        var repo = services.GetRequiredService<IProductionTaskRepository>();
+        var dataSync = services.GetRequiredService<ITaskDataSyncHubBroadcaster>();
+        var hubContext = services.GetRequiredService<IHubContext<NotificationHub>>();
+        var userManager = services.GetRequiredService<UserManager<User>>();
+
+        var employees = await repo.CloseAllOpenLunchIntervalsAsync(workDayEnd, cancellationToken);
+        if (employees.Count == 0)
+            return;
+
+        _logger.LogInformation(
+            "Автозакрытие обеда в конце дня для {Count} сотрудников: {Names}",
+            employees.Count,
+            string.Join(", ", employees));
+
+        foreach (var employeeName in employees)
+        {
+            await dataSync.BroadcastAsync(
+                "LunchStateChanged",
+                [employeeName],
+                employeeName,
+                null);
+
+            var user = await userManager.Users.FirstOrDefaultAsync(
+                u => u.FullName == employeeName,
+                cancellationToken);
+            if (user == null)
+                continue;
+
+            await hubContext.Clients.Group(user.Id).SendAsync(
+                "LunchStateChanged",
+                employeeName,
+                null,
+                cancellationToken);
+        }
     }
 }

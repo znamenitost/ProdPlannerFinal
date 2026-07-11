@@ -297,15 +297,20 @@ export function createProductionChatAdapter({
 
     const convKey = String(conversationId);
     const prevMarked = lastMarkedReadByConversation.get(convKey) ?? 0;
-    pushUnreadCleared(conversationId);
-    if (id <= prevMarked) return;
+    if (id <= prevMarked) {
+      // Уже подтверждено сервером ранее — можно спокойно сбросить локальный badge.
+      pushUnreadCleared(conversationId);
+      return;
+    }
 
     try {
       await markChatRead(Number(conversationId), id);
       lastMarkedReadByConversation.set(convKey, id);
+      pushUnreadCleared(conversationId);
       onUnreadMaybeChanged?.();
     } catch (err) {
       console.warn('Chat markRead failed:', err?.message ?? err);
+      // Не трогаем locallyReadIds / badge — refresh восстановит реальный unread с сервера.
       onUnreadMaybeChanged?.();
     }
   };
@@ -430,12 +435,7 @@ export function createProductionChatAdapter({
       chatOpen = Boolean(open);
       const nextId = conversationId != null ? String(conversationId) : null;
       viewingConversationId = nextId;
-      if (chatOpen && nextId) {
-        queueMicrotask(() => {
-          if (viewingConversationId !== nextId) return;
-          pushUnreadCleared(nextId);
-        });
-      }
+      // Badge сбрасываем только после успешного markChatRead (listMessages → markReadUpTo).
     },
 
     clearUnread(conversationId) {
