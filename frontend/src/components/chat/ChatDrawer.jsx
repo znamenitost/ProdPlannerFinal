@@ -18,9 +18,7 @@ import { useTheme } from '@mui/material/styles';
 import {
   Chat as ChatIcon,
   Close,
-  Edit as EditIcon,
-  PersonAdd,
-  Reply as ReplyIcon
+  PersonAdd
 } from '@mui/icons-material';
 import { ChatBox } from '@mui/x-chat';
 import { createProductionChatAdapter } from './createProductionChatAdapter';
@@ -29,7 +27,7 @@ import ChatComposerInputWithReply from './ChatComposerInputWithReply';
 import ChatComposerToolbarWithEmoji from './ChatComposerToolbarWithEmoji';
 import ChatMessageContentWithReply from './ChatMessageContentWithReply';
 import ChatConversationOnlineAvatar from './ChatConversationOnlineAvatar';
-import ChatMessageListWithScroll from './ChatMessageListWithScroll';
+import ChatScrollToEndOnOpen from './ChatScrollToEndOnOpen';
 import {
   ChatEditSessionContext,
   textFromChatMessage
@@ -248,32 +246,6 @@ export default function ChatDrawer({
     composerInputPlaceholder: editingMessage ? 'Изменить сообщение…' : 'Сообщение…'
   }), [editingMessage]);
 
-  const messageActionsSlotProps = useMemo(() => (context) => {
-    const message = context?.message;
-    if (!message?.id) return {};
-    const actions = [
-      {
-        id: 'reply',
-        label: 'Ответить',
-        icon: <ReplyIcon fontSize="inherit" />,
-        onClick: (_event, { message: actionMessage }) => {
-          replySession.startReply(actionMessage ?? message);
-        }
-      }
-    ];
-    if (message.role === 'user') {
-      actions.push({
-        id: 'edit',
-        label: 'Изменить',
-        icon: <EditIcon fontSize="inherit" />,
-        onClick: (_event, { message: actionMessage }) => {
-          editSession.startEdit(actionMessage ?? message);
-        }
-      });
-    }
-    return { extraActions: actions };
-  }, [editSession, replySession]);
-
   const handleConversationsChange = useCallback((conversations) => {
     if (initialConversationId || pickedDefaultConversationRef.current) return;
     const team = conversations.find((c) => c.metadata?.type === 'Team') || conversations[0];
@@ -462,7 +434,7 @@ export default function ChatDrawer({
                 composerInput: ChatComposerInputWithReply,
                 composerToolbar: ChatComposerToolbarWithEmoji,
                 composerAttachButton: editingMessage ? null : undefined,
-                messageList: ChatMessageListWithScroll,
+                messageActions: null,
                 messageContent: ChatMessageContentWithReply
               }}
               slotProps={{
@@ -470,8 +442,7 @@ export default function ChatDrawer({
                   slots: {
                     itemAvatar: ChatConversationOnlineAvatar
                   }
-                },
-                messageActions: messageActionsSlotProps
+                }
               }}
               features={{
                 conversationList: true,
@@ -507,13 +478,6 @@ export default function ChatDrawer({
                 '& [role="article"][data-chat-highlight="true"]': {
                   animation: 'chatMessageHighlight 1.1s ease-out'
                 },
-                // On touch devices the reply/edit bar stays visible (not hover-only).
-                '@media (hover: none)': {
-                  '& .MuiChatMessage-root .MuiChatMessage-actions': {
-                    opacity: 1,
-                    visibility: 'visible'
-                  }
-                },
                 // Telegram-like blue double-check for read own messages.
                 '& .MuiChatMessage-inlineMetaStatus .MuiSvgIcon-root': {
                   fontSize: '1.05em'
@@ -544,7 +508,9 @@ export default function ChatDrawer({
                   width: 'auto'
                 }
               }}
-            />
+            >
+              <ChatScrollToEndOnOpen />
+            </ChatBox>
             </ChatReplySessionContext.Provider>
           </ChatEditSessionContext.Provider>
         ) : (
