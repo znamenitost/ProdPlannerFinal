@@ -1,16 +1,20 @@
 import { Badge, Box } from '@mui/material';
 import { ConversationListItemAvatar } from '@mui/x-chat-headless';
+import { TEAM_CHAT_AVATAR_URL } from './createProductionChatAdapter';
 
 /**
  * Conversation list avatar with Telegram-style online/offline dot for direct chats.
  */
 export default function ChatConversationOnlineAvatar(props) {
   const { conversation } = props;
+  const isTeam = conversation?.metadata?.type === 'Team';
   const peer = conversation?.participants?.find((p) => p.role !== 'user')
     ?? conversation?.participants?.[0];
-  const isDirect = conversation?.metadata?.type === 'Direct'
+  const isDirect = !isTeam && (
+    conversation?.metadata?.type === 'Direct'
     || Boolean(conversation?.metadata?.peerUserId)
-    || Boolean(peer);
+    || Boolean(peer)
+  );
   const isOnline = Boolean(peer?.isOnline);
 
   return (
@@ -39,7 +43,7 @@ export default function ChatConversationOnlineAvatar(props) {
           borderRadius: '50%',
           overflow: 'hidden',
           flexShrink: 0,
-          bgcolor: (t) => t.palette.grey[300],
+          bgcolor: (t) => (isTeam ? t.palette.background.paper : t.palette.grey[300]),
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center'
@@ -47,6 +51,9 @@ export default function ChatConversationOnlineAvatar(props) {
       >
         <ConversationListItemAvatar
           {...props}
+          conversation={isTeam
+            ? { ...conversation, avatarUrl: TEAM_CHAT_AVATAR_URL }
+            : conversation}
           slots={{
             ...props.slots,
             root: 'div'
@@ -71,7 +78,9 @@ export default function ChatConversationOnlineAvatar(props) {
               style: {
                 width: '100%',
                 height: '100%',
-                objectFit: 'cover',
+                objectFit: isTeam ? 'contain' : 'cover',
+                padding: isTeam ? '7px' : 0,
+                boxSizing: 'border-box',
                 ...props.slotProps?.image?.style
               }
             }

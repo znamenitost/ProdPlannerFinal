@@ -19,21 +19,25 @@ import {
   Chat as ChatIcon,
   Close,
   Edit as EditIcon,
-  PersonAdd
+  PersonAdd,
+  Reply as ReplyIcon
 } from '@mui/icons-material';
 import { ChatBox } from '@mui/x-chat';
 import { createProductionChatAdapter } from './createProductionChatAdapter';
 import ChatComposerAttachments from './ChatComposerAttachments';
-import {
-  ChatComposerEditHelperText,
-  ChatComposerInputWithEdit
-} from './ChatComposerEdit';
+import { ChatComposerInputWithEdit } from './ChatComposerEdit';
+import ChatComposerBanner from './ChatComposerBanner';
+import ChatMessageContentWithReply from './ChatMessageContentWithReply';
 import ChatConversationOnlineAvatar from './ChatConversationOnlineAvatar';
 import ChatMessageListWithScroll from './ChatMessageListWithScroll';
 import {
   ChatEditSessionContext,
   textFromChatMessage
 } from './ChatEditSessionContext';
+import {
+  ChatReplySessionContext,
+  replyPreviewFromMessage
+} from './ChatReplySessionContext';
 import { renderChatFilePart } from './renderChatFilePart';
 import { avatarDisplayUrl } from '../../utils/avatarUrl';
 
@@ -160,9 +164,12 @@ export default function ChatDrawer({
   ));
   const [contacts, setContacts] = useState([]);
   const [editingMessage, setEditingMessage] = useState(null);
+  const [replyingMessage, setReplyingMessage] = useState(null);
   const editingMessageRef = useRef(null);
+  const replyingMessageRef = useRef(null);
   const pickedDefaultConversationRef = useRef(false);
   editingMessageRef.current = editingMessage;
+  replyingMessageRef.current = replyingMessage;
 
   const currentUser = useMemo(() => {
     if (!user?.id) return undefined;
@@ -183,6 +190,11 @@ export default function ChatDrawer({
       clearEditingMessage: () => {
         editingMessageRef.current = null;
         setEditingMessage(null);
+      },
+      getReplyingMessage: () => replyingMessageRef.current,
+      clearReplyingMessage: () => {
+        replyingMessageRef.current = null;
+        setReplyingMessage(null);
       }
     });
   }, [currentUserId, onUnreadMaybeChanged]);
@@ -191,9 +203,11 @@ export default function ChatDrawer({
     editing: editingMessage,
     startEdit: (message) => {
       if (!message || message.role !== 'user') return;
+      replyingMessageRef.current = null;
+      setReplyingMessage(null);
       const next = {
         id: String(message.id),
-        conversationId: String(message.conversationId || activeConversationId || ''),
+        conversationId: String(activeConversationId || message.conversationId || ''),
         text: textFromChatMessage(message)
       };
       editingMessageRef.current = next;
@@ -205,6 +219,29 @@ export default function ChatDrawer({
     }
   }), [editingMessage, activeConversationId]);
 
+  const replySession = useMemo(() => ({
+    replying: replyingMessage,
+    startReply: (message) => {
+      if (!message?.id) return;
+      editingMessageRef.current = null;
+      setEditingMessage(null);
+      const next = {
+        id: String(message.id),
+        conversationId: String(activeConversationId || message.conversationId || ''),
+        senderUserId: message.author?.id || '',
+        senderFullName: message.author?.displayName
+          || (message.role === 'user' ? 'Вы' : 'Сообщение'),
+        preview: replyPreviewFromMessage(message)
+      };
+      replyingMessageRef.current = next;
+      setReplyingMessage(next);
+    },
+    cancelReply: () => {
+      replyingMessageRef.current = null;
+      setReplyingMessage(null);
+    }
+  }), [replyingMessage, activeConversationId]);
+
   const ruLocaleText = useMemo(() => ({
     ...ruLocaleTextBase,
     composerSendButtonLabel: editingMessage ? 'Сохранить' : 'Отправить',
@@ -213,20 +250,29 @@ export default function ChatDrawer({
 
   const messageActionsSlotProps = useMemo(() => (context) => {
     const message = context?.message;
-    if (!message || message.role !== 'user') return {};
-    return {
-      extraActions: [
-        {
-          id: 'edit',
-          label: 'Изменить',
-          icon: <EditIcon fontSize="inherit" />,
-          onClick: () => {
-            editSession.startEdit(message);
-          }
+    if (!message?.id) return {};
+    const actions = [
+      {
+        id: 'reply',
+        label: 'Ответить',
+        icon: <ReplyIcon fontSize="inherit" />,
+        onClick: () => {
+          replySession.startReply(message);
         }
-      ]
-    };
-  }, [editSession]);
+      }
+    ];
+    if (message.role === 'user') {
+      actions.push({
+        id: 'edit',
+        label: 'Изменить',
+        icon: <EditIcon fontSize="inherit" />,
+        onClick: () => {
+          editSession.startEdit(message);
+        }
+      });
+    }
+    return { extraActions: actions };
+  }, [editSession, replySession]);
 
   const handleConversationsChange = useCallback((conversations) => {
     if (initialConversationId || pickedDefaultConversationRef.current) return;
@@ -249,9 +295,11 @@ export default function ChatDrawer({
   }, [adapter, hubConnection]);
 
   useEffect(() => {
-    // Leaving a thread cancels in-progress edit.
+    // Leaving a thread cancels in-progress edit or reply.
     editingMessageRef.current = null;
     setEditingMessage(null);
+    replyingMessageRef.current = null;
+    setReplyingMessage(null);
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -335,9 +383,9 @@ export default function ChatDrawer({
         paper: {
           elevation: 0,
           sx: {
-            width: { xs: '100%', sm: 1100, md: 1240 },
+            width: { xs: '100%', sm: 1040, md: 1160 },
             maxWidth: { xs: '100%', sm: 'calc(100vw - 48px)' },
-            minWidth: { sm: 960 },
+            minWidth: { sm: 900 },
             height: { xs: '100%', sm: 820 },
             maxHeight: { xs: '100%', sm: 'calc(100vh - 48px)' },
             m: { xs: 0, sm: 3 },
@@ -396,6 +444,7 @@ export default function ChatDrawer({
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
         {open && adapter && currentUser ? (
           <ChatEditSessionContext.Provider value={editSession}>
+            <ChatReplySessionContext.Provider value={replySession}>
             <ChatBox
               key={currentUserId}
               adapter={adapter}
@@ -411,9 +460,10 @@ export default function ChatDrawer({
               slots={{
                 composerAttachmentList: ChatComposerAttachments,
                 composerInput: ChatComposerInputWithEdit,
-                composerHelperText: ChatComposerEditHelperText,
+                composerHelperText: ChatComposerBanner,
                 composerAttachButton: editingMessage ? null : undefined,
-                messageList: ChatMessageListWithScroll
+                messageList: ChatMessageListWithScroll,
+                messageContent: ChatMessageContentWithReply
               }}
               slotProps={{
                 conversationList: {
@@ -480,6 +530,7 @@ export default function ChatDrawer({
                 }
               }}
             />
+            </ChatReplySessionContext.Provider>
           </ChatEditSessionContext.Provider>
         ) : (
           <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

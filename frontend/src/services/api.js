@@ -365,11 +365,15 @@ export async function getChatMessages(conversationId, { beforeId, take = 50, sig
   return res.json();
 }
 
-export async function sendChatMessage(conversationId, text, files = []) {
+export async function sendChatMessage(conversationId, text, files = [], replyToMessageId = null) {
   const hasFiles = Array.isArray(files) && files.length > 0;
+  const replyId = replyToMessageId != null && Number(replyToMessageId) > 0
+    ? Number(replyToMessageId)
+    : null;
   if (hasFiles) {
     const form = new FormData();
     if (text) form.append('text', text);
+    if (replyId) form.append('replyToMessageId', String(replyId));
     for (const file of files) form.append('files', file);
     const res = await fetch(`${API_BASE}/chat/conversations/${conversationId}/messages`, {
       method: 'POST',
@@ -380,11 +384,14 @@ export async function sendChatMessage(conversationId, text, files = []) {
     return res.json();
   }
 
+  const body = { text: text ?? '' };
+  if (replyId) body.replyToMessageId = replyId;
+
   const res = await fetch(`${API_BASE}/chat/conversations/${conversationId}/messages`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: text ?? '' })
+    body: JSON.stringify(body)
   });
   await throwIfNotOk(res, 'Не удалось отправить сообщение');
   return res.json();

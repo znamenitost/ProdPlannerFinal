@@ -10,6 +10,8 @@ import {
 import { avatarDisplayUrl } from '../../utils/avatarUrl';
 import { textFromChatMessage } from './ChatEditSessionContext';
 
+export const TEAM_CHAT_AVATAR_URL = '/sprites/favicon2.svg';
+
 function emptyStream() {
   return new ReadableStream({
     start(controller) {
@@ -62,6 +64,16 @@ export function mapServerMessage(dto, currentUserId) {
     status,
     createdAt: dto.createdAt,
     editedAt: dto.editedAt || undefined,
+    metadata: dto.replyTo
+      ? {
+        replyTo: {
+          id: String(dto.replyTo.id),
+          senderUserId: dto.replyTo.senderUserId,
+          senderFullName: dto.replyTo.senderFullName,
+          preview: dto.replyTo.preview
+        }
+      }
+      : undefined,
     author: {
       id: dto.senderUserId,
       displayName: dto.senderFullName,
@@ -97,7 +109,7 @@ export function mapServerConversation(dto, currentUserId) {
         ? 'В сети'
         : previewFromMessage(dto.lastMessage) || 'Личные сообщения',
     avatarUrl: isTeam
-      ? undefined
+      ? TEAM_CHAT_AVATAR_URL
       : resolveAvatar(dto.peerUserId, dto.peerAvatarUrl),
     participants,
     unreadCount: unread,
@@ -130,7 +142,9 @@ export function createProductionChatAdapter({
   currentUserId,
   onUnreadMaybeChanged,
   getEditingMessage,
-  clearEditingMessage
+  clearEditingMessage,
+  getReplyingMessage,
+  clearReplyingMessage
 }) {
   let eventHandler = null;
   let boundConnection = null;
@@ -485,9 +499,14 @@ export function createProductionChatAdapter({
       const files = (attachments || []).map((a) => a.file).filter(Boolean);
 
       const editing = getEditingMessage?.();
-      if (editing && String(editing.conversationId) === String(conversationId)) {
+      const editMessageId = Number(editing?.id);
+      if (
+        editing
+        && Number.isFinite(editMessageId)
+        && editMessageId > 0
+      ) {
         try {
-          const dto = await editChatMessage(Number(conversationId), Number(editing.id), text);
+          const dto = await editChatMessage(Number(conversationId), editMessageId, text);
           if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
           // MUI always inserts an optimistic new message before sendMessage —
@@ -515,8 +534,14 @@ export function createProductionChatAdapter({
         }
       }
 
-      const dto = await sendChatMessage(Number(conversationId), text, files);
+      const dto = await sendChatMessage(
+        Number(conversationId),
+        text,
+        files,
+        getReplyingMessage?.()?.id
+      );
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      clearReplyingMessage?.();
 
       // Replace optimistic client id with server message so read receipts can match.
       const serverMessage = rememberMessage(mapServerMessage(dto, currentUserId));

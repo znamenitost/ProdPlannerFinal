@@ -1,28 +1,56 @@
-import { useEffect, useRef } from 'react';
-import { alpha, Box, IconButton, Typography } from '@mui/material';
-import { Close, Edit as EditIcon } from '@mui/icons-material';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { ChatComposerTextArea } from '@mui/x-chat';
 import { useChatComposer } from '@mui/x-chat-headless';
 import { useChatEditSession } from './ChatEditSessionContext';
+import { useChatReplySession } from './ChatReplySessionContext';
+
+function focusComposer(inputRef) {
+  requestAnimationFrame(() => {
+    const el = inputRef.current;
+    if (!el || typeof el.focus !== 'function') return;
+    el.focus();
+    const end = el.value?.length ?? 0;
+    if (typeof el.setSelectionRange === 'function') {
+      el.setSelectionRange(end, end);
+    }
+  });
+}
 
 /**
  * Syncs composer text when entering Telegram-style edit mode.
  */
 export function ChatComposerInputWithEdit(props) {
   const session = useChatEditSession();
+  const replySession = useChatReplySession();
   const { setValue } = useChatComposer();
-  const syncedIdRef = useRef(null);
+  const syncedEditIdRef = useRef(null);
+  const syncedReplyIdRef = useRef(null);
+  const inputRef = useRef(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const editing = session?.editing;
     if (!editing) {
-      syncedIdRef.current = null;
+      syncedEditIdRef.current = null;
       return;
     }
-    if (syncedIdRef.current === editing.id) return;
-    syncedIdRef.current = editing.id;
+    syncedReplyIdRef.current = null;
+    if (syncedEditIdRef.current === editing.id) return;
+    syncedEditIdRef.current = editing.id;
     setValue(editing.text);
+    focusComposer(inputRef);
   }, [session?.editing, setValue]);
+
+  useLayoutEffect(() => {
+    const replying = replySession?.replying;
+    if (!replying || session?.editing) {
+      syncedReplyIdRef.current = null;
+      return;
+    }
+    if (syncedReplyIdRef.current === replying.id) return;
+    syncedReplyIdRef.current = replying.id;
+    setValue('');
+    focusComposer(inputRef);
+  }, [replySession?.replying, session?.editing, setValue]);
 
   useEffect(() => {
     if (!session?.editing) return undefined;
@@ -37,59 +65,5 @@ export function ChatComposerInputWithEdit(props) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [session, setValue]);
 
-  return <ChatComposerTextArea {...props} />;
-}
-
-/**
- * Banner above the composer while editing a message.
- */
-export function ChatComposerEditHelperText(props) {
-  const session = useChatEditSession();
-  const { setValue } = useChatComposer();
-  const editing = session?.editing;
-
-  if (!editing) {
-    return null;
-  }
-
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        px: 0.5,
-        py: 0.25,
-        mb: 0.25,
-        borderLeft: (t) => `3px solid ${t.palette.primary.main}`,
-        bgcolor: (t) => alpha(t.palette.primary.main, 0.06),
-        borderRadius: 1
-      }}
-    >
-      <EditIcon sx={{ fontSize: 16, color: 'primary.main', ml: 0.75 }} />
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', display: 'block', lineHeight: 1.2 }}>
-          Редактирование
-        </Typography>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          noWrap
-          sx={{ display: 'block', lineHeight: 1.2 }}
-        >
-          {editing.text || 'Сообщение'}
-        </Typography>
-      </Box>
-      <IconButton
-        size="small"
-        aria-label="Отменить редактирование"
-        onClick={() => {
-          session.cancelEdit();
-          setValue('');
-        }}
-      >
-        <Close fontSize="small" />
-      </IconButton>
-    </Box>
-  );
+  return <ChatComposerTextArea {...props} ref={inputRef} />;
 }

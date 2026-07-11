@@ -304,6 +304,7 @@ public static class DatabaseInitializer
                 Text TEXT NOT NULL,
                 CreatedAt TEXT NOT NULL,
                 EditedAt TEXT NULL,
+                ReplyToMessageId INTEGER NULL,
                 FOREIGN KEY (ConversationId) REFERENCES ChatConversations(Id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS IX_ChatMessages_ConversationId_Id
@@ -349,6 +350,13 @@ public static class DatabaseInitializer
         {
             using var alter = connection.CreateCommand();
             alter.CommandText = "ALTER TABLE ChatMessages ADD COLUMN EditedAt TEXT NULL";
+            await alter.ExecuteNonQueryAsync();
+        }
+
+        if (!chatMessageColumns.Contains("ReplyToMessageId"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE ChatMessages ADD COLUMN ReplyToMessageId INTEGER NULL";
             await alter.ExecuteNonQueryAsync();
         }
 

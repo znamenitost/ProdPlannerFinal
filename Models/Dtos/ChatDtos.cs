@@ -18,6 +18,14 @@ public sealed class ChatAttachmentDto
     public string Url { get; set; } = "";
 }
 
+public sealed class ChatMessageReplyPreviewDto
+{
+    public long Id { get; set; }
+    public string SenderUserId { get; set; } = "";
+    public string SenderFullName { get; set; } = "";
+    public string Preview { get; set; } = "";
+}
+
 public sealed class ChatMessageDto
 {
     public long Id { get; set; }
@@ -28,6 +36,8 @@ public sealed class ChatMessageDto
     public string Text { get; set; } = "";
     public DateTime CreatedAt { get; set; }
     public DateTime? EditedAt { get; set; }
+    public long? ReplyToMessageId { get; set; }
+    public ChatMessageReplyPreviewDto? ReplyTo { get; set; }
     /// <summary>For the current user's own messages: "sent" or "read". Null for incoming.</summary>
     public string? Status { get; set; }
     public IReadOnlyList<ChatAttachmentDto> Attachments { get; set; } = Array.Empty<ChatAttachmentDto>();
@@ -54,6 +64,7 @@ public sealed class ChatConversationDto
 public sealed class SendChatMessageRequest
 {
     public string Text { get; set; } = "";
+    public long? ReplyToMessageId { get; set; }
 }
 
 public sealed class OpenDirectChatRequest

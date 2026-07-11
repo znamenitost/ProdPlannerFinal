@@ -26,6 +26,7 @@ public interface IChatService
         long conversationId,
         string? text,
         IReadOnlyList<IFormFile>? files,
+        long? replyToMessageId = null,
         CancellationToken ct = default);
     Task<ChatMessageDto> EditMessageAsync(
         string currentUserId,
@@ -241,9 +242,58 @@ public sealed class ChatService : IChatService
                 m.SenderUserId,
                 m.Text,
                 m.CreatedAt,
-                m.EditedAt
+                m.EditedAt,
+                m.ReplyToMessageId
             })
             .ToListAsync(ct);
+
+        var replyIds = rows
+            .Where(r => r.ReplyToMessageId is > 0)
+            .Select(r => r.ReplyToMessageId!.Value)
+            .Distinct()
+            .ToList();
+
+        var replyRows = replyIds.Count == 0
+            ? []
+            : await _db.ChatMessages.AsNoTracking()
+                .Where(m => replyIds.Contains(m.Id))
+                .Select(m => new { m.Id, m.SenderUserId, m.Text })
+                .ToListAsync(ct);
+
+        var replyAttachments = replyIds.Count == 0
+            ? []
+            : await _db.ChatAttachments.AsNoTracking()
+                .Where(a => replyIds.Contains(a.MessageId))
+                .OrderBy(a => a.Id)
+                .ToListAsync(ct);
+        var replyAttachmentsByMessage = replyAttachments
+            .GroupBy(a => a.MessageId)
+            .ToDictionary(g => g.Key, g => g.Select(MapAttachmentDto).ToList());
+
+        var replySenderIds = replyRows.Select(r => r.SenderUserId).Distinct().ToList();
+        Dictionary<string, string> replySenderNames = new();
+        if (replySenderIds.Count > 0)
+        {
+            replySenderNames = await _userManager.Users.AsNoTracking()
+                .Where(u => replySenderIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.FullName })
+                .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+        }
+
+        var replyPreviewById = replyRows.ToDictionary(
+            r => r.Id,
+            r =>
+            {
+                replyAttachmentsByMessage.TryGetValue(r.Id, out var replyFiles);
+                replySenderNames.TryGetValue(r.SenderUserId, out var replySenderName);
+                return new ChatMessageReplyPreviewDto
+                {
+                    Id = r.Id,
+                    SenderUserId = r.SenderUserId,
+                    SenderFullName = replySenderName ?? "?",
+                    Preview = BuildReplyPreview(r.Text, replyFiles ?? [])
+                };
+            });
 
         var messageIds = rows.Select(r => r.Id).ToList();
         var attachments = await _db.ChatAttachments.AsNoTracking()
@@ -295,6 +345,11 @@ public sealed class ChatService : IChatService
                     Text = r.Text,
                     CreatedAt = r.CreatedAt,
                     EditedAt = r.EditedAt,
+                    ReplyToMessageId = r.ReplyToMessageId,
+                    ReplyTo = r.ReplyToMessageId is long replyId && replyId > 0
+                        && replyPreviewById.TryGetValue(replyId, out var reply)
+                        ? reply
+                        : null,
                     Status = status,
                     Attachments = files ?? []
                 };
@@ -364,6 +419,7 @@ public sealed class ChatService : IChatService
         long conversationId,
         string? text,
         IReadOnlyList<IFormFile>? files,
+        long? replyToMessageId = null,
         CancellationToken ct = default)
     {
         var trimmed = (text ?? "").Trim();
@@ -388,6 +444,16 @@ public sealed class ChatService : IChatService
         if (!CanAccess(conv, currentUserId))
             throw new UnauthorizedAccessException("Нет доступа к диалогу.");
 
+        long? validatedReplyId = null;
+        if (replyToMessageId is > 0)
+        {
+            var replyExists = await _db.ChatMessages.AsNoTracking()
+                .AnyAsync(m => m.Id == replyToMessageId && m.ConversationId == conversationId, ct);
+            if (!replyExists)
+                throw new ArgumentException("Сообщение для ответа не найдено.");
+            validatedReplyId = replyToMessageId;
+        }
+
         var sender = await _userManager.FindByIdAsync(currentUserId)
             ?? throw new UnauthorizedAccessException("Пользователь не найден.");
 
@@ -396,7 +462,8 @@ public sealed class ChatService : IChatService
             ConversationId = conversationId,
             SenderUserId = currentUserId,
             Text = trimmed,
-            CreatedAt = _time.Now
+            CreatedAt = _time.Now,
+            ReplyToMessageId = validatedReplyId
         };
         _db.ChatMessages.Add(message);
 
@@ -451,18 +518,8 @@ public sealed class ChatService : IChatService
         read.UpdatedAt = _time.Now;
         await _db.SaveChangesAsync(ct);
 
-        var dto = new ChatMessageDto
-        {
-            Id = message.Id,
-            ConversationId = conversationId,
-            SenderUserId = currentUserId,
-            SenderFullName = sender.FullName,
-            SenderAvatarUrl = sender.AvatarUrl,
-            Text = message.Text,
-            CreatedAt = message.CreatedAt,
-            Status = "sent",
-            Attachments = savedAttachments.Select(MapAttachmentDto).ToList()
-        };
+        message.Attachments = savedAttachments;
+        var dto = await ToMessageDtoAsync(message, currentUserId, conv, ct);
 
         if (conv.Type == ChatConversationType.Team)
         {
@@ -756,9 +813,52 @@ public sealed class ChatService : IChatService
             Text = message.Text,
             CreatedAt = message.CreatedAt,
             EditedAt = message.EditedAt,
+            ReplyToMessageId = message.ReplyToMessageId,
+            ReplyTo = await BuildReplyPreviewDtoAsync(message.ReplyToMessageId, ct),
             Status = status,
             Attachments = attachments
         };
+    }
+
+    private async Task<ChatMessageReplyPreviewDto?> BuildReplyPreviewDtoAsync(long? replyToMessageId, CancellationToken ct)
+    {
+        if (replyToMessageId is not > 0) return null;
+
+        var reply = await _db.ChatMessages.AsNoTracking()
+            .Where(m => m.Id == replyToMessageId)
+            .Select(m => new { m.Id, m.SenderUserId, m.Text })
+            .FirstOrDefaultAsync(ct);
+        if (reply == null) return null;
+
+        var senderName = await _userManager.Users.AsNoTracking()
+            .Where(u => u.Id == reply.SenderUserId)
+            .Select(u => u.FullName)
+            .FirstOrDefaultAsync(ct) ?? "?";
+
+        var replyFiles = await _db.ChatAttachments.AsNoTracking()
+            .Where(a => a.MessageId == reply.Id)
+            .OrderBy(a => a.Id)
+            .ToListAsync(ct);
+
+        return new ChatMessageReplyPreviewDto
+        {
+            Id = reply.Id,
+            SenderUserId = reply.SenderUserId,
+            SenderFullName = senderName,
+            Preview = BuildReplyPreview(reply.Text, replyFiles.Select(MapAttachmentDto).ToList())
+        };
+    }
+
+    private static string BuildReplyPreview(string text, IReadOnlyList<ChatAttachmentDto> attachments)
+    {
+        var trimmed = (text ?? "").Trim();
+        if (!string.IsNullOrEmpty(trimmed))
+            return trimmed.Length > 120 ? $"{trimmed[..119]}…" : trimmed;
+        if (attachments.Count == 1)
+            return attachments[0].FileName;
+        if (attachments.Count > 1)
+            return $"{attachments.Count} файла";
+        return "Сообщение";
     }
 
     private async Task BroadcastMessageUpdatedAsync(

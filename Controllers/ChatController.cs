@@ -85,6 +85,7 @@ public class ChatController : ControllerBase
 
         string? text = null;
         List<IFormFile>? files = null;
+        long? replyToMessageId = null;
 
         if (Request.HasFormContentType)
         {
@@ -92,16 +93,21 @@ public class ChatController : ControllerBase
             files = Request.Form.Files.GetFiles("files").ToList();
             if (files.Count == 0)
                 files = Request.Form.Files.ToList();
+            var replyRaw = Request.Form["replyToMessageId"].FirstOrDefault();
+            if (long.TryParse(replyRaw, out var parsedReply) && parsedReply > 0)
+                replyToMessageId = parsedReply;
         }
         else
         {
             var body = await Request.ReadFromJsonAsync<SendChatMessageRequest>(cancellationToken: ct);
             text = body?.Text;
+            if (body?.ReplyToMessageId is > 0)
+                replyToMessageId = body.ReplyToMessageId;
         }
 
         try
         {
-            return Ok(await _chat.SendMessageAsync(userId, id, text, files, ct));
+            return Ok(await _chat.SendMessageAsync(userId, id, text, files, replyToMessageId, ct));
         }
         catch (ArgumentException ex)
         {
