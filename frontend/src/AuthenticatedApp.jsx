@@ -90,6 +90,7 @@ function AuthenticatedAppContent() {
   const [maxLinkToken, setMaxLinkToken] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatFocusConversationId, setChatFocusConversationId] = useState(null);
+  const [chatActiveConversationId, setChatActiveConversationId] = useState(null);
   const fileInputRef = useRef(null);
   const maxMessenger = useMaxMessenger(user);
   const {
@@ -214,7 +215,7 @@ function AuthenticatedAppContent() {
   const { chatToasts, closeChatToast } = useChatMessageToasts(user, hubConnection, {
     enabled: Boolean(user?.isAuthenticated) && !deployMaintenanceActive,
     chatOpen,
-    activeConversationId: chatFocusConversationId
+    activeConversationId: chatActiveConversationId
   });
 
   useWebPush(user, {
@@ -258,6 +259,7 @@ function AuthenticatedAppContent() {
   const handleCloseChat = useCallback(() => {
     setChatOpen(false);
     setChatFocusConversationId(null);
+    setChatActiveConversationId(null);
     void refreshUnread();
   }, [refreshUnread]);
 
@@ -710,7 +712,7 @@ function AuthenticatedAppContent() {
         hubConnection={hubConnection}
         onUnreadMaybeChanged={refreshUnread}
         initialConversationId={chatFocusConversationId}
-        onActiveConversationChange={setChatFocusConversationId}
+        onActiveConversationChange={setChatActiveConversationId}
       />
 
       <PushNotificationSnackbars

@@ -315,7 +315,8 @@ export async function prepareDeploy() {
   const res = await fetch(`${API_BASE}/deploy/prepare`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}'
   });
   await throwIfNotOk(res, 'Не удалось включить режим обновления');
   const text = await res.text();

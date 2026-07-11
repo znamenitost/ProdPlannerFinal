@@ -78,15 +78,15 @@ export default function ChatComposerBanner() {
           display: 'flex',
           alignItems: 'center',
           gap: 1,
-          px: 0.5,
-          py: 0.5,
-          mb: 0.25,
+          px: 1.25,
+          py: 0.75,
+          mb: 0.5,
           borderLeft: (t) => `3px solid ${t.palette.primary.main}`,
-          bgcolor: (t) => alpha(t.palette.primary.main, 0.06),
+          bgcolor: (t) => alpha(t.palette.grey[500], 0.12),
           borderRadius: 1
         }}
       >
-        <ReplyIcon sx={{ fontSize: 16, color: 'primary.main', ml: 0.75, flexShrink: 0 }} />
+        <ReplyIcon sx={{ fontSize: 16, color: 'primary.main', flexShrink: 0 }} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             variant="caption"

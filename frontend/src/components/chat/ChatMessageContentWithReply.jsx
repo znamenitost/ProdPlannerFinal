@@ -1,9 +1,11 @@
-import { alpha, Box, IconButton, Tooltip } from '@mui/material';
+import { forwardRef } from 'react';
+import { Box, IconButton, Tooltip, styled } from '@mui/material';
 import { Edit as EditIcon, Reply as ReplyIcon } from '@mui/icons-material';
 import { ChatMessageContent } from '@mui/x-chat';
-import { useMessageContext } from '@mui/x-chat-headless';
+import { useMessage, useMessageContext } from '@mui/x-chat-headless';
 import { useChatEditSession } from './ChatEditSessionContext';
 import { useChatReplySession } from './ChatReplySessionContext';
+import { replyToFromSession } from './chatReplyPreview';
 import ChatReplyQuote from './ChatReplyQuote';
 
 const hoverActionSx = {
@@ -17,11 +19,48 @@ const hoverActionSx = {
   }
 };
 
-export default function ChatMessageContentWithReply(props) {
-  const { message, isOwnMessage } = useMessageContext();
+const ChatMessageBubbleRoot = styled(Box, {
+  name: 'MuiChatMessage',
+  slot: 'Bubble',
+  shouldForwardProp: (prop) => prop !== 'ownerState'
+})(({ theme, ownerState }) => {
+  const isUserRole = ownerState?.role === 'user';
+  const isOwn = ownerState?.isOwnMessage ?? false;
+
+  return {
+    position: 'relative',
+    overflow: 'visible',
+    fontSize: theme.typography.body2.fontSize,
+    lineHeight: theme.typography.body2.lineHeight,
+    wordBreak: 'break-word',
+    whiteSpace: isUserRole ? 'pre-wrap' : 'normal',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
+    padding: theme.spacing(1, 1.5),
+    borderRadius: theme.shape.borderRadius,
+    alignSelf: isOwn ? 'flex-end' : 'flex-start',
+    '& p': {
+      margin: 0
+    }
+  };
+});
+
+const ChatMessageBubbleWithReply = forwardRef(function ChatMessageBubbleWithReply(props, ref) {
+  const {
+    children,
+    className,
+    ownerState,
+    ...rest
+  } = props;
+
+  const { messageId, isOwnMessage } = useMessageContext();
+  const message = useMessage(messageId);
   const replySession = useChatReplySession();
   const editSession = useChatEditSession();
-  const replyTo = message?.metadata?.replyTo;
+  const outgoingReplyTo = isOwnMessage && message?.status === 'sending'
+    ? replyToFromSession(replySession?.replying)
+    : null;
+  const replyTo = message?.metadata?.replyTo || outgoingReplyTo;
   const canInteract = message?.id
     && message.status !== 'streaming'
     && message.status !== 'pending';
@@ -38,52 +77,35 @@ export default function ChatMessageContentWithReply(props) {
   };
 
   return (
-    <Box
+    <ChatMessageBubbleRoot
+      ref={ref}
       data-chat-message-id={message?.id || undefined}
-      className="chat-message-content"
-      sx={{
-        position: 'relative',
-        minWidth: 0,
-        maxWidth: '100%',
-        overflow: 'visible',
-        '& [data-chat-hover-actions]': {
-          opacity: 0,
-          pointerEvents: 'none',
-          transition: (t) => t.transitions.create('opacity', {
-            duration: t.transitions.duration.shortest
-          })
-        },
-        '.MuiChatMessage-root:hover & [data-chat-hover-actions], &:focus-within [data-chat-hover-actions]': {
-          opacity: 1,
-          pointerEvents: 'auto'
-        },
-        '@media (hover: none)': {
-          '& [data-chat-hover-actions]': {
-            opacity: 1,
-            pointerEvents: 'auto'
-          }
-        }
-      }}
+      className={className}
+      ownerState={ownerState}
+      data-role={ownerState?.role}
+      {...rest}
     >
-      {replyTo ? <ChatReplyQuote replyTo={replyTo} isOwnBubble={isOwnMessage} /> : null}
-      <ChatMessageContent {...props} />
+      {replyTo ? (
+        <ChatReplyQuote replyTo={replyTo} isOwnBubble={isOwnMessage} />
+      ) : null}
+      {children}
       {canInteract ? (
         <Box
           data-chat-hover-actions
           sx={{
             position: 'absolute',
-            top: 2,
+            top: 4,
             display: 'flex',
             flexDirection: 'column',
             gap: 0.25,
             zIndex: 2,
             ...(isOwnMessage
-              ? { right: 4 }
-              : { left: 'calc(100% + 4px)' })
+              ? { right: 'calc(100% + 6px)' }
+              : { left: 'calc(100% + 6px)' })
           }}
         >
           {!isOwnMessage ? (
-            <Tooltip title="Ответить" placement="right">
+            <Tooltip title="Ответить" placement="top">
               <IconButton
                 size="small"
                 aria-label="Ответить"
@@ -95,7 +117,7 @@ export default function ChatMessageContentWithReply(props) {
             </Tooltip>
           ) : null}
           {isOwnMessage ? (
-            <Tooltip title="Изменить" placement="left">
+            <Tooltip title="Изменить" placement="top">
               <IconButton
                 size="small"
                 aria-label="Изменить"
@@ -108,6 +130,18 @@ export default function ChatMessageContentWithReply(props) {
           ) : null}
         </Box>
       ) : null}
-    </Box>
+    </ChatMessageBubbleRoot>
+  );
+});
+
+export default function ChatMessageContentWithReply(props) {
+  return (
+    <ChatMessageContent
+      {...props}
+      slots={{
+        ...props.slots,
+        bubble: ChatMessageBubbleWithReply
+      }}
+    />
   );
 }

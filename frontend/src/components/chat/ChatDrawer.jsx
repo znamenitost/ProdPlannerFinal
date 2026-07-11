@@ -24,6 +24,7 @@ import { ChatBox } from '@mui/x-chat';
 import { createProductionChatAdapter } from './createProductionChatAdapter';
 import ChatComposerAttachments from './ChatComposerAttachments';
 import ChatComposerInputWithReply from './ChatComposerInputWithReply';
+import ChatComposerRootWithReply from './ChatComposerRootWithReply';
 import ChatComposerToolbarWithEmoji from './ChatComposerToolbarWithEmoji';
 import ChatMessageContentWithReply from './ChatMessageContentWithReply';
 import ChatConversationOnlineAvatar from './ChatConversationOnlineAvatar';
@@ -36,6 +37,10 @@ import {
   ChatReplySessionContext,
   replyPreviewFromMessage
 } from './ChatReplySessionContext';
+import {
+  clearPendingReplyMessage,
+  setPendingReplyMessage
+} from './chatReplyPreview';
 import { renderChatFilePart } from './renderChatFilePart';
 import { avatarDisplayUrl } from '../../utils/avatarUrl';
 
@@ -156,18 +161,23 @@ export default function ChatDrawer({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const currentUserId = user?.id;
+  const normalizedInitialConversationId = initialConversationId != null
+    ? String(initialConversationId)
+    : undefined;
 
   const [activeConversationId, setActiveConversationId] = useState(() => (
-    initialConversationId ? String(initialConversationId) : undefined
+    normalizedInitialConversationId
   ));
   const [contacts, setContacts] = useState([]);
   const [editingMessage, setEditingMessage] = useState(null);
   const [replyingMessage, setReplyingMessage] = useState(null);
   const editingMessageRef = useRef(null);
   const replyingMessageRef = useRef(null);
+  const onUnreadMaybeChangedRef = useRef(onUnreadMaybeChanged);
   const pickedDefaultConversationRef = useRef(false);
   editingMessageRef.current = editingMessage;
   replyingMessageRef.current = replyingMessage;
+  onUnreadMaybeChangedRef.current = onUnreadMaybeChanged;
 
   const currentUser = useMemo(() => {
     if (!user?.id) return undefined;
@@ -183,7 +193,7 @@ export default function ChatDrawer({
     if (!currentUserId) return null;
     return createProductionChatAdapter({
       currentUserId,
-      onUnreadMaybeChanged,
+      onUnreadMaybeChanged: () => onUnreadMaybeChangedRef.current?.(),
       getEditingMessage: () => editingMessageRef.current,
       clearEditingMessage: () => {
         editingMessageRef.current = null;
@@ -191,11 +201,12 @@ export default function ChatDrawer({
       },
       getReplyingMessage: () => replyingMessageRef.current,
       clearReplyingMessage: () => {
+        clearPendingReplyMessage(replyingMessageRef.current?.id);
         replyingMessageRef.current = null;
         setReplyingMessage(null);
       }
     });
-  }, [currentUserId, onUnreadMaybeChanged]);
+  }, [currentUserId]);
 
   const editSession = useMemo(() => ({
     editing: editingMessage,
@@ -232,9 +243,11 @@ export default function ChatDrawer({
         preview: replyPreviewFromMessage(message)
       };
       replyingMessageRef.current = next;
+      setPendingReplyMessage(next);
       setReplyingMessage(next);
     },
     cancelReply: () => {
+      clearPendingReplyMessage(replyingMessageRef.current?.id);
       replyingMessageRef.current = null;
       setReplyingMessage(null);
     }
@@ -247,16 +260,18 @@ export default function ChatDrawer({
   }), [editingMessage]);
 
   const handleConversationsChange = useCallback((conversations) => {
-    if (initialConversationId || pickedDefaultConversationRef.current) return;
+    if (normalizedInitialConversationId || pickedDefaultConversationRef.current) return;
     const team = conversations.find((c) => c.metadata?.type === 'Team') || conversations[0];
     if (!team?.id) return;
+    const nextId = String(team.id);
     pickedDefaultConversationRef.current = true;
-    setActiveConversationId(String(team.id));
-  }, [initialConversationId]);
+    setActiveConversationId((prev) => (prev === nextId ? prev : nextId));
+  }, [normalizedInitialConversationId]);
 
   useEffect(() => {
     if (!open) {
       pickedDefaultConversationRef.current = false;
+      setActiveConversationId(undefined);
     }
   }, [open]);
 
@@ -271,6 +286,7 @@ export default function ChatDrawer({
     editingMessageRef.current = null;
     setEditingMessage(null);
     replyingMessageRef.current = null;
+    clearPendingReplyMessage();
     setReplyingMessage(null);
   }, [activeConversationId]);
 
@@ -315,20 +331,23 @@ export default function ChatDrawer({
   }, [open, hubConnection]);
 
   useEffect(() => {
-    if (!open || !initialConversationId) return;
+    if (!open || !normalizedInitialConversationId) return;
     setActiveConversationId((prev) => {
-      const next = String(initialConversationId);
+      const next = normalizedInitialConversationId;
       return prev === next ? prev : next;
     });
-  }, [open, initialConversationId]);
+  }, [open, normalizedInitialConversationId]);
 
   useEffect(() => {
-    if (!open) return;
-    onActiveConversationChange?.(activeConversationId ?? null);
+    if (!open || !activeConversationId) return;
+    onActiveConversationChange?.(activeConversationId);
   }, [open, activeConversationId, onActiveConversationChange]);
 
   const handleActiveConversationChange = (id) => {
-    setActiveConversationId((prev) => (prev === id ? prev : id));
+    if (id == null) return;
+    const next = String(id);
+    if (!next) return;
+    setActiveConversationId((prev) => (prev === next ? prev : next));
   };
 
   const handleOpenDirect = async (contact) => {
@@ -431,6 +450,7 @@ export default function ChatDrawer({
               partRenderers={{ file: renderChatFilePart }}
               slots={{
                 composerAttachmentList: ChatComposerAttachments,
+                composerRoot: ChatComposerRootWithReply,
                 composerInput: ChatComposerInputWithReply,
                 composerToolbar: ChatComposerToolbarWithEmoji,
                 composerAttachButton: editingMessage ? null : undefined,

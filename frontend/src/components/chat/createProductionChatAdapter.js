@@ -9,7 +9,12 @@ import {
 } from '../../services/api';
 import { avatarDisplayUrl } from '../../utils/avatarUrl';
 import { textFromChatMessage } from './ChatEditSessionContext';
-import { truncateReplyPreview } from './chatReplyPreview';
+import {
+  getPendingReplyMessage,
+  messageMetadataWithReply,
+  replyToFromDto,
+  replyToFromSession
+} from './chatReplyPreview';
 
 export const TEAM_CHAT_AVATAR_URL = '/sprites/favicon2.svg';
 
@@ -58,6 +63,8 @@ export function mapServerMessage(dto, currentUserId) {
     status = dto.status === 'read' ? 'read' : 'sent';
   }
 
+  const replyTo = replyToFromDto(dto);
+
   return {
     id: String(dto.id),
     conversationId: String(dto.conversationId),
@@ -65,16 +72,7 @@ export function mapServerMessage(dto, currentUserId) {
     status,
     createdAt: dto.createdAt,
     editedAt: dto.editedAt || undefined,
-    metadata: dto.replyTo
-      ? {
-        replyTo: {
-          id: String(dto.replyTo.id),
-          senderUserId: dto.replyTo.senderUserId,
-          senderFullName: dto.replyTo.senderFullName,
-          preview: truncateReplyPreview(dto.replyTo.preview)
-        }
-      }
-      : undefined,
+    metadata: replyTo ? { replyTo } : undefined,
     author: {
       id: dto.senderUserId,
       displayName: dto.senderFullName,
@@ -193,9 +191,18 @@ export function createProductionChatAdapter({
     return message;
   };
 
+  const withPreservedReplyMetadata = (message) => {
+    const cachedReplyTo = messageCache.get(String(message.id))?.metadata?.replyTo;
+    if (message.metadata?.replyTo || !cachedReplyTo) return message;
+    return {
+      ...message,
+      metadata: messageMetadataWithReply(message, cachedReplyTo)
+    };
+  };
+
   const applyMessageUpdate = (dto) => {
     if (!dto?.id) return;
-    const mapped = rememberMessage(mapServerMessage(dto, currentUserId));
+    const mapped = rememberMessage(withPreservedReplyMetadata(mapServerMessage(dto, currentUserId)));
     emit({ type: 'message-updated', message: mapped });
 
     const convId = String(dto.conversationId);
@@ -324,10 +331,17 @@ export function createProductionChatAdapter({
 
     // Own message echo (other tabs) — add once if not already present from sendMessage.
     if (dto.senderUserId === currentUserId) {
-      if (!messageCache.has(id)) {
+      const existedBefore = messageCache.has(id);
+      const mapped = rememberMessage(withPreservedReplyMetadata(mapServerMessage(dto, currentUserId)));
+      if (existedBefore) {
+        emit({
+          type: 'message-updated',
+          message: mapped
+        });
+      } else {
         emit({
           type: 'message-added',
-          message: rememberMessage(mapServerMessage(dto, currentUserId))
+          message: mapped
         });
       }
       onUnreadMaybeChanged?.();
@@ -535,21 +549,15 @@ export function createProductionChatAdapter({
         }
       }
 
-      const replying = getReplyingMessage?.();
-      if (replying?.id && message?.id) {
+      const replying = getReplyingMessage?.() || getPendingReplyMessage();
+      const pendingReplyTo = replyToFromSession(replying);
+
+      if (pendingReplyTo && message?.id) {
         emit({
           type: 'message-updated',
           message: {
             ...message,
-            metadata: {
-              ...(message.metadata || {}),
-              replyTo: {
-                id: String(replying.id),
-                senderUserId: replying.senderUserId,
-                senderFullName: replying.senderFullName,
-                preview: truncateReplyPreview(replying.preview)
-              }
-            }
+            metadata: messageMetadataWithReply(message, pendingReplyTo)
           }
         });
       }
@@ -558,13 +566,22 @@ export function createProductionChatAdapter({
         Number(conversationId),
         text,
         files,
-        getReplyingMessage?.()?.id
+        replying?.id
       );
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       clearReplyingMessage?.();
 
-      // Replace optimistic client id with server message so read receipts can match.
-      const serverMessage = rememberMessage(mapServerMessage(dto, currentUserId));
+      const mapped = mapServerMessage(dto, currentUserId);
+      const replyTo = replyToFromDto(dto) ?? pendingReplyTo;
+      const nextMessage = {
+        ...mapped,
+        metadata: replyTo
+          ? messageMetadataWithReply(mapped, replyTo)
+          : mapped.metadata
+      };
+      const existedBefore = messageCache.has(String(nextMessage.id));
+      const serverMessage = rememberMessage(nextMessage);
+
       if (message?.id && String(message.id) !== serverMessage.id) {
         emit({
           type: 'message-removed',
@@ -572,7 +589,12 @@ export function createProductionChatAdapter({
           conversationId: String(conversationId)
         });
       }
-      emit({ type: 'message-added', message: serverMessage });
+
+      if (existedBefore) {
+        emit({ type: 'message-updated', message: serverMessage });
+      } else {
+        emit({ type: 'message-added', message: serverMessage });
+      }
 
       scheduleConversationRefresh(dto.conversationId);
       return emptyStream();

@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { ChatComposerTextArea } from '@mui/x-chat';
+import { Box } from '@mui/material';
 import { useChatComposer } from '@mui/x-chat-headless';
 import { useChatEditSession } from './ChatEditSessionContext';
 import { useChatReplySession } from './ChatReplySessionContext';
+import { useSubmitReplyMessage } from './ChatComposerRootWithReply';
 
 function focusComposer(inputRef) {
   requestAnimationFrame(() => {
@@ -22,7 +23,9 @@ function focusComposer(inputRef) {
 export function ChatComposerInputWithEdit(props) {
   const session = useChatEditSession();
   const replySession = useChatReplySession();
-  const { setValue } = useChatComposer();
+  const composer = useChatComposer();
+  const { setValue } = composer;
+  const submitReply = useSubmitReplyMessage();
   const syncedEditIdRef = useRef(null);
   const syncedReplyIdRef = useRef(null);
   const inputRef = useRef(null);
@@ -65,5 +68,84 @@ export function ChatComposerInputWithEdit(props) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [session, setValue]);
 
-  return <ChatComposerTextArea {...props} ref={inputRef} />;
+  const syncHeight = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  useLayoutEffect(() => {
+    syncHeight();
+  }, [composer.value]);
+
+  const handleKeyDown = async (event) => {
+    props.onKeyDown?.(event);
+    if (
+      event.defaultPrevented
+      || event.key !== 'Enter'
+      || event.shiftKey
+      || event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    if (replySession?.replying && !session?.editing) {
+      await submitReply();
+    } else {
+      await composer.submit();
+    }
+  };
+
+  return (
+    <Box
+      component="textarea"
+      {...props}
+      ref={inputRef}
+      value={composer.value}
+      placeholder={props.placeholder ?? 'Сообщение…'}
+      aria-label={props['aria-label'] ?? 'Сообщение'}
+      disabled={Boolean(props.disabled) || composer.isSubmitting}
+      onChange={(event) => {
+        props.onChange?.(event);
+        if (!event.defaultPrevented) {
+          setValue(event.target.value);
+        }
+      }}
+      onKeyDown={handleKeyDown}
+      onCompositionStart={(event) => {
+        props.onCompositionStart?.(event);
+      }}
+      onCompositionEnd={(event) => {
+        props.onCompositionEnd?.(event);
+      }}
+      sx={{
+        flex: 1,
+        resize: 'none',
+        border: 'none',
+        borderRadius: 0,
+        p: 0.5,
+        fontFamily: 'inherit',
+        fontSize: 'body2.fontSize',
+        lineHeight: 'body2.lineHeight',
+        color: 'text.primary',
+        bgcolor: 'transparent',
+        outline: 'none',
+        boxSizing: 'border-box',
+        minHeight: 40,
+        maxHeight: 200,
+        overflowY: 'auto',
+        scrollbarWidth: 'thin',
+        '&:disabled': {
+          color: 'text.disabled',
+          cursor: 'not-allowed'
+        },
+        '&::placeholder': {
+          color: 'text.disabled'
+        },
+        ...(Array.isArray(props.sx) ? undefined : props.sx)
+      }}
+    />
+  );
 }
