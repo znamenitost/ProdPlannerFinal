@@ -1,4 +1,5 @@
 import { alpha, Box, Typography } from '@mui/material';
+import { scrollToChatMessage } from './scrollToChatMessage';
 
 export default function ChatReplyQuote({ replyTo, isOwnBubble = false }) {
   if (!replyTo) return null;
@@ -8,8 +9,22 @@ export default function ChatReplyQuote({ replyTo, isOwnBubble = false }) {
   const barColor = isOwnBubble ? 'rgba(255,255,255,0.85)' : 'primary.main';
   const bg = isOwnBubble ? 'rgba(255,255,255,0.12)' : (t) => alpha(t.palette.primary.main, 0.06);
 
+  const handleClick = () => {
+    if (replyTo.id) scrollToChatMessage(replyTo.id);
+  };
+
   return (
     <Box
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleClick();
+        }
+      }}
+      aria-label={`Перейти к сообщению: ${replyTo.senderFullName || 'Сообщение'}`}
       sx={{
         mb: 0.75,
         px: 1,
@@ -18,7 +33,14 @@ export default function ChatReplyQuote({ replyTo, isOwnBubble = false }) {
         borderLeft: `3px solid`,
         borderLeftColor: barColor,
         bgcolor: bg,
-        maxWidth: '100%'
+        maxWidth: '100%',
+        cursor: 'pointer',
+        transition: (t) => t.transitions.create('background-color', {
+          duration: t.transitions.duration.shortest
+        }),
+        '&:hover': {
+          bgcolor: isOwnBubble ? 'rgba(255,255,255,0.18)' : (t) => alpha(t.palette.primary.main, 0.1)
+        }
       }}
     >
       <Typography

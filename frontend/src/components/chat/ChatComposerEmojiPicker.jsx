@@ -14,10 +14,22 @@ const EmojiPicker = lazy(() => import('emoji-picker-react'));
 
 const emojiRuPromise = import('emoji-picker-react/dist/data/emojis-ru');
 
-function EmojiPickerPanel({ onPick }) {
+const PICKER_HEIGHT = { desktop: 400, mobile: 360 };
+const PICKER_MIN_HEIGHT = 160;
+const PICKER_VIEWPORT_MARGIN = 16;
+
+function computePickerHeight(anchorTop, isMobile) {
+  const preferred = isMobile ? PICKER_HEIGHT.mobile : PICKER_HEIGHT.desktop;
+  const available = Math.floor(anchorTop - PICKER_VIEWPORT_MARGIN);
+  if (available <= PICKER_MIN_HEIGHT) return Math.max(available, 120);
+  return Math.min(preferred, available);
+}
+
+function EmojiPickerPanel({ onPick, height }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [emojiData, setEmojiData] = useState(null);
+  const pickerHeight = height ?? (isMobile ? PICKER_HEIGHT.mobile : PICKER_HEIGHT.desktop);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +62,7 @@ function EmojiPickerPanel({ onPick }) {
           autoFocusSearch={false}
           searchPlaceholder="Поиск"
           width={isMobile ? 280 : 320}
-          height={isMobile ? 360 : 400}
+          height={pickerHeight}
           previewConfig={{ showPreview: true }}
           onEmojiClick={(emojiDataClick) => {
             onPick(emojiDataClick.emoji);
@@ -75,9 +87,22 @@ function EmojiPickerPanel({ onPick }) {
  */
 export default function ChatComposerEmojiPicker() {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { value, setValue } = useChatComposer();
   const [anchorEl, setAnchorEl] = useState(null);
+  const [pickerHeight, setPickerHeight] = useState(null);
   const open = Boolean(anchorEl);
+
+  const handleOpen = useCallback((event) => {
+    const top = event.currentTarget.getBoundingClientRect().top;
+    setPickerHeight(computePickerHeight(top, isMobile));
+    setAnchorEl(event.currentTarget);
+  }, [isMobile]);
+
+  const handleClose = useCallback(() => {
+    setAnchorEl(null);
+    setPickerHeight(null);
+  }, []);
 
   const insertEmoji = useCallback((emoji) => {
     const active = document.activeElement;
@@ -110,7 +135,7 @@ export default function ChatComposerEmojiPicker() {
           aria-label="Эмодзи"
           aria-expanded={open}
           aria-haspopup="dialog"
-          onClick={(event) => setAnchorEl(event.currentTarget)}
+          onClick={handleOpen}
           sx={{
             width: 36,
             height: 36,
@@ -126,7 +151,8 @@ export default function ChatComposerEmojiPicker() {
       <Popover
         open={open}
         anchorEl={anchorEl}
-        onClose={() => setAnchorEl(null)}
+        onClose={handleClose}
+        marginThreshold={PICKER_VIEWPORT_MARGIN}
         anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
         transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         slotProps={{
@@ -135,12 +161,15 @@ export default function ChatComposerEmojiPicker() {
               overflow: 'hidden',
               borderRadius: 2,
               boxShadow: theme.shadows[8],
-              zIndex: theme.zIndex.modal + 2
+              zIndex: theme.zIndex.modal + 2,
+              // Global theme adds marginTop for downward menus; here the picker opens upward.
+              mt: 0,
+              mb: 1
             }
           }
         }}
       >
-        <EmojiPickerPanel onPick={insertEmoji} />
+        <EmojiPickerPanel onPick={insertEmoji} height={pickerHeight} />
       </Popover>
     </>
   );

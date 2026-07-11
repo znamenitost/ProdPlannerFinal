@@ -534,6 +534,25 @@ export function createProductionChatAdapter({
         }
       }
 
+      const replying = getReplyingMessage?.();
+      if (replying?.id && message?.id) {
+        emit({
+          type: 'message-updated',
+          message: {
+            ...message,
+            metadata: {
+              ...(message.metadata || {}),
+              replyTo: {
+                id: String(replying.id),
+                senderUserId: replying.senderUserId,
+                senderFullName: replying.senderFullName,
+                preview: replying.preview
+              }
+            }
+          }
+        });
+      }
+
       const dto = await sendChatMessage(
         Number(conversationId),
         text,
