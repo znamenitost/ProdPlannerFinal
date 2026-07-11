@@ -82,7 +82,7 @@ public sealed class ChatService : IChatService
             .AsNoTracking()
             .Where(u => u.IsActive && u.Id != currentUserId)
             .OrderBy(u => u.FullName)
-            .Select(u => new { u.Id, u.FullName, u.AvatarUrl, u.Role })
+            .Select(u => new { u.Id, u.FullName, u.Role })
             .ToListAsync(ct);
 
         return users
@@ -90,7 +90,6 @@ public sealed class ChatService : IChatService
             {
                 UserId = u.Id,
                 FullName = u.FullName,
-                AvatarUrl = u.AvatarUrl,
                 Role = u.Role,
                 IsOnline = _connections.CountForUser(u.Id) > 0
             })
@@ -307,7 +306,7 @@ public sealed class ChatService : IChatService
         var senderIds = rows.Select(r => r.SenderUserId).Distinct().ToList();
         var senders = await _userManager.Users.AsNoTracking()
             .Where(u => senderIds.Contains(u.Id))
-            .Select(u => new { u.Id, u.FullName, u.AvatarUrl })
+            .Select(u => new { u.Id, u.FullName })
             .ToDictionaryAsync(u => u.Id, ct);
 
         // Peer last-read for Direct chats → Telegram-style sent/read ticks on own messages.
@@ -341,7 +340,6 @@ public sealed class ChatService : IChatService
                     ConversationId = r.ConversationId,
                     SenderUserId = r.SenderUserId,
                     SenderFullName = sender?.FullName ?? "?",
-                    SenderAvatarUrl = sender?.AvatarUrl,
                     Text = r.Text,
                     CreatedAt = r.CreatedAt,
                     EditedAt = r.EditedAt,
@@ -696,7 +694,7 @@ public sealed class ChatService : IChatService
         {
             var sender = await _userManager.Users.AsNoTracking()
                 .Where(u => u.Id == last.SenderUserId)
-                .Select(u => new { u.FullName, u.AvatarUrl })
+                .Select(u => new { u.FullName })
                 .FirstOrDefaultAsync(ct);
             var files = await _db.ChatAttachments.AsNoTracking()
                 .Where(a => a.MessageId == last.Id)
@@ -708,7 +706,6 @@ public sealed class ChatService : IChatService
                 ConversationId = last.ConversationId,
                 SenderUserId = last.SenderUserId,
                 SenderFullName = sender?.FullName ?? "?",
-                SenderAvatarUrl = sender?.AvatarUrl,
                 Text = last.Text,
                 CreatedAt = last.CreatedAt,
                 EditedAt = last.EditedAt,
@@ -742,11 +739,10 @@ public sealed class ChatService : IChatService
             var peerId = conv.UserIdLow == currentUserId ? conv.UserIdHigh! : conv.UserIdLow!;
             var peer = await _userManager.Users.AsNoTracking()
                 .Where(u => u.Id == peerId)
-                .Select(u => new { u.Id, u.FullName, u.AvatarUrl })
+                .Select(u => new { u.Id, u.FullName })
                 .FirstOrDefaultAsync(ct);
             dto.PeerUserId = peerId;
             dto.PeerFullName = peer?.FullName ?? "?";
-            dto.PeerAvatarUrl = peer?.AvatarUrl;
             dto.PeerIsOnline = _connections.CountForUser(peerId) > 0;
             dto.Title = dto.PeerFullName;
         }
@@ -771,7 +767,7 @@ public sealed class ChatService : IChatService
     {
         var sender = await _userManager.Users.AsNoTracking()
             .Where(u => u.Id == message.SenderUserId)
-            .Select(u => new { u.FullName, u.AvatarUrl })
+            .Select(u => new { u.FullName })
             .FirstOrDefaultAsync(ct);
 
         string? status = null;
@@ -813,7 +809,6 @@ public sealed class ChatService : IChatService
             ConversationId = message.ConversationId,
             SenderUserId = message.SenderUserId,
             SenderFullName = sender?.FullName ?? "?",
-            SenderAvatarUrl = sender?.AvatarUrl,
             Text = message.Text,
             CreatedAt = message.CreatedAt,
             EditedAt = message.EditedAt,

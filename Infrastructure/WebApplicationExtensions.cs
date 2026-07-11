@@ -73,6 +73,8 @@ public static class WebApplicationExtensions
             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
         });
 
+        app.UseResponseCompression();
+
         if (app.Environment.IsDevelopment())
         {
             app.UseSwagger();

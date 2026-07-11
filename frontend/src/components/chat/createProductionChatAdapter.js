@@ -18,6 +18,9 @@ import {
 
 export const TEAM_CHAT_AVATAR_URL = '/sprites/favicon2.svg';
 
+/** MUI loads older messages when scrollTop is within this distance from the top (default 84px). */
+export const CHAT_HISTORY_PREFETCH_PX = 560;
+
 function emptyStream() {
   return new ReadableStream({
     start(controller) {

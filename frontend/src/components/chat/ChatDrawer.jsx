@@ -21,7 +21,7 @@ import {
   PersonAdd
 } from '@mui/icons-material';
 import { ChatBox } from '@mui/x-chat';
-import { createProductionChatAdapter } from './createProductionChatAdapter';
+import { createProductionChatAdapter, CHAT_HISTORY_PREFETCH_PX } from './createProductionChatAdapter';
 import ChatComposerAttachments from './ChatComposerAttachments';
 import ChatComposerInputWithReply from './ChatComposerInputWithReply';
 import ChatComposerRootWithReply from './ChatComposerRootWithReply';
@@ -29,6 +29,8 @@ import ChatComposerToolbarWithEmoji from './ChatComposerToolbarWithEmoji';
 import ChatMessageContentWithReply from './ChatMessageContentWithReply';
 import ChatConversationOnlineAvatar from './ChatConversationOnlineAvatar';
 import ChatScrollToEndOnOpen from './ChatScrollToEndOnOpen';
+import ChatThreadPaneWithLoading from './ChatThreadPaneWithLoading';
+import { LoadingState } from '../LoadingState';
 import {
   ChatEditSessionContext,
   textFromChatMessage
@@ -449,6 +451,7 @@ export default function ChatDrawer({
               layoutMode={isMobile ? 'split' : 'standard'}
               partRenderers={{ file: renderChatFilePart }}
               slots={{
+                threadPane: ChatThreadPaneWithLoading,
                 composerAttachmentList: ChatComposerAttachments,
                 composerRoot: ChatComposerRootWithReply,
                 composerInput: ChatComposerInputWithReply,
@@ -458,6 +461,9 @@ export default function ChatDrawer({
                 messageContent: ChatMessageContentWithReply
               }}
               slotProps={{
+                messageList: {
+                  estimatedItemSize: CHAT_HISTORY_PREFETCH_PX
+                },
                 conversationList: {
                   slots: {
                     itemAvatar: ChatConversationOnlineAvatar
@@ -536,9 +542,7 @@ export default function ChatDrawer({
             </ChatReplySessionContext.Provider>
           </ChatEditSessionContext.Provider>
         ) : (
-          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Typography color="text.secondary">Загрузка чата…</Typography>
-          </Box>
+          <LoadingState message="Загрузка чата…" />
         )}
       </Box>
     </Dialog>
