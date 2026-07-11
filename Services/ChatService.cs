@@ -447,11 +447,15 @@ public sealed class ChatService : IChatService
         long? validatedReplyId = null;
         if (replyToMessageId is > 0)
         {
-            var replyExists = await _db.ChatMessages.AsNoTracking()
-                .AnyAsync(m => m.Id == replyToMessageId && m.ConversationId == conversationId, ct);
-            if (!replyExists)
+            var replyTarget = await _db.ChatMessages.AsNoTracking()
+                .Where(m => m.Id == replyToMessageId && m.ConversationId == conversationId)
+                .Select(m => new { m.Id, m.SenderUserId })
+                .FirstOrDefaultAsync(ct);
+            if (replyTarget == null)
                 throw new ArgumentException("Сообщение для ответа не найдено.");
-            validatedReplyId = replyToMessageId;
+            if (replyTarget.SenderUserId == currentUserId)
+                throw new ArgumentException("Нельзя отвечать на собственное сообщение.");
+            validatedReplyId = replyTarget.Id;
         }
 
         var sender = await _userManager.FindByIdAsync(currentUserId)

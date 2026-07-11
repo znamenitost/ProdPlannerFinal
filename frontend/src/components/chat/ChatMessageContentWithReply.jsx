@@ -28,7 +28,8 @@ export default function ChatMessageContentWithReply(props) {
 
   const startReply = (event) => {
     event.stopPropagation();
-    if (message) replySession?.startReply(message);
+    if (!message || isOwnMessage) return;
+    replySession?.startReply(message);
   };
 
   const startEdit = (event) => {
@@ -77,20 +78,22 @@ export default function ChatMessageContentWithReply(props) {
             gap: 0.25,
             zIndex: 2,
             ...(isOwnMessage
-              ? { right: 'calc(100% + 4px)' }
+              ? { right: 4 }
               : { left: 'calc(100% + 4px)' })
           }}
         >
-          <Tooltip title="Ответить" placement={isOwnMessage ? 'left' : 'right'}>
-            <IconButton
-              size="small"
-              aria-label="Ответить"
-              onClick={startReply}
-              sx={hoverActionSx}
-            >
-              <ReplyIcon sx={{ fontSize: 16, color: 'primary.main' }} />
-            </IconButton>
-          </Tooltip>
+          {!isOwnMessage ? (
+            <Tooltip title="Ответить" placement="right">
+              <IconButton
+                size="small"
+                aria-label="Ответить"
+                onClick={startReply}
+                sx={hoverActionSx}
+              >
+                <ReplyIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+              </IconButton>
+            </Tooltip>
+          ) : null}
           {isOwnMessage ? (
             <Tooltip title="Изменить" placement="left">
               <IconButton

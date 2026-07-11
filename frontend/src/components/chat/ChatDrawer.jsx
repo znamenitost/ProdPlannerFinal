@@ -220,7 +220,7 @@ export default function ChatDrawer({
   const replySession = useMemo(() => ({
     replying: replyingMessage,
     startReply: (message) => {
-      if (!message?.id) return;
+      if (!message?.id || message.role === 'user') return;
       editingMessageRef.current = null;
       setEditingMessage(null);
       const next = {
