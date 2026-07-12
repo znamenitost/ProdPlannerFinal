@@ -6,6 +6,7 @@ public sealed class ChatContactDto
     public string FullName { get; set; } = "";
     public string? AvatarUrl { get; set; }
     public bool IsOnline { get; set; }
+    public DateTime? LastSeenAt { get; set; }
     public string Role { get; set; } = "";
 }
 
@@ -57,6 +58,7 @@ public sealed class ChatConversationDto
     public string? PeerFullName { get; set; }
     public string? PeerAvatarUrl { get; set; }
     public bool PeerIsOnline { get; set; }
+    public DateTime? PeerLastSeenAt { get; set; }
     public ChatMessageDto? LastMessage { get; set; }
     public int UnreadCount { get; set; }
 }

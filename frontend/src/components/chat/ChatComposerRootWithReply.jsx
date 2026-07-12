@@ -1,5 +1,4 @@
-import { forwardRef, useCallback } from 'react';
-import { Box } from '@mui/material';
+import { useCallback } from 'react';
 import { useChatActions, useChatStore, useComposerContext } from '@mui/x-chat-headless';
 import { useChatReplySession } from './ChatReplySessionContext';
 import { messageMetadataWithReply, replyToFromSession } from './chatReplyPreview';
@@ -67,32 +66,3 @@ export function useSubmitReplyMessage() {
     return true;
   }, [actions, composer.attachments, composer.value, replySession, store]);
 }
-
-const ChatComposerRootWithReply = forwardRef(function ChatComposerRootWithReply(props, ref) {
-  const {
-    onSubmit,
-    children,
-    ...rest
-  } = props;
-  const submitReply = useSubmitReplyMessage();
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    const handled = await submitReply();
-    if (handled) return;
-    onSubmit?.(event);
-  };
-
-  return (
-    <Box
-      component="form"
-      ref={ref}
-      {...rest}
-      onSubmit={handleSubmit}
-    >
-      {children}
-    </Box>
-  );
-});
-
-export default ChatComposerRootWithReply;

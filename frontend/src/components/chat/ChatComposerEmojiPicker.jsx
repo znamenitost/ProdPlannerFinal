@@ -14,13 +14,13 @@ const EmojiPicker = lazy(() => import('emoji-picker-react'));
 
 const emojiRuPromise = import('emoji-picker-react/dist/data/emojis-ru');
 
-const PICKER_HEIGHT = { desktop: 400, mobile: 360 };
+const PICKER_HEIGHT = { desktop: 400, mobile: 320 };
 const PICKER_MIN_HEIGHT = 160;
 const PICKER_VIEWPORT_MARGIN = 16;
 
-function computePickerHeight(anchorBottom, isMobile) {
+function computePickerHeight(anchorTop, isMobile) {
   const preferred = isMobile ? PICKER_HEIGHT.mobile : PICKER_HEIGHT.desktop;
-  const available = Math.floor(anchorBottom - PICKER_VIEWPORT_MARGIN);
+  const available = Math.floor(anchorTop - PICKER_VIEWPORT_MARGIN);
   if (available <= PICKER_MIN_HEIGHT) return Math.max(available, 120);
   return Math.min(preferred, available);
 }
@@ -94,11 +94,10 @@ export default function ChatComposerEmojiPicker() {
   const open = Boolean(anchorEl);
 
   const handleOpen = useCallback((event) => {
-    const composer = event.currentTarget.closest('.MuiChatComposer-root');
-    const anchor = composer ?? event.currentTarget;
-    const bottom = anchor.getBoundingClientRect().bottom;
-    setPickerHeight(computePickerHeight(bottom, isMobile));
-    setAnchorEl(anchor);
+    const button = event.currentTarget;
+    const top = button.getBoundingClientRect().top;
+    setPickerHeight(computePickerHeight(top, isMobile));
+    setAnchorEl(button);
   }, [isMobile]);
 
   const handleClose = useCallback(() => {
@@ -154,36 +153,17 @@ export default function ChatComposerEmojiPicker() {
         open={open}
         anchorEl={anchorEl}
         onClose={handleClose}
-        disableScrollLock
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
         transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         slotProps={{
-          popper: {
-            placement: 'top-start',
-            modifiers: [
-              { name: 'flip', enabled: false },
-              {
-                name: 'offset',
-                options: { offset: [0, -8] }
-              },
-              {
-                name: 'preventOverflow',
-                options: {
-                  padding: PICKER_VIEWPORT_MARGIN,
-                  boundary: 'viewport'
-                }
-              }
-            ]
-          },
           paper: {
             sx: {
               overflow: 'hidden',
               borderRadius: 2,
               boxShadow: theme.shadows[8],
-              zIndex: theme.zIndex.modal + 2,
-              // Global theme adds marginTop for downward menus; here the picker opens upward.
+              // Global theme adds marginTop for downward popovers; picker opens upward.
               mt: '0 !important',
-              mb: 0
+              mb: 1
             }
           }
         }}

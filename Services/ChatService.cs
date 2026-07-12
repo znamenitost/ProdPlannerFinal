@@ -86,12 +86,17 @@ public sealed class ChatService : IChatService
             .ToListAsync(ct);
 
         return users
-            .Select(u => new ChatContactDto
+            .Select(u =>
             {
-                UserId = u.Id,
-                FullName = u.FullName,
-                Role = u.Role,
-                IsOnline = _connections.CountForUser(u.Id) > 0
+                var isOnline = _connections.CountForUser(u.Id) > 0;
+                return new ChatContactDto
+                {
+                    UserId = u.Id,
+                    FullName = u.FullName,
+                    Role = u.Role,
+                    IsOnline = isOnline,
+                    LastSeenAt = isOnline ? null : _connections.GetLastSeenUtc(u.Id)
+                };
             })
             .ToList();
     }
@@ -744,6 +749,7 @@ public sealed class ChatService : IChatService
             dto.PeerUserId = peerId;
             dto.PeerFullName = peer?.FullName ?? "?";
             dto.PeerIsOnline = _connections.CountForUser(peerId) > 0;
+            dto.PeerLastSeenAt = dto.PeerIsOnline ? null : _connections.GetLastSeenUtc(peerId);
             dto.Title = dto.PeerFullName;
         }
 

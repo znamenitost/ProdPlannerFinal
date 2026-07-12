@@ -2,9 +2,12 @@ import { useEffect } from 'react';
 import { alpha, Box, IconButton, Typography } from '@mui/material';
 import { Close, Edit as EditIcon, Reply as ReplyIcon } from '@mui/icons-material';
 import { useChatComposer } from '@mui/x-chat-headless';
+import { tokens } from '../../theme/paletteTokens';
 import { useChatEditSession } from './ChatEditSessionContext';
 import { useChatReplySession } from './ChatReplySessionContext';
 import { truncateReplyPreview } from './chatReplyPreview';
+
+const { neutral, primary } = tokens;
 
 /**
  * Banner above the composer while editing or replying to a message.
@@ -81,18 +84,18 @@ export default function ChatComposerBanner() {
           px: 1.25,
           py: 0.75,
           mb: 0.5,
-          borderLeft: (t) => `3px solid ${t.palette.primary.main}`,
-          bgcolor: (t) => alpha(t.palette.grey[500], 0.12),
+          borderLeft: `3px solid ${neutral[600]}`,
+          bgcolor: neutral[200],
           borderRadius: 1
         }}
       >
-        <ReplyIcon sx={{ fontSize: 16, color: 'primary.main', flexShrink: 0 }} />
+        <ReplyIcon sx={{ fontSize: 16, color: neutral[600], flexShrink: 0 }} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             variant="caption"
             sx={{
               fontWeight: 700,
-              color: 'primary.main',
+              color: primary.dark,
               display: 'block',
               lineHeight: 1.2,
               overflow: 'hidden',
@@ -104,10 +107,10 @@ export default function ChatComposerBanner() {
           </Typography>
           <Typography
             variant="caption"
-            color="text.secondary"
             sx={{
               display: 'block',
               lineHeight: 1.2,
+              color: neutral[600],
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap'

@@ -1,3 +1,4 @@
+import '@mui/x-chat/themeAugmentation';
 import { createTheme, alpha } from '@mui/material/styles';
 import { tokens, chrome } from './paletteTokens';
 import { createMuiTransition, sectionPaperThemeStyles } from './motion';
@@ -364,6 +365,18 @@ export const appTheme = createTheme({
         root: {
           backgroundColor: neutral[100]
         }
+      }
+    },
+    MuiChatComposer: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          borderColor: alpha(neutral[300], 0.92),
+          margin: theme.spacing(0, 2, 2),
+          [theme.breakpoints.down('sm')]: {
+            marginInline: theme.spacing(1.5),
+            marginBottom: `max(${theme.spacing(1.5)}, env(safe-area-inset-bottom, 0px))`
+          }
+        })
       }
     },
     MuiChatMessage: {

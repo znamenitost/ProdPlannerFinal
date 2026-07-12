@@ -102,14 +102,14 @@ export function mapServerConversation(dto, currentUserId) {
   const lastAt = dto.lastMessage?.createdAt;
   const unread = dto.unreadCount || 0;
 
+  const lastPreview = previewFromMessage(dto.lastMessage);
+
   return {
     id: String(dto.id),
     title: dto.title || (isTeam ? 'Общий чат' : 'Чат'),
     subtitle: isTeam
       ? 'Вся команда'
-      : dto.peerIsOnline
-        ? 'В сети'
-        : previewFromMessage(dto.lastMessage) || 'Личные сообщения',
+      : (lastPreview || 'Нет сообщений'),
     avatarUrl: isTeam
       ? TEAM_CHAT_AVATAR_URL
       : resolveAvatar(dto.peerUserId, dto.peerAvatarUrl),
@@ -120,7 +120,8 @@ export function mapServerConversation(dto, currentUserId) {
     metadata: {
       type: dto.type,
       peerUserId: dto.peerUserId || null,
-      lastPreview: previewFromMessage(dto.lastMessage)
+      lastPreview,
+      peerLastSeenAt: dto.peerLastSeenAt || null
     }
   };
 }
@@ -133,7 +134,9 @@ function conversationVisualKey(conversation) {
     conversation.unreadCount,
     conversation.readState,
     conversation.lastMessageAt,
-    conversation.metadata?.lastPreview
+    conversation.metadata?.lastPreview,
+    conversation.participants?.[0]?.isOnline,
+    conversation.metadata?.peerLastSeenAt
   ].join('\0');
 }
 
@@ -218,9 +221,7 @@ export function createProductionChatAdapter({
       lastMessageAt: dto.createdAt || cached.lastMessageAt,
       subtitle: cached.metadata?.type === 'Team'
         ? 'Вся команда'
-        : (cached.participants?.some((p) => p.isOnline)
-          ? 'В сети'
-          : (preview || cached.metadata?.lastPreview || 'Личные сообщения')),
+        : (preview || cached.metadata?.lastPreview || 'Нет сообщений'),
       metadata: {
         ...cached.metadata,
         lastPreview: preview || cached.metadata?.lastPreview
@@ -409,12 +410,13 @@ export function createProductionChatAdapter({
       if (conv.metadata?.peerUserId !== String(userId)) continue;
       emitConversationUpdated({
         ...conv,
-        subtitle: online
-          ? 'В сети'
-          : (conv.metadata?.lastPreview || 'Личные сообщения'),
         participants: (conv.participants || []).map((p) => (
           p.id === String(userId) ? { ...p, isOnline: online } : p
-        ))
+        )),
+        metadata: {
+          ...conv.metadata,
+          peerLastSeenAt: online ? conv.metadata?.peerLastSeenAt : new Date().toISOString()
+        }
       });
     }
   };

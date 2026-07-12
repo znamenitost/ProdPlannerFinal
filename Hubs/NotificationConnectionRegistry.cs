@@ -19,6 +19,7 @@ public sealed record ConnectionRegistrySnapshot(
 public sealed class NotificationConnectionRegistry
 {
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _byUser = new();
+    private readonly ConcurrentDictionary<string, DateTime> _lastSeenUtc = new(StringComparer.Ordinal);
     private long _totalOpened;
     private long _totalClosed;
 
@@ -57,8 +58,14 @@ public sealed class NotificationConnectionRegistry
             Interlocked.Increment(ref _totalClosed);
 
         if (connections.IsEmpty)
+        {
             _byUser.TryRemove(userId, out _);
+            _lastSeenUtc[userId] = DateTime.UtcNow;
+        }
     }
+
+    public DateTime? GetLastSeenUtc(string userId) =>
+        _lastSeenUtc.TryGetValue(userId, out var at) ? at : null;
 
     public int CountForUser(string userId) =>
         _byUser.TryGetValue(userId, out var connections) ? connections.Count : 0;

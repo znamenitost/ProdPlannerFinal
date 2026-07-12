@@ -24,10 +24,11 @@ import { ChatBox } from '@mui/x-chat';
 import { createProductionChatAdapter, CHAT_HISTORY_PREFETCH_PX } from './createProductionChatAdapter';
 import ChatComposerAttachments from './ChatComposerAttachments';
 import ChatComposerInputWithReply from './ChatComposerInputWithReply';
-import ChatComposerRootWithReply from './ChatComposerRootWithReply';
+import ChatComposerSendButtonWithReply from './ChatComposerSendButtonWithReply';
 import ChatComposerToolbarWithEmoji from './ChatComposerToolbarWithEmoji';
 import ChatMessageContentWithReply from './ChatMessageContentWithReply';
 import ChatConversationOnlineAvatar from './ChatConversationOnlineAvatar';
+import ChatConversationHeaderSubtitle from './ChatConversationHeaderSubtitle';
 import ChatScrollToEndOnOpen from './ChatScrollToEndOnOpen';
 import ChatThreadPaneWithLoading from './ChatThreadPaneWithLoading';
 import { LoadingState } from '../LoadingState';
@@ -366,7 +367,6 @@ export default function ChatDrawer({
     <Dialog
       open={open}
       onClose={onClose}
-      fullScreen={isMobile}
       fullWidth
       maxWidth={false}
       slotProps={{
@@ -376,13 +376,13 @@ export default function ChatDrawer({
         paper: {
           elevation: 0,
           sx: {
-            width: { xs: '100%', sm: 1040, md: 1160 },
-            maxWidth: { xs: '100%', sm: 'calc(100vw - 48px)' },
-            minWidth: { sm: 900 },
-            height: { xs: '100%', sm: 820 },
-            maxHeight: { xs: '100%', sm: 'calc(100vh - 48px)' },
-            m: { xs: 0, sm: 3 },
-            borderRadius: { xs: 0, sm: 3 },
+            width: { xs: '100%', sm: 960, md: 1040 },
+            maxWidth: { xs: 'calc(100vw - 32px)', sm: 'calc(100vw - 64px)' },
+            minWidth: { sm: 720 },
+            height: { xs: '78vh', sm: 620, md: 660 },
+            maxHeight: { xs: '78vh', sm: 'min(660px, calc(100vh - 96px))' },
+            m: { xs: 2, sm: 4 },
+            borderRadius: { xs: 2, sm: 3 },
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
@@ -452,10 +452,11 @@ export default function ChatDrawer({
               partRenderers={{ file: renderChatFilePart }}
               slots={{
                 threadPane: ChatThreadPaneWithLoading,
+                conversationSubtitle: ChatConversationHeaderSubtitle,
                 composerAttachmentList: ChatComposerAttachments,
-                composerRoot: ChatComposerRootWithReply,
                 composerInput: ChatComposerInputWithReply,
                 composerToolbar: ChatComposerToolbarWithEmoji,
+                composerSendButton: ChatComposerSendButtonWithReply,
                 composerAttachButton: editingMessage ? null : undefined,
                 messageActions: null,
                 messageContent: ChatMessageContentWithReply

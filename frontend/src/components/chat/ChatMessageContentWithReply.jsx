@@ -1,12 +1,17 @@
 import { forwardRef } from 'react';
-import { Box, IconButton, Tooltip, styled } from '@mui/material';
+import { Box, Divider, IconButton, Tooltip, styled } from '@mui/material';
 import { Edit as EditIcon, Reply as ReplyIcon } from '@mui/icons-material';
 import { ChatMessageContent } from '@mui/x-chat';
 import { useMessage, useMessageContext } from '@mui/x-chat-headless';
 import { useChatEditSession } from './ChatEditSessionContext';
 import { useChatReplySession } from './ChatReplySessionContext';
 import { replyToFromSession } from './chatReplyPreview';
-import ChatReplyQuote from './ChatReplyQuote';
+import ChatReplyQuote, { BUBBLE_PADDING_X } from './ChatReplyQuote';
+import { getTelegramBubbleBorderRadius } from './chatBubbleShape';
+import useMessageGroupEdges from './useMessageGroupEdges';
+import { tokens } from '../../theme/paletteTokens';
+
+const { neutral } = tokens;
 
 const hoverActionSx = {
   width: 28,
@@ -18,6 +23,22 @@ const hoverActionSx = {
     bgcolor: 'action.hover'
   }
 };
+
+const HOVER_ACTION_BRIDGE_PX = 12;
+const HOVER_ACTION_GAP_PX = 4;
+const HOVER_ACTION_HIDE_DELAY_MS = 280;
+
+const hoverActionBridgeSx = (isOwnMessage) => (isOwnMessage
+  ? {
+      right: `calc(100% + ${HOVER_ACTION_GAP_PX}px)`,
+      paddingRight: `${HOVER_ACTION_BRIDGE_PX}px`,
+      marginRight: `-${HOVER_ACTION_BRIDGE_PX - HOVER_ACTION_GAP_PX}px`
+    }
+  : {
+      left: `calc(100% + ${HOVER_ACTION_GAP_PX}px)`,
+      paddingLeft: `${HOVER_ACTION_BRIDGE_PX}px`,
+      marginLeft: `-${HOVER_ACTION_BRIDGE_PX - HOVER_ACTION_GAP_PX}px`
+    });
 
 const ChatMessageBubbleRoot = styled(Box, {
   name: 'MuiChatMessage',
@@ -37,8 +58,28 @@ const ChatMessageBubbleRoot = styled(Box, {
     maxWidth: '100%',
     boxSizing: 'border-box',
     padding: theme.spacing(1, 1.5),
-    borderRadius: theme.shape.borderRadius,
     alignSelf: isOwn ? 'flex-end' : 'flex-start',
+    '& [data-chat-hover-actions]': {
+      opacity: 0,
+      pointerEvents: 'none',
+      transition: theme.transitions.create('opacity', {
+        duration: theme.transitions.duration.shorter,
+        delay: HOVER_ACTION_HIDE_DELAY_MS
+      })
+    },
+    '@media (hover: hover)': {
+      '&:hover [data-chat-hover-actions], &:focus-within [data-chat-hover-actions]': {
+        opacity: 1,
+        pointerEvents: 'auto',
+        transitionDelay: '0ms'
+      }
+    },
+    '@media (hover: none)': {
+      '& [data-chat-hover-actions]': {
+        opacity: 1,
+        pointerEvents: 'auto'
+      }
+    },
     '& p': {
       margin: 0
     }
@@ -61,6 +102,13 @@ const ChatMessageBubbleWithReply = forwardRef(function ChatMessageBubbleWithRepl
     ? replyToFromSession(replySession?.replying)
     : null;
   const replyTo = message?.metadata?.replyTo || outgoingReplyTo;
+  const hasReply = Boolean(replyTo);
+  const { isFirst, isLast } = useMessageGroupEdges();
+  const bubbleBorderRadius = getTelegramBubbleBorderRadius({
+    isOwn: isOwnMessage,
+    isFirst,
+    isLast
+  });
   const canInteract = message?.id
     && message.status !== 'streaming'
     && message.status !== 'pending';
@@ -84,11 +132,46 @@ const ChatMessageBubbleWithReply = forwardRef(function ChatMessageBubbleWithRepl
       ownerState={ownerState}
       data-role={ownerState?.role}
       {...rest}
+      sx={[
+        { borderRadius: bubbleBorderRadius },
+        hasReply && {
+          display: 'flex',
+          flexDirection: 'column',
+          p: 0,
+          gap: 0
+        },
+        ...(Array.isArray(rest.sx) ? rest.sx : rest.sx ? [rest.sx] : [])
+      ]}
     >
-      {replyTo ? (
-        <ChatReplyQuote replyTo={replyTo} isOwnBubble={isOwnMessage} />
-      ) : null}
-      {children}
+      {hasReply ? (
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            borderRadius: 'inherit'
+          }}
+        >
+          <ChatReplyQuote replyTo={replyTo} isOwnBubble={isOwnMessage} />
+          <Divider
+            sx={{
+              borderColor: isOwnMessage ? neutral[500] : neutral[300],
+              opacity: 1
+            }}
+          />
+          <Box
+            sx={{
+              px: BUBBLE_PADDING_X,
+              py: 1,
+              minWidth: 0
+            }}
+          >
+            {children}
+          </Box>
+        </Box>
+      ) : (
+        children
+      )}
       {canInteract ? (
         <Box
           data-chat-hover-actions
@@ -99,9 +182,7 @@ const ChatMessageBubbleWithReply = forwardRef(function ChatMessageBubbleWithRepl
             flexDirection: 'column',
             gap: 0.25,
             zIndex: 2,
-            ...(isOwnMessage
-              ? { right: 'calc(100% + 6px)' }
-              : { left: 'calc(100% + 6px)' })
+            ...hoverActionBridgeSx(isOwnMessage)
           }}
         >
           {!isOwnMessage ? (
