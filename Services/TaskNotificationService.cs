@@ -14,6 +14,8 @@ public class TaskNotificationService : ITaskNotificationService
     private readonly UserManager<User> _userManager;
     private readonly INotificationInboxService _inbox;
     private readonly IMaxMessengerService _maxMessenger;
+    private readonly IWebPushService _webPush;
+    private readonly NotificationConnectionRegistry _connections;
     private readonly ILogger<TaskNotificationService> _logger;
 
     public TaskNotificationService(
@@ -22,6 +24,8 @@ public class TaskNotificationService : ITaskNotificationService
         UserManager<User> userManager,
         INotificationInboxService inbox,
         IMaxMessengerService maxMessenger,
+        IWebPushService webPush,
+        NotificationConnectionRegistry connections,
         ILogger<TaskNotificationService> logger)
     {
         _hubContext = hubContext;
@@ -29,6 +33,8 @@ public class TaskNotificationService : ITaskNotificationService
         _userManager = userManager;
         _inbox = inbox;
         _maxMessenger = maxMessenger;
+        _webPush = webPush;
+        _connections = connections;
         _logger = logger;
     }
 
@@ -52,6 +58,12 @@ public class TaskNotificationService : ITaskNotificationService
                 title,
                 task.Deadline,
                 "NewTask");
+
+            await SendOfflineWebPushAsync(
+                [userId],
+                title,
+                FormatDeadlineBody(task.Deadline),
+                $"task-NewTask-{task.Id}");
         }
         else
         {
@@ -132,6 +144,7 @@ public class TaskNotificationService : ITaskNotificationService
             task.Deadline,
             readyStatus);
 
+        var readyType = readyStatus == JobStatus.InStock ? "TaskInStockReady" : "TaskApprovedReady";
         await SendToGroupsAsync(
             [userId],
             "NewTask",
@@ -139,7 +152,13 @@ public class TaskNotificationService : ITaskNotificationService
             task.Id,
             title,
             task.Deadline,
-            readyStatus == JobStatus.InStock ? "TaskInStockReady" : "TaskApprovedReady");
+            readyType);
+
+        await SendOfflineWebPushAsync(
+            [userId],
+            title,
+            FormatDeadlineBody(task.Deadline),
+            $"task-{readyType}-{task.Id}");
     }
 
     public async Task NotifySequentialStageReadyAsync(ProductionTask task, int stageNumber)
@@ -173,6 +192,12 @@ public class TaskNotificationService : ITaskNotificationService
             title,
             task.Deadline,
             "SequentialStageReady");
+
+        await SendOfflineWebPushAsync(
+            [userId],
+            title,
+            FormatDeadlineBody(task.Deadline),
+            $"task-SequentialStageReady-{task.Id}");
     }
 
     public async Task NotifyTaskCommentAddedAsync(
@@ -219,6 +244,12 @@ public class TaskNotificationService : ITaskNotificationService
                 "TaskCommentAdded");
         }
 
+        await SendOfflineWebPushAsync(
+            recipientIds,
+            title,
+            "В комментарии к задаче появилась запись",
+            $"comment-{task.Id}");
+
         await _dataSync.BroadcastAsync(
             "TaskUpdated",
             AffectedEmployees(task.EmployeeName),
@@ -234,6 +265,25 @@ public class TaskNotificationService : ITaskNotificationService
             return Task.CompletedTask;
         return _hubContext.Clients.Groups(groups).SendCoreAsync(method, args);
     }
+
+    private Task SendOfflineWebPushAsync(
+        IReadOnlyList<string> userIds,
+        string title,
+        string body,
+        string tag)
+    {
+        var offlineRecipients = userIds
+            .Where(id => !string.IsNullOrWhiteSpace(id) && _connections.CountForUser(id) == 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (offlineRecipients.Count == 0)
+            return Task.CompletedTask;
+
+        return _webPush.SendAsync(offlineRecipients, title, body, "/", tag);
+    }
+
+    private static string FormatDeadlineBody(DateTime deadline) =>
+        $"Дедлайн: {deadline:dd.MM.yyyy HH:mm}";
 
     private static string[] AffectedEmployees(params string?[] employeeNames) =>
         employeeNames

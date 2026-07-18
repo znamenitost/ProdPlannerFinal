@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getChatConversations } from '../services/api';
+import {
+  browserNotificationForChat,
+  isPageActive,
+  showBrowserNotification
+} from '../utils/browserNotification';
 
 function pluralizeRu(value, one, few, many) {
   const mod10 = value % 10;
@@ -57,7 +62,7 @@ function unreadSummaryToast(userId, unreadConversations) {
 
 /**
  * Toast notifications for incoming chat messages (when chat is closed or another thread is active).
- * Queues toasts while the browser tab is hidden (same pattern as task push notifications).
+ * Uses native browser notifications when the window is not active; otherwise in-app snackbars.
  */
 export default function useChatMessageToasts(user, hubConnection, {
   enabled = true,
@@ -66,6 +71,7 @@ export default function useChatMessageToasts(user, hubConnection, {
 } = {}) {
   const [toasts, setToasts] = useState([]);
   const hiddenQueueRef = useRef([]);
+  const shownNativeIdsRef = useRef(new Set());
   const pendingSummaryShownRef = useRef(new Set());
   const chatOpenRef = useRef(chatOpen);
   const activeConversationIdRef = useRef(activeConversationId);
@@ -85,38 +91,38 @@ export default function useChatMessageToasts(user, hubConnection, {
     });
   }, []);
 
-  const offerToast = useCallback((dto) => {
-    if (!dto?.id) return;
-    const toast = toastFromDto(dto);
-
-    if (document.visibilityState === 'hidden') {
-      if (!hiddenQueueRef.current.some((t) => t.serverId === toast.serverId)) {
-        hiddenQueueRef.current.push(toast);
-      }
-      return;
-    }
-
-    commitToast(toast);
-  }, [commitToast]);
-
   const offerPreparedToast = useCallback((toast) => {
     if (!toast?.serverId) return;
+    if (shownNativeIdsRef.current.has(toast.serverId)) return;
 
-    if (document.visibilityState === 'hidden') {
-      if (!hiddenQueueRef.current.some((t) => t.serverId === toast.serverId)) {
-        hiddenQueueRef.current.push(toast);
-      }
+    if (!isPageActive()) {
+      const payload = browserNotificationForChat(toast);
+      showBrowserNotification(payload).then((shown) => {
+        if (shown) {
+          shownNativeIdsRef.current.add(toast.serverId);
+          return;
+        }
+        if (!hiddenQueueRef.current.some((t) => t.serverId === toast.serverId)) {
+          hiddenQueueRef.current.push(toast);
+        }
+      });
       return;
     }
 
     commitToast(toast);
   }, [commitToast]);
 
+  const offerToast = useCallback((dto) => {
+    if (!dto?.id) return;
+    offerPreparedToast(toastFromDto(dto));
+  }, [offerPreparedToast]);
+
   const flushHiddenQueue = useCallback(() => {
-    if (document.visibilityState === 'hidden') return;
+    if (!isPageActive()) return;
     const queued = [...hiddenQueueRef.current];
     hiddenQueueRef.current = [];
     queued.forEach((toast) => {
+      if (shownNativeIdsRef.current.has(toast.serverId)) return;
       const viewingThisThread = chatOpenRef.current
         && String(activeConversationIdRef.current || '') === String(toast.conversationId);
       if (viewingThisThread) return;
@@ -158,7 +164,8 @@ export default function useChatMessageToasts(user, hubConnection, {
       const conversationId = String(dto.conversationId);
       const viewingThisThread = chatOpenRef.current
         && String(activeConversationIdRef.current || '') === conversationId;
-      if (viewingThisThread && document.visibilityState === 'visible') return;
+      // Suppress only when the user is actively looking at this thread.
+      if (viewingThisThread && isPageActive()) return;
 
       offerToast(dto);
     };
@@ -166,7 +173,7 @@ export default function useChatMessageToasts(user, hubConnection, {
     hubConnection.on('ChatMessage', onMessage);
 
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') flushHiddenQueue();
+      if (isPageActive()) flushHiddenQueue();
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('focus', onVisibilityChange);

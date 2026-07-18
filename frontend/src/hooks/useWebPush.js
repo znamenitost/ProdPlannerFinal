@@ -20,7 +20,8 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 /**
- * Registers service worker and subscribes to Web Push for chat when tab is closed.
+ * Registers service worker and subscribes to Web Push (chat / tasks / comments)
+ * for delivery when the tab has no SignalR connection.
  */
 export default function useWebPush(user, { enabled = true } = {}) {
   useEffect(() => {

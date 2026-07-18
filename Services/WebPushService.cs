@@ -84,11 +84,28 @@ public sealed class WebPushService : IWebPushService
         await _db.SaveChangesAsync(ct);
     }
 
-    public async Task SendChatMessageAsync(
+    public Task SendChatMessageAsync(
         IEnumerable<string> userIds,
         string title,
         string body,
         long conversationId,
+        CancellationToken ct = default)
+    {
+        return SendAsync(
+            userIds,
+            title,
+            body,
+            $"/?chat={conversationId}",
+            $"chat-{conversationId}",
+            ct);
+    }
+
+    public async Task SendAsync(
+        IEnumerable<string> userIds,
+        string title,
+        string body,
+        string url,
+        string? tag = null,
         CancellationToken ct = default)
     {
         if (!_options.IsConfigured)
@@ -108,11 +125,13 @@ public sealed class WebPushService : IWebPushService
         if (subscriptions.Count == 0)
             return;
 
+        var safeUrl = string.IsNullOrWhiteSpace(url) ? "/" : url.Trim();
         var payload = JsonSerializer.Serialize(new
         {
-            title = string.IsNullOrWhiteSpace(title) ? "Сообщение" : title.Trim(),
-            body = string.IsNullOrWhiteSpace(body) ? "Новое сообщение" : body.Trim(),
-            url = $"/?chat={conversationId}"
+            title = string.IsNullOrWhiteSpace(title) ? "Уведомление" : title.Trim(),
+            body = string.IsNullOrWhiteSpace(body) ? "" : body.Trim(),
+            url = safeUrl,
+            tag = string.IsNullOrWhiteSpace(tag) ? safeUrl : tag.Trim()
         }, JsonOptions);
 
         var client = new WebPushClient();

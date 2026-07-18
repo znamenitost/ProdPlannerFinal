@@ -6,6 +6,11 @@ import {
   notifyDeployMaintenanceIfNeeded,
   shortenHubLogMessage
 } from '../utils/deployMaintenance';
+import {
+  browserNotificationForTask,
+  isPageActive,
+  showBrowserNotification
+} from '../utils/browserNotification';
 
 function buildHubLogger(onMaintenanceDetected) {
   return (logLevel, message) => {
@@ -248,18 +253,27 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     if (notification.serverId == null) return;
     if (displayedServerIdsRef.current.has(notification.serverId)) return;
 
-    if (document.visibilityState === 'hidden') {
-      if (!hiddenQueueRef.current.some((n) => n.serverId === notification.serverId)) {
-        hiddenQueueRef.current.push(notification);
-      }
+    if (!isPageActive()) {
+      const payload = browserNotificationForTask(notification);
+      showBrowserNotification(payload).then((shown) => {
+        if (shown) {
+          // Ack so pending fetch does not re-show as snackbar later.
+          displayedServerIdsRef.current.add(notification.serverId);
+          ackNotification(notification.serverId);
+          return;
+        }
+        if (!hiddenQueueRef.current.some((n) => n.serverId === notification.serverId)) {
+          hiddenQueueRef.current.push(notification);
+        }
+      });
       return;
     }
 
     commitDisplay(notification);
-  }, [commitDisplay]);
+  }, [ackNotification, commitDisplay]);
 
   const flushHiddenQueue = useCallback(() => {
-    if (document.visibilityState === 'hidden') return;
+    if (!isPageActive()) return;
     const queued = [...hiddenQueueRef.current];
     hiddenQueueRef.current = [];
     queued.forEach(offerNotification);
@@ -454,7 +468,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     });
 
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (isPageActive()) {
         flushHiddenQueue();
         fetchPendingNotifications(abort.signal);
         applyViewSubscription();

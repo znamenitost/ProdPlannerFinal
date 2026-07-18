@@ -1,5 +1,5 @@
 self.addEventListener('push', (event) => {
-  let data = { title: 'Сообщение', body: 'Новое сообщение', url: '/' };
+  let data = { title: 'Уведомление', body: '', url: '/', tag: 'notification' };
   try {
     if (event.data) {
       data = { ...data, ...event.data.json() };
@@ -9,18 +9,18 @@ self.addEventListener('push', (event) => {
   }
 
   const options = {
-    body: data.body,
+    body: data.body || '',
     icon: '/favicon.svg',
     badge: '/favicon.svg',
     vibrate: [200, 100, 200],
-    tag: data.url || 'chat-message',
+    tag: data.tag || data.url || 'notification',
     renotify: true,
     data: {
       url: data.url || '/'
     }
   };
 
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  event.waitUntil(self.registration.showNotification(data.title || 'Уведомление', options));
 });
 
 self.addEventListener('notificationclick', (event) => {
