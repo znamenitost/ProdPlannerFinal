@@ -442,10 +442,15 @@ public sealed class TaskCommentService : ITaskCommentService
         return false;
     }
 
+    /// <summary>
+    /// Разделитель целых комментариев в denormalized preview (не путать с \n внутри текста).
+    /// </summary>
+    public const char CommentPreviewSeparator = '\u001e';
+
     internal static string FormatPreview(IEnumerable<TaskCommentDto> comments)
     {
         var list = comments.ToList();
-        var lines = list
+        var blocks = list
             .Select((c, index) =>
             {
                 var text = (c.Text ?? "").Trim();
@@ -466,9 +471,9 @@ public sealed class TaskCommentService : ITaskCommentService
                     return $"{author} → {c.RecipientName.Trim()}: {text}";
                 return $"{author}: {text}";
             })
-            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Where(block => !string.IsNullOrWhiteSpace(block))
             .ToList();
-        return string.Join("\n", lines);
+        return string.Join(CommentPreviewSeparator, blocks);
     }
 
     /// <summary>

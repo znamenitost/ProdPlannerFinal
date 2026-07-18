@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import { Comment as CommentIcon } from '@mui/icons-material';
 import { formatCommentForDisplay, getCommentDisplaySx } from '../../utils/commentLimits';
+import { normalizeCommentPreviewForDisplay } from '../../utils/commentPreview';
 import { useTextLimit } from '../../context/TextLimitContext';
 import { needsTooltip } from '../../utils/taskTableStyles';
 import CommentTooltipTitle from './CommentTooltipTitle';
@@ -27,12 +28,13 @@ export default function TaskCommentCell({
     [limit]
   );
   const comment = String(task.comment || '').trim();
-  const displayText = formatCommentForDisplay(comment, limit);
+  const displayComment = normalizeCommentPreviewForDisplay(comment);
+  const displayText = formatCommentForDisplay(displayComment, limit);
   const commentEditedViaDialog = Boolean(task.commentEditedViaDialog);
   const badgeCount = Math.max(0, Number(task.commentBadgeCount) || 0);
   const showTooltip = Boolean(comment) && (
-    needsTooltip(comment, limit)
-    || comment.includes('\n')
+    needsTooltip(displayComment, limit)
+    || displayComment.includes('\n')
     || comment.includes('→')
     || forceTooltipOpen
   );

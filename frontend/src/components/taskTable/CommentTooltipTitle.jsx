@@ -21,15 +21,15 @@ function PersonLabel({ name, bold = false }) {
 }
 
 export default function CommentTooltipTitle({ preview }) {
-  const lines = parseCommentPreviewLines(preview);
-  if (lines.length === 0) return null;
+  const comments = parseCommentPreviewLines(preview);
+  if (comments.length === 0) return null;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', py: 0.25, maxWidth: 380 }}>
-      {lines.map((line, index) => {
+      {comments.map((item, index) => {
         const isFirst = index === 0;
-        const showAuthor = Boolean(line.author) && !line.hideAuthor;
-        const showRecipient = Boolean(line.recipient);
+        const showAuthor = Boolean(item.author) && !item.hideAuthor;
+        const showRecipient = Boolean(item.recipient);
         const hasMeta = showAuthor || showRecipient;
 
         return (
@@ -46,14 +46,14 @@ export default function CommentTooltipTitle({ preview }) {
                 rowGap: 0.25
               }}
             >
-              {showAuthor ? <PersonLabel name={line.author} bold={isFirst} /> : null}
+              {showAuthor ? <PersonLabel name={item.author} bold={isFirst} /> : null}
               {showRecipient ? (
                 <>
                   <ArrowForward sx={iconSx} />
-                  <PersonLabel name={line.recipient} bold={isFirst} />
+                  <PersonLabel name={item.recipient} bold={isFirst} />
                 </>
               ) : null}
-              {line.text ? (
+              {item.text ? (
                 <Typography
                   component="span"
                   variant="caption"
@@ -61,10 +61,16 @@ export default function CommentTooltipTitle({ preview }) {
                     lineHeight: 1.35,
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
-                    fontWeight: isFirst ? 800 : 400
+                    fontWeight: isFirst ? 800 : 400,
+                    // Многострочный текст — блок под автором/получателем, не рядом.
+                    ...(String(item.text).includes('\n')
+                      ? { flexBasis: '100%', display: 'block', mt: hasMeta ? 0.25 : 0 }
+                      : null)
                   }}
                 >
-                  {hasMeta ? `: ${line.text}` : line.text}
+                  {hasMeta && !String(item.text).includes('\n')
+                    ? `: ${item.text}`
+                    : item.text}
                 </Typography>
               ) : null}
             </Box>
