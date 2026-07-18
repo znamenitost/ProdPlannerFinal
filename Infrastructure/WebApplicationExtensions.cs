@@ -27,6 +27,7 @@ public static class WebApplicationExtensions
         services.AddSingleton<ITaskDataSyncHubBroadcaster, TaskDataSyncHubBroadcaster>();
         services.AddScoped<ITaskNotificationService, TaskNotificationService>();
         services.AddScoped<INotificationInboxService, NotificationInboxService>();
+        services.AddScoped<ITaskCommentService, TaskCommentService>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<IWebPushService, WebPushService>();
         services.AddScoped<ITaskTableService, TaskTableService>();

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -26,6 +25,7 @@ import {
 } from '@mui/material';
 import { Add, Delete, FiberNew } from '@mui/icons-material';
 import EstimateHoursInput from './EstimateHoursInput';
+import AppDialogTitle from './ui/AppDialogTitle';
 import { partsToApi } from '../utils/splitTaskUtils';
 import {
   SUPPLY_MODE_COOPERATIVE,
@@ -457,29 +457,31 @@ export default function SplitTaskModal({
         }
       }}
     >
-      <DialogTitle sx={{ px: { xs: 2, sm: 3 }, pt: 2.5, pb: 1.5 }}>
-        {title}
-        {taskLabel && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            {taskLabel}
+      <AppDialogTitle onClose={onClose} closeDisabled={submitting}>
+        <Box sx={{ minWidth: 0 }}>
+          {title}
+          {taskLabel && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {taskLabel}
+            </Typography>
+          )}
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            {hasThroughTestPart
+              ? `Есть назначения через тест · ${displayTotalHours.toFixed(1)} ч`
+              : isDraft
+                ? parts.length >= 2
+                  ? isSequential
+                    ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
+                    : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`
+                  : `Обычная задача · ${displayTotalHours.toFixed(1)} ч`
+                : parts.length === 1
+                  ? `Обычная задача · ${displayTotalHours.toFixed(1)} ч`
+                  : isSequential
+                    ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
+                    : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`}
           </Typography>
-        )}
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          {hasThroughTestPart
-            ? `Есть назначения через тест · ${displayTotalHours.toFixed(1)} ч`
-            : isDraft
-              ? parts.length >= 2
-                ? isSequential
-                  ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
-                  : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`
-                : `Обычная задача · ${displayTotalHours.toFixed(1)} ч`
-              : parts.length === 1
-                ? `Обычная задача · ${displayTotalHours.toFixed(1)} ч`
-                : isSequential
-                  ? `Последовательная · ${displayTotalHours.toFixed(1)} ч · ${parts.length} этапов`
-                  : `Общая задача · ${displayTotalHours.toFixed(1)} ч (сумма по сотрудникам)`}
-        </Typography>
-      </DialogTitle>
+        </Box>
+      </AppDialogTitle>
       <Divider />
 
       <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: 2.5, overflowX: 'auto' }}>

@@ -11,4 +11,5 @@ public interface ITaskNotificationService
     Task NotifyProgressChangedAsync(ProductionTask task, double progress);
     Task NotifyTaskReadyToStartAsync(ProductionTask task, JobStatus readyStatus);
     Task NotifySequentialStageReadyAsync(ProductionTask task, int stageNumber);
+    Task NotifyTaskCommentAddedAsync(ProductionTask task, string authorUserId, string? recipientUserId);
 }

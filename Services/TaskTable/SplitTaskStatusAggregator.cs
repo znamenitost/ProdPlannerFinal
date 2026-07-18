@@ -71,6 +71,16 @@ public static class SplitTaskStatusAggregator
             : JobStatus.Assigned;
 
     /// <summary>
+    /// Частичная готовность: есть «Готово» среди детей, а агрегат активных дал только
+    /// «Назначена»/ожидание/инфо → родитель «Начал» (работа по общей задаче уже шла).
+    /// «Пауза» и явный «Начал» не поднимаем — они сильнее по своим правилам.
+    /// </summary>
+    private static JobStatus ApplyPartialCompletion(JobStatus candidate, bool hasCompletedSibling) =>
+        hasCompletedSibling && candidate == JobStatus.Assigned
+            ? JobStatus.InProgress
+            : candidate;
+
+    /// <summary>
     /// Статус split-родителя для записи в БД.
     /// Инфостатусы на родителя не пишутся — только Assigned / InProgress / Paused / Completed.
     /// </summary>
@@ -83,15 +93,16 @@ public static class SplitTaskStatusAggregator
             return JobStatus.Completed;
 
         var activeChildren = children.Where(c => c.Status != JobStatus.Completed).ToList();
+        var hasCompletedSibling = children.Any(c => c.Status == JobStatus.Completed);
 
         if (activeChildren.Any(c => c.Status == JobStatus.InProgress))
             return JobStatus.InProgress;
 
         if (activeChildren.Count == 1)
-            return ToParentDbStatus(activeChildren[0].Status);
+            return ApplyPartialCompletion(ToParentDbStatus(activeChildren[0].Status), hasCompletedSibling);
 
         var strongest = StrongestByWeight(activeChildren.Select(c => c.Status));
-        return ToParentDbStatus(strongest);
+        return ApplyPartialCompletion(ToParentDbStatus(strongest), hasCompletedSibling);
     }
 
     /// <summary>Текст статуса split-родителя для отображения (учитывает инфостатусы детей).</summary>
@@ -100,23 +111,12 @@ public static class SplitTaskStatusAggregator
         if (children.Count == 0)
             return TaskStatusMapper.ToText(JobStatus.Assigned);
 
-        if (children.All(c => c.Status == JobStatus.Completed))
-            return TaskStatusMapper.ToText(JobStatus.Completed);
-
+        // Инфостатусы в БД родителя не хранятся — только для отображения.
         var infoStatus = StrongestInfoStatus(children);
         if (infoStatus.HasValue)
             return ToParentDisplayText(infoStatus.Value);
 
-        if (children.Any(c => c.Status == JobStatus.InProgress))
-            return TaskStatusMapper.ToText(JobStatus.InProgress);
-
-        var activeChildren = children.Where(c => c.Status != JobStatus.Completed).ToList();
-
-        if (activeChildren.Count == 1)
-            return ToParentDisplayText(activeChildren[0].Status);
-
-        var strongest = StrongestByWeight(activeChildren.Select(c => c.Status));
-        return ToParentDisplayText(strongest);
+        return TaskStatusMapper.ToText(ResolveParentStatus(children));
     }
 
     public static TaskStatusPatch? BuildParentStatusPatch(

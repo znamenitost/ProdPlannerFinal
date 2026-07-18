@@ -87,7 +87,9 @@ function ParentTaskRow({
   isCdrPreviewBuilding = () => false,
   maxSubscribedTaskIds = [],
   maxCanSubscribe = false,
-  onMaxSubscribeToggle
+  onMaxSubscribeToggle,
+  forceCommentTooltipTaskId = null,
+  onForceCommentTooltipClose
 }) {
   const maxSubscribedSet = useMemo(
     () => new Set((maxSubscribedTaskIds || []).map(Number)),
@@ -266,7 +268,12 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>
-          <TaskCommentCell task={task} onOpenComment={onOpenComment} />
+          <TaskCommentCell
+            task={task}
+            onOpenComment={onOpenComment}
+            forceTooltipOpen={forceCommentTooltipTaskId === task.id}
+            onForceTooltipClose={onForceCommentTooltipClose}
+          />
         </TableCell>
 
         <TableCell sx={columnCellSx('deadline', columnVisibility, showHoursTypeColumns, COL_DEADLINE)}>
@@ -384,6 +391,8 @@ function ParentTaskRow({
           maxSubscribed={maxSubscribedSet.has(child.id)}
           maxCanSubscribe={maxCanSubscribe}
           onMaxSubscribeToggle={onMaxSubscribeToggle}
+          forceCommentTooltipTaskId={forceCommentTooltipTaskId}
+          onForceCommentTooltipClose={onForceCommentTooltipClose}
         />
       ))}
     </Fragment>

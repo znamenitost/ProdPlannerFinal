@@ -35,6 +35,9 @@ public class NotificationInboxService : INotificationInboxService
     public Task<long> EnqueueSequentialStageReadyAsync(string userId, int taskId, string title, DateTime deadline) =>
         EnqueueAsync(userId, "SequentialStageReady", taskId, title, deadline);
 
+    public Task<long> EnqueueTaskCommentAddedAsync(string userId, int taskId, string title, DateTime deadline) =>
+        EnqueueAsync(userId, "TaskCommentAdded", taskId, title, deadline);
+
     private async Task<long> EnqueueAsync(string userId, string type, int taskId, string title, DateTime deadline)
     {
         var notification = new UserNotification

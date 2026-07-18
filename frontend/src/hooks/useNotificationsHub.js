@@ -35,12 +35,27 @@ function parseNewTaskHubArgs(notificationId, taskId, taskTitle, deadline, type) 
   return { notificationId, taskId, taskTitle, deadline, type };
 }
 
+function stripCommentCountPrefix(title) {
+  return String(title || '').replace(/^\+\d+\s*·\s*/, '').trim();
+}
+
+function formatCommentNotificationTitle(count, baseTitle) {
+  const base = stripCommentCountPrefix(baseTitle);
+  return base ? `+${count} · ${base}` : `+${count}`;
+}
+
 function mapPendingDto(dto) {
+  const type = dto.type || 'NewTask';
+  const rawTitle = dto.title?.trim() || (type === 'TaskCommentAdded' ? '' : 'Новая задача');
   return {
     id: `n-${dto.id}`,
     serverId: dto.id,
-    type: dto.type || 'NewTask',
-    title: dto.title?.trim() || 'Новая задача',
+    type,
+    taskId: dto.taskId ?? null,
+    title: type === 'TaskCommentAdded'
+      ? formatCommentNotificationTitle(1, rawTitle)
+      : rawTitle || 'Новая задача',
+    commentCount: type === 'TaskCommentAdded' ? 1 : undefined,
     deadline: formatNotificationDeadline(dto.deadline),
   };
 }
@@ -198,6 +213,31 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
   const commitDisplay = useCallback((notification) => {
     setNotifications((prev) => {
       if (prev.some((n) => n.serverId === notification.serverId)) return prev;
+
+      if (
+        notification.type === 'TaskCommentAdded'
+        && notification.taskId != null
+      ) {
+        const existingIndex = prev.findIndex(
+          (n) => n.type === 'TaskCommentAdded' && n.taskId === notification.taskId
+        );
+        if (existingIndex >= 0) {
+          const existing = prev[existingIndex];
+          const nextCount = (existing.commentCount || 1) + (notification.commentCount || 1);
+          const baseTitle = stripCommentCountPrefix(existing.title || notification.title);
+          const updated = {
+            ...existing,
+            serverId: notification.serverId,
+            commentCount: nextCount,
+            title: formatCommentNotificationTitle(nextCount, baseTitle),
+            deadline: notification.deadline || existing.deadline
+          };
+          const next = [...prev];
+          next[existingIndex] = updated;
+          return next;
+        }
+      }
+
       return [...prev.slice(-19), notification];
     });
     displayedServerIdsRef.current.add(notification.serverId);
@@ -265,16 +305,31 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     const handleNewTask = (notificationId, taskId, taskTitle, deadline, type) => {
       if (!isMounted) return;
       const args = parseNewTaskHubArgs(notificationId, taskId, taskTitle, deadline, type);
-      const title =
+      const rawTitle =
         typeof args.taskTitle === 'string' ? args.taskTitle.trim() : String(args.taskTitle ?? '').trim();
+      const notifType = args.type || 'NewTask';
+      const hubTask = hubTaskId(args.taskId);
       offerNotification({
         id: `n-${args.notificationId}`,
         serverId: args.notificationId,
-        type: args.type || 'NewTask',
-        title: title || 'Новая задача',
+        type: notifType,
+        taskId: hubTask,
+        title: notifType === 'TaskCommentAdded'
+          ? formatCommentNotificationTitle(1, rawTitle)
+          : (rawTitle || 'Новая задача'),
+        commentCount: notifType === 'TaskCommentAdded' ? 1 : undefined,
         deadline: formatNotificationDeadline(args.deadline),
       });
       scheduleCalendarRefresh();
+      // Comment push must also refresh the table badge (+N), not only the snackbar.
+      if (notifType === 'TaskCommentAdded' && hubTask != null) {
+        scheduleTaskEvent({
+          type: 'TaskUpdated',
+          taskId: hubTask,
+          affectedEmployees: [],
+          commentBadgeDelta: 1,
+        });
+      }
     };
 
     const handleTaskDeleted = (taskId, affectedEmployees) => {

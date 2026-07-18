@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
+using ProductionPlanner.Services;
 
 namespace ProductionPlanner.Infrastructure;
 
@@ -45,6 +46,16 @@ public static class DatabaseInitializer
         }
 
         await IdentitySeedService.SeedAsync(scope.ServiceProvider);
+
+        try
+        {
+            var comments = scope.ServiceProvider.GetRequiredService<ITaskCommentService>();
+            await comments.RebuildStaleBaselinePreviewsAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Не удалось пересобрать превью baseline-комментариев");
+        }
     }
 
     private static async Task ApplySqliteSchemaPatchesAsync(ApplicationDbContext db, ILogger logger)
@@ -105,6 +116,8 @@ public static class DatabaseInitializer
             await EnsureAppSettingsTableSqliteAsync(connection, logger);
             await EnsureMaxMessengerTablesSqliteAsync(connection, logger);
             await EnsureChatTablesSqliteAsync(connection, logger);
+            await EnsureTaskCommentsTableSqliteAsync(connection, logger);
+            await EnsureTaskCommentReadStatesSqliteAsync(connection, logger);
             await EnsureWebPushSubscriptionsSqliteAsync(connection, logger);
             await ApplyPhase2PerformanceIndexesSqliteAsync(connection, logger);
             await connection.CloseAsync();
@@ -361,6 +374,135 @@ public static class DatabaseInitializer
         }
 
         logger.LogInformation("Таблицы чата проверены/созданы.");
+    }
+
+    private static async Task EnsureTaskCommentsTableSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)
+    {
+        using var create = connection.CreateCommand();
+        create.CommandText = """
+            CREATE TABLE IF NOT EXISTS TaskComments (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ProductionTaskId INTEGER NOT NULL,
+                AuthorUserId TEXT NOT NULL,
+                AuthorName TEXT NOT NULL,
+                AuthorIsAdmin INTEGER NOT NULL,
+                Text TEXT NOT NULL,
+                RecipientUserId TEXT NULL,
+                RecipientName TEXT NULL,
+                ReplyToCommentId INTEGER NULL,
+                IsBaseline INTEGER NOT NULL DEFAULT 0,
+                CreatedAt TEXT NOT NULL,
+                FOREIGN KEY (ProductionTaskId) REFERENCES ProductionTasks(Id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS IX_TaskComments_ProductionTaskId_Id
+                ON TaskComments(ProductionTaskId, Id);
+            """;
+        await create.ExecuteNonQueryAsync();
+
+        var commentColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = connection.CreateCommand())
+        {
+            info.CommandText = "PRAGMA table_info(TaskComments)";
+            using var reader = await info.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                commentColumns.Add(reader.GetString(1));
+        }
+
+        if (!commentColumns.Contains("IsBaseline"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE TaskComments ADD COLUMN IsBaseline INTEGER NOT NULL DEFAULT 0";
+            await alter.ExecuteNonQueryAsync();
+        }
+
+        using var migrate = connection.CreateCommand();
+        migrate.CommandText = """
+            INSERT INTO TaskComments (
+                ProductionTaskId,
+                AuthorUserId,
+                AuthorName,
+                AuthorIsAdmin,
+                Text,
+                RecipientUserId,
+                RecipientName,
+                ReplyToCommentId,
+                IsBaseline,
+                CreatedAt
+            )
+            SELECT
+                t.Id,
+                COALESCE(
+                    (
+                        SELECT u.Id
+                        FROM Users u
+                        WHERE u.Role = 'Admin' AND u.IsActive = 1
+                        ORDER BY u.CreatedAt
+                        LIMIT 1
+                    ),
+                    ''
+                ),
+                COALESCE(
+                    (
+                        SELECT u.FullName
+                        FROM Users u
+                        WHERE u.Role = 'Admin' AND u.IsActive = 1
+                        ORDER BY u.CreatedAt
+                        LIMIT 1
+                    ),
+                    'Админ'
+                ),
+                1,
+                TRIM(t.Comment),
+                NULL,
+                NULL,
+                NULL,
+                1,
+                COALESCE(t.CreatedAt, datetime('now'))
+            FROM ProductionTasks t
+            WHERE TRIM(COALESCE(t.Comment, '')) <> ''
+              AND NOT EXISTS (
+                  SELECT 1 FROM TaskComments c WHERE c.ProductionTaskId = t.Id
+              );
+            """;
+        var inserted = await migrate.ExecuteNonQueryAsync();
+
+        using var markBaseline = connection.CreateCommand();
+        markBaseline.CommandText = """
+            UPDATE TaskComments
+            SET IsBaseline = 1
+            WHERE Id IN (
+                SELECT MIN(Id)
+                FROM TaskComments
+                GROUP BY ProductionTaskId
+            )
+            AND IFNULL(RecipientUserId, '') = ''
+            AND ReplyToCommentId IS NULL;
+            """;
+        var baselineMarked = await markBaseline.ExecuteNonQueryAsync();
+        logger.LogInformation(
+            "Таблица TaskComments проверена/создана. Мигрировано: {Count}, baseline: {Baseline}.",
+            inserted,
+            baselineMarked);
+    }
+
+    private static async Task EnsureTaskCommentReadStatesSqliteAsync(
+        System.Data.Common.DbConnection connection,
+        ILogger logger)
+    {
+        using var create = connection.CreateCommand();
+        create.CommandText = """
+            CREATE TABLE IF NOT EXISTS TaskCommentReadStates (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId TEXT NOT NULL,
+                ProductionTaskId INTEGER NOT NULL,
+                LastReadCommentId INTEGER NOT NULL,
+                UpdatedAt TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_TaskCommentReadStates_UserId_ProductionTaskId
+                ON TaskCommentReadStates(UserId, ProductionTaskId);
+            """;
+        await create.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблица TaskCommentReadStates проверена/создана.");
     }
 
     private static async Task EnsureWebPushSubscriptionsSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)

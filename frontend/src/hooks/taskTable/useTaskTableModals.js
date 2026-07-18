@@ -1,6 +1,7 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { childrenToModalParts, apiPartsToModalParts, taskToModalParts } from '../../utils/splitTaskUtils';
 import { SUPPLY_MODE_INTERNAL, TASK_EXECUTION_PARALLEL, TASK_EXECUTION_SEQUENTIAL } from '../../constants/taskStatuses';
+import { getTaskComments } from '../../services/api';
 
 export default function useTaskTableModals({
   api,
@@ -29,7 +30,6 @@ export default function useTaskTableModals({
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [selectedCommentTask, setSelectedCommentTask] = useState(null);
   const [commentSaving, setCommentSaving] = useState(false);
-  const savingCommentRef = useRef(false);
 
   const closeSplitModal = useCallback(() => {
     setSplitModalOpen(false);
@@ -169,36 +169,18 @@ export default function useTaskTableModals({
     setCommentDialogOpen(true);
   }, []);
 
-  const handleSaveComment = useCallback(async (newComment) => {
-    if (!selectedCommentTask || savingCommentRef.current) return;
-
-    savingCommentRef.current = true;
-    setCommentSaving(true);
+  const applyCommentPreview = useCallback(async (taskId) => {
     const task = selectedCommentTask;
-    const previousComment = String(task.comment || '');
-    const commentChanged = String(newComment || '') !== previousComment;
-    if (!commentChanged && !task.commentEditedViaDialog) {
-      setCommentDialogOpen(false);
-      setSelectedCommentTask(null);
-      savingCommentRef.current = false;
-      setCommentSaving(false);
-      return;
-    }
-    try {
-      await api.updateRow(task.id, {
-        folderPath: task.folderPath ?? '',
-        fileName: task.fileName ?? '',
-        comment: newComment,
-        deadline: task.deadline,
-        estimateHours: task.estimateHours ?? 0,
-        type: task.type ?? '',
-        employeeName: task.employeeName ?? '',
-        parentRowNumber: task.parentRowNumber ?? null,
-        expectedUpdatedAt: task.updatedAt ?? null,
-        commentEditedViaDialog: true
-      });
+    if (!task || task.id !== taskId) return;
 
-      const commentPatch = { comment: newComment, commentEditedViaDialog: true };
+    setCommentSaving(true);
+    try {
+      const data = await getTaskComments(taskId);
+      const commentPatch = {
+        comment: data?.preview ?? '',
+        commentEditedViaDialog: (data?.comments?.length ?? 0) > 0,
+        commentBadgeCount: 0
+      };
 
       const parentId = task.parentRowNumber;
       if (parentId) {
@@ -209,14 +191,11 @@ export default function useTaskTableModals({
       } else {
         patchRow(task.id, commentPatch);
       }
-
-      setCommentDialogOpen(false);
-      setSelectedCommentTask(null);
+      setSelectedCommentTask((prev) => (prev ? { ...prev, ...commentPatch } : prev));
     } catch (err) {
       console.error(err);
-      showError('Ошибка сохранения комментария');
+      showError('Ошибка обновления комментария');
     } finally {
-      savingCommentRef.current = false;
       setCommentSaving(false);
     }
   }, [
@@ -231,6 +210,7 @@ export default function useTaskTableModals({
 
   const setCommentDialogOpenStable = useCallback((open) => {
     setCommentDialogOpen(open);
+    if (!open) setSelectedCommentTask(null);
   }, []);
 
   return {
@@ -247,7 +227,7 @@ export default function useTaskTableModals({
     handleOpenAssigneeModal,
     handleSplitSuccess,
     handleOpenComment,
-    handleSaveComment,
+    handleCommentChanged: applyCommentPreview,
     setCommentDialogOpen: setCommentDialogOpenStable
   };
 }

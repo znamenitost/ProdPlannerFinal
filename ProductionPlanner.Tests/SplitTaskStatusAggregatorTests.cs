@@ -145,7 +145,7 @@ public class SplitTaskStatusAggregatorTests
     }
 
     [Fact]
-    public void SingleActiveChildWaiting_ShowsNaznachena()
+    public void SingleActiveChildWaiting_WithCompletedSibling_ShowsNachal()
     {
         var parent = Parent();
         var children = new List<ProductionTask>
@@ -157,8 +157,25 @@ public class SplitTaskStatusAggregatorTests
         var (statusText, _) = SplitTaskStatusAggregator.Aggregate(parent, children, "Яромир");
         var resolved = SplitTaskStatusAggregator.ResolveParentStatus(children);
 
-        Assert.Equal("Назначена", statusText);
-        Assert.Equal(JobStatus.Assigned, resolved);
+        Assert.Equal("Начал", statusText);
+        Assert.Equal(JobStatus.InProgress, resolved);
+    }
+
+    [Fact]
+    public void AssignedAndCompleted_ShowsNachal()
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Assigned),
+            Child("Яромир", JobStatus.Completed)
+        };
+
+        var (statusText, _) = SplitTaskStatusAggregator.Aggregate(parent, children, "Дима");
+        var resolved = SplitTaskStatusAggregator.ResolveParentStatus(children);
+
+        Assert.Equal("Начал", statusText);
+        Assert.Equal(JobStatus.InProgress, resolved);
     }
 
     [Fact]
@@ -209,9 +226,10 @@ public class SplitTaskStatusAggregatorTests
     [Theory]
     [InlineData(JobStatus.Paused, JobStatus.Paused)]
     [InlineData(JobStatus.InProgress, JobStatus.InProgress)]
-    [InlineData(JobStatus.Assigned, JobStatus.Assigned)]
-    [InlineData(JobStatus.Waiting, JobStatus.Assigned)]
-    [InlineData(JobStatus.Approved, JobStatus.Assigned)]
+    // Частичная готовность: слабый единственный активный ребёнок → «Начал»
+    [InlineData(JobStatus.Assigned, JobStatus.InProgress)]
+    [InlineData(JobStatus.Waiting, JobStatus.InProgress)]
+    [InlineData(JobStatus.Approved, JobStatus.InProgress)]
     public void ResolveParentStatus_WithSingleActiveChild_MirrorsChildStatus(
         JobStatus childStatus,
         JobStatus expectedParentStatus)

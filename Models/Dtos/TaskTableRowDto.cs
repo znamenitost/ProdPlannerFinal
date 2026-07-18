@@ -55,6 +55,9 @@ public class TaskTableRowDto
     /// <summary>Комментарий хотя бы раз сохраняли через диалог (иконка в таблице).</summary>
     public bool CommentEditedViaDialog { get; set; }
 
+    /// <summary>Непрочитанные комментарии для текущего зрителя (+N у иконки).</summary>
+    public int CommentBadgeCount { get; set; }
+
     public static TaskTableRowDto FromParent(
         ProductionTask parent,
         string statusText,

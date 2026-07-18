@@ -91,6 +91,7 @@ function AuthenticatedAppContent() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatFocusConversationId, setChatFocusConversationId] = useState(null);
   const [chatActiveConversationId, setChatActiveConversationId] = useState(null);
+  const [focusCommentTooltipTaskId, setFocusCommentTooltipTaskId] = useState(null);
   const fileInputRef = useRef(null);
   const maxMessenger = useMaxMessenger(user);
   const {
@@ -250,6 +251,18 @@ function AuthenticatedAppContent() {
     closeChatToast(notification.id);
     setChatOpen(true);
   }, [closeChatToast]);
+
+  const handleOpenFromPush = useCallback((notification) => {
+    if (notification?.type === 'ChatMessage') {
+      handleOpenChatFromToast(notification);
+      return;
+    }
+    if (notification?.type === 'TaskCommentAdded' && notification.taskId != null) {
+      closeNotification(notification.id);
+      setActiveTab(1);
+      setFocusCommentTooltipTaskId(Number(notification.taskId));
+    }
+  }, [closeNotification, handleOpenChatFromToast, setActiveTab]);
 
   const handleOpenChat = useCallback(() => {
     setChatFocusConversationId(null);
@@ -587,6 +600,8 @@ function AuthenticatedAppContent() {
                 maxSubscribedTaskIds={maxMessenger.subscribedTaskIds}
                 maxCanSubscribe={maxMessenger.canSubscribe}
                 onMaxSubscribeToggle={handleMaxSubscribeToggle}
+                focusCommentTooltipTaskId={focusCommentTooltipTaskId}
+                onFocusCommentTooltipConsumed={() => setFocusCommentTooltipTaskId(null)}
               />
             )}
           </MotionSwitch>
@@ -718,7 +733,7 @@ function AuthenticatedAppContent() {
       <PushNotificationSnackbars
         notifications={allPushNotifications}
         onClose={handleClosePushNotification}
-        onOpen={handleOpenChatFromToast}
+        onOpen={handleOpenFromPush}
       />
     </>
   );

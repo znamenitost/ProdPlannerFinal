@@ -65,6 +65,14 @@ export async function handleTaskTableHubEvent(event, ctx) {
 
   if (type === 'TaskStatusChanged' || type === 'TaskProgressChanged' || type === 'TaskUpdated') {
     try {
+      const badgeDelta = Number(event.commentBadgeDelta) || 0;
+      if (badgeDelta > 0 && rows.some((r) => r.id === taskId)) {
+        const current = rows.find((r) => r.id === taskId);
+        patchRow(taskId, {
+          commentBadgeCount: Math.max(0, Number(current?.commentBadgeCount) || 0) + badgeDelta
+        });
+      }
+
       const updated = await api.fetchTableRow(taskId);
       if (!updated) return false;
 

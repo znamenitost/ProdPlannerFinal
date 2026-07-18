@@ -1,7 +1,6 @@
 import { Snackbar, Alert, Box, Chip, Typography, Button } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import { toastAlertThemeStyles } from '../theme/componentVariants';
-import { Assignment, AccessTime, CheckCircle, Inventory2, PlayArrow, Chat } from '@mui/icons-material';
+import { Assignment, AccessTime, CheckCircle, Inventory2, PlayArrow, Chat, Comment } from '@mui/icons-material';
 
 const SNACKBAR_HEIGHT = 108;
 
@@ -36,18 +35,32 @@ const notificationVariants = {
     color: 'secondary',
     icon: <PlayArrow fontSize="small" />
   },
+  TaskCommentAdded: {
+    chip: 'Комментарий',
+    severity: 'warning',
+    color: 'warning',
+    icon: <Comment fontSize="small" />
+  },
   ChatMessage: {
     chip: 'Сообщение',
-    severity: 'info',
-    color: 'info',
+    severity: 'success',
+    color: 'success',
     icon: <Chat fontSize="small" />
   }
 };
 
 const getNotificationVariant = (type) => notificationVariants[type] || notificationVariants.NewTask;
 
+function isLeftStackNotification(type) {
+  return type === 'ChatMessage' || type === 'TaskCommentAdded';
+}
+
+function isOpenableNotification(type) {
+  return type === 'ChatMessage' || type === 'TaskCommentAdded';
+}
+
 export default function PushNotificationSnackbars({ notifications, onClose, onOpen }) {
-  let chatStackIndex = 0;
+  let leftStackIndex = 0;
   let taskStackIndex = 0;
 
   return (
@@ -55,7 +68,10 @@ export default function PushNotificationSnackbars({ notifications, onClose, onOp
       {notifications.map((notification) => {
         const variant = getNotificationVariant(notification.type);
         const isChat = notification.type === 'ChatMessage';
-        const stackIndex = isChat ? chatStackIndex++ : taskStackIndex++;
+        const isComment = notification.type === 'TaskCommentAdded';
+        const canOpen = Boolean(onOpen) && isOpenableNotification(notification.type);
+        const isLeft = isLeftStackNotification(notification.type);
+        const stackIndex = isLeft ? leftStackIndex++ : taskStackIndex++;
 
         return (
           <Snackbar
@@ -70,14 +86,14 @@ export default function PushNotificationSnackbars({ notifications, onClose, onOp
             }}
             anchorOrigin={{
               vertical: 'bottom',
-              horizontal: isChat ? 'left' : 'right'
+              horizontal: isLeft ? 'left' : 'right'
             }}
             sx={{
               bottom: {
                 xs: 16 + stackIndex * SNACKBAR_HEIGHT,
                 sm: 24 + stackIndex * SNACKBAR_HEIGHT
               },
-              ...(isChat
+              ...(isLeft
                 ? { left: { xs: 16, sm: 24 }, right: 'auto' }
                 : { right: { xs: 16, sm: 24 }, left: 'auto' }),
               zIndex: (theme) => theme.zIndex.snackbar + stackIndex
@@ -88,13 +104,13 @@ export default function PushNotificationSnackbars({ notifications, onClose, onOp
               variant="toast"
               onClose={() => onClose(notification.id)}
               icon={variant.icon}
-              onClick={isChat && onOpen ? () => onOpen(notification) : undefined}
+              onClick={canOpen ? () => onOpen(notification) : undefined}
               sx={(theme) => ({
                 ...toastAlertThemeStyles(theme, variant.color),
                 minWidth: 280,
                 maxWidth: 380,
                 alignItems: 'flex-start',
-                cursor: isChat && onOpen ? 'pointer' : 'default',
+                cursor: canOpen ? 'pointer' : 'default',
                 '& .MuiAlert-message': { padding: 0, width: '100%' },
                 '& .MuiAlert-icon': { mt: 0.25 }
               })}
@@ -104,14 +120,16 @@ export default function PushNotificationSnackbars({ notifications, onClose, onOp
                   size="small"
                   label={variant.chip}
                   color={variant.color}
-                  variant="outlined"
+                  variant="filled"
                   sx={(theme) => ({
                     height: 22,
                     fontSize: '0.68rem',
                     fontWeight: 700,
-                    color: theme.palette.common.white,
-                    bgcolor: alpha(theme.palette[variant.color]?.main || theme.palette.primary.main, 0.18),
-                    borderColor: alpha(theme.palette[variant.color]?.main || theme.palette.primary.main, 0.72)
+                    color: theme.palette.getContrastText(
+                      theme.palette[variant.color]?.main || theme.palette.primary.main
+                    ),
+                    bgcolor: theme.palette[variant.color]?.main || theme.palette.primary.main,
+                    borderColor: 'transparent'
                   })}
                 />
               </Box>
@@ -147,6 +165,38 @@ export default function PushNotificationSnackbars({ notifications, onClose, onOp
                       }}
                     >
                       Открыть чат
+                    </Button>
+                  )}
+                </>
+              ) : isComment ? (
+                <>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: 'rgba(255, 255, 255, 0.78)', display: 'block', mb: canOpen ? 1 : 0 }}
+                  >
+                    В комментарии к задаче появилась запись
+                  </Typography>
+                  {canOpen && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="inherit"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpen(notification);
+                      }}
+                      sx={{
+                        borderColor: 'rgba(255,255,255,0.35)',
+                        color: 'common.white',
+                        fontSize: '0.72rem',
+                        py: 0.25,
+                        '&:hover': {
+                          borderColor: 'rgba(255,255,255,0.6)',
+                          bgcolor: 'rgba(255,255,255,0.08)'
+                        }
+                      }}
+                    >
+                      Открыть
                     </Button>
                   )}
                 </>

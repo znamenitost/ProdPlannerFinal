@@ -23,6 +23,7 @@ public class ProductionTasksController : ControllerBase
     private readonly IProductionTaskRepository _repo;
     private readonly IPlanningWarningService _planningWarnings;
     private readonly IAppTimeService _timeService;
+    private readonly ITaskCommentService _taskComments;
 
     public ProductionTasksController(
         ILogger<ProductionTasksController> logger,
@@ -30,7 +31,8 @@ public class ProductionTasksController : ControllerBase
         ITaskTableService tableService,
         IProductionTaskRepository repo,
         IPlanningWarningService planningWarnings,
-        IAppTimeService timeService)
+        IAppTimeService timeService,
+        ITaskCommentService taskComments)
     {
         _logger = logger;
         _userManager = userManager;
@@ -38,6 +40,7 @@ public class ProductionTasksController : ControllerBase
         _repo = repo;
         _planningWarnings = planningWarnings;
         _timeService = timeService;
+        _taskComments = taskComments;
     }
 
     private async Task<(User? User, string? TargetEmployee)> ResolveViewerAsync(
@@ -78,6 +81,7 @@ public class ProductionTasksController : ControllerBase
                 excludeCompleted,
                 search,
                 isAdmin,
+                currentUser.Id,
                 cancellationToken);
             return Ok(result);
         }
@@ -100,7 +104,12 @@ public class ProductionTasksController : ControllerBase
             if (currentUser == null) return Unauthorized();
             var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
 
-            var row = await _tableService.GetRowDtoAsync(id, targetEmployeeName!, isAdmin, cancellationToken);
+            var row = await _tableService.GetRowDtoAsync(
+                id,
+                targetEmployeeName!,
+                isAdmin,
+                currentUser.Id,
+                cancellationToken);
             if (row == null)
                 return NotFound();
 
@@ -180,14 +189,115 @@ public class ProductionTasksController : ControllerBase
     {
         try
         {
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null) return Unauthorized();
+
             var result = await _tableService.CreateRowAsync(request, cancellationToken);
             if (result.Error != null)
                 return BadRequest(new { error = result.Error });
+
+            if (!string.IsNullOrWhiteSpace(request.Comment))
+            {
+                await _taskComments.SeedInitialCommentAsync(
+                    result.Data!,
+                    currentUser,
+                    authorIsAdmin: true,
+                    cancellationToken);
+            }
+
             return Ok(await BuildSaveResponseAsync(result.Data!, request.Parts, cancellationToken));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка в CreateTableRow");
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("table/row/{id}/comments")]
+    public async Task<IActionResult> GetTaskComments(int id, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null) return Unauthorized();
+            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+
+            var result = await _taskComments.GetCommentsAsync(id, currentUser, isAdmin, cancellationToken);
+            if (result == null) return NotFound();
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в GetTaskComments для id {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("table/row/{id}/comments")]
+    public async Task<IActionResult> AddTaskComment(
+        int id,
+        [FromBody] AddTaskCommentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null) return Unauthorized();
+            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+
+            var created = await _taskComments.AddCommentAsync(
+                id,
+                currentUser,
+                isAdmin,
+                request,
+                cancellationToken);
+            if (created == null) return NotFound();
+            return Ok(created);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в AddTaskComment для id {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpDelete("table/row/{id}/comments/{commentId:long}")]
+    public async Task<IActionResult> DeleteTaskComment(
+        int id,
+        long commentId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null) return Unauthorized();
+            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+
+            var deleted = await _taskComments.DeleteCommentAsync(
+                id,
+                commentId,
+                currentUser,
+                isAdmin,
+                cancellationToken);
+            if (!deleted) return NotFound();
+            return Ok();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в DeleteTaskComment для id {Id}, comment {CommentId}", id, commentId);
             return StatusCode(500, new { error = ex.Message });
         }
     }
@@ -211,7 +321,12 @@ public class ProductionTasksController : ControllerBase
 
             if (!isAdmin)
             {
-                var task = await _tableService.GetRowDtoAsync(id, currentUser.FullName, viewerIsAdmin: false, cancellationToken);
+                var task = await _tableService.GetRowDtoAsync(
+                    id,
+                    currentUser.FullName,
+                    viewerIsAdmin: false,
+                    viewerUserId: currentUser.Id,
+                    cancellationToken: cancellationToken);
                 if (task == null) return NotFound();
 
                 var isOwnTask = string.Equals(task.EmployeeName, currentUser.FullName, StringComparison.Ordinal)

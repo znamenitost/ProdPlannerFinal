@@ -68,6 +68,8 @@ namespace ProductionPlanner.Data
         public DbSet<ChatReadState> ChatReadStates { get; set; }
         public DbSet<ChatAttachment> ChatAttachments { get; set; }
         public DbSet<WebPushSubscription> WebPushSubscriptions { get; set; }
+        public DbSet<TaskComment> TaskComments { get; set; }
+        public DbSet<TaskCommentReadState> TaskCommentReadStates { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -184,6 +186,28 @@ namespace ProductionPlanner.Data
                 entity.Property(s => s.Endpoint).HasMaxLength(2048);
                 entity.Property(s => s.P256dh).HasMaxLength(256);
                 entity.Property(s => s.Auth).HasMaxLength(128);
+            });
+
+            modelBuilder.Entity<TaskComment>(entity =>
+            {
+                entity.ToTable("TaskComments");
+                entity.HasOne(c => c.ProductionTask)
+                    .WithMany()
+                    .HasForeignKey(c => c.ProductionTaskId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(c => new { c.ProductionTaskId, c.Id });
+                entity.Property(c => c.AuthorUserId).HasMaxLength(450);
+                entity.Property(c => c.AuthorName).HasMaxLength(100);
+                entity.Property(c => c.Text).HasMaxLength(4000);
+                entity.Property(c => c.RecipientUserId).HasMaxLength(450);
+                entity.Property(c => c.RecipientName).HasMaxLength(100);
+            });
+
+            modelBuilder.Entity<TaskCommentReadState>(entity =>
+            {
+                entity.ToTable("TaskCommentReadStates");
+                entity.HasIndex(r => new { r.UserId, r.ProductionTaskId }).IsUnique();
+                entity.Property(r => r.UserId).HasMaxLength(450);
             });
 
             modelBuilder.Entity<WorkInterval>()

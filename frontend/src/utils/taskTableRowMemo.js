@@ -23,6 +23,7 @@ function sameChildren(a, b) {
     if (a[i].statusText !== b[i].statusText) return false;
     if (a[i].comment !== b[i].comment) return false;
     if (a[i].commentEditedViaDialog !== b[i].commentEditedViaDialog) return false;
+    if (a[i].commentBadgeCount !== b[i].commentBadgeCount) return false;
     if (a[i].isPriorityMarked !== b[i].isPriorityMarked) return false;
     if (workIntervalsKey(a[i]) !== workIntervalsKey(b[i])) return false;
     if (a[i].plannedTimeProgress !== b[i].plannedTimeProgress) return false;
@@ -50,6 +51,7 @@ export function areParentRowPropsEqual(prev, next) {
   if (prev.task.folderPath !== next.task.folderPath) return false;
   if (prev.task.comment !== next.task.comment) return false;
   if (prev.task.commentEditedViaDialog !== next.task.commentEditedViaDialog) return false;
+  if (prev.task.commentBadgeCount !== next.task.commentBadgeCount) return false;
   if (prev.task.hasCdrPreview !== next.task.hasCdrPreview) return false;
   if (prev.isCdrPreviewBuilding?.(prev.task.id) !== next.isCdrPreviewBuilding?.(next.task.id)) return false;
   if (
@@ -90,6 +92,8 @@ export function areParentRowPropsEqual(prev, next) {
     prev.onOpenComment === next.onOpenComment &&
     prev.onOpenIntervals === next.onOpenIntervals &&
     prev.isCdrPreviewBuilding === next.isCdrPreviewBuilding &&
+    prev.forceCommentTooltipTaskId === next.forceCommentTooltipTaskId &&
+    prev.onForceCommentTooltipClose === next.onForceCommentTooltipClose &&
     prev.currentUser === next.currentUser
   );
 }
@@ -100,6 +104,7 @@ export function areChildRowPropsEqual(prev, next) {
   if (prev.task.statusText !== next.task.statusText) return false;
   if (prev.task.comment !== next.task.comment) return false;
   if (prev.task.commentEditedViaDialog !== next.task.commentEditedViaDialog) return false;
+  if (prev.task.commentBadgeCount !== next.task.commentBadgeCount) return false;
   if (prev.task.isPriorityMarked !== next.task.isPriorityMarked) return false;
   if ((prev.task.workIntervals?.length ?? 0) !== (next.task.workIntervals?.length ?? 0)) return false;
   if (workIntervalsKey(prev.task) !== workIntervalsKey(next.task)) return false;
@@ -138,6 +143,8 @@ export function areChildRowPropsEqual(prev, next) {
     prev.onComplete === next.onComplete &&
     prev.onOpenComment === next.onOpenComment &&
     prev.onOpenIntervals === next.onOpenIntervals &&
+    prev.forceCommentTooltipTaskId === next.forceCommentTooltipTaskId &&
+    prev.onForceCommentTooltipClose === next.onForceCommentTooltipClose &&
     prev.currentUser === next.currentUser
   );
 }

@@ -175,6 +175,59 @@ public class TaskNotificationService : ITaskNotificationService
             "SequentialStageReady");
     }
 
+    public async Task NotifyTaskCommentAddedAsync(
+        ProductionTask task,
+        string authorUserId,
+        string? recipientUserId)
+    {
+        var taskTitle = GetNotificationTitle(task);
+        var title = $"+1 · {taskTitle}";
+
+        IReadOnlyList<string> recipientIds;
+        if (!string.IsNullOrWhiteSpace(recipientUserId))
+        {
+            recipientIds = string.Equals(recipientUserId, authorUserId, StringComparison.Ordinal)
+                ? Array.Empty<string>()
+                : new[] { recipientUserId };
+        }
+        else
+        {
+            recipientIds = await _userManager.Users
+                .AsNoTracking()
+                .Where(u => u.IsActive
+                    && u.Id != authorUserId
+                    && (u.Role == "Admin" || u.Role == "Employee"))
+                .Select(u => u.Id)
+                .ToListAsync();
+        }
+
+        foreach (var userId in recipientIds)
+        {
+            var notificationId = await _inbox.EnqueueTaskCommentAddedAsync(
+                userId,
+                task.Id,
+                title,
+                task.Deadline);
+
+            await SendToGroupsAsync(
+                [userId],
+                "NewTask",
+                notificationId,
+                task.Id,
+                title,
+                task.Deadline,
+                "TaskCommentAdded");
+        }
+
+        await _dataSync.BroadcastAsync(
+            "TaskUpdated",
+            AffectedEmployees(task.EmployeeName),
+            task.Id,
+            taskTitle,
+            task.Deadline,
+            AffectedEmployees(task.EmployeeName));
+    }
+
     private Task SendToGroupsAsync(IReadOnlyList<string> groups, string method, params object?[] args)
     {
         if (groups.Count == 0)

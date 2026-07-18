@@ -9,7 +9,14 @@ export const ICON_SLOT_FILE = { width: 32, minWidth: 32, flexShrink: 0, display:
 export const TEXT_LIMIT_COLUMN_WIDTH = 'var(--task-table-text-limit-width, 23ch)';
 export const COL_TASK = { minWidth: 140, width: TEXT_LIMIT_COLUMN_WIDTH, maxWidth: TEXT_LIMIT_COLUMN_WIDTH, whiteSpace: 'nowrap', verticalAlign: 'middle' };
 export const COL_FILE = { minWidth: 100, width: TEXT_LIMIT_COLUMN_WIDTH, maxWidth: TEXT_LIMIT_COLUMN_WIDTH, whiteSpace: 'nowrap', verticalAlign: 'middle' };
-export const COL_COMMENT = { minWidth: 64, width: TEXT_LIMIT_COLUMN_WIDTH, maxWidth: TEXT_LIMIT_COLUMN_WIDTH, whiteSpace: 'normal', verticalAlign: 'middle' };
+export const COL_COMMENT = {
+  minWidth: 72,
+  width: TEXT_LIMIT_COLUMN_WIDTH,
+  maxWidth: TEXT_LIMIT_COLUMN_WIDTH,
+  whiteSpace: 'normal',
+  verticalAlign: 'middle',
+  overflow: 'visible'
+};
 export const COL_DEADLINE = { width: '1%', minWidth: 72, maxWidth: 88, whiteSpace: 'nowrap', verticalAlign: 'middle' };
 
 /** Дедлайн в строке создания/редактирования: дата DD.MM.YYYY + кнопка календаря */

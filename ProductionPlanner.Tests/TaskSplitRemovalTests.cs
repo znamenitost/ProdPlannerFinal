@@ -273,6 +273,8 @@ public class TaskSplitRemovalTests
         public Task NotifyProgressChangedAsync(ProductionTask task, double progress) => Task.CompletedTask;
         public Task NotifyTaskReadyToStartAsync(ProductionTask task, JobStatus readyStatus) => Task.CompletedTask;
         public Task NotifySequentialStageReadyAsync(ProductionTask task, int stageNumber) => Task.CompletedTask;
+        public Task NotifyTaskCommentAddedAsync(ProductionTask task, string authorUserId, string? recipientUserId) =>
+            Task.CompletedTask;
     }
 
     private sealed class PassthroughWorkHoursCalculator : IWorkHoursCalculator

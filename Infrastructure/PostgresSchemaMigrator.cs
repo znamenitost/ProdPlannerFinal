@@ -40,6 +40,7 @@ public static class PostgresSchemaMigrator
         await ApplyAppSettingsPatchAsync(db, logger, cancellationToken);
         await ApplyMaxMessengerPatchAsync(db, logger, cancellationToken);
         await ApplyChatTablesPatchAsync(db, logger, cancellationToken);
+        await ApplyTaskCommentsPatchAsync(db, logger, cancellationToken);
         await ApplyWebPushSubscriptionsPatchAsync(db, logger, cancellationToken);
         await ApplyPhase2PerformanceIndexesPatchAsync(db, logger, cancellationToken);
     }
@@ -378,6 +379,148 @@ public static class PostgresSchemaMigrator
         catch (Exception ex)
         {
             logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (Chat)");
+            throw;
+        }
+    }
+
+    private static async Task ApplyTaskCommentsPatchAsync(
+        ApplicationDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "TaskComments" (
+                    "Id" bigserial NOT NULL,
+                    "ProductionTaskId" integer NOT NULL,
+                    "AuthorUserId" character varying(450) NOT NULL,
+                    "AuthorName" character varying(100) NOT NULL,
+                    "AuthorIsAdmin" boolean NOT NULL,
+                    "Text" character varying(4000) NOT NULL,
+                    "RecipientUserId" character varying(450) NULL,
+                    "RecipientName" character varying(100) NULL,
+                    "ReplyToCommentId" bigint NULL,
+                    "IsBaseline" boolean NOT NULL DEFAULT FALSE,
+                    "CreatedAt" timestamp with time zone NOT NULL,
+                    CONSTRAINT "PK_TaskComments" PRIMARY KEY ("Id"),
+                    CONSTRAINT "FK_TaskComments_ProductionTasks_ProductionTaskId"
+                        FOREIGN KEY ("ProductionTaskId") REFERENCES "ProductionTasks" ("Id") ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS "IX_TaskComments_ProductionTaskId_Id"
+                    ON "TaskComments" ("ProductionTaskId", "Id");
+
+                ALTER TABLE "TaskComments"
+                    ADD COLUMN IF NOT EXISTS "IsBaseline" boolean NOT NULL DEFAULT FALSE;
+                """, cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "TaskComments" (
+                    "ProductionTaskId",
+                    "AuthorUserId",
+                    "AuthorName",
+                    "AuthorIsAdmin",
+                    "Text",
+                    "RecipientUserId",
+                    "RecipientName",
+                    "ReplyToCommentId",
+                    "IsBaseline",
+                    "CreatedAt"
+                )
+                SELECT
+                    t."Id",
+                    COALESCE(
+                        (
+                            SELECT u."Id"
+                            FROM "Users" u
+                            WHERE u."Role" = 'Admin' AND u."IsActive" = TRUE
+                            ORDER BY u."CreatedAt"
+                            LIMIT 1
+                        ),
+                        ''
+                    ),
+                    COALESCE(
+                        (
+                            SELECT u."FullName"
+                            FROM "Users" u
+                            WHERE u."Role" = 'Admin' AND u."IsActive" = TRUE
+                            ORDER BY u."CreatedAt"
+                            LIMIT 1
+                        ),
+                        'Админ'
+                    ),
+                    TRUE,
+                    TRIM(t."Comment"),
+                    NULL,
+                    NULL,
+                    NULL,
+                    TRUE,
+                    COALESCE(t."CreatedAt", NOW())
+                FROM "ProductionTasks" t
+                WHERE TRIM(COALESCE(t."Comment", '')) <> ''
+                  AND NOT EXISTS (
+                      SELECT 1 FROM "TaskComments" c WHERE c."ProductionTaskId" = t."Id"
+                  );
+                """, cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                UPDATE "TaskComments" AS c
+                SET "IsBaseline" = TRUE
+                WHERE c."Id" IN (
+                    SELECT MIN(c2."Id")
+                    FROM "TaskComments" AS c2
+                    GROUP BY c2."ProductionTaskId"
+                )
+                AND COALESCE(c."RecipientUserId", '') = ''
+                AND c."ReplyToCommentId" IS NULL;
+                """, cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "TaskCommentReadStates" (
+                    "Id" bigserial NOT NULL,
+                    "UserId" character varying(450) NOT NULL,
+                    "ProductionTaskId" integer NOT NULL,
+                    "LastReadCommentId" bigint NOT NULL,
+                    "UpdatedAt" timestamp with time zone NOT NULL,
+                    CONSTRAINT "PK_TaskCommentReadStates" PRIMARY KEY ("Id")
+                );
+
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_TaskCommentReadStates_UserId_ProductionTaskId"
+                    ON "TaskCommentReadStates" ("UserId", "ProductionTaskId");
+                """, cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                SELECT '20260718120000_AddTaskComments', '10.0.7'
+                WHERE EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '__EFMigrationsHistory'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM "__EFMigrationsHistory"
+                    WHERE "MigrationId" = '20260718120000_AddTaskComments'
+                );
+                """, cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                SELECT '20260718140000_AddTaskCommentIsBaseline', '10.0.7'
+                WHERE EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '__EFMigrationsHistory'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM "__EFMigrationsHistory"
+                    WHERE "MigrationId" = '20260718140000_AddTaskCommentIsBaseline'
+                );
+                """, cancellationToken);
+
+            logger.LogInformation("Таблицы TaskComments / TaskCommentReadStates проверены/созданы (PostgreSQL).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (TaskComments)");
             throw;
         }
     }

@@ -16,6 +16,7 @@ public class TaskTableService : ITaskTableService
     private readonly IWorkHoursCalculator _workHours;
     private readonly IEmployeeStatsService _statsService;
     private readonly ITaskCdrPreviewService _cdrPreviewService;
+    private readonly ITaskCommentService _taskComments;
 
     public TaskTableService(
         IProductionTaskRepository repo,
@@ -25,7 +26,8 @@ public class TaskTableService : ITaskTableService
         ITaskSplitService splitService,
         IWorkHoursCalculator workHours,
         IEmployeeStatsService statsService,
-        ITaskCdrPreviewService cdrPreviewService)
+        ITaskCdrPreviewService cdrPreviewService,
+        ITaskCommentService taskComments)
     {
         _repo = repo;
         _lifecycle = lifecycle;
@@ -35,6 +37,7 @@ public class TaskTableService : ITaskTableService
         _workHours = workHours;
         _statsService = statsService;
         _cdrPreviewService = cdrPreviewService;
+        _taskComments = taskComments;
     }
 
     /// <summary>
@@ -64,6 +67,7 @@ public class TaskTableService : ITaskTableService
         bool excludeCompleted = false,
         string? search = null,
         bool viewerIsAdmin = true,
+        string? viewerUserId = null,
         CancellationToken cancellationToken = default)
     {
         var pageResult = await _repo.GetRootTasksPaginatedAsync(
@@ -125,6 +129,8 @@ public class TaskTableService : ITaskTableService
             return dto;
         }).ToList();
 
+        await ApplyCommentBadgeCountsAsync(rows, viewerUserId, cancellationToken);
+
         return new PaginatedResult<TaskTableRowDto>
         {
             Items = rows,
@@ -138,6 +144,7 @@ public class TaskTableService : ITaskTableService
         int id,
         string targetEmployeeName,
         bool viewerIsAdmin = true,
+        string? viewerUserId = null,
         CancellationToken cancellationToken = default)
     {
         var task = await _repo.GetTaskByIdAsync(id, cancellationToken, includeIntervals: true);
@@ -172,6 +179,7 @@ public class TaskTableService : ITaskTableService
             dto.SequenceStartBlocked = parent?.SupplyMode == SupplyMode.InternalProduction
                 && task.Status == JobStatus.Waiting;
             dto.HasCdrPreview = hasCdrPreview;
+            await ApplyCommentBadgeCountsAsync([dto], viewerUserId, cancellationToken);
             return dto;
         }
 
@@ -204,7 +212,28 @@ public class TaskTableService : ITaskTableService
             priorityMarkViewer,
             restrictPriorityMark);
         parentDto.HasCdrPreview = hasCdrPreview;
+        await ApplyCommentBadgeCountsAsync([parentDto], viewerUserId, cancellationToken);
         return parentDto;
+    }
+
+    private async Task ApplyCommentBadgeCountsAsync(
+        IReadOnlyList<TaskTableRowDto> rows,
+        string? viewerUserId,
+        CancellationToken cancellationToken)
+    {
+        if (rows.Count == 0 || string.IsNullOrWhiteSpace(viewerUserId))
+            return;
+
+        var counts = await _taskComments.GetUnreadBadgeCountsAsync(
+            rows.Select(r => r.Id).ToList(),
+            viewerUserId,
+            cancellationToken);
+
+        foreach (var row in rows)
+        {
+            if (counts.TryGetValue(row.Id, out var count))
+                row.CommentBadgeCount = count;
+        }
     }
 
     public async Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(

@@ -116,7 +116,9 @@ export default function TaskTable({
   selectedEmployeeForHighlight,
   maxSubscribedTaskIds = [],
   maxCanSubscribe = false,
-  onMaxSubscribeToggle
+  onMaxSubscribeToggle,
+  focusCommentTooltipTaskId = null,
+  onFocusCommentTooltipConsumed
 }) {
   const isAdmin = userRole === 'Admin';
   const tableContainerRef = useRef(null);
@@ -222,6 +224,93 @@ export default function TaskTable({
     return () => window.clearTimeout(timer);
   }, [hideCompletedInSharedSort, visibleRows, table.loadChildrenForParent]);
 
+  const handleForceCommentTooltipClose = useCallback(() => {
+    onFocusCommentTooltipConsumed?.();
+  }, [onFocusCommentTooltipConsumed]);
+
+  useEffect(() => {
+    const taskId = Number(focusCommentTooltipTaskId);
+    if (!Number.isFinite(taskId) || taskId <= 0) return undefined;
+
+    let cancelled = false;
+    const cellExists = () => Boolean(document.querySelector(`[data-task-comment-cell="${taskId}"]`));
+
+    const openDialogFallback = async () => {
+      try {
+        const row = await table.api.fetchTableRow(taskId, selectedEmployeeForHighlight || '');
+        if (cancelled || !row) {
+          onFocusCommentTooltipConsumed?.();
+          return;
+        }
+        table.handleOpenComment(row);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (!cancelled) onFocusCommentTooltipConsumed?.();
+      }
+    };
+
+    (async () => {
+      if (cellExists()) return;
+
+      const onPage = visibleRows.some((row) => row.id === taskId);
+      if (onPage) return;
+
+      for (const [parentId, children] of table.childrenCache.entries()) {
+        if (!children.some((child) => child.id === taskId)) continue;
+        if (!table.expandedRows.has(parentId)) {
+          await table.loadChildrenForParent(parentId, { force: true });
+          if (cancelled) return;
+          table.expandParent(parentId);
+        }
+        return;
+      }
+
+      // Wait for table data after tab switch; effect re-runs when rows arrive.
+      if (visibleRows.length === 0 && table.totalCount === 0) {
+        return;
+      }
+
+      try {
+        const row = await table.api.fetchTableRow(taskId, selectedEmployeeForHighlight || '');
+        if (cancelled || !row) {
+          onFocusCommentTooltipConsumed?.();
+          return;
+        }
+        const parentId = row.parentRowNumber;
+        if (parentId) {
+          const parentOnPage = visibleRows.some((r) => r.id === parentId);
+          if (parentOnPage) {
+            await table.loadChildrenForParent(parentId, { force: true });
+            if (cancelled) return;
+            table.expandParent(parentId);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      }
+
+      if (!cancelled) await openDialogFallback();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    focusCommentTooltipTaskId,
+    onFocusCommentTooltipConsumed,
+    selectedEmployeeForHighlight,
+    table.api,
+    table.childrenCache,
+    table.expandParent,
+    table.expandedRows,
+    table.handleOpenComment,
+    table.loadChildrenForParent,
+    table.totalCount,
+    visibleRows
+  ]);
+
   const tableColSpan = taskTableColumnCount(
     columnSettings.visibility,
     table.showHoursTypeColumns
@@ -314,6 +403,38 @@ export default function TaskTable({
     return () => window.clearTimeout(timer);
   }, [rowVirtualizer, columnSettings.textLimit]);
 
+  useEffect(() => {
+    const taskId = Number(focusCommentTooltipTaskId);
+    if (!Number.isFinite(taskId) || taskId <= 0) return undefined;
+
+    let index = visibleRows.findIndex((row) => row.id === taskId);
+    if (index < 0) {
+      index = visibleRows.findIndex((row) => {
+        const children = table.childrenCache.get(row.id) || [];
+        return children.some((child) => child.id === taskId);
+      });
+    }
+    if (index < 0) return undefined;
+
+    if (shouldVirtualize) {
+      rowVirtualizer.scrollToIndex(index, { align: 'center' });
+    }
+
+    const timer = window.setTimeout(() => {
+      document
+        .querySelector(`[data-task-comment-cell="${taskId}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, shouldVirtualize ? 80 : 0);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    focusCommentTooltipTaskId,
+    rowVirtualizer,
+    shouldVirtualize,
+    table.childrenCache,
+    visibleRows
+  ]);
+
   const virtualRows = rowVirtualizer.getVirtualItems();
   const topPadding = virtualRows.length > 0 ? virtualRows[0].start - scrollMargin : 0;
   const bottomPadding =
@@ -395,6 +516,8 @@ export default function TaskTable({
         maxSubscribedTaskIds={isAdmin ? maxSubscribedTaskIds : []}
         maxCanSubscribe={isAdmin && maxCanSubscribe}
         onMaxSubscribeToggle={isAdmin ? onMaxSubscribeToggle : undefined}
+        forceCommentTooltipTaskId={focusCommentTooltipTaskId}
+        onForceCommentTooltipClose={handleForceCommentTooltipClose}
       />
     );
   };
@@ -505,9 +628,9 @@ export default function TaskTable({
 
       <CommentDialog
         open={table.commentDialogOpen}
-        comment={table.selectedCommentTask?.comment || ''}
+        task={table.selectedCommentTask}
         pending={table.commentSaving}
-        onSave={table.handleSaveComment}
+        onChanged={table.handleCommentChanged}
         onClose={() => table.setCommentDialogOpen(false)}
       />
       {DEV_CDR_PREVIEW_ENABLED && (

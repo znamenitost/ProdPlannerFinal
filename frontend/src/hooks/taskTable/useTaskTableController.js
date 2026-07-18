@@ -386,7 +386,7 @@ export default function useTaskTableController({
     handleOpenIntervals,
     handleCloseIntervals,
     handleSaveIntervals,
-    handleSaveComment: modals.handleSaveComment,
+    handleCommentChanged: modals.handleCommentChanged,
     commentSaving: modals.commentSaving,
     planningWarnings,
     dismissPlanningWarning

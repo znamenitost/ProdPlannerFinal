@@ -64,7 +64,9 @@ function ChildTaskRow({
   cdrPreviewBuilding = false,
   maxSubscribed = false,
   maxCanSubscribe = false,
-  onMaxSubscribeToggle
+  onMaxSubscribeToggle,
+  forceCommentTooltipTaskId = null,
+  onForceCommentTooltipClose
 }) {
   const supplyMode = getSplitSupplyMode(task, sharedGroupParentTask);
   const isSequentialChild = supplyMode === SUPPLY_MODE_INTERNAL;
@@ -173,7 +175,13 @@ function ChildTaskRow({
       </TableCell>
 
       <TableCell sx={columnCellSx('comment', columnVisibility, showHoursTypeColumns, COL_COMMENT)}>
-        <TaskCommentCell task={task} onOpenComment={onOpenComment} iconButtonColor="primary" />
+        <TaskCommentCell
+          task={task}
+          onOpenComment={onOpenComment}
+          iconButtonColor="primary"
+          forceTooltipOpen={forceCommentTooltipTaskId === task.id}
+          onForceTooltipClose={onForceCommentTooltipClose}
+        />
       </TableCell>
 
       <TableCell sx={columnCellSx('deadline', columnVisibility, showHoursTypeColumns, COL_DEADLINE)}>

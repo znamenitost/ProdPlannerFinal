@@ -333,6 +333,38 @@ export async function getChatContacts(options = {}) {
   return res.json();
 }
 
+export async function getTaskComments(taskId) {
+  const res = await fetch(`${API_BASE}/tasks/table/row/${taskId}/comments`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  await throwIfNotOk(res, 'Не удалось загрузить комментарии');
+  return res.json();
+}
+
+export async function addTaskComment(taskId, { text, recipientUserId = null, replyToCommentId = null } = {}) {
+  const res = await fetch(`${API_BASE}/tasks/table/row/${taskId}/comments`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: text ?? '',
+      recipientUserId: recipientUserId || null,
+      replyToCommentId: replyToCommentId || null
+    })
+  });
+  await throwIfNotOk(res, 'Не удалось добавить комментарий');
+  return res.json();
+}
+
+export async function deleteTaskComment(taskId, commentId) {
+  const res = await fetch(`${API_BASE}/tasks/table/row/${taskId}/comments/${commentId}`, {
+    method: 'DELETE',
+    credentials: 'include'
+  });
+  await throwIfNotOk(res, 'Не удалось удалить комментарий');
+}
+
 export async function getChatConversations(options = {}) {
   const res = await fetch(`${API_BASE}/chat/conversations`, {
     credentials: 'include',

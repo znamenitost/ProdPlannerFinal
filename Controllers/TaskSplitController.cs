@@ -21,6 +21,7 @@ namespace ProductionPlanner.Controllers
         private readonly IPlanningWarningService _planningWarnings;
         private readonly UserManager<User> _userManager;
         private readonly ITaskCdrPreviewService _cdrPreviewService;
+        private readonly ITaskCommentService _taskComments;
 
         public TaskSplitController(
             ITaskSplitService splitService,
@@ -28,7 +29,8 @@ namespace ProductionPlanner.Controllers
             IAppTimeService timeService,
             IPlanningWarningService planningWarnings,
             UserManager<User> userManager,
-            ITaskCdrPreviewService cdrPreviewService)
+            ITaskCdrPreviewService cdrPreviewService,
+            ITaskCommentService taskComments)
         {
             _splitService = splitService;
             _repo = repo;
@@ -36,6 +38,7 @@ namespace ProductionPlanner.Controllers
             _planningWarnings = planningWarnings;
             _userManager = userManager;
             _cdrPreviewService = cdrPreviewService;
+            _taskComments = taskComments;
         }
 
         [HttpPost]
@@ -118,6 +121,10 @@ namespace ProductionPlanner.Controllers
             var intervalsByTask = (await _repo.GetWorkIntervalsForTaskIdsAsync(childIds, cancellationToken))
                 .GroupBy(i => i.ProductionTaskId)
                 .ToDictionary(g => g.Key, g => g.ToList());
+            var badgeCounts = await _taskComments.GetUnreadBadgeCountsAsync(
+                childIds,
+                currentUser.Id,
+                cancellationToken);
 
             var result = children.Select(c =>
             {
@@ -132,6 +139,7 @@ namespace ProductionPlanner.Controllers
                     c.FileName,
                     c.Comment,
                     commentEditedViaDialog = c.CommentEditedViaDialog,
+                    commentBadgeCount = badgeCounts.GetValueOrDefault(c.Id),
                     StatusText = TaskStatusMapper.ToText(c.Status),
                     status = (int)c.Status,
                     isPriorityMarked = c.IsPriorityMarked,
