@@ -70,6 +70,38 @@ public class TaskTypeStatsServiceTests
         Assert.Equal(now, result.CalculatedAt);
     }
 
+    [Fact]
+    public async Task Splits_comma_joined_types_into_atomic_buckets()
+    {
+        await using var db = CreateDb();
+        var now = new DateTime(2026, 7, 19, 15, 0, 0);
+
+        db.ProductionTasks.AddRange(
+            Task(1, "Резка, Сборка", JobStatus.Completed, actual: 10, isSplit: false, parent: null),
+            Task(2, "Резка", JobStatus.Completed, actual: 4, isSplit: false, parent: null),
+            // split parent with joined type — exclude
+            Task(10, "Резка, УФ Печать", JobStatus.Completed, actual: 99, isSplit: true, parent: null)
+        );
+        await db.SaveChangesAsync();
+
+        var svc = new TaskTypeStatsService(db, new FixedAppTimeService(now));
+        var result = await svc.GetCompletedLeafStatsAsync();
+
+        Assert.Equal(2, result.TotalTasks);
+        Assert.Equal(14, result.TotalActualHours, 3);
+        Assert.DoesNotContain(result.Items, i => i.Type.Contains(','));
+
+        var rezka = result.Items.Single(i => i.Type == "Резка");
+        Assert.Equal(2, rezka.TaskCount);
+        Assert.Equal(9, rezka.TotalActualHours, 3); // 10/2 + 4
+
+        var assembly = result.Items.Single(i => i.Type == "Сборка");
+        Assert.Equal(1, assembly.TaskCount);
+        Assert.Equal(5, assembly.TotalActualHours, 3); // 10/2
+
+        Assert.DoesNotContain(result.Items, i => i.Type == "УФ Печать");
+    }
+
     private static ProductionTask Task(
         int id,
         string type,
