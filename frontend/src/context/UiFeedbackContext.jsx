@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useRef, useState } from 'react'
 import {
   Alert,
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -28,6 +29,7 @@ export function UiFeedbackProvider({ children }) {
     open: false,
     message: '',
     severity: 'info',
+    loading: false,
   });
   const [confirmState, setConfirmState] = useState(defaultConfirmState);
   const [confirmInputValue, setConfirmInputValue] = useState('');
@@ -35,7 +37,15 @@ export function UiFeedbackProvider({ children }) {
   const confirmOpenRef = useRef(false);
 
   const showSnackbar = useCallback((message, severity = 'info') => {
-    setSnackbar({ open: true, message, severity });
+    setSnackbar({ open: true, message, severity, loading: false });
+  }, []);
+
+  const showLoading = useCallback((message) => {
+    setSnackbar({ open: true, message, severity: 'info', loading: true });
+  }, []);
+
+  const hideSnackbar = useCallback(() => {
+    setSnackbar((prev) => ({ ...prev, open: false, loading: false }));
   }, []);
 
   const showSuccess = useCallback((message) => showSnackbar(message, 'success'), [showSnackbar]);
@@ -86,11 +96,14 @@ export function UiFeedbackProvider({ children }) {
 
   const handleSnackbarClose = (_event, reason) => {
     if (reason === 'clickaway') return;
-    setSnackbar((prev) => ({ ...prev, open: false }));
+    if (snackbar.loading) return;
+    setSnackbar((prev) => ({ ...prev, open: false, loading: false }));
   };
 
   const value = {
     showSnackbar,
+    showLoading,
+    hideSnackbar,
     showSuccess,
     showError,
     showWarning,
@@ -105,14 +118,15 @@ export function UiFeedbackProvider({ children }) {
 
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={5000}
+        autoHideDuration={snackbar.loading ? null : 5000}
         onClose={handleSnackbarClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert
-          onClose={handleSnackbarClose}
+          onClose={snackbar.loading ? undefined : handleSnackbarClose}
           severity={snackbar.severity}
           variant="toast"
+          icon={snackbar.loading ? <CircularProgress size={18} color="inherit" /> : undefined}
         >
           {snackbar.message}
         </Alert>

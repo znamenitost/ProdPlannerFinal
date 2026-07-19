@@ -1,6 +1,10 @@
 import { useCallback, useMemo } from 'react';
-import { openFileOnClient } from '../utils/openFileOnClient';
-import { normalizePathForOpen, detectClientPlatform } from '../utils/filePathForOpen';
+import { openFileOnClient, openFolderOnClient } from '../utils/openFileOnClient';
+import { normalizePathForOpen, normalizeFolderPathForOpen, detectClientPlatform } from '../utils/filePathForOpen';
+import {
+  ensureFileOpenSettingsLoaded,
+  getFileOpenShareName
+} from '../utils/fileOpenSettingsCache';
 
 export default function useTaskTableApi() {
   const handleResponse = useCallback(async (response) => {
@@ -169,13 +173,26 @@ export default function useTaskTableApi() {
   }, [handleResponse, lifecycleUrl]);
 
   const openFile = useCallback(async (row) => {
-    const relativePath = normalizePathForOpen(row.folderPath, row.fileName);
+    await ensureFileOpenSettingsLoaded();
+    const relativePath = normalizePathForOpen(row.folderPath, row.fileName, getFileOpenShareName());
     if (!relativePath || relativePath === '/') {
       throw new Error('Путь к файлу не указан');
     }
     const result = await openFileOnClient(relativePath);
     if (!result.ok) {
       throw new Error(result.reason || 'Не удалось открыть файл');
+    }
+  }, []);
+
+  const openFolder = useCallback(async (row) => {
+    await ensureFileOpenSettingsLoaded();
+    const relativePath = normalizeFolderPathForOpen(row.folderPath, getFileOpenShareName());
+    if (!relativePath || relativePath === '/') {
+      throw new Error('Путь к папке не указан');
+    }
+    const result = await openFolderOnClient(relativePath);
+    if (!result.ok) {
+      throw new Error(result.reason || 'Не удалось открыть папку');
     }
   }, []);
 
@@ -210,9 +227,10 @@ export default function useTaskTableApi() {
     resumeTask,
     completeTask,
     openFile,
+    openFolder,
     getTaskForSplit,
     splitTask
-  }), [fetchTableRow, loadRows, loadChildren, createRow, updateRow, getIntervals, updateIntervals, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, getTaskForSplit, splitTask]);
+  }), [fetchTableRow, loadRows, loadChildren, createRow, updateRow, getIntervals, updateIntervals, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, openFolder, getTaskForSplit, splitTask]);
 
   return api;
 }

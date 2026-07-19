@@ -7,7 +7,7 @@ import {
 } from './cdrPreviewErrors';
 
 /** Получить netopen/smb URL с сервера (без HTML-страницы launch). */
-export async function resolveOpenUrl(relativePath) {
+export async function resolveOpenUrl(relativePath, { isDirectory = false } = {}) {
   try {
     const response = await fetch('/api/files/open', {
       method: 'POST',
@@ -15,7 +15,8 @@ export async function resolveOpenUrl(relativePath) {
       credentials: 'include',
       body: JSON.stringify({
         filePath: relativePath,
-        clientPlatform: detectClientPlatform()
+        clientPlatform: detectClientPlatform(),
+        isDirectory
       })
     });
 
@@ -23,20 +24,38 @@ export async function resolveOpenUrl(relativePath) {
       const text = (await response.text().catch(() => '')).trim();
       try {
         const body = JSON.parse(text);
-        return { ok: false, reason: body?.message || text || 'Не удалось сформировать ссылку на файл' };
+        return {
+          ok: false,
+          reason: body?.message || text || (isDirectory
+            ? 'Не удалось сформировать ссылку на папку'
+            : 'Не удалось сформировать ссылку на файл')
+        };
       } catch {
-        return { ok: false, reason: text || 'Не удалось сформировать ссылку на файл' };
+        return {
+          ok: false,
+          reason: text || (isDirectory
+            ? 'Не удалось сформировать ссылку на папку'
+            : 'Не удалось сформировать ссылку на файл')
+        };
       }
     }
 
     const data = await response.json();
     if (!data?.openUrl) {
-      return { ok: false, reason: 'Не удалось сформировать ссылку на файл' };
+      return {
+        ok: false,
+        reason: isDirectory
+          ? 'Не удалось сформировать ссылку на папку'
+          : 'Не удалось сформировать ссылку на файл'
+      };
     }
 
     return { ok: true, openUrl: data.openUrl };
   } catch (err) {
-    return { ok: false, reason: err?.message || 'Не удалось открыть файл' };
+    return {
+      ok: false,
+      reason: err?.message || (isDirectory ? 'Не удалось открыть папку' : 'Не удалось открыть файл')
+    };
   }
 }
 
@@ -58,9 +77,19 @@ export function triggerLaunch(openUrl, platform) {
   };
 }
 
-export async function openFileOnClient(relativePath) {
+function shouldFallbackToLaunch(agentError, isDirectory) {
+  if (shouldTryNetopenAfterAgentFailure(agentError)) return true;
+  // Старый агент отклоняет папки («path not allowed») — пробуем netopen/smb.
+  if (isDirectory && /path not allowed/i.test(String(agentError || ''))) return true;
+  return false;
+}
+
+export async function openFileOnClient(relativePath, { isDirectory = false } = {}) {
   if (!relativePath || relativePath === '/') {
-    return { ok: false, reason: 'Путь к файлу не указан' };
+    return {
+      ok: false,
+      reason: isDirectory ? 'Путь к папке не указан' : 'Путь к файлу не указан'
+    };
   }
 
   const platform = detectClientPlatform();
@@ -79,17 +108,22 @@ export async function openFileOnClient(relativePath) {
       agentError = err?.message || 'Не удалось связаться с агентом';
     }
 
-    if (agentError && !shouldTryNetopenAfterAgentFailure(agentError)) {
+    if (agentError && !shouldFallbackToLaunch(agentError, isDirectory)) {
       return { ok: false, reason: formatFileOpenError(agentError, agentUncPath) };
     }
   }
 
   const tryLaunch = platform === 'mac' || (platform === 'Win32' && agentError);
   if (!tryLaunch) {
-    return { ok: false, reason: 'Открытие файла не поддерживается на этой платформе' };
+    return {
+      ok: false,
+      reason: isDirectory
+        ? 'Открытие папки не поддерживается на этой платформе'
+        : 'Открытие файла не поддерживается на этой платформе'
+    };
   }
 
-  const resolved = await resolveOpenUrl(relativePath);
+  const resolved = await resolveOpenUrl(relativePath, { isDirectory });
   if (!resolved.ok) {
     return {
       ok: false,
@@ -106,4 +140,8 @@ export async function openFileOnClient(relativePath) {
   }
 
   return { ok: true, method: 'launch' };
+}
+
+export async function openFolderOnClient(relativePath) {
+  return openFileOnClient(relativePath, { isDirectory: true });
 }

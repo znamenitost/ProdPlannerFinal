@@ -31,7 +31,7 @@ import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { childRowSx, highlightedTaskRowSx } from '../theme/surfaces';
 import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
-import { getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
+import { getSharedGroupAccentColor, getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
 import { getSplitSupplyMode } from '../utils/throughApproval';
 import { getPriorityMarkViewerEmployeeName } from '../utils/taskPriorityMark';
 
@@ -94,29 +94,37 @@ function ChildTaskRow({
       position: 'relative',
       '&:hover': { bgcolor: 'action.hover' }
     };
-    let bgColor;
-    if (overdue) {
-      bgColor = (t) => alpha(t.palette.error.main, 0.06);
-    }
-    if (highlightMyTasks) {
-      if (isMine) {
-        style = { ...style, ...highlightedTaskRowSx(theme) };
-      } else {
-        style.opacity = 0.65;
-        style['&:hover'] = { opacity: 0.85 };
-      }
-    }
+
+    // Group band first; mine / overdue may override bgcolor.
     if (sharedGroupParentTask) {
       style = {
         ...style,
-        ...getSharedGroupStripeRowSx(theme, sharedGroupParentTask, {
+        ...getSharedGroupStripeRowSx(theme, {
           isFirst: false,
-          isLast: isLastInSharedGroup
+          isLast: isLastInSharedGroup,
+          role: 'child'
         })
       };
     }
 
-    return bgColor ? { ...style, bgcolor: bgColor } : style;
+    if (highlightMyTasks) {
+      if (isMine) {
+        style = { ...style, ...highlightedTaskRowSx(theme) };
+      } else {
+        style = {
+          ...style,
+          opacity: 0.65,
+          '&:hover': { ...(style['&:hover'] || {}), opacity: 0.85 }
+        };
+      }
+    } else if (overdue) {
+      style = {
+        ...style,
+        bgcolor: alpha(theme.palette.error.main, 0.06)
+      };
+    }
+
+    return style;
   };
 
   const showActionButtons = canUserManage() && canChangeStatus;
@@ -134,7 +142,7 @@ function ChildTaskRow({
         <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap' }}>
           <Box sx={{ ...ICON_SLOT_EXPAND, height: 34, position: 'relative' }}>
             <Box
-              sx={{
+              sx={(theme) => ({
                 position: 'absolute',
                 left: 12,
                 top: 0,
@@ -142,9 +150,11 @@ function ChildTaskRow({
                 height: '50%',
                 borderLeft: '2px solid',
                 borderBottom: '2px solid',
-                borderColor: 'grey.300',
+                borderColor: sharedGroupParentTask
+                  ? getSharedGroupAccentColor(theme)
+                  : theme.palette.grey[300],
                 borderBottomLeftRadius: '6px'
-              }}
+              })}
             />
           </Box>
           {isSequentialChild && sequenceOrder > 0 ? (

@@ -251,6 +251,12 @@ export default function useTaskTableController({
     });
   }, [api, showError]);
 
+  const handleOpenFolder = useCallback((row) => {
+    void api.openFolder(row).catch((err) => {
+      showError(err.message || 'Не удалось открыть папку');
+    });
+  }, [api, showError]);
+
   const handleCloseCdrPreview = useCallback(() => {
     cdrPreviewLoadRef.current += 1;
     detachCdrPreviewRmbListeners();
@@ -371,6 +377,7 @@ export default function useTaskTableController({
     ...actions,
     ...modals,
     handleOpenFile,
+    handleOpenFolder,
     handleShowCdrPreview,
     handleCloseCdrPreview,
     cdrPreviewOpen,

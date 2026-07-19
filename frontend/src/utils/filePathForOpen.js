@@ -55,8 +55,8 @@ export function ensureSupportedFileExtension(fileName) {
   return `${clean}.cdr`;
 }
 
-export function normalizePathForOpen(folderPath, fileName, shareName = DEFAULT_SHARE) {
-  let raw = `${folderPath || ''}/${fileName || ''}`.replace(/\\/g, '/');
+function stripToShareRelative(rawPath, shareName = DEFAULT_SHARE) {
+  let raw = String(rawPath || '').replace(/\\/g, '/');
   while (raw.includes('//')) raw = raw.replace('//', '/');
   raw = raw.trim().replace(/^[A-Za-z]:/i, '').replace(/^\/+/, '');
 
@@ -64,7 +64,11 @@ export function normalizePathForOpen(folderPath, fileName, shareName = DEFAULT_S
   const idx = raw.toLowerCase().indexOf(marker.toLowerCase());
   if (idx >= 0) raw = raw.slice(idx + marker.length);
 
-  const trimmed = raw.replace(/^\/+/, '').replace(/\/+$/, '');
+  return raw.replace(/^\/+/, '').replace(/\/+$/, '');
+}
+
+export function normalizePathForOpen(folderPath, fileName, shareName = DEFAULT_SHARE) {
+  const trimmed = stripToShareRelative(`${folderPath || ''}/${fileName || ''}`, shareName);
   if (!trimmed) return '';
 
   const parts = trimmed.split('/').filter(Boolean);
@@ -74,6 +78,14 @@ export function normalizePathForOpen(folderPath, fileName, shareName = DEFAULT_S
   const withExtension = parts.join('/');
 
   return ensureClientLetterPrefix(withExtension, stripShareRelativeFolder(folderPath, shareName));
+}
+
+/** Путь к папке задачи (без дописывания расширения файла). */
+export function normalizeFolderPathForOpen(folderPath, shareName = DEFAULT_SHARE) {
+  const trimmed = stripToShareRelative(folderPath, shareName);
+  if (!trimmed) return '';
+
+  return ensureClientLetterPrefix(trimmed, stripShareRelativeFolder(folderPath, shareName));
 }
 
 export function detectClientPlatform() {

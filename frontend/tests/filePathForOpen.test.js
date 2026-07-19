@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   ensureClientLetterPrefix,
   isClientLetterSegment,
+  normalizeFolderPathForOpen,
   normalizePathForOpen
 } from '../src/utils/filePathForOpen.js';
 
@@ -58,5 +59,17 @@ describe('filePathForOpen', () => {
   it('keeps .ai extension without appending .cdr', () => {
     const result = normalizePathForOpen('Федерация Бодибилдинга', 'макет.ai');
     assert.equal(result, 'Ф/Федерация Бодибилдинга/макет.ai');
+  });
+
+  it('normalizes folder path without appending file extension', () => {
+    const result = normalizeFolderPathForOpen(
+      'C:\\Users\\пк\\Yandex.Disk\\Клиенты\\Федерация Бодибилдинга'
+    );
+    assert.equal(result, 'Ф/Федерация Бодибилдинга');
+  });
+
+  it('keeps folder path when letter bucket is already present', () => {
+    const result = normalizeFolderPathForOpen('Ф/Фрэшмемори');
+    assert.equal(result, 'Ф/Фрэшмемори');
   });
 });

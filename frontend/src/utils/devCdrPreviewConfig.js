@@ -1,5 +1,6 @@
 import { buildWindowsUncPath } from './fileOpenerAgent';
 import { normalizePathForOpen } from './filePathForOpen';
+import { getFileOpenShareName, getFileOpenSettings } from './fileOpenSettingsCache';
 
 export const DEV_CDR_PREVIEW_ENABLED = true;
 
@@ -11,15 +12,16 @@ export function getDevCdrDefaultFileName() {
   return '';
 }
 
-/** UNC-путь для чтения .cdr через агент: \\MINIMARKER\Клиенты\... */
+/** UNC-путь для чтения .cdr через агент: \\сервер\шара\... */
 export function getDevAgentAbsolutePath(folderPath, fileName) {
-  const relative = normalizePathForOpen(folderPath, fileName);
+  const relative = normalizePathForOpen(folderPath, fileName, getFileOpenShareName());
   if (!relative) return null;
 
   const baseName = relative.split('/').pop() || '';
   if (!/\.cdr$/i.test(baseName)) return null;
 
-  return buildWindowsUncPath(relative);
+  const { windowsHost, shareName } = getFileOpenSettings();
+  return buildWindowsUncPath(relative, windowsHost, shareName);
 }
 
 export function resolveCdrPreviewPath(folderPath, fileName) {

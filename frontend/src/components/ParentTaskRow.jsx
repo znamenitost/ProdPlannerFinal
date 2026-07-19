@@ -62,6 +62,7 @@ function ParentTaskRow({
   isExpanded,
   onToggleExpand,
   onOpenFile,
+  onOpenFolder,
   onShowCdrPreview,
   onStart,
   onPause,
@@ -162,31 +163,37 @@ function ParentTaskRow({
   const getRowStyle = (theme) => {
     const overdue =
       task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
-    const base = {
+    let style = {
       borderLeft: 'none',
       '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) }
     };
-    let style = base;
-    if (highlightMyTasks && isMine) {
-      style = { ...base, ...highlightedTaskRowSx(theme) };
-    } else if (highlightMyTasks && !isMine) {
-      style = {
-        ...base,
-        opacity: 0.65,
-        '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04), opacity: 0.85 }
-      };
-    } else if (overdue) {
-      style = { ...base, ...overdueTaskRowSx(theme) };
-    }
 
+    // Group band first; mine / overdue highlights may override bgcolor.
     if (showSharedGroupStripe) {
       style = {
         ...style,
-        ...getSharedGroupStripeRowSx(theme, task, {
+        ...getSharedGroupStripeRowSx(theme, {
           isFirst: true,
-          isLast: !sharedGroupExpanded
+          isLast: !sharedGroupExpanded,
+          role: 'parent'
         })
       };
+    }
+
+    if (highlightMyTasks && isMine) {
+      style = { ...style, ...highlightedTaskRowSx(theme) };
+    } else if (highlightMyTasks && !isMine) {
+      style = {
+        ...style,
+        opacity: 0.65,
+        '&:hover': {
+          ...(style['&:hover'] || {}),
+          bgcolor: alpha(theme.palette.primary.main, 0.04),
+          opacity: 0.85
+        }
+      };
+    } else if (overdue) {
+      style = { ...style, ...overdueTaskRowSx(theme) };
     }
 
     return style;
@@ -233,12 +240,20 @@ function ParentTaskRow({
             </Box>
 
             <Box sx={ICON_SLOT_FILE}>
-              <LazyTooltip title={`Открыть файл: ${fullFilePath}`} arrow>
+              <LazyTooltip
+                title={`Открыть файл: ${fullFilePath}. ПКМ — открыть папку в проводнике`}
+                arrow
+              >
                 <IconButton
                   size="small"
                   color="primary"
                   onClick={() => onOpenFile(task)}
-                  aria-label={`Открыть файл: ${fullFilePath}`}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onOpenFolder?.(task);
+                  }}
+                  aria-label={`Открыть файл: ${fullFilePath}. Правая кнопка — открыть папку`}
                   sx={{ p: 0.5 }}
                 >
                   <FolderOpen fontSize="small" />
@@ -250,7 +265,13 @@ function ParentTaskRow({
 
         <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)}>
           <TableTruncatedTooltip fullText={task.folderPath || ''} limit={limit}>
-            <Typography variant="body2" sx={{ fontWeight: 600, ...cellDisplayTextSx }}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: showSharedGroupStripe ? 700 : 600,
+                ...cellDisplayTextSx
+              }}
+            >
               {needsTooltip(shortFolderPath || task.folderPath, limit)
                 ? truncateText(shortFolderPath || task.folderPath, limit)
                 : shortFolderPath || task.folderPath || '—'}

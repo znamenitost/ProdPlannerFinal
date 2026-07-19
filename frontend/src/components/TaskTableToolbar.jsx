@@ -12,7 +12,7 @@ import {
   Tooltip,
   Typography
 } from '@mui/material';
-import { Add, Lightbulb, LinearScale, Sort, TableChart } from '@mui/icons-material';
+import { Add, Lightbulb, LinearScale, PieChart, Settings, Sort, TableChart } from '@mui/icons-material';
 import { sectionHeaderSx, sectionTitleRowSx } from '../theme/surfaces';
 import TaskTableColumnSettings from './taskTable/TaskTableColumnSettings';
 import ExpandableSearchField from './taskTable/ExpandableSearchField';
@@ -40,7 +40,10 @@ export default function TaskTableToolbar({
   showPlannedProgress,
   onToggleShowPlannedProgress,
   autoSearchMinutes,
-  onAutoSearchMinutesChange
+  onAutoSearchMinutesChange,
+  onOpenFileOpenSettings,
+  onOpenTaskTypeStats,
+  taskTypeStatsOpen = false
 }) {
   const [sortAnchorEl, setSortAnchorEl] = useState(null);
   const sortMenuOpen = Boolean(sortAnchorEl);
@@ -58,18 +61,45 @@ export default function TaskTableToolbar({
       <Box sx={{ ...sectionTitleRowSx, gap: 1.5 }}>
         <TableChart color="primary" />
         <Typography variant="h2" component="h2">Таблица задач</Typography>
+        {isAdmin && onOpenFileOpenSettings && (
+          <Tooltip title="Файловый сервер">
+            <IconButton
+              variant="soft"
+              color="primary"
+              size="small"
+              onClick={onOpenFileOpenSettings}
+              aria-label="Настройки файлового сервера"
+            >
+              <Settings fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+        {isAdmin && onOpenTaskTypeStats && (
+          <Tooltip title="Статистика по типам задач">
+            <IconButton
+              variant="soft"
+              color="primary"
+              size="small"
+              onClick={onOpenTaskTypeStats}
+              aria-label="Статистика по типам задач"
+              disabled={taskTypeStatsOpen}
+            >
+              <PieChart fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
         {isAdmin && (
-          <Tooltip title="AutoSearch: минуты до второй попытки превью CDR (0 — выкл.)">
+          <Tooltip title="SAVE: минуты до второй попытки превью CDR (0 — выкл.)">
             <TextField
-              label="AS"
+              label="SAVE"
               placeholder="мин"
               type="number"
               size="small"
               value={autoSearchMinutes || ''}
               onChange={(e) => onAutoSearchMinutesChange(e.target.value)}
-              slotProps={{ htmlInput: { min: 0, max: 1440, step: 1, 'aria-label': 'AutoSearch, минуты' } }}
+              slotProps={{ htmlInput: { min: 0, max: 1440, step: 1, 'aria-label': 'SAVE, минуты' } }}
               sx={{
-                width: 68,
+                width: 78,
                 '& .MuiInputBase-root': { fontSize: '0.8125rem' },
                 '& .MuiInputBase-input': { py: 0.75, px: 0.75, textAlign: 'center' },
                 '& .MuiInputLabel-root': { fontSize: '0.8125rem' }

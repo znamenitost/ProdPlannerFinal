@@ -32,6 +32,10 @@ import useAuth from '../hooks/useAuth';
 import useUserPreference from '../hooks/useUserPreference';
 import { openFileOnClient } from '../utils/openFileOnClient';
 import { normalizePathForOpen } from '../utils/filePathForOpen';
+import {
+  ensureFileOpenSettingsLoaded,
+  getFileOpenShareName
+} from '../utils/fileOpenSettingsCache';
 import EmptyState from './ui/EmptyState';
 import { Assignment } from '@mui/icons-material';
 import { getTaskStatusLine } from './TaskTitleTwoLines';
@@ -146,7 +150,8 @@ export default function ActiveTasksList({
     const parts = String(filePath).replace(/\\/g, '/').split('/');
     const fileName = parts.pop() || '';
     const folderPath = parts.join('/');
-    void openFileOnClient(normalizePathForOpen(folderPath, fileName))
+    void ensureFileOpenSettingsLoaded()
+      .then(() => openFileOnClient(normalizePathForOpen(folderPath, fileName, getFileOpenShareName())))
       .then((result) => {
         if (!result.ok) {
           showError(result.reason || 'Не удалось открыть файл');

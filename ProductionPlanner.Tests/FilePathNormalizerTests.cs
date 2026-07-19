@@ -47,16 +47,18 @@ public class FilePathNormalizerTests
     }
 
     [Fact]
-    public void GetWindowsServerHost_AlwaysUsesNetworkPcName()
+    public void GetWindowsServerHost_UsesConfiguredHostOrDefault()
     {
-        Assert.Equal("MINIMARKER", FilePathNormalizer.GetWindowsServerHost("192.168.1.119"));
         Assert.Equal("MINIMARKER", FilePathNormalizer.GetWindowsServerHost(null));
+        Assert.Equal("MINIMARKER", FilePathNormalizer.GetWindowsServerHost("  "));
+        Assert.Equal("FILESERVER", FilePathNormalizer.GetWindowsServerHost("FILESERVER"));
+        Assert.Equal("192.168.1.119", FilePathNormalizer.GetWindowsServerHost("192.168.1.119"));
     }
 
     [Fact]
     public void BuildWindowsFileUrl_encodes_path_for_file_protocol()
     {
-        var host = FilePathNormalizer.GetWindowsServerHost("192.168.1.119");
+        var host = FilePathNormalizer.GetWindowsServerHost("MINIMARKER");
         var url = FilePathNormalizer.BuildWindowsFileUrl(host, Share, "С/Спортмебель/15,05,26 спортт.cdr");
         Assert.StartsWith("file://MINIMARKER/", url);
         Assert.Contains("15%2C05%2C26", url);
@@ -65,7 +67,7 @@ public class FilePathNormalizerTests
     [Fact]
     public void BuildWindowsUncPath_matches_server_layout()
     {
-        var host = FilePathNormalizer.GetWindowsServerHost("192.168.1.119");
+        var host = FilePathNormalizer.GetWindowsServerHost("MINIMARKER");
         var unc = FilePathNormalizer.BuildWindowsUncPath(host, Share, "С/Спортмебель/15,05,26 спортт.cdr");
         Assert.Equal(@"\\MINIMARKER\Клиенты\С\Спортмебель\15,05,26 спортт.cdr", unc);
     }
@@ -117,5 +119,20 @@ public class FilePathNormalizerTests
     public void IsEligibleForCdrPreview_rejects_non_cdr_extension()
     {
         Assert.False(FilePathNormalizer.IsEligibleForCdrPreview("Клиент/2024", "layout.ai", Share));
+    }
+
+    [Fact]
+    public void NormalizeRelativeFolderPath_does_not_append_cdr()
+    {
+        var input = @"C:\Users\пк\Yandex.Disk\Клиенты\Федерация Бодибилдинга";
+        var result = FilePathNormalizer.NormalizeRelativeFolderPath(input, Share);
+        Assert.Equal("Ф/Федерация Бодибилдинга", result);
+    }
+
+    [Fact]
+    public void NormalizeRelativeFolderPath_keeps_letter_bucket()
+    {
+        var result = FilePathNormalizer.NormalizeRelativeFolderPath("Ф/Фрэшмемори", Share);
+        Assert.Equal("Ф/Фрэшмемори", result);
     }
 }

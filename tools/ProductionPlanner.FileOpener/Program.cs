@@ -5,7 +5,6 @@ using System.Threading;
 
 const int DefaultPort = 17888;
 const string DefaultHost = "127.0.0.1";
-const string AllowedUncPrefix = @"\\MINIMARKER\Клиенты\";
 
 using var mutex = new Mutex(true, "ProductionPlanner.FileOpener", out var createdNew);
 if (!createdNew)
@@ -101,6 +100,19 @@ static void HandleOpen(
         return;
     }
 
+    if (Directory.Exists(filePath))
+    {
+        if (readMode)
+        {
+            WriteText(ctx, 400, "cannot read directory");
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
+        WriteText(ctx, 200, "ok");
+        return;
+    }
+
     if (!File.Exists(filePath))
     {
         WriteText(ctx, 404, "file not found");
@@ -184,12 +196,20 @@ static bool IsAllowedDevPath(string path)
 
 static bool IsAllowedUncPath(string path)
 {
+    // Любой корректный UNC \\host\share\... — host/share задаются в настройках приложения.
     if (!path.StartsWith(@"\\", StringComparison.Ordinal))
-        return false;
-    if (!path.StartsWith(AllowedUncPrefix, StringComparison.OrdinalIgnoreCase))
         return false;
     if (path.Contains("..", StringComparison.Ordinal))
         return false;
+
+    var trimmed = path.TrimStart('\\');
+    var parts = trimmed.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+    if (parts.Length < 2)
+        return false;
+
+    // Папка (без расширения) или поддерживаемый файл.
+    if (string.IsNullOrEmpty(Path.GetExtension(path)))
+        return true;
 
     return HasSupportedExtension(path);
 }

@@ -1,13 +1,15 @@
 import { detectClientPlatform } from './filePathForOpen';
 import { FILE_OPENER_INSTALL_HINT } from './fileOpenerHints.js';
+import {
+  DEFAULT_FILE_OPEN_SETTINGS,
+  ensureFileOpenSettingsLoaded,
+  getFileOpenSettings
+} from './fileOpenSettingsCache';
 
 export const FILE_OPENER_PORT = 17888;
 export const FILE_OPENER_BASE = `http://127.0.0.1:${FILE_OPENER_PORT}`;
 
 export { FILE_OPENER_INSTALL_HINT };
-
-const DEFAULT_WINDOWS_HOST = 'MINIMARKER';
-const DEFAULT_SHARE = 'Клиенты';
 
 let cachedAgentUnavailableMessage;
 let cachedAgentUnavailableAt = 0;
@@ -15,8 +17,8 @@ const AGENT_AVAILABILITY_TTL_MS = 5000;
 
 export function buildWindowsUncPath(
   relativePath,
-  host = DEFAULT_WINDOWS_HOST,
-  shareName = DEFAULT_SHARE
+  host = getFileOpenSettings().windowsHost || DEFAULT_FILE_OPEN_SETTINGS.windowsHost,
+  shareName = getFileOpenSettings().shareName || DEFAULT_FILE_OPEN_SETTINGS.shareName
 ) {
   const path = String(relativePath || '').replace(/\//g, '\\').replace(/^\\+/, '');
   return `\\\\${host}\\${shareName}\\${path}`;
@@ -57,7 +59,9 @@ export async function getLocalAgentUnavailableMessage() {
 }
 
 export async function openFileViaAgent(relativePath) {
-  const uncPath = buildWindowsUncPath(relativePath);
+  await ensureFileOpenSettingsLoaded();
+  const { windowsHost, shareName } = getFileOpenSettings();
+  const uncPath = buildWindowsUncPath(relativePath, windowsHost, shareName);
   const url = `${FILE_OPENER_BASE}/open?path=${encodeURIComponent(uncPath)}`;
   const response = await fetch(url);
   if (response.ok) {

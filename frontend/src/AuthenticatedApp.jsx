@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import {
   Typography,
   Container,
@@ -46,6 +46,10 @@ import DeployMaintenanceOverlay from './components/DeployMaintenanceOverlay';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
 import MaxLinkDialog from './components/MaxLinkDialog';
 import ChatDrawer, { ChatHeaderButton } from './components/chat/ChatDrawer';
+import FileOpenSettingsDialog from './components/FileOpenSettingsDialog';
+
+const TaskTypeStatsDialog = lazy(() => import('./components/TaskTypeStatsDialog'));
+import { ensureFileOpenSettingsLoaded } from './utils/fileOpenSettingsCache';
 import useMaxMessenger from './hooks/useMaxMessenger';
 import useChatUnread from './hooks/useChatUnread';
 import useChatMessageToasts from './hooks/useChatMessageToasts';
@@ -74,8 +78,22 @@ import './App.css';
 
 function AuthenticatedAppContent() {
   const { user, setUser, employee, setEmployee, handleLogout } = useAuth();
-  const { showSuccess, showError, showWarning, confirm } = useUiFeedback();
+  const { showSuccess, showError, showWarning, showLoading, hideSnackbar, confirm } = useUiFeedback();
   const [activeTab, setActiveTab] = useUserPreference(user, 'app.activeTab', 0);
+  const [fileOpenSettingsOpen, setFileOpenSettingsOpen] = useState(false);
+  const [taskTypeStatsOpen, setTaskTypeStatsOpen] = useState(false);
+  const closeTaskTypeStats = useCallback(() => {
+    hideSnackbar();
+    setTaskTypeStatsOpen(false);
+  }, [hideSnackbar]);
+  const openTaskTypeStats = useCallback(() => {
+    showLoading('Считаем статистику по типам задач…');
+    setTaskTypeStatsOpen(true);
+  }, [showLoading]);
+
+  useEffect(() => {
+    void ensureFileOpenSettingsLoaded();
+  }, []);
 
   useEffect(() => {
     if (activeTab > 1) setActiveTab(0);
@@ -502,19 +520,20 @@ function AuthenticatedAppContent() {
         <Container maxWidth="xl">
           <Paper sx={{ p: 2, mb: 3, borderRadius: 2.5 }}>
             <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-              <Box
-                component="img"
-                src="/sprites/logo.svg"
-                alt="Production Planner"
-                sx={{
-                  height: 36,
-                  width: 'auto',
-                  maxWidth: { xs: 220, sm: 280 },
-                  objectFit: 'contain',
-                  display: 'block',
-                  ml: { md: 1 },
-                }}
-              />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: { md: 1 } }}>
+                <Box
+                  component="img"
+                  src="/sprites/logo.svg"
+                  alt="Production Planner"
+                  sx={{
+                    height: 36,
+                    width: 'auto',
+                    maxWidth: { xs: 220, sm: 280 },
+                    objectFit: 'contain',
+                    display: 'block',
+                  }}
+                />
+              </Box>
 
               <CurrentDateTime />
 
@@ -602,6 +621,9 @@ function AuthenticatedAppContent() {
                 onMaxSubscribeToggle={handleMaxSubscribeToggle}
                 focusCommentTooltipTaskId={focusCommentTooltipTaskId}
                 onFocusCommentTooltipConsumed={() => setFocusCommentTooltipTaskId(null)}
+                onOpenFileOpenSettings={isAdmin ? () => setFileOpenSettingsOpen(true) : undefined}
+                onOpenTaskTypeStats={isAdmin ? openTaskTypeStats : undefined}
+                taskTypeStatsOpen={taskTypeStatsOpen}
               />
             )}
           </MotionSwitch>
@@ -719,6 +741,20 @@ function AuthenticatedAppContent() {
           void maxMessenger.refresh();
         }}
       />
+
+      <FileOpenSettingsDialog
+        open={fileOpenSettingsOpen}
+        onClose={() => setFileOpenSettingsOpen(false)}
+      />
+
+      {isAdmin && taskTypeStatsOpen && (
+        <Suspense fallback={null}>
+          <TaskTypeStatsDialog
+            open={taskTypeStatsOpen}
+            onClose={closeTaskTypeStats}
+          />
+        </Suspense>
+      )}
 
       <ChatDrawer
         open={chatOpen}

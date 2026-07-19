@@ -37,6 +37,8 @@ public static class WebApplicationExtensions
         services.AddScoped<IAutoAssignSettingsService, AutoAssignSettingsService>();
         services.AddScoped<ICdrPreviewAutoSearchSettingsService, CdrPreviewAutoSearchSettingsService>();
         services.AddScoped<ITaskTableSortSettingsService, TaskTableSortSettingsService>();
+        services.AddScoped<IFileOpenSettingsService, FileOpenSettingsService>();
+        services.AddScoped<ITaskTypeStatsService, TaskTypeStatsService>();
         services.AddScoped<ITaskListQueryService, TaskListQueryService>();
         services.AddScoped<IEmployeeAssignmentLoadService, EmployeeAssignmentLoadService>();
         services.AddScoped<IWeekCalendarService, WeekCalendarService>();

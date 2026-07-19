@@ -82,6 +82,7 @@ export function areParentRowPropsEqual(prev, next) {
   return (
     prev.onToggleExpand === next.onToggleExpand &&
     prev.onOpenFile === next.onOpenFile &&
+    prev.onOpenFolder === next.onOpenFolder &&
     prev.onShowCdrPreview === next.onShowCdrPreview &&
     prev.onStart === next.onStart &&
     prev.onPause === next.onPause &&

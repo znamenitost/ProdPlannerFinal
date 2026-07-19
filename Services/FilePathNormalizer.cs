@@ -9,8 +9,11 @@ public static class FilePathNormalizer
 
     private static readonly Regex DrivePrefixRegex = new(@"^[A-Za-z]:[/\\]?", RegexOptions.Compiled);
 
-    /// <summary>Хост для открытия файлов с Windows — всегда имя ПК в сети, не IP из конфига.</summary>
-    public static string GetWindowsServerHost(string? _ = null) => WindowsServerHostName;
+    /// <summary>Хост для открытия файлов с Windows. Пустое значение → имя по умолчанию.</summary>
+    public static string GetWindowsServerHost(string? configuredHost = null) =>
+        string.IsNullOrWhiteSpace(configuredHost)
+            ? WindowsServerHostName
+            : configuredHost.Trim().Trim('\\', '/');
 
     /// <summary>
     /// Возвращает путь относительно SMB-шары «Клиенты»: Ф/Фрэшмемори/файл.cdr
@@ -28,12 +31,41 @@ public static class FilePathNormalizer
         out string? relativePath,
         out string? error)
     {
+        return TryNormalizeRelativePathCore(filePath, shareName, appendFileExtension: true, out relativePath, out error);
+    }
+
+    /// <summary>
+    /// Путь к папке относительно шары «Клиенты» (без дописывания .cdr).
+    /// </summary>
+    public static string NormalizeRelativeFolderPath(string folderPath, string shareName)
+    {
+        return TryNormalizeRelativeFolderPath(folderPath, shareName, out var relativePath, out _)
+            ? relativePath ?? string.Empty
+            : string.Empty;
+    }
+
+    public static bool TryNormalizeRelativeFolderPath(
+        string folderPath,
+        string shareName,
+        out string? relativePath,
+        out string? error)
+    {
+        return TryNormalizeRelativePathCore(folderPath, shareName, appendFileExtension: false, out relativePath, out error);
+    }
+
+    private static bool TryNormalizeRelativePathCore(
+        string filePath,
+        string shareName,
+        bool appendFileExtension,
+        out string? relativePath,
+        out string? error)
+    {
         relativePath = null;
         error = null;
 
         if (string.IsNullOrWhiteSpace(filePath))
         {
-            error = "Путь к файлу не указан";
+            error = appendFileExtension ? "Путь к файлу не указан" : "Путь к папке не указан";
             return false;
         }
 
@@ -61,7 +93,9 @@ public static class FilePathNormalizer
         rawPath = rawPath.Trim('/');
         if (string.IsNullOrEmpty(rawPath))
         {
-            error = "Не удалось определить путь к файлу";
+            error = appendFileExtension
+                ? "Не удалось определить путь к файлу"
+                : "Не удалось определить путь к папке";
             return false;
         }
 
@@ -71,7 +105,9 @@ public static class FilePathNormalizer
 
         if (parts.Length == 0)
         {
-            error = "Не удалось определить путь к файлу";
+            error = appendFileExtension
+                ? "Не удалось определить путь к файлу"
+                : "Не удалось определить путь к папке";
             return false;
         }
 
@@ -84,12 +120,20 @@ public static class FilePathNormalizer
             }
         }
 
-        var cleanFileName = parts[^1].Split('[')[0].Trim();
-        if (!HasSupportedExtension(cleanFileName))
-            cleanFileName += ".cdr";
+        if (appendFileExtension)
+        {
+            var cleanFileName = parts[^1].Split('[')[0].Trim();
+            if (!HasSupportedExtension(cleanFileName))
+                cleanFileName += ".cdr";
 
-        parts[^1] = cleanFileName;
-        relativePath = EnsureClientLetterPrefix(string.Join("/", parts));
+            parts[^1] = cleanFileName;
+        }
+
+        var joined = string.Join("/", parts);
+        // Для папки (один сегмент) передаём путь как hint, иначе буква-каталог не добавится.
+        relativePath = appendFileExtension
+            ? EnsureClientLetterPrefix(joined)
+            : EnsureClientLetterPrefix(joined, joined);
         return true;
     }
 

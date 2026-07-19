@@ -1,11 +1,12 @@
 import { FILE_OPENER_INSTALL_HINT } from './fileOpenerHints.js';
 import { normalizePathForOpen } from './filePathForOpen.js';
+import { getFileOpenShareName } from './fileOpenSettingsCache.js';
 
 const AGENT_ERROR_MESSAGES = {
   'file not found': 'Файл не найден',
   'missing path': 'Не указан путь к файлу',
   'read path not allowed': 'Путь не разрешён для чтения',
-  'dev path not allowed': 'Путь не разрешён (только C:\\... или \\\\MINIMARKER\\Клиенты\\...)',
+  'dev path not allowed': 'Путь не разрешён (только C:\\... или корректный UNC \\\\сервер\\шара\\...)',
   'path not allowed': 'Путь не разрешён',
   'not found': 'Запрос к агенту не найден',
 };
@@ -17,7 +18,7 @@ export function getTaskFilePathHint(folderPath, fileName) {
     return 'Укажите имя файла для открытия и превью';
   }
 
-  const relative = normalizePathForOpen(folderPath, fileName);
+  const relative = normalizePathForOpen(folderPath, fileName, getFileOpenShareName());
   if (!relative) {
     return 'Не удалось определить путь. Проверьте папку и имя файла';
   }
@@ -31,7 +32,7 @@ export function getCdrPathValidationError(folderPath, fileName) {
   if (hint) return hint;
 
   const file = String(fileName || '').trim();
-  const relative = normalizePathForOpen(folderPath, fileName);
+  const relative = normalizePathForOpen(folderPath, fileName, getFileOpenShareName());
   if (!/\.cdr$/i.test(relative.split('/').pop() || '')) {
     return `Превью строится только для .cdr — указан файл «${file}»`;
   }

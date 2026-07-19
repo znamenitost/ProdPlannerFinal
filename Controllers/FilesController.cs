@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using ProductionPlanner.Models.Dtos;
 using ProductionPlanner.Services;
+using ProductionPlanner.Services.AppSettings;
 
 namespace ProductionPlanner.Controllers
 {
@@ -13,11 +15,16 @@ namespace ProductionPlanner.Controllers
 
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
+        private readonly IFileOpenSettingsService _fileOpenSettings;
 
-        public FilesController(IConfiguration configuration, IWebHostEnvironment environment)
+        public FilesController(
+            IConfiguration configuration,
+            IWebHostEnvironment environment,
+            IFileOpenSettingsService fileOpenSettings)
         {
             _configuration = configuration;
             _environment = environment;
+            _fileOpenSettings = fileOpenSettings;
         }
 
         [HttpGet("download/windows-agent")]
@@ -36,58 +43,68 @@ namespace ProductionPlanner.Controllers
         }
 
         [HttpGet("agent-info")]
-        public IActionResult GetAgentInfo()
+        public async Task<IActionResult> GetAgentInfo(CancellationToken cancellationToken)
         {
-            var shareName = _configuration["FileOpen:ShareName"] ?? "Клиенты";
-            var windowsHost = FilePathNormalizer.GetWindowsServerHost(_configuration["FileOpen:WindowsHost"]);
+            var settings = await _fileOpenSettings.GetAsync(cancellationToken);
             var port = _configuration.GetValue("FileOpen:MacOpenerPort", 17888);
 
             return Ok(new
             {
                 port,
-                windowsHost,
-                shareName,
+                windowsHost = settings.WindowsHost,
+                shareName = settings.ShareName,
+                macSmbHost = settings.MacSmbHost,
                 agentBaseUrl = $"http://127.0.0.1:{port}",
                 downloadUrl = "/api/files/download/windows-agent"
             });
         }
 
         [HttpGet("launch")]
-        public IActionResult LaunchFile([FromQuery] string path, [FromQuery] string? clientPlatform)
+        public async Task<IActionResult> LaunchFile(
+            [FromQuery] string path,
+            [FromQuery] string? clientPlatform,
+            [FromQuery] bool isDirectory = false,
+            CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(path))
-                return BadRequest(new { message = "Путь к файлу не указан" });
+                return BadRequest(new { message = isDirectory ? "Путь к папке не указан" : "Путь к файлу не указан" });
 
-            if (!TryBuildOpenUrl(path, clientPlatform, out var openUrl, out var error))
+            var settings = await _fileOpenSettings.GetAsync(cancellationToken);
+            if (!TryBuildOpenUrl(path, clientPlatform, isDirectory, settings, out var openUrl, out var error))
                 return BadRequest(new { message = error });
 
             return Redirect(openUrl);
         }
 
         [HttpPost("open")]
-        public IActionResult OpenFile([FromBody] OpenFileRequest request)
+        public async Task<IActionResult> OpenFile(
+            [FromBody] OpenFileRequest request,
+            CancellationToken cancellationToken = default)
         {
+            var isDirectory = request.IsDirectory;
             if (string.IsNullOrWhiteSpace(request.FilePath))
-                return BadRequest(new { message = "Путь к файлу не указан" });
+                return BadRequest(new { message = isDirectory ? "Путь к папке не указан" : "Путь к файлу не указан" });
 
-            if (!TryBuildOpenUrl(request.FilePath, request.ClientPlatform, out var openUrl, out var error))
+            var settings = await _fileOpenSettings.GetAsync(cancellationToken);
+            if (!TryBuildOpenUrl(request.FilePath, request.ClientPlatform, isDirectory, settings, out var openUrl, out var error))
                 return BadRequest(new { message = error });
 
-            var shareName = _configuration["FileOpen:ShareName"] ?? "Клиенты";
-            var windowsHost = FilePathNormalizer.GetWindowsServerHost(_configuration["FileOpen:WindowsHost"]);
-            var windowsShareName = _configuration["FileOpen:WindowsShareName"] ?? shareName;
-            var correctedPath = FilePathNormalizer.NormalizeRelativePath(request.FilePath, shareName);
-            var uncPath = FilePathNormalizer.BuildWindowsUncPath(windowsHost, windowsShareName, correctedPath);
+            var shareName = settings.ShareName;
+            var windowsHost = FilePathNormalizer.GetWindowsServerHost(settings.WindowsHost);
+            var correctedPath = isDirectory
+                ? FilePathNormalizer.NormalizeRelativeFolderPath(request.FilePath, shareName)
+                : FilePathNormalizer.NormalizeRelativePath(request.FilePath, shareName);
+            var uncPath = FilePathNormalizer.BuildWindowsUncPath(windowsHost, shareName, correctedPath);
             var port = _configuration.GetValue("FileOpen:MacOpenerPort", 17888);
 
             return Ok(new
             {
-                message = "Ссылка на файл сформирована",
+                message = isDirectory ? "Ссылка на папку сформирована" : "Ссылка на файл сформирована",
                 openUrl,
                 relativePath = correctedPath,
                 uncPath,
                 agentOpenUrl = $"http://127.0.0.1:{port}/open?path={Uri.EscapeDataString(uncPath)}",
-                launchUrl = $"/api/files/launch?path={Uri.EscapeDataString(request.FilePath)}&clientPlatform={Uri.EscapeDataString(request.ClientPlatform ?? "")}"
+                launchUrl = $"/api/files/launch?path={Uri.EscapeDataString(request.FilePath)}&clientPlatform={Uri.EscapeDataString(request.ClientPlatform ?? "")}&isDirectory={(isDirectory ? "true" : "false")}"
             });
         }
 
@@ -102,27 +119,40 @@ namespace ProductionPlanner.Controllers
             return candidates.FirstOrDefault(System.IO.File.Exists);
         }
 
-        private bool TryBuildOpenUrl(string filePath, string? clientPlatform, out string openUrl, out string error)
+        private bool TryBuildOpenUrl(
+            string filePath,
+            string? clientPlatform,
+            bool isDirectory,
+            FileOpenSettingsDto settings,
+            out string openUrl,
+            out string error)
         {
             openUrl = "";
             error = "";
 
-            var shareName = _configuration["FileOpen:ShareName"] ?? "Клиенты";
-            var macSmbHost = _configuration["FileOpen:MacSmbHost"] ?? "minimarker";
-            var windowsHost = FilePathNormalizer.GetWindowsServerHost(_configuration["FileOpen:WindowsHost"]);
+            var shareName = settings.ShareName;
+            var macSmbHost = settings.MacSmbHost;
+            var windowsHost = FilePathNormalizer.GetWindowsServerHost(settings.WindowsHost);
             var netOpenScheme = _configuration["FileOpen:NetOpenScheme"] ?? "netopen";
-            var netOpenShareName = _configuration["FileOpen:NetOpenShareName"] ?? shareName;
-            var windowsShareName = _configuration["FileOpen:WindowsShareName"] ?? shareName;
             var windowsOpenMode = _configuration["FileOpen:WindowsOpenMode"] ?? "netopen";
 
-            if (!FilePathNormalizer.TryNormalizeRelativePath(filePath, shareName, out var correctedPath, out var pathError))
+            string? correctedPath;
+            string? pathError;
+            var normalized = isDirectory
+                ? FilePathNormalizer.TryNormalizeRelativeFolderPath(filePath, shareName, out correctedPath, out pathError)
+                : FilePathNormalizer.TryNormalizeRelativePath(filePath, shareName, out correctedPath, out pathError);
+            if (!normalized)
             {
-                error = pathError ?? "Не удалось определить путь к файлу";
+                error = pathError ?? (isDirectory
+                    ? "Не удалось определить путь к папке"
+                    : "Не удалось определить путь к файлу");
                 return false;
             }
             if (string.IsNullOrEmpty(correctedPath))
             {
-                error = "Не удалось определить путь к файлу";
+                error = isDirectory
+                    ? "Не удалось определить путь к папке"
+                    : "Не удалось определить путь к файлу";
                 return false;
             }
 
@@ -133,8 +163,8 @@ namespace ProductionPlanner.Controllers
             if (isWindows)
             {
                 openUrl = windowsOpenMode.Equals("netopen", StringComparison.OrdinalIgnoreCase)
-                    ? FilePathNormalizer.BuildNetOpenUrl(netOpenScheme, windowsHost, netOpenShareName, correctedPath)
-                    : FilePathNormalizer.BuildWindowsFileUrl(windowsHost, windowsShareName, correctedPath);
+                    ? FilePathNormalizer.BuildNetOpenUrl(netOpenScheme, windowsHost, shareName, correctedPath)
+                    : FilePathNormalizer.BuildWindowsFileUrl(windowsHost, shareName, correctedPath);
             }
             else
             {
@@ -150,5 +180,6 @@ namespace ProductionPlanner.Controllers
     {
         public string FilePath { get; set; } = "";
         public string? ClientPlatform { get; set; }
+        public bool IsDirectory { get; set; }
     }
 }

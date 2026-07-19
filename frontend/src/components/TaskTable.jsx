@@ -118,7 +118,10 @@ export default function TaskTable({
   maxCanSubscribe = false,
   onMaxSubscribeToggle,
   focusCommentTooltipTaskId = null,
-  onFocusCommentTooltipConsumed
+  onFocusCommentTooltipConsumed,
+  onOpenFileOpenSettings,
+  onOpenTaskTypeStats,
+  taskTypeStatsOpen = false
 }) {
   const isAdmin = userRole === 'Admin';
   const tableContainerRef = useRef(null);
@@ -488,6 +491,7 @@ export default function TaskTable({
         isExpanded={isExpanded}
         onToggleExpand={shouldPromoteSingleChild ? () => {} : table.toggleExpand}
         onOpenFile={table.handleOpenFile}
+        onOpenFolder={table.handleOpenFolder}
         onShowCdrPreview={DEV_CDR_PREVIEW_ENABLED ? table.handleShowCdrPreview : undefined}
         onStart={table.handleStartTask}
         onPause={table.handlePauseTask}
@@ -555,6 +559,9 @@ export default function TaskTable({
         onToggleShowPlannedProgress={plannedProgressPref.toggleShowPlannedProgress}
         autoSearchMinutes={autoSearchSettings.minutes}
         onAutoSearchMinutesChange={autoSearchSettings.setMinutes}
+        onOpenFileOpenSettings={onOpenFileOpenSettings}
+        onOpenTaskTypeStats={onOpenTaskTypeStats}
+        taskTypeStatsOpen={taskTypeStatsOpen}
       />
 
       <TableContainer ref={tableContainerRef}>

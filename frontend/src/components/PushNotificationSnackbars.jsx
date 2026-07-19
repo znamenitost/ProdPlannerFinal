@@ -69,6 +69,7 @@ export default function PushNotificationSnackbars({ notifications, onClose, onOp
         const variant = getNotificationVariant(notification.type);
         const isChat = notification.type === 'ChatMessage';
         const isComment = notification.type === 'TaskCommentAdded';
+        const staysUntilDismissed = isChat || isComment;
         const canOpen = Boolean(onOpen) && isOpenableNotification(notification.type);
         const isLeft = isLeftStackNotification(notification.type);
         const stackIndex = isLeft ? leftStackIndex++ : taskStackIndex++;
@@ -77,11 +78,11 @@ export default function PushNotificationSnackbars({ notifications, onClose, onOp
           <Snackbar
             key={notification.id}
             open
-            autoHideDuration={isChat ? null : 8000}
+            autoHideDuration={staysUntilDismissed ? null : 8000}
             onClose={(_event, reason) => {
               if (reason === 'clickaway') return;
-              // Chat toasts stay until explicit close / open — ignore timeout just in case.
-              if (isChat && reason === 'timeout') return;
+              // Chat/comment toasts stay until explicit close / open — ignore timeout just in case.
+              if (staysUntilDismissed && reason === 'timeout') return;
               onClose(notification.id);
             }}
             anchorOrigin={{
