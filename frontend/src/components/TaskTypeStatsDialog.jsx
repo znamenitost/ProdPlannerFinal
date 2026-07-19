@@ -124,6 +124,16 @@ export default function TaskTypeStatsDialog({ open, onClose }) {
       .filter(Boolean);
   }, [stats, metric]);
 
+  const pieTotal = useMemo(
+    () => pieData.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
+    [pieData]
+  );
+
+  const percentLabel = (value) => {
+    const pct = pieTotal > 0 ? Math.round((Number(value) / pieTotal) * 100) : 0;
+    return `${pct}%`;
+  };
+
   const calculatedLabel = stats?.calculatedAt
     ? dayjs(stats.calculatedAt).format('DD.MM.YYYY HH:mm')
     : null;
@@ -169,12 +179,8 @@ export default function TaskTypeStatsDialog({ open, onClose }) {
                   data: pieData,
                   highlightScope: { fade: 'global', highlight: 'item' },
                   faded: { additionalRadius: -8, color: tokens.neutral[300] },
-                  valueFormatter: (item) =>
-                    metric === 'hours'
-                      ? `${formatHours(item.value)} ч`
-                      : `${item.value} шт.`,
-                  arcLabel: (item) =>
-                    metric === 'hours' ? formatHours(item.value) : String(item.value),
+                  valueFormatter: (item) => percentLabel(item.value),
+                  arcLabel: (item) => percentLabel(item.value),
                   arcLabelMinAngle: 18
                 }
               ]}
