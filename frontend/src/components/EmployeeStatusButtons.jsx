@@ -20,6 +20,7 @@ import {
 } from '@mui/icons-material';
 import {
   ACTION_RESUME,
+  STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
   STATUS_PAUSED,
   STATUS_WAITING,
