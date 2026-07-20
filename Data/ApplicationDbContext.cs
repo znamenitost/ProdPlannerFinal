@@ -71,6 +71,7 @@ namespace ProductionPlanner.Data
         public DbSet<TaskComment> TaskComments { get; set; }
         public DbSet<TaskCommentReadState> TaskCommentReadStates { get; set; }
         public DbSet<CustomerOrderTracking> CustomerOrderTrackings { get; set; }
+        public DbSet<PrintJob> PrintJobs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -219,6 +220,17 @@ namespace ProductionPlanner.Data
                 entity.Property(c => c.PublicToken).HasMaxLength(64);
                 entity.HasIndex(c => c.CustomerKey).IsUnique();
                 entity.HasIndex(c => c.PublicToken).IsUnique();
+            });
+
+            modelBuilder.Entity<PrintJob>(entity =>
+            {
+                entity.ToTable("PrintJobs");
+                entity.Property(j => j.OrderTitle).HasMaxLength(500);
+                entity.Property(j => j.PickupCode).HasMaxLength(8);
+                entity.Property(j => j.ErrorMessage).HasMaxLength(500);
+                entity.Property(j => j.AgentName).HasMaxLength(100);
+                entity.HasIndex(j => new { j.Status, j.CreatedAt });
+                entity.HasIndex(j => j.TaskId);
             });
 
             modelBuilder.Entity<ProductionTask>()

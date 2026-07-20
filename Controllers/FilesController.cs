@@ -12,6 +12,7 @@ namespace ProductionPlanner.Controllers
     public class FilesController : ControllerBase
     {
         private const string WindowsAgentZipName = "ProductionPlanner-FileOpener-win-x64.zip";
+        private const string PrintAgentZipName = "ProductionPlanner-PrintAgent-win.zip";
 
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
@@ -42,6 +43,21 @@ namespace ProductionPlanner.Controllers
             return PhysicalFile(zipPath, "application/zip", WindowsAgentZipName);
         }
 
+        [HttpGet("download/print-agent")]
+        public IActionResult DownloadPrintAgent()
+        {
+            var zipPath = ResolvePrintAgentZipPath();
+            if (zipPath == null || !System.IO.File.Exists(zipPath))
+            {
+                return NotFound(new
+                {
+                    message = "Агент печати пока не собран на сервере. Обратитесь к администратору."
+                });
+            }
+
+            return PhysicalFile(zipPath, "application/zip", PrintAgentZipName);
+        }
+
         [HttpGet("agent-info")]
         public async Task<IActionResult> GetAgentInfo(CancellationToken cancellationToken)
         {
@@ -55,7 +71,8 @@ namespace ProductionPlanner.Controllers
                 shareName = settings.ShareName,
                 macSmbHost = settings.MacSmbHost,
                 agentBaseUrl = $"http://127.0.0.1:{port}",
-                downloadUrl = "/api/files/download/windows-agent"
+                downloadUrl = "/api/files/download/windows-agent",
+                printAgentDownloadUrl = "/api/files/download/print-agent"
             });
         }
 
@@ -114,6 +131,17 @@ namespace ProductionPlanner.Controllers
             {
                 Path.Combine(_environment.WebRootPath ?? "", "downloads", WindowsAgentZipName),
                 Path.Combine(_environment.ContentRootPath, "tools", "ProductionPlanner.FileOpener", "releases", WindowsAgentZipName)
+            };
+
+            return candidates.FirstOrDefault(System.IO.File.Exists);
+        }
+
+        private string? ResolvePrintAgentZipPath()
+        {
+            var candidates = new[]
+            {
+                Path.Combine(_environment.WebRootPath ?? "", "downloads", PrintAgentZipName),
+                Path.Combine(_environment.ContentRootPath, "tools", "ProductionPlanner.PrintAgent", "releases", PrintAgentZipName)
             };
 
             return candidates.FirstOrDefault(System.IO.File.Exists);

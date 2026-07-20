@@ -87,6 +87,17 @@ jobs:
           mkdir -p publish/wwwroot/downloads
           cp tools/ProductionPlanner.FileOpener/releases/ProductionPlanner-FileOpener-win-x64.zip publish/wwwroot/downloads/
 
+      - name: Bundle print agent zip
+        run: |
+          mkdir -p publish/wwwroot/downloads
+          PRINT_ZIP="tools/ProductionPlanner.PrintAgent/releases/ProductionPlanner-PrintAgent-win.zip"
+          if [ ! -f "$PRINT_ZIP" ]; then
+            echo "::error::Нет $PRINT_ZIP — соберите агент локально (dotnet build -c Release) и закоммитьте zip"
+            exit 1
+          fi
+          cp "$PRINT_ZIP" publish/wwwroot/downloads/
+          ls -la publish/wwwroot/downloads/
+
       - name: Configure PostgreSQL connection for production
         env:
           POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}

@@ -6,6 +6,8 @@ using ProductionPlanner.Data;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
+using ProductionPlanner.Services.LabelPrint;
+using ProductionPlanner.Models.Dtos;
 
 namespace ProductionPlanner.Tests;
 
@@ -177,6 +179,7 @@ public class TaskSplitRemovalTests
         services.AddSingleton<IWorkHoursCalculator>(_ => new PassthroughWorkHoursCalculator());
         services.AddSingleton<IEmployeeStatsService, NoOpEmployeeStatsService>();
         services.AddSingleton<ITaskNotificationService, NoOpTaskNotificationService>();
+        services.AddSingleton<ILabelPrintService, NoOpLabelPrintService>();
         services.AddSingleton<ILogger<TaskLifecycleService>>(NullLogger<TaskLifecycleService>.Instance);
 
         var provider = services.BuildServiceProvider();
@@ -275,6 +278,22 @@ public class TaskSplitRemovalTests
         public Task NotifySequentialStageReadyAsync(ProductionTask task, int stageNumber) => Task.CompletedTask;
         public Task NotifyTaskCommentAddedAsync(ProductionTask task, string authorUserId, string? recipientUserId) =>
             Task.CompletedTask;
+    }
+
+    private sealed class NoOpLabelPrintService : ILabelPrintService
+    {
+        public Task TryEnqueueForCompletedTaskAsync(int taskId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+        public Task<IReadOnlyList<PrintJobDto>> GetPendingJobsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<PrintJobDto>>([]);
+        public Task<PrintJobDto?> ClaimJobAsync(int jobId, string? agentName, CancellationToken cancellationToken = default) =>
+            Task.FromResult<PrintJobDto?>(null);
+        public Task<bool> MarkPrintingAsync(int jobId, string? agentName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+        public Task<bool> MarkPrintedAsync(int jobId, string? agentName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+        public Task<bool> MarkFailedAsync(int jobId, string? agentName, string? errorMessage, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
     }
 
     private sealed class PassthroughWorkHoursCalculator : IWorkHoursCalculator

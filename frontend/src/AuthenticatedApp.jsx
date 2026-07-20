@@ -181,6 +181,26 @@ function AuthenticatedAppContent() {
     }
   }, [user?.fullName, employee, activeTab, refreshCalendar]);
 
+  const handleLabelPrintStatus = useCallback((payload) => {
+    const status = String(payload?.status || payload?.Status || '');
+    const code = String(payload?.pickupCode || payload?.PickupCode || '').trim();
+    const title = String(payload?.orderTitle || payload?.OrderTitle || '').trim();
+    const err = String(payload?.errorMessage || payload?.ErrorMessage || '').trim();
+    const label = code ? `«${code}»` : (title ? `«${title}»` : '');
+
+    if (status === 'Printing') {
+      showSuccess(label ? `Идёт печать этикетки ${label}` : 'Идёт печать этикетки');
+      return;
+    }
+    if (status === 'Printed') {
+      showSuccess(label ? `Этикетка ${label} напечатана` : 'Этикетка напечатана');
+      return;
+    }
+    if (status === 'Failed') {
+      showError(err || (label ? `Не удалось напечатать этикетку ${label}` : 'Не удалось напечатать этикетку'));
+    }
+  }, [showSuccess, showError]);
+
   const viewSubscription = useMemo(
     () => ({
       activeTab,
@@ -199,7 +219,8 @@ function AuthenticatedAppContent() {
       onCalendarRefresh: handleHubCalendarRefresh,
       onFullRefresh: handleHubFullRefresh,
       onCdrPreviewRetryDue: handleCdrPreviewRetryDue,
-      onLunchStateChanged: handleHubLunchStateChanged
+      onLunchStateChanged: handleHubLunchStateChanged,
+      onLabelPrintStatus: handleLabelPrintStatus
     }),
     [
       handleHubTaskEventForTab,
@@ -208,7 +229,8 @@ function AuthenticatedAppContent() {
       handleHubCalendarRefresh,
       handleHubFullRefresh,
       handleCdrPreviewRetryDue,
-      handleHubLunchStateChanged
+      handleHubLunchStateChanged,
+      handleLabelPrintStatus
     ]
   );
 

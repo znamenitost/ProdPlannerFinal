@@ -11,6 +11,7 @@ using ProductionPlanner.Services.TaskCdrPreview;
 using ProductionPlanner.Services.TaskTable;
 using ProductionPlanner.Services.MaxMessenger;
 using ProductionPlanner.Services.CustomerOrders;
+using ProductionPlanner.Services.LabelPrint;
 
 namespace ProductionPlanner.Infrastructure;
 
@@ -30,6 +31,7 @@ public static class WebApplicationExtensions
         services.AddScoped<INotificationInboxService, NotificationInboxService>();
         services.AddScoped<ITaskCommentService, TaskCommentService>();
         services.AddScoped<ICustomerOrderTrackingService, CustomerOrderTrackingService>();
+        services.AddScoped<ILabelPrintService, LabelPrintService>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<IWebPushService, WebPushService>();
         services.AddScoped<ITaskTableService, TaskTableService>();
@@ -115,11 +117,13 @@ public static class WebApplicationExtensions
         app.UseWebSockets();
         app.MapControllers();
         app.MapHub<NotificationHub>("/notificationHub");
+        app.MapHub<PrintHub>("/printHub");
         app.MapFallback(async (HttpContext context) =>
         {
             var path = context.Request.Path.Value ?? "";
             if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
                 || path.StartsWith("/notificationHub", StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith("/printHub", StringComparison.OrdinalIgnoreCase)
                 || path.StartsWith("/chatHub", StringComparison.OrdinalIgnoreCase))
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;

@@ -9,6 +9,7 @@ using ProductionPlanner.Infrastructure.Logging;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Services.MaxMessenger;
+using ProductionPlanner.Services.LabelPrint;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -123,6 +124,7 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 builder.Services.Configure<MaxBotOptions>(builder.Configuration.GetSection(MaxBotOptions.SectionName));
 builder.Services.Configure<WebPushOptions>(builder.Configuration.GetSection(WebPushOptions.SectionName));
+builder.Services.Configure<PrintAgentOptions>(builder.Configuration.GetSection(PrintAgentOptions.SectionName));
 builder.Services.AddProductionPlannerServices();
 builder.Services.AddSingleton<NotificationConnectionRegistry>();
 builder.Services.AddSignalR(options =>

@@ -42,6 +42,7 @@ public static class PostgresSchemaMigrator
         await ApplyChatTablesPatchAsync(db, logger, cancellationToken);
         await ApplyTaskCommentsPatchAsync(db, logger, cancellationToken);
         await ApplyCustomerOrderTrackingPatchAsync(db, logger, cancellationToken);
+        await ApplyPrintJobsPatchAsync(db, logger, cancellationToken);
         await ApplyWebPushSubscriptionsPatchAsync(db, logger, cancellationToken);
         await ApplyPhase2PerformanceIndexesPatchAsync(db, logger, cancellationToken);
     }
@@ -574,6 +575,56 @@ public static class PostgresSchemaMigrator
         catch (Exception ex)
         {
             logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (CustomerOrderTracking)");
+            throw;
+        }
+    }
+
+    private static async Task ApplyPrintJobsPatchAsync(
+        ApplicationDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "PrintJobs" (
+                    "Id" serial NOT NULL,
+                    "TaskId" integer NOT NULL,
+                    "OrderTitle" character varying(500) NOT NULL,
+                    "PickupCode" character varying(8) NOT NULL,
+                    "Status" integer NOT NULL,
+                    "CreatedAt" timestamp with time zone NOT NULL,
+                    "UpdatedAt" timestamp with time zone NULL,
+                    "ErrorMessage" character varying(500) NULL,
+                    "AgentName" character varying(100) NULL,
+                    CONSTRAINT "PK_PrintJobs" PRIMARY KEY ("Id")
+                );
+
+                CREATE INDEX IF NOT EXISTS "IX_PrintJobs_Status_CreatedAt"
+                    ON "PrintJobs" ("Status", "CreatedAt");
+
+                CREATE INDEX IF NOT EXISTS "IX_PrintJobs_TaskId"
+                    ON "PrintJobs" ("TaskId");
+                """, cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                SELECT '20260720230000_AddPrintJobs', '10.0.7'
+                WHERE EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '__EFMigrationsHistory'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM "__EFMigrationsHistory"
+                    WHERE "MigrationId" = '20260720230000_AddPrintJobs'
+                );
+                """, cancellationToken);
+
+            logger.LogInformation("PrintJobs проверены/созданы (PostgreSQL).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (PrintJobs)");
             throw;
         }
     }

@@ -412,6 +412,11 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       });
     };
 
+    const handleLabelPrintStatus = (payload) => {
+      if (!isMounted) return;
+      handlersRef.current.onLabelPrintStatus?.(payload);
+    };
+
     connection.on('NewTask', handleNewTask);
     connection.on('TaskDeleted', handleTaskDeleted);
     connection.on('TaskUpdated', handleTaskUpdated);
@@ -419,6 +424,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     connection.on('TaskProgressChanged', handleTaskProgressChanged);
     connection.on('CdrPreviewRetryDue', handleCdrPreviewRetryDue);
     connection.on('LunchStateChanged', handleLunchStateChanged);
+    connection.on('LabelPrintStatus', handleLabelPrintStatus);
     connection.on('ForceDisconnect', handleForceDisconnect);
 
     const startConnection = async () => {
@@ -495,6 +501,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       connection.off('TaskProgressChanged', handleTaskProgressChanged);
       connection.off('CdrPreviewRetryDue', handleCdrPreviewRetryDue);
       connection.off('LunchStateChanged', handleLunchStateChanged);
+      connection.off('LabelPrintStatus', handleLabelPrintStatus);
       connection.off('ForceDisconnect', handleForceDisconnect);
       connectionRef.current = null;
       setHubConnection(null);

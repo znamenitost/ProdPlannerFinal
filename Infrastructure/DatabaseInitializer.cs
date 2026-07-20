@@ -121,6 +121,7 @@ public static class DatabaseInitializer
             await EnsureTaskCommentsTableSqliteAsync(connection, logger);
             await EnsureTaskCommentReadStatesSqliteAsync(connection, logger);
             await EnsureCustomerOrderTrackingsSqliteAsync(connection, logger);
+            await EnsurePrintJobsSqliteAsync(connection, logger);
             await EnsureWebPushSubscriptionsSqliteAsync(connection, logger);
             await ApplyPhase2PerformanceIndexesSqliteAsync(connection, logger);
             await connection.CloseAsync();
@@ -528,6 +529,32 @@ public static class DatabaseInitializer
             """;
         await create.ExecuteNonQueryAsync();
         logger.LogInformation("Таблица CustomerOrderTrackings проверена/создана.");
+    }
+
+    private static async Task EnsurePrintJobsSqliteAsync(
+        System.Data.Common.DbConnection connection,
+        ILogger logger)
+    {
+        using var create = connection.CreateCommand();
+        create.CommandText = """
+            CREATE TABLE IF NOT EXISTS PrintJobs (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                TaskId INTEGER NOT NULL,
+                OrderTitle TEXT NOT NULL,
+                PickupCode TEXT NOT NULL,
+                Status INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NULL,
+                ErrorMessage TEXT NULL,
+                AgentName TEXT NULL
+            );
+            CREATE INDEX IF NOT EXISTS IX_PrintJobs_Status_CreatedAt
+                ON PrintJobs(Status, CreatedAt);
+            CREATE INDEX IF NOT EXISTS IX_PrintJobs_TaskId
+                ON PrintJobs(TaskId);
+            """;
+        await create.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблица PrintJobs проверена/создана.");
     }
 
     private static async Task EnsureWebPushSubscriptionsSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)

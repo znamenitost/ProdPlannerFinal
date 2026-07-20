@@ -86,6 +86,11 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      '/printHub': {
+        target: 'http://localhost:5234',
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 })
