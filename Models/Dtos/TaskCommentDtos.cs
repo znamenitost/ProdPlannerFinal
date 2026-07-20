@@ -26,7 +26,10 @@ public sealed class TaskCommentDto
 public sealed class AddTaskCommentRequest
 {
     public string Text { get; set; } = "";
+    /// <summary>Один получатель (обратная совместимость).</summary>
     public string? RecipientUserId { get; set; }
+    /// <summary>Несколько получателей — создаётся отдельный комментарий на каждого.</summary>
+    public List<string>? RecipientUserIds { get; set; }
     public long? ReplyToCommentId { get; set; }
 }
 

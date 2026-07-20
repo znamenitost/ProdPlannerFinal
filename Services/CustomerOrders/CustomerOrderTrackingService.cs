@@ -131,6 +131,18 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
                 .ToDictionary(g => g.Key, g => g.ToList());
         }
 
+        var parentIds = parents.Select(p => p.Id).ToList();
+        var baselineByTaskId = await _db.TaskComments
+            .AsNoTracking()
+            .Where(c => parentIds.Contains(c.ProductionTaskId) && c.IsBaseline)
+            .OrderBy(c => c.Id)
+            .Select(c => new { c.ProductionTaskId, c.Text })
+            .ToListAsync(cancellationToken);
+
+        var baselineTextByTaskId = baselineByTaskId
+            .GroupBy(c => c.ProductionTaskId)
+            .ToDictionary(g => g.Key, g => (g.First().Text ?? "").Trim());
+
         var result = new List<CustomerOrderPublicItemDto>(parents.Count);
         foreach (var parent in parents)
         {
@@ -142,12 +154,17 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
                 status = SplitTaskStatusAggregator.ResolveParentStatus(kids);
             }
 
+            baselineTextByTaskId.TryGetValue(parent.Id, out var baselineComment);
+            var primaryComment = !string.IsNullOrWhiteSpace(baselineComment)
+                ? baselineComment
+                : CustomerOrderKey.ExtractPrimaryComment(parent.Comment);
+
             var (label, kind) = CustomerOrderPublicStatus.Map(status);
             result.Add(new CustomerOrderPublicItemDto
             {
                 Title = CustomerOrderKey.BuildOrderTitle(
                     parent.FileName,
-                    parent.Comment,
+                    primaryComment,
                     customerDisplayName),
                 PickupCode = parent.PickupCode ?? "",
                 Status = label,

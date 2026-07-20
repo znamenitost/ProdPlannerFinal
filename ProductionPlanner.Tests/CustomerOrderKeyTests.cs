@@ -1,4 +1,5 @@
 using ProductionPlanner.Models;
+using ProductionPlanner.Services;
 using ProductionPlanner.Services.CustomerOrders;
 
 namespace ProductionPlanner.Tests;
@@ -30,6 +31,19 @@ public class CustomerOrderKeyTests
         Assert.Equal("визитки — 500 шт", CustomerOrderKey.BuildOrderTitle("визитки.cdr", "500 шт", "Арета"));
         Assert.Equal("визитки", CustomerOrderKey.BuildOrderTitle("визитки.cdr", "", "Арета"));
         Assert.Equal("Арета", CustomerOrderKey.BuildOrderTitle("", "", "Арета"));
+    }
+
+    [Fact]
+    public void ExtractPrimaryComment_TakesBaselineBlockOnly()
+    {
+        var sep = TaskCommentService.CommentPreviewSeparator;
+        Assert.Equal(
+            "визитки 500",
+            CustomerOrderKey.ExtractPrimaryComment($"визитки 500{sep}Дима: ок{sep}Павел → Дима: ещё"));
+        Assert.Equal(
+            "только текст",
+            CustomerOrderKey.ExtractPrimaryComment("→ Дима: только текст"));
+        Assert.Equal("legacy", CustomerOrderKey.ExtractPrimaryComment("legacy\nДима: later"));
     }
 
     [Theory]

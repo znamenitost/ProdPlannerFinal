@@ -68,20 +68,17 @@ public sealed class TaskCommentService : ITaskCommentService
         if (!await CanAccessTaskAsync(task, currentUser, isAdmin, cancellationToken))
             return null;
 
-        string? recipientUserId = null;
-        string? recipientName = null;
-        if (!string.IsNullOrWhiteSpace(request.RecipientUserId))
+        var recipientIds = ResolveRecipientUserIds(request);
+        var recipients = new List<(string UserId, string FullName)>();
+        foreach (var recipientId in recipientIds)
         {
             var recipient = await _userManager.Users
                 .AsNoTracking()
-                .FirstOrDefaultAsync(
-                    u => u.Id == request.RecipientUserId && u.IsActive,
-                    cancellationToken);
+                .FirstOrDefaultAsync(u => u.Id == recipientId && u.IsActive, cancellationToken);
             if (recipient == null)
                 throw new InvalidOperationException("Получатель не найден");
 
-            recipientUserId = recipient.Id;
-            recipientName = recipient.FullName;
+            recipients.Add((recipient.Id, recipient.FullName));
         }
 
         long? replyToId = null;
@@ -97,35 +94,83 @@ public sealed class TaskCommentService : ITaskCommentService
             replyToId = replyParent.Id;
         }
 
-        var entity = new TaskComment
+        var authorName = string.IsNullOrWhiteSpace(currentUser.FullName)
+            ? currentUser.UserName ?? "Пользователь"
+            : currentUser.FullName.Trim();
+        var now = _timeService.Now;
+
+        // Пустой список — один комментарий без адресата и без оповещений.
+        var targets = recipients.Count == 0
+            ? new List<(string? UserId, string? FullName)> { (null, null) }
+            : recipients.Select(r => ((string?)r.UserId, (string?)r.FullName)).ToList();
+
+        TaskComment? lastEntity = null;
+        foreach (var (recipientUserId, recipientName) in targets)
         {
-            ProductionTaskId = taskId,
-            AuthorUserId = currentUser.Id,
-            AuthorName = string.IsNullOrWhiteSpace(currentUser.FullName)
-                ? currentUser.UserName ?? "Пользователь"
-                : currentUser.FullName.Trim(),
-            AuthorIsAdmin = isAdmin,
-            Text = text,
-            RecipientUserId = recipientUserId,
-            RecipientName = recipientName,
-            ReplyToCommentId = replyToId,
-            CreatedAt = _timeService.Now
-        };
+            var entity = new TaskComment
+            {
+                ProductionTaskId = taskId,
+                AuthorUserId = currentUser.Id,
+                AuthorName = authorName,
+                AuthorIsAdmin = isAdmin,
+                Text = text,
+                RecipientUserId = recipientUserId,
+                RecipientName = recipientName,
+                ReplyToCommentId = replyToId,
+                CreatedAt = now
+            };
+            _context.TaskComments.Add(entity);
+            lastEntity = entity;
+        }
 
-        _context.TaskComments.Add(entity);
         await _context.SaveChangesAsync(cancellationToken);
-
         await RefreshTaskCommentPreviewAsync(taskId, cancellationToken);
 
-        await _notificationService.NotifyTaskCommentAddedAsync(
-            task,
-            currentUser.Id,
-            recipientUserId);
+        if (recipients.Count > 0)
+        {
+            foreach (var (recipientUserId, _) in recipients)
+            {
+                await _notificationService.NotifyTaskCommentAddedAsync(
+                    task,
+                    currentUser.Id,
+                    recipientUserId);
+            }
+        }
+        else
+        {
+            // Без адресатов — только синхронизация превью в таблице, без пушей/инбокса.
+            await _notificationService.NotifyTaskUpdatedAsync(task);
+        }
 
         await MarkCommentsReadAsync(taskId, currentUser.Id, cancellationToken);
 
+        if (lastEntity == null)
+            return null;
+
         var list = await LoadCommentDtosAsync(taskId, currentUser.Id, isAdmin, cancellationToken);
-        return list.FirstOrDefault(c => c.Id == entity.Id);
+        return list.FirstOrDefault(c => c.Id == lastEntity.Id);
+    }
+
+    private static List<string> ResolveRecipientUserIds(AddTaskCommentRequest request)
+    {
+        var ids = new List<string>();
+        if (request.RecipientUserIds is { Count: > 0 })
+        {
+            foreach (var id in request.RecipientUserIds)
+            {
+                var trimmed = (id ?? "").Trim();
+                if (trimmed.Length == 0)
+                    continue;
+                if (!ids.Contains(trimmed, StringComparer.Ordinal))
+                    ids.Add(trimmed);
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(request.RecipientUserId))
+        {
+            ids.Add(request.RecipientUserId.Trim());
+        }
+
+        return ids;
     }
 
     public async Task<bool> DeleteCommentAsync(

@@ -152,13 +152,29 @@ export default function CustomerOrderPage({ token }) {
                   </Box>
                 )}
 
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ display: 'block', textAlign: 'center', mt: 3 }}
-                >
-                  Назовите код на стойке выдачи
-                </Typography>
+                {totalCount > 0 && (
+                  <Box
+                    sx={{
+                      mt: 3,
+                      pt: 2,
+                      borderTop: 1,
+                      borderColor: 'divider',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.55 }}>
+                      Назовите номер получения на стойке выдачи.
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mt: 0.75, lineHeight: 1.55 }}
+                    >
+                      Если заказ забирает курьер — заранее сообщите ему этот номер,
+                      без него заказ не выдадут.
+                    </Typography>
+                  </Box>
+                )}
               </>
             )}
           </Paper>

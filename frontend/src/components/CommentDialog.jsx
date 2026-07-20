@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Box,
   Button,
+  Checkbox,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -10,6 +11,7 @@ import {
   FormControl,
   IconButton,
   InputLabel,
+  ListItemText,
   MenuItem,
   Select,
   TextField,
@@ -19,6 +21,7 @@ import {
   Close,
   Comment,
   Delete,
+  Notes,
   Reply,
   Send
 } from '@mui/icons-material';
@@ -28,7 +31,8 @@ import AppDialogTitle from './ui/AppDialogTitle';
 function CommentItem({ comment, onReply, onDelete, deleting, hideAuthor = false }) {
   const showAuthor = !hideAuthor && Boolean(comment.authorName);
   const showRecipient = Boolean(comment.recipientName);
-  const showMeta = showAuthor || showRecipient;
+  const isPrimaryNote = hideAuthor && !showAuthor && !showRecipient;
+  const showMeta = showAuthor || showRecipient || isPrimaryNote;
 
   return (
     <Box
@@ -63,7 +67,19 @@ function CommentItem({ comment, onReply, onDelete, deleting, hideAuthor = false 
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           {showMeta ? (
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                flexWrap: 'wrap'
+              }}
+            >
+              {isPrimaryNote ? (
+                <Notes sx={{ fontSize: 16, color: 'text.secondary' }} aria-hidden />
+              ) : null}
               {showAuthor ? comment.authorName : null}
               {showRecipient ? (
                 <Typography component="span" variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
@@ -101,11 +117,19 @@ function CommentItem({ comment, onReply, onDelete, deleting, hideAuthor = false 
   );
 }
 
+function recipientSelectLabel(selectedIds, contacts) {
+  if (!selectedIds.length) return 'Никому (без оповещения)';
+  const names = selectedIds
+    .map((id) => contacts.find((c) => c.userId === id)?.fullName || id)
+    .filter(Boolean);
+  return names.join(', ');
+}
+
 export default function CommentDialog({ open, task, pending = false, onChanged, onClose }) {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [value, setValue] = useState('');
-  const [recipientUserId, setRecipientUserId] = useState('');
+  const [recipientUserIds, setRecipientUserIds] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [replyTo, setReplyTo] = useState(null);
   const [sending, setSending] = useState(false);
@@ -136,7 +160,7 @@ export default function CommentDialog({ open, task, pending = false, onChanged, 
   useEffect(() => {
     if (!open) return undefined;
     setValue('');
-    setRecipientUserId('');
+    setRecipientUserIds([]);
     setReplyTo(null);
     setError('');
     loadComments();
@@ -165,10 +189,11 @@ export default function CommentDialog({ open, task, pending = false, onChanged, 
     try {
       await addTaskComment(taskId, {
         text,
-        recipientUserId: recipientUserId || null,
+        recipientUserIds: recipientUserIds.length > 0 ? recipientUserIds : null,
         replyToCommentId: replyTo?.id || null
       });
       setValue('');
+      setRecipientUserIds([]);
       setReplyTo(null);
       await loadComments();
       onChanged?.(taskId);
@@ -180,13 +205,24 @@ export default function CommentDialog({ open, task, pending = false, onChanged, 
     }
   };
 
+  const handleReply = (comment) => {
+    setReplyTo(comment);
+    const authorId = String(comment?.authorUserId || '').trim();
+    setRecipientUserIds(authorId ? [authorId] : []);
+  };
+
+  const clearReply = () => {
+    setReplyTo(null);
+    setRecipientUserIds([]);
+  };
+
   const handleDelete = async (comment) => {
     if (!taskId || deletingId != null) return;
     setDeletingId(comment.id);
     setError('');
     try {
       await deleteTaskComment(taskId, comment.id);
-      if (replyTo?.id === comment.id) setReplyTo(null);
+      if (replyTo?.id === comment.id) clearReply();
       await loadComments();
       onChanged?.(taskId);
     } catch (err) {
@@ -226,7 +262,7 @@ export default function CommentDialog({ open, task, pending = false, onChanged, 
               <CommentItem
                 key={c.id}
                 comment={c}
-                onReply={setReplyTo}
+                onReply={handleReply}
                 onDelete={handleDelete}
                 deleting={deletingId === c.id}
                 hideAuthor={Boolean(c.isBaseline) || index === 0}
@@ -259,7 +295,7 @@ export default function CommentDialog({ open, task, pending = false, onChanged, 
                 {replyTo.text}
               </Typography>
             </Box>
-            <IconButton size="small" onClick={() => setReplyTo(null)} aria-label="Отменить ответ">
+            <IconButton size="small" onClick={clearReply} aria-label="Отменить ответ">
               <Close fontSize="small" />
             </IconButton>
           </Box>
@@ -270,15 +306,18 @@ export default function CommentDialog({ open, task, pending = false, onChanged, 
           <Select
             labelId="task-comment-recipient-label"
             label="Кому"
-            value={recipientUserId}
-            onChange={(e) => setRecipientUserId(e.target.value)}
+            multiple
+            value={recipientUserIds}
+            onChange={(e) => {
+              const next = e.target.value;
+              setRecipientUserIds(typeof next === 'string' ? next.split(',') : next);
+            }}
+            renderValue={(selected) => recipientSelectLabel(selected, contacts)}
           >
-            <MenuItem value="">
-              <em>Всем (админы и сотрудники)</em>
-            </MenuItem>
             {contacts.map((c) => (
               <MenuItem key={c.userId} value={c.userId}>
-                {c.fullName}
+                <Checkbox checked={recipientUserIds.includes(c.userId)} size="small" />
+                <ListItemText primary={c.fullName} />
               </MenuItem>
             ))}
           </Select>

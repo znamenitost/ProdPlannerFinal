@@ -342,14 +342,24 @@ export async function getTaskComments(taskId) {
   return res.json();
 }
 
-export async function addTaskComment(taskId, { text, recipientUserId = null, replyToCommentId = null } = {}) {
+export async function addTaskComment(
+  taskId,
+  { text, recipientUserId = null, recipientUserIds = null, replyToCommentId = null } = {}
+) {
+  const ids = Array.isArray(recipientUserIds)
+    ? recipientUserIds.filter(Boolean)
+    : recipientUserId
+      ? [recipientUserId]
+      : [];
+
   const res = await fetch(`${API_BASE}/tasks/table/row/${taskId}/comments`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       text: text ?? '',
-      recipientUserId: recipientUserId || null,
+      recipientUserId: ids.length === 1 ? ids[0] : null,
+      recipientUserIds: ids.length > 0 ? ids : null,
       replyToCommentId: replyToCommentId || null
     })
   });

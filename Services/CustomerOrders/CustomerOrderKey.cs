@@ -1,4 +1,5 @@
 using System.Globalization;
+using ProductionPlanner.Services;
 
 namespace ProductionPlanner.Services.CustomerOrders;
 
@@ -60,6 +61,34 @@ public static class CustomerOrderKey
             return string.Join(" — ", parts);
 
         return string.IsNullOrWhiteSpace(customerDisplayName) ? "Заказ" : customerDisplayName.Trim();
+    }
+
+    /// <summary>
+    /// Первичный комментарий из denormalized preview: первый блок без последующих «Автор: …».
+    /// </summary>
+    public static string ExtractPrimaryComment(string? denormalizedComment)
+    {
+        var raw = denormalizedComment ?? "";
+        if (string.IsNullOrWhiteSpace(raw))
+            return "";
+
+        var firstBlock = raw.Contains(TaskCommentService.CommentPreviewSeparator)
+            ? raw.Split(TaskCommentService.CommentPreviewSeparator)[0]
+            : raw.Split('\n')[0];
+
+        firstBlock = firstBlock.Trim();
+        if (string.IsNullOrEmpty(firstBlock))
+            return "";
+
+        // «→ Получатель: текст» у baseline
+        if (firstBlock.StartsWith('→'))
+        {
+            var colon = firstBlock.IndexOf(':');
+            if (colon > 0 && colon < firstBlock.Length - 1)
+                return firstBlock[(colon + 1)..].Trim();
+        }
+
+        return firstBlock;
     }
 
     private static string StripExtension(string fileName)

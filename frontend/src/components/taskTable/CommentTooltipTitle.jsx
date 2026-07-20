@@ -1,5 +1,5 @@
 import { Box, Divider, Typography } from '@mui/material';
-import { ArrowForward, Person } from '@mui/icons-material';
+import { ArrowForward, Notes, Person } from '@mui/icons-material';
 import { parseCommentPreviewLines } from '../../utils/commentPreview';
 
 const iconSx = { fontSize: 14, opacity: 0.92, flexShrink: 0, mt: '1px' };
@@ -28,9 +28,10 @@ export default function CommentTooltipTitle({ preview }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', py: 0.25, maxWidth: 380 }}>
       {comments.map((item, index) => {
         const isFirst = index === 0;
+        const isPrimaryNote = Boolean(item.hideAuthor) && !item.author && !item.recipient;
         const showAuthor = Boolean(item.author) && !item.hideAuthor;
         const showRecipient = Boolean(item.recipient);
-        const hasMeta = showAuthor || showRecipient;
+        const hasMeta = showAuthor || showRecipient || isPrimaryNote;
 
         return (
           <Box key={index}>
@@ -46,6 +47,9 @@ export default function CommentTooltipTitle({ preview }) {
                 rowGap: 0.25
               }}
             >
+              {isPrimaryNote ? (
+                <Notes sx={{ ...iconSx, opacity: 1 }} aria-hidden />
+              ) : null}
               {showAuthor ? <PersonLabel name={item.author} bold={isFirst} /> : null}
               {showRecipient ? (
                 <>
@@ -62,13 +66,12 @@ export default function CommentTooltipTitle({ preview }) {
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                     fontWeight: isFirst ? 800 : 400,
-                    // Многострочный текст — блок под автором/получателем, не рядом.
                     ...(String(item.text).includes('\n')
                       ? { flexBasis: '100%', display: 'block', mt: hasMeta ? 0.25 : 0 }
                       : null)
                   }}
                 >
-                  {hasMeta && !String(item.text).includes('\n')
+                  {(showAuthor || showRecipient) && !String(item.text).includes('\n')
                     ? `: ${item.text}`
                     : item.text}
                 </Typography>
