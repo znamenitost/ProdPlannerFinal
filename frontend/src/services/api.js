@@ -480,6 +480,17 @@ export async function unsubscribePush({ endpoint }) {
   await throwIfNotOk(res, 'Не удалось отписаться от push');
 }
 
+/** Публичная ссылка на страницу заказов заказчика (get-or-create). */
+export async function createCustomerOrderLink(taskId) {
+  const res = await fetch(`${API_BASE}/customer-orders/link/${taskId}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  await throwIfNotOk(res, 'Не удалось создать ссылку на заказ');
+  return res.json();
+}
+
 // Эндпоинты dev-панели (роль Admin). Мок-время и интервалы — на проде тоже.
 async function debugFetch(url, init = {}) {
   const res = await fetch(`${API_BASE}/debug${url}`, {

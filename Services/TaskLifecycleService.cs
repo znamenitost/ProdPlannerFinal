@@ -72,45 +72,51 @@ public class TaskLifecycleService : ITaskLifecycleService
     private async Task UpdateParentStatusAsync(int childTaskId, CancellationToken cancellationToken)
     {
         var child = await _repo.GetTaskByIdAsync(childTaskId, cancellationToken);
-        if (child?.ParentRowNumber == null) return;
+        if (child?.ParentRowNumber is not int parentId) return;
 
-        var parent = await _repo.GetTaskByIdAsync(child.ParentRowNumber.Value, cancellationToken);
-        if (parent == null || !parent.IsSplitTask) return;
-
-        var allChildren = await _repo.GetChildTasksAsync(parent.Id, cancellationToken);
-        if (!allChildren.Any()) return;
-
-        var newStatus = SplitTaskStatusAggregator.ResolveParentStatus(allChildren);
-        var now = _timeService.Now;
-        var patch = SplitTaskStatusAggregator.BuildParentStatusPatch(newStatus, allChildren, now);
+        var parentProbe = await _repo.GetTaskByIdAsync(parentId, cancellationToken);
+        if (parentProbe == null || !parentProbe.IsSplitTask) return;
 
         var parentUpdated = 0;
-        if (parent.Status == newStatus)
+        await _repo.ExecuteWithTaskLifecycleLockAsync(parentId, async ct =>
         {
-            if (newStatus == JobStatus.Completed && parent.Progress < 0.99)
+            var parent = await _repo.GetTaskByIdAsync(parentId, ct);
+            if (parent == null || !parent.IsSplitTask) return;
+
+            var allChildren = await _repo.GetChildTasksAsync(parent.Id, ct);
+            if (!allChildren.Any()) return;
+
+            var newStatus = SplitTaskStatusAggregator.ResolveParentStatus(allChildren);
+            var now = _timeService.Now;
+            var patch = SplitTaskStatusAggregator.BuildParentStatusPatch(newStatus, allChildren, now);
+
+            if (parent.Status == newStatus)
+            {
+                if (newStatus == JobStatus.Completed && parent.Progress < 0.99)
+                {
+                    parentUpdated = await _repo.TryTransitionStatusAsync(
+                        parent.Id,
+                        JobStatus.Completed,
+                        now,
+                        expectedStatuses: [JobStatus.Completed],
+                        patch,
+                        ct);
+                }
+            }
+            else
             {
                 parentUpdated = await _repo.TryTransitionStatusAsync(
                     parent.Id,
-                    JobStatus.Completed,
+                    newStatus,
                     now,
-                    expectedStatuses: null,
+                    expectedStatuses: [parent.Status],
                     patch,
-                    cancellationToken);
+                    ct);
             }
-        }
-        else
-        {
-            parentUpdated = await _repo.TryTransitionStatusAsync(
-                parent.Id,
-                newStatus,
-                now,
-                expectedStatuses: null,
-                patch,
-                cancellationToken);
-        }
+        }, cancellationToken);
 
         if (parentUpdated > 0)
-            await NotifySplitParentStatusChangedAsync(parent.Id, cancellationToken);
+            await NotifySplitParentStatusChangedAsync(parentId, cancellationToken);
     }
 
     private async Task NotifySplitParentStatusChangedAsync(int parentId, CancellationToken cancellationToken)
@@ -461,20 +467,24 @@ public class TaskLifecycleService : ITaskLifecycleService
         if (task?.ParentRowNumber is not int parentId || !task.IsSplitTask)
             return;
 
-        var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId, cancellationToken);
-        if (!allCompleted) return;
+        var updated = 0;
+        await _repo.ExecuteWithTaskLifecycleLockAsync(parentId, async ct =>
+        {
+            var allCompleted = await _splitService.AreAllSubtasksCompletedAsync(parentId, ct);
+            if (!allCompleted) return;
 
-        var parentTask = await _repo.GetTaskByIdAsync(parentId, cancellationToken);
-        if (parentTask == null || !parentTask.IsSplitTask || parentTask.Status == JobStatus.Completed)
-            return;
+            var parentTask = await _repo.GetTaskByIdAsync(parentId, ct);
+            if (parentTask == null || !parentTask.IsSplitTask || parentTask.Status == JobStatus.Completed)
+                return;
 
-        var updated = await _repo.TryTransitionStatusAsync(
-            parentId,
-            JobStatus.Completed,
-            now,
-            [JobStatus.Assigned, JobStatus.InProgress, JobStatus.Paused],
-            new TaskStatusPatch { Progress = 1, CompletedAt = now },
-            cancellationToken);
+            updated = await _repo.TryTransitionStatusAsync(
+                parentId,
+                JobStatus.Completed,
+                now,
+                [JobStatus.Assigned, JobStatus.InProgress, JobStatus.Paused],
+                new TaskStatusPatch { Progress = 1, CompletedAt = now },
+                ct);
+        }, cancellationToken);
 
         if (updated > 0)
         {

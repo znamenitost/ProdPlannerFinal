@@ -97,6 +97,10 @@ namespace ProductionPlanner.Models
 
         /// <summary>1 — запланирована вторая попытка; 0 — первая ещё не провалена или завершено.</summary>
         public int CdrPreviewRetryAttempts { get; set; }
+
+        /// <summary>Код выдачи для заказчика (буква каталога + 2 цифры), например «А42».</summary>
+        [MaxLength(8)]
+        public string? PickupCode { get; set; }
         
         public string FullPath => string.IsNullOrEmpty(FolderPath) ? FileName : $"{FolderPath}/{FileName}";
         

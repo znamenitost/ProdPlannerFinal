@@ -15,7 +15,11 @@ public static class TaskTableConcurrencyHelper
     public static void RequireExpectedUpdatedAt(int taskId, DateTime storedUpdatedAt, DateTime? expectedUpdatedAt)
     {
         if (!expectedUpdatedAt.HasValue)
-            return;
+        {
+            throw new TaskConcurrencyException(
+                taskId,
+                "Не передана версия строки (expectedUpdatedAt). Обновите таблицу и повторите.");
+        }
 
         if (!UpdatedAtMatches(storedUpdatedAt, expectedUpdatedAt.Value))
         {

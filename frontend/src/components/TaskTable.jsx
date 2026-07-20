@@ -502,6 +502,7 @@ export default function TaskTable({
         pendingLifecycleTaskId={table.pendingLifecycleTaskId}
         onEdit={table.handleEditRow}
         onDelete={table.handleDeleteRow}
+        onCopyOrderLink={table.handleCopyOrderLink}
         onOpenComment={table.handleOpenComment}
         onOpenIntervals={table.handleOpenIntervals}
         canEdit={isAdmin}

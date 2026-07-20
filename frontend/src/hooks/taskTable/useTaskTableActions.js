@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { combineDateTime, DEFAULT_TIME } from '../../utils/dateTimeHelpers';
-import { buildTaskUpdatePayload } from '../../services/api';
+import { buildTaskUpdatePayload, createCustomerOrderLink } from '../../services/api';
 import { runWorkflowWithSequenceGuard } from '../../utils/supplyStatusWorkflow';
 import {
   SUPPLY_MODE_COOPERATIVE,
@@ -44,6 +44,7 @@ export default function useTaskTableActions({
   onCalendarRefresh,
   showError,
   showWarning,
+  showSuccess,
   confirm,
   applyPlanningWarnings,
   getAutoSearchMinutes = () => 0
@@ -480,6 +481,21 @@ export default function useTaskTableActions({
     setEditingId(id);
   }, [setEditingId]);
 
+  const handleCopyOrderLink = useCallback(async (task) => {
+    const taskId = typeof task === 'object' ? task?.id : task;
+    if (!taskId) return;
+    try {
+      const link = await createCustomerOrderLink(taskId);
+      const url = link?.url || (link?.path ? `${window.location.origin}${link.path}` : '');
+      if (!url) throw new Error('Сервер не вернул ссылку');
+      await navigator.clipboard.writeText(url);
+      const name = link.customerName ? ` (${link.customerName})` : '';
+      showSuccess?.(`Ссылка на заказ${name} скопирована`);
+    } catch (err) {
+      showError(err.message || 'Не удалось скопировать ссылку на заказ');
+    }
+  }, [showError, showSuccess]);
+
   return {
     pendingLifecycleTaskId,
     handleSaveNewRow,
@@ -492,6 +508,7 @@ export default function useTaskTableActions({
     handleTogglePriority,
     handleDeleteRow,
     handleAddNewRow,
-    handleEditRow
+    handleEditRow,
+    handleCopyOrderLink
   };
 }

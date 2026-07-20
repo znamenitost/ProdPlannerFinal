@@ -73,6 +73,7 @@ function ParentTaskRow({
   pendingLifecycleTaskId = null,
   onEdit,
   onDelete,
+  onCopyOrderLink,
   onOpenComment,
   onOpenIntervals,
   canEdit,
@@ -343,6 +344,7 @@ function ParentTaskRow({
                 lifecycleBusy={lifecycleBusy}
                 onEdit={() => onEdit(task.id)}
                 onDelete={() => onDelete(task.id)}
+                onCopyOrderLink={onCopyOrderLink}
                 onIntervals={hasChildren ? undefined : () => onOpenIntervals(task)}
                 onStart={onStart}
                 onPause={onPause}
@@ -397,6 +399,7 @@ function ParentTaskRow({
           pendingLifecycleTaskId={pendingLifecycleTaskId}
           onEdit={onEdit}
           onDelete={onDelete}
+          onCopyOrderLink={onCopyOrderLink}
           onOpenComment={onOpenComment}
           onOpenIntervals={onOpenIntervals}
           isAdmin={canEdit}

@@ -115,6 +115,7 @@ export default function useTaskTableController({
     onCalendarRefresh,
     showError,
     showWarning,
+    showSuccess,
     confirm,
     applyPlanningWarnings,
     getAutoSearchMinutes

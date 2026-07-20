@@ -12,7 +12,12 @@ namespace ProductionPlanner.Data
         private readonly ApplicationDbContext _context;
         private readonly IAppTimeService _timeService;
         private static readonly ConcurrentDictionary<int, SemaphoreSlim> LifecycleLocks = new();
-        private static readonly AsyncLocal<int?> HeldLifecycleLockTaskId = new();
+        /// <summary>
+        /// Stack of held task ids for nested locks (e.g. child lifecycle → parent status sync).
+        /// Semaphores are kept in the dictionary for process lifetime — never disposed —
+        /// to avoid TOCTOU races under concurrent WaitAsync.
+        /// </summary>
+        private static readonly AsyncLocal<Stack<int>?> HeldLifecycleLockTaskIds = new();
         private static readonly SemaphoreSlim DisplayOrderLock = new(1, 1);
         private const long DisplayOrderAdvisoryLockKey = 7_326_001L;
 
@@ -720,7 +725,8 @@ namespace ProductionPlanner.Data
             Func<CancellationToken, Task> action,
             CancellationToken cancellationToken = default)
         {
-            if (HeldLifecycleLockTaskId.Value == taskId)
+            var held = HeldLifecycleLockTaskIds.Value;
+            if (held != null && held.Contains(taskId))
             {
                 await action(cancellationToken);
                 return;
@@ -728,9 +734,11 @@ namespace ProductionPlanner.Data
 
             var sem = LifecycleLocks.GetOrAdd(taskId, _ => new SemaphoreSlim(1, 1));
             await sem.WaitAsync(cancellationToken);
+            held = HeldLifecycleLockTaskIds.Value ?? new Stack<int>();
+            held.Push(taskId);
+            HeldLifecycleLockTaskIds.Value = held;
             try
             {
-                HeldLifecycleLockTaskId.Value = taskId;
                 await ExecuteInTransactionAsync(async ct =>
                 {
                     if (_context.Database.IsNpgsql())
@@ -744,13 +752,11 @@ namespace ProductionPlanner.Data
             }
             finally
             {
-                HeldLifecycleLockTaskId.Value = null;
+                if (held.Count > 0 && held.Peek() == taskId)
+                    held.Pop();
+                if (held.Count == 0)
+                    HeldLifecycleLockTaskIds.Value = null;
                 sem.Release();
-                if (sem.CurrentCount == 1
-                    && LifecycleLocks.TryRemove(new KeyValuePair<int, SemaphoreSlim>(taskId, sem)))
-                {
-                    sem.Dispose();
-                }
             }
         }
 

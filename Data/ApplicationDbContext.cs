@@ -70,6 +70,7 @@ namespace ProductionPlanner.Data
         public DbSet<WebPushSubscription> WebPushSubscriptions { get; set; }
         public DbSet<TaskComment> TaskComments { get; set; }
         public DbSet<TaskCommentReadState> TaskCommentReadStates { get; set; }
+        public DbSet<CustomerOrderTracking> CustomerOrderTrackings { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -209,6 +210,20 @@ namespace ProductionPlanner.Data
                 entity.HasIndex(r => new { r.UserId, r.ProductionTaskId }).IsUnique();
                 entity.Property(r => r.UserId).HasMaxLength(450);
             });
+
+            modelBuilder.Entity<CustomerOrderTracking>(entity =>
+            {
+                entity.ToTable("CustomerOrderTrackings");
+                entity.Property(c => c.CustomerKey).HasMaxLength(200);
+                entity.Property(c => c.CustomerDisplayName).HasMaxLength(200);
+                entity.Property(c => c.PublicToken).HasMaxLength(64);
+                entity.HasIndex(c => c.CustomerKey).IsUnique();
+                entity.HasIndex(c => c.PublicToken).IsUnique();
+            });
+
+            modelBuilder.Entity<ProductionTask>()
+                .Property(t => t.PickupCode)
+                .HasMaxLength(8);
 
             modelBuilder.Entity<WorkInterval>()
                 .HasIndex(i => new { i.ProductionTaskId, i.StartTime });

@@ -1,5 +1,13 @@
 # Деплой на 1gb.ru и ошибка FTP 550
 
+## Инкрементальный FTP (по умолчанию)
+
+`deploy-1gb.yml` заливает через **SamKirkland/FTP-Deploy-Action** только файлы, изменившиеся с прошлого деплоя (state: `.ftp-deploy-sync-state.json` на сервере). Файлы, которых больше нет в `publish/`, action удаляет сам. `app_offline.htm` перед заливкой и проверки `deploy-version` / `/api/deploy-info` остаются.
+
+Сборка (`npm` + `dotnet publish`) по-прежнему полная — экономия на этапе FTP.
+
+**Аварийный полный sync:** Actions → Deploy to 1gb.ru → Run workflow → включите **full_sync**. Сбрасывается sync-state и чистятся `wwwroot/index.html` + `wwwroot/assets/*`. Не используйте `dangerous-clean-slate` — он сотрёт и `logs/` / `App_Data/`.
+
 ## Timeout data connection (порт 5986 и т.п.)
 
 На шаге **Deploy via FTP** (SamKirkland) с раннеров GitHub Actions часто:
@@ -8,9 +16,7 @@
 
 Причина: пассивный FTP data-порт хостинга 1gb не принимает соединения с IP GitHub Actions (firewall/NAT).
 
-**Решение в CI:** workflow `deploy-1gb.yml` заливает файлы через **lftp mirror** (те же настройки, что для `app_offline.htm` и теста логина). Шаги lftp до деплоя обычно зелёные — падает только Node FTP-клиент SamKirkland.
-
-Если снова timeout на `mirror`: в панели 1gb проверьте пассивный диапазон портов FTP и что он открыт для внешних клиентов; либо повторите workflow (иногда помогает смена IP раннера).
+Если timeout повторяется: в панели 1gb проверьте пассивный диапазон портов FTP; либо повторите workflow (иногда помогает смена IP раннера); при подозрении на битый state — один раз **full_sync**.
 
 ## FTP 550 Access denied
 

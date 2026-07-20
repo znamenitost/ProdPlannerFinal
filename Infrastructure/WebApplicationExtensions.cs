@@ -10,6 +10,7 @@ using ProductionPlanner.Services.AppSettings;
 using ProductionPlanner.Services.TaskCdrPreview;
 using ProductionPlanner.Services.TaskTable;
 using ProductionPlanner.Services.MaxMessenger;
+using ProductionPlanner.Services.CustomerOrders;
 
 namespace ProductionPlanner.Infrastructure;
 
@@ -28,6 +29,7 @@ public static class WebApplicationExtensions
         services.AddScoped<ITaskNotificationService, TaskNotificationService>();
         services.AddScoped<INotificationInboxService, NotificationInboxService>();
         services.AddScoped<ITaskCommentService, TaskCommentService>();
+        services.AddScoped<ICustomerOrderTrackingService, CustomerOrderTrackingService>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<IWebPushService, WebPushService>();
         services.AddScoped<ITaskTableService, TaskTableService>();

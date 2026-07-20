@@ -4,12 +4,19 @@ on:
   push:
     branches: [codexOPT, codexOpt3, codexOpt4, codexOpt5, codexOPT7, codexOPT8, codexOPT12]
   workflow_dispatch:
+    inputs:
+      full_sync:
+        description: 'Аварийный полный FTP sync (сброс state + очистка wwwroot/assets). По умолчанию — инкремент.'
+        type: boolean
+        default: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # Push всегда инкремент; полный sync только вручную через workflow_dispatch.
+      FULL_SYNC: ${{ github.event_name == 'workflow_dispatch' && inputs.full_sync == true }}
     environment:
       name: FTP_SERVER
     steps:
@@ -217,8 +224,12 @@ jobs:
           echo "Ждём остановку пула IIS (30 с)…"
           sleep 30
 
-      - name: Reset FTP sync and stale frontend entrypoints
+      # По умолчанию FTP-Deploy льёт только diff по .ftp-deploy-sync-state.json
+      # и сам удаляет файлы, которых больше нет в publish/. Полный sync — вручную.
+      - name: Full FTP sync reset (emergency)
+        if: env.FULL_SYNC == 'true'
         run: |
+          echo "FULL_SYNC=true — сбрасываем state и wwwroot entrypoints"
           lftp -e "
             set ftp:passive-mode on;
             set ssl:force off;
@@ -228,7 +239,7 @@ jobs:
             rm -f wwwroot/index.html;
             glob -a rm -f wwwroot/assets/*;
             bye
-          " || echo "::warning::Не удалось очистить wwwroot на FTP — продолжаем деплой"
+          " || echo "::warning::Не удалось сделать full sync reset на FTP — продолжаем деплой"
 
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.4.0
@@ -243,6 +254,8 @@ jobs:
           security: loose
           log-level: verbose
           timeout: 120000
+          # Не используем dangerous-clean-slate: он сотрёт logs/App_Data.
+          # Мёртвые файлы из прошлого publish/ action удаляет по sync-state.
           exclude: |
             **/.git*
             **/.github/**
@@ -347,12 +360,19 @@ jobs:
       - name: Deploy summary
         run: |
           JS=$(basename "$(ls publish/wwwroot/assets/index-*.js)")
+          MODE="incremental (только изменённые файлы)"
+          if [ "${FULL_SYNC}" = "true" ]; then
+            MODE="full sync (state сброшен)"
+          fi
           echo "## Deployed bundle" >> "$GITHUB_STEP_SUMMARY"
           echo "- sha: \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- js: \`$JS\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ftp: \`$MODE\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Проверка на проде (после зелёного job):" >> "$GITHUB_STEP_SUMMARY"
           echo "1. http://team-mainb6d.1gb.ru/wwwroot/deploy-version.txt" >> "$GITHUB_STEP_SUMMARY"
           echo "2. http://team-mainb6d.1gb.ru/api/deploy-info" >> "$GITHUB_STEP_SUMMARY"
           echo "3. View Source главной — комментарий \`deploy-sha:${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "4. Ctrl+Shift+R; меню ⋮ — вкладка **Таблица задач** (роль Admin или своя задача)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Если UI/DLL «залипли»: Actions → Run workflow → включите **full_sync**." >> "$GITHUB_STEP_SUMMARY"

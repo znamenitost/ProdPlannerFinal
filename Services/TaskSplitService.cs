@@ -344,12 +344,9 @@ namespace ProductionPlanner.Services
             }
             finally
             {
+                // Keep semaphore in SplitLocks for process lifetime — disposing after
+                // TryRemove races with concurrent WaitAsync under burst load.
                 sem.Release();
-                if (sem.CurrentCount == 1
-                    && SplitLocks.TryRemove(new KeyValuePair<int, SemaphoreSlim>(parentTaskId, sem)))
-                {
-                    sem.Dispose();
-                }
             }
         }
 
@@ -703,7 +700,7 @@ namespace ProductionPlanner.Services
                         parent.Id,
                         JobStatus.Completed,
                         now,
-                        expectedStatuses: null,
+                        expectedStatuses: [JobStatus.Completed],
                         patch,
                         cancellationToken);
                 }
@@ -715,7 +712,7 @@ namespace ProductionPlanner.Services
                 parent.Id,
                 newStatus,
                 now,
-                expectedStatuses: null,
+                expectedStatuses: [parent.Status],
                 patch,
                 cancellationToken);
         }

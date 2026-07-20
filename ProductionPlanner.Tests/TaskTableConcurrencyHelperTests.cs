@@ -24,10 +24,19 @@ public class TaskTableConcurrencyHelperTests
     }
 
     [Fact]
-    public void RequireExpectedUpdatedAt_skips_when_not_sent()
+    public void RequireExpectedUpdatedAt_throws_when_not_sent()
     {
-        var ex = Record.Exception(() =>
+        Assert.Throws<TaskConcurrencyException>(() =>
             TaskTableConcurrencyHelper.RequireExpectedUpdatedAt(1, DateTime.UtcNow, null));
+    }
+
+    [Fact]
+    public void RequireExpectedUpdatedAt_accepts_matching_version()
+    {
+        var stored = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
+
+        var ex = Record.Exception(() =>
+            TaskTableConcurrencyHelper.RequireExpectedUpdatedAt(7, stored, stored.AddMilliseconds(200)));
 
         Assert.Null(ex);
     }

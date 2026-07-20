@@ -100,6 +100,8 @@ public static class DatabaseInitializer
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN IsPriorityMarked INTEGER NOT NULL DEFAULT 0");
             if (!columns.Contains("CommentEditedViaDialog"))
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN CommentEditedViaDialog INTEGER NOT NULL DEFAULT 0");
+            if (!columns.Contains("PickupCode"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN PickupCode TEXT NULL");
 
             foreach (var alterCmd in alterCommands)
             {
@@ -118,6 +120,7 @@ public static class DatabaseInitializer
             await EnsureChatTablesSqliteAsync(connection, logger);
             await EnsureTaskCommentsTableSqliteAsync(connection, logger);
             await EnsureTaskCommentReadStatesSqliteAsync(connection, logger);
+            await EnsureCustomerOrderTrackingsSqliteAsync(connection, logger);
             await EnsureWebPushSubscriptionsSqliteAsync(connection, logger);
             await ApplyPhase2PerformanceIndexesSqliteAsync(connection, logger);
             await connection.CloseAsync();
@@ -503,6 +506,28 @@ public static class DatabaseInitializer
             """;
         await create.ExecuteNonQueryAsync();
         logger.LogInformation("Таблица TaskCommentReadStates проверена/создана.");
+    }
+
+    private static async Task EnsureCustomerOrderTrackingsSqliteAsync(
+        System.Data.Common.DbConnection connection,
+        ILogger logger)
+    {
+        using var create = connection.CreateCommand();
+        create.CommandText = """
+            CREATE TABLE IF NOT EXISTS CustomerOrderTrackings (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                CustomerKey TEXT NOT NULL,
+                CustomerDisplayName TEXT NOT NULL,
+                PublicToken TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_CustomerOrderTrackings_CustomerKey
+                ON CustomerOrderTrackings(CustomerKey);
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_CustomerOrderTrackings_PublicToken
+                ON CustomerOrderTrackings(PublicToken);
+            """;
+        await create.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблица CustomerOrderTrackings проверена/создана.");
     }
 
     private static async Task EnsureWebPushSubscriptionsSqliteAsync(System.Data.Common.DbConnection connection, ILogger logger)

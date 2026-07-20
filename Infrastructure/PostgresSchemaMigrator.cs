@@ -41,6 +41,7 @@ public static class PostgresSchemaMigrator
         await ApplyMaxMessengerPatchAsync(db, logger, cancellationToken);
         await ApplyChatTablesPatchAsync(db, logger, cancellationToken);
         await ApplyTaskCommentsPatchAsync(db, logger, cancellationToken);
+        await ApplyCustomerOrderTrackingPatchAsync(db, logger, cancellationToken);
         await ApplyWebPushSubscriptionsPatchAsync(db, logger, cancellationToken);
         await ApplyPhase2PerformanceIndexesPatchAsync(db, logger, cancellationToken);
     }
@@ -85,6 +86,9 @@ public static class PostgresSchemaMigrator
 
                 ALTER TABLE "ProductionTasks"
                     ADD COLUMN IF NOT EXISTS "CommentEditedViaDialog" boolean NOT NULL DEFAULT false;
+
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "PickupCode" character varying(8) NULL;
 
                 CREATE INDEX IF NOT EXISTS "IX_ProductionTasks_CdrPreviewRetryAt"
                     ON "ProductionTasks" ("CdrPreviewRetryAt");
@@ -521,6 +525,55 @@ public static class PostgresSchemaMigrator
         catch (Exception ex)
         {
             logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (TaskComments)");
+            throw;
+        }
+    }
+
+    private static async Task ApplyCustomerOrderTrackingPatchAsync(
+        ApplicationDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "PickupCode" character varying(8) NULL;
+
+                CREATE TABLE IF NOT EXISTS "CustomerOrderTrackings" (
+                    "Id" serial NOT NULL,
+                    "CustomerKey" character varying(200) NOT NULL,
+                    "CustomerDisplayName" character varying(200) NOT NULL,
+                    "PublicToken" character varying(64) NOT NULL,
+                    "CreatedAt" timestamp with time zone NOT NULL,
+                    CONSTRAINT "PK_CustomerOrderTrackings" PRIMARY KEY ("Id")
+                );
+
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_CustomerOrderTrackings_CustomerKey"
+                    ON "CustomerOrderTrackings" ("CustomerKey");
+
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_CustomerOrderTrackings_PublicToken"
+                    ON "CustomerOrderTrackings" ("PublicToken");
+                """, cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                SELECT '20260720220000_AddCustomerOrderTracking', '10.0.7'
+                WHERE EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '__EFMigrationsHistory'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM "__EFMigrationsHistory"
+                    WHERE "MigrationId" = '20260720220000_AddCustomerOrderTracking'
+                );
+                """, cancellationToken);
+
+            logger.LogInformation("CustomerOrderTrackings / PickupCode проверены/созданы (PostgreSQL).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (CustomerOrderTracking)");
             throw;
         }
     }

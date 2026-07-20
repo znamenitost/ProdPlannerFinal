@@ -21,7 +21,8 @@ import {
   AccessTime,
   LocalFireDepartment,
   Notifications,
-  NotificationsActive
+  NotificationsActive,
+  Link as LinkIcon
 } from '@mui/icons-material';
 import {
   ACTION_RESUME,
@@ -49,6 +50,7 @@ export default function TaskAdminActionStacks({
   lifecycleBusy = false,
   onEdit,
   onDelete,
+  onCopyOrderLink,
   onIntervals,
   onStart,
   onPause,
@@ -159,6 +161,22 @@ export default function TaskAdminActionStacks({
               <Edit fontSize="small" />
             </ListItemIcon>
             <ListItemText>Редактировать</ListItemText>
+          </MenuItem>
+        )}
+        {onCopyOrderLink && (
+          <MenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              handleClose();
+              void Promise.resolve(onCopyOrderLink(task)).catch((err) => {
+                console.error('Ошибка копирования ссылки на заказ:', err);
+              });
+            }}
+          >
+            <ListItemIcon>
+              <LinkIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Ссылка на заказ</ListItemText>
           </MenuItem>
         )}
         <MenuItem

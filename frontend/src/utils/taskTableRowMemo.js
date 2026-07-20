@@ -90,6 +90,7 @@ export function areParentRowPropsEqual(prev, next) {
     prev.onComplete === next.onComplete &&
     prev.onEdit === next.onEdit &&
     prev.onDelete === next.onDelete &&
+    prev.onCopyOrderLink === next.onCopyOrderLink &&
     prev.onOpenComment === next.onOpenComment &&
     prev.onOpenIntervals === next.onOpenIntervals &&
     prev.isCdrPreviewBuilding === next.isCdrPreviewBuilding &&
@@ -142,6 +143,9 @@ export function areChildRowPropsEqual(prev, next) {
     prev.onPause === next.onPause &&
     prev.onResume === next.onResume &&
     prev.onComplete === next.onComplete &&
+    prev.onEdit === next.onEdit &&
+    prev.onDelete === next.onDelete &&
+    prev.onCopyOrderLink === next.onCopyOrderLink &&
     prev.onOpenComment === next.onOpenComment &&
     prev.onOpenIntervals === next.onOpenIntervals &&
     prev.forceCommentTooltipTaskId === next.forceCommentTooltipTaskId &&
