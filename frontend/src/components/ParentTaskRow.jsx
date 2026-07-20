@@ -36,6 +36,7 @@ import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import { alpha } from '@mui/material/styles';
 import { highlightedTaskRowSx, overdueTaskRowSx } from '../theme/surfaces';
+import { isFinishedStatusText } from '../constants/taskStatuses';
 import {
   COL_ICON,
   ICON_SLOT_EXPAND,
@@ -107,7 +108,7 @@ function ParentTaskRow({
 
     if (Array.isArray(childrenTasks) && childrenTasks.length > 0) {
       return childrenTasks.some(
-        (child) => child.employeeName === employeeName && child.statusText !== 'Готово'
+        (child) => child.employeeName === employeeName && !isFinishedStatusText(child.statusText)
       );
     }
 
@@ -126,14 +127,14 @@ function ParentTaskRow({
       if (hasChildren) {
         isMine = !isExpanded && hasActiveSubtaskForEmployee(selectedEmployeeForHighlight);
       } else {
-        isMine = task.employeeName === selectedEmployeeForHighlight && task.statusText !== 'Готово';
+        isMine = task.employeeName === selectedEmployeeForHighlight && !isFinishedStatusText(task.statusText);
       }
     }
     else if (currentUser?.role !== 'Admin') {
       if (hasChildren) {
         isMine = !isExpanded && hasActiveSubtaskForEmployee(currentUser?.fullName);
       } else {
-        isMine = task.employeeName === currentUser?.fullName && task.statusText !== 'Готово';
+        isMine = task.employeeName === currentUser?.fullName && !isFinishedStatusText(task.statusText);
       }
     }
   }
@@ -151,7 +152,7 @@ function ParentTaskRow({
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
     if (!hasChildren) {
-      return task.employeeName === currentUser.fullName && task.statusText !== 'Готово';
+      return task.employeeName === currentUser.fullName && !isFinishedStatusText(task.statusText);
     }
     return false;
   };
@@ -163,7 +164,7 @@ function ParentTaskRow({
 
   const getRowStyle = (theme) => {
     const overdue =
-      task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
+      task.deadline && !isFinishedStatusText(task.statusText) && new Date(task.deadline) < new Date();
     let style = {
       borderLeft: 'none',
       '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) }

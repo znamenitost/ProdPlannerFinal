@@ -21,3 +21,15 @@ public class CustomerOrderPublicItemDto
     public string Status { get; set; } = "";
     public string StatusKind { get; set; } = "";
 }
+
+public class PickupOrderLookupDto
+{
+    public int TaskId { get; set; }
+    public string PickupCode { get; set; } = "";
+    public string CustomerName { get; set; } = "";
+    public string FileName { get; set; } = "";
+    public string PrimaryComment { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string StatusKind { get; set; } = "";
+    public bool CanIssue { get; set; }
+}

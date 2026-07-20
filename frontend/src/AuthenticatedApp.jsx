@@ -17,7 +17,9 @@ import {
   Divider,
   ListItemIcon,
   ListItemText,
-  ListSubheader
+  ListSubheader,
+  Tooltip,
+  alpha
 } from '@mui/material';
 import {
   Today,
@@ -35,6 +37,7 @@ import {
   Print,
   Notifications,
   LinkOff,
+  AssignmentTurnedIn,
 } from '@mui/icons-material';
 import CurrentDateTime from './components/CurrentDateTime';
 import WeekCalendar from './components/WeekCalendar';
@@ -46,6 +49,7 @@ import LunchBreakOverlay from './components/LunchBreakOverlay';
 import DeployMaintenanceOverlay from './components/DeployMaintenanceOverlay';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
 import MaxLinkDialog from './components/MaxLinkDialog';
+import IssueOrderDialog from './components/IssueOrderDialog';
 import ChatDrawer, { ChatHeaderButton } from './components/chat/ChatDrawer';
 import FileOpenSettingsDialog from './components/FileOpenSettingsDialog';
 
@@ -107,6 +111,7 @@ function AuthenticatedAppContent() {
   const [avatarKey, setAvatarKey] = useState(Date.now());
   const [maxLinkDialogOpen, setMaxLinkDialogOpen] = useState(false);
   const [maxLinkToken, setMaxLinkToken] = useState(null);
+  const [issueOrderDialogOpen, setIssueOrderDialogOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatFocusConversationId, setChatFocusConversationId] = useState(null);
   const [chatActiveConversationId, setChatActiveConversationId] = useState(null);
@@ -537,6 +542,8 @@ function AuthenticatedAppContent() {
   const isAdmin = user?.role === 'Admin';
   const canPrepareDeploy = isAdmin && user?.fullName === DEPLOY_PREPARE_ADMIN_FULL_NAME;
   const isWindowsClient = detectClientPlatform() === 'Win32';
+  const canDownloadAgents =
+    isWindowsClient && user?.fullName === DEPLOY_PREPARE_ADMIN_FULL_NAME;
   const isOnLunchBreak = Boolean(currentLunch);
   const avatarUrl = user?.avatarUrl && user?.id
     ? avatarDisplayUrl(user.id, { size: 128, cacheBust: avatarKey })
@@ -580,6 +587,28 @@ function AuthenticatedAppContent() {
                   />
                 )}
                 {isAdmin && <Divider orientation="vertical" flexItem sx={{ height: 30 }} />}
+                {isAdmin && (
+                  <Tooltip title="Выдать заказ">
+                    <IconButton
+                      onClick={() => setIssueOrderDialogOpen(true)}
+                      aria-label="Выдать заказ"
+                      sx={{ p: 0.75 }}
+                    >
+                      <Avatar
+                        variant="rounded"
+                        sx={{
+                          width: 40,
+                          height: 40,
+                          bgcolor: (t) => alpha(t.palette.success.main, 0.12),
+                          color: 'success.dark',
+                          borderRadius: 2.5
+                        }}
+                      >
+                        <AssignmentTurnedIn fontSize="small" />
+                      </Avatar>
+                    </IconButton>
+                  </Tooltip>
+                )}
                 <ChatHeaderButton
                   unreadCount={unreadCount}
                   onClick={handleOpenChat}
@@ -691,7 +720,7 @@ function AuthenticatedAppContent() {
             <ListItemText>Обед</ListItemText>
           </MenuItem>
         )}
-        {isWindowsClient && (
+        {canDownloadAgents && (
           <MenuItem onClick={handleDownloadFileOpener}>
             <ListItemIcon><Download fontSize="small" color="primary" /></ListItemIcon>
             <ListItemText
@@ -700,7 +729,7 @@ function AuthenticatedAppContent() {
             />
           </MenuItem>
         )}
-        {isWindowsClient && (
+        {canDownloadAgents && (
           <MenuItem onClick={handleDownloadPrintAgent}>
             <ListItemIcon><Print fontSize="small" color="primary" /></ListItemIcon>
             <ListItemText
@@ -709,7 +738,7 @@ function AuthenticatedAppContent() {
             />
           </MenuItem>
         )}
-        {isWindowsClient && <Divider />}
+        {canDownloadAgents && <Divider />}
         <MenuItem onClick={handleFileSelect} disabled={uploadingAvatar}>
           <ListItemIcon><CloudUpload fontSize="small" /></ListItemIcon>
           <ListItemText>Загрузить фото</ListItemText>
@@ -769,6 +798,16 @@ function AuthenticatedAppContent() {
           lunchPending={lunchPending}
         />
       )}
+
+      <IssueOrderDialog
+        open={issueOrderDialogOpen}
+        onClose={() => setIssueOrderDialogOpen(false)}
+        onIssued={(order) => {
+          const code = String(order?.pickupCode || '').trim();
+          showSuccess(code ? `Заказ «${code}» выдан` : 'Заказ выдан');
+          refreshTable();
+        }}
+      />
 
       <MaxLinkDialog
         open={maxLinkDialogOpen}

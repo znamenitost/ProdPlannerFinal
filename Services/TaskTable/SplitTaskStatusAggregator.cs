@@ -145,14 +145,14 @@ public static class SplitTaskStatusAggregator
         var hasCurrentUserSubtask = false;
 
         if (!parent.IsSplitTask || children == null || children.Count == 0)
-            return (statusText, hasCurrentUserSubtask);
+            return (TaskStatusMapper.ApplyPickedUpDisplay(parent, statusText), hasCurrentUserSubtask);
 
         hasCurrentUserSubtask = children.Any(c =>
             c.EmployeeName == targetEmployeeName && c.Status != JobStatus.Completed);
 
         statusText = ResolveParentDisplayStatus(children);
 
-        return (statusText, hasCurrentUserSubtask);
+        return (TaskStatusMapper.ApplyPickedUpDisplay(parent, statusText), hasCurrentUserSubtask);
     }
 
     public static bool AggregatePriorityMarked(

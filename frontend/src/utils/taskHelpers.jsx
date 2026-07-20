@@ -16,7 +16,7 @@ export const truncate = (str, maxLen) => {
 };
 
 export const getStatusColor = (status) => {
-  if (status === 'Готово') return 'success.main';
+  if (status === 'Готово' || status === 'Выдан') return 'success.main';
   if (status === 'Начал') return 'info.main';
   if (status === 'Пауза') return 'warning.main';
   if (status === 'Согласование' || status === 'На согласовании') return 'warning.main';
@@ -33,6 +33,7 @@ export const getStatusIcon = (status, size = 16) => {
     case 'На паузе':
       return <Pause sx={sx} />;
     case 'Готово':
+    case 'Выдан':
     case 'Завершена':
       return <CheckCircle sx={sx} />;
     case 'Назначена':
@@ -68,7 +69,7 @@ export const getParentEmployeeDisplay = (task, childrenTasks) => {
 };
 
 export const isOverdue = (deadline, status) => {
-  if (status === 'Готово') return false;
+  if (status === 'Готово' || status === 'Выдан') return false;
   return new Date(deadline) < new Date();
 };
 

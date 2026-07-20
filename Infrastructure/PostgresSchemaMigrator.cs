@@ -91,8 +91,14 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE "ProductionTasks"
                     ADD COLUMN IF NOT EXISTS "PickupCode" character varying(8) NULL;
 
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "PickedUpAt" timestamp with time zone NULL;
+
                 CREATE INDEX IF NOT EXISTS "IX_ProductionTasks_CdrPreviewRetryAt"
                     ON "ProductionTasks" ("CdrPreviewRetryAt");
+
+                CREATE INDEX IF NOT EXISTS "IX_ProductionTasks_PickupCode"
+                    ON "ProductionTasks" ("PickupCode");
 
                 ALTER TABLE "TaskSplits"
                     ADD COLUMN IF NOT EXISTS "SequenceOrder" integer NOT NULL DEFAULT 0;
@@ -541,6 +547,12 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE "ProductionTasks"
                     ADD COLUMN IF NOT EXISTS "PickupCode" character varying(8) NULL;
 
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "PickedUpAt" timestamp with time zone NULL;
+
+                CREATE INDEX IF NOT EXISTS "IX_ProductionTasks_PickupCode"
+                    ON "ProductionTasks" ("PickupCode");
+
                 CREATE TABLE IF NOT EXISTS "CustomerOrderTrackings" (
                     "Id" serial NOT NULL,
                     "CustomerKey" character varying(200) NOT NULL,
@@ -570,7 +582,20 @@ public static class PostgresSchemaMigrator
                 );
                 """, cancellationToken);
 
-            logger.LogInformation("CustomerOrderTrackings / PickupCode проверены/созданы (PostgreSQL).");
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                SELECT '20260721000000_AddPickedUpAt', '10.0.7'
+                WHERE EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '__EFMigrationsHistory'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM "__EFMigrationsHistory"
+                    WHERE "MigrationId" = '20260721000000_AddPickedUpAt'
+                );
+                """, cancellationToken);
+
+            logger.LogInformation("CustomerOrderTrackings / PickupCode / PickedUpAt проверены/созданы (PostgreSQL).");
         }
         catch (Exception ex)
         {
@@ -591,6 +616,7 @@ public static class PostgresSchemaMigrator
                     "Id" serial NOT NULL,
                     "TaskId" integer NOT NULL,
                     "OrderTitle" character varying(500) NOT NULL,
+                    "PrimaryComment" character varying(500) NOT NULL DEFAULT '',
                     "PickupCode" character varying(8) NOT NULL,
                     "Status" integer NOT NULL,
                     "CreatedAt" timestamp with time zone NOT NULL,
@@ -599,6 +625,9 @@ public static class PostgresSchemaMigrator
                     "AgentName" character varying(100) NULL,
                     CONSTRAINT "PK_PrintJobs" PRIMARY KEY ("Id")
                 );
+
+                ALTER TABLE "PrintJobs"
+                    ADD COLUMN IF NOT EXISTS "PrimaryComment" character varying(500) NOT NULL DEFAULT '';
 
                 CREATE INDEX IF NOT EXISTS "IX_PrintJobs_Status_CreatedAt"
                     ON "PrintJobs" ("Status", "CreatedAt");

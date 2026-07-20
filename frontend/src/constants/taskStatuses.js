@@ -5,6 +5,8 @@ export const STATUS_IN_PROGRESS = 'Начал';
 export const ACTION_RESUME = 'Продолжить';
 export const STATUS_PAUSED = 'Пауза';
 export const STATUS_COMPLETED = 'Готово';
+/** Выдан клиенту (JobStatus остаётся Completed, PickedUpAt на бэкенде). */
+export const STATUS_PICKED_UP = 'Выдан';
 export const STATUS_PENDING_APPROVAL = 'Согласование';
 export const STATUS_NO_ITEMS = 'Нет изделий';
 export const STATUS_APPROVED = 'Согласовано';
@@ -136,6 +138,12 @@ export function normalizeStatusText(statusText) {
   if (!statusText) return '';
   if (statusText === LEGACY_PENDING_APPROVAL) return STATUS_PENDING_APPROVAL;
   return statusText;
+}
+
+/** Готово или уже выдан клиенту — терминальные для UI таблицы. */
+export function isFinishedStatusText(statusText) {
+  const text = normalizeStatusText(statusText);
+  return text === STATUS_COMPLETED || text === STATUS_PICKED_UP;
 }
 
 export function getTaskStatusText(task) {

@@ -102,6 +102,8 @@ public static class DatabaseInitializer
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN CommentEditedViaDialog INTEGER NOT NULL DEFAULT 0");
             if (!columns.Contains("PickupCode"))
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN PickupCode TEXT NULL");
+            if (!columns.Contains("PickedUpAt"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN PickedUpAt TEXT NULL");
 
             foreach (var alterCmd in alterCommands)
             {
@@ -541,6 +543,7 @@ public static class DatabaseInitializer
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 TaskId INTEGER NOT NULL,
                 OrderTitle TEXT NOT NULL,
+                PrimaryComment TEXT NOT NULL DEFAULT '',
                 PickupCode TEXT NOT NULL,
                 Status INTEGER NOT NULL,
                 CreatedAt TEXT NOT NULL,
@@ -554,6 +557,23 @@ public static class DatabaseInitializer
                 ON PrintJobs(TaskId);
             """;
         await create.ExecuteNonQueryAsync();
+
+        // Existing DBs created before PrimaryComment
+        using var info = connection.CreateCommand();
+        info.CommandText = "PRAGMA table_info(PrintJobs)";
+        using var reader = await info.ExecuteReaderAsync();
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (await reader.ReadAsync())
+            columns.Add(reader.GetString(1));
+        await reader.CloseAsync();
+
+        if (!columns.Contains("PrimaryComment"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE PrintJobs ADD COLUMN PrimaryComment TEXT NOT NULL DEFAULT ''";
+            await alter.ExecuteNonQueryAsync();
+        }
+
         logger.LogInformation("Таблица PrintJobs проверена/создана.");
     }
 

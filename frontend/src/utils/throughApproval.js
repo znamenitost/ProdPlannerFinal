@@ -1,12 +1,12 @@
 import {
-  STATUS_COMPLETED,
+  isFinishedStatusText,
   WORK_PHASE_DONE,
   WORK_PHASE_TEST
 } from '../constants/taskStatuses.js';
 
 function isTaskCompleted(task) {
   if (!task) return true;
-  if (task.statusText === STATUS_COMPLETED || task.status === 3) return true;
+  if (isFinishedStatusText(task.statusText) || task.status === 3) return true;
   return Number(task.workPhase) === WORK_PHASE_DONE;
 }
 

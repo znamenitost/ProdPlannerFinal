@@ -200,7 +200,7 @@ internal sealed class MainForm : Form
 
         try
         {
-            LabelPrinter.Print(_config.PrinterName, "Тестовая этикетка", "Т00");
+            LabelPrinter.Print(_config.PrinterName, "Арета", "vizitki", "А42");
             SetStatus("Тестовая этикетка отправлена на принтер");
         }
         catch (Exception ex)

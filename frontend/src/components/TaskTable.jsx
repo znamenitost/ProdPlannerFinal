@@ -25,7 +25,7 @@ import PlanningWarningsBanner from './PlanningWarningsBanner';
 import useTaskTableController from '../hooks/taskTable/useTaskTableController';
 import useTaskTableColumnVisibility from '../hooks/taskTable/useTaskTableColumnVisibility';
 import { TextLimitProvider } from '../context/TextLimitContext';
-import { STATUS_COMPLETED } from '../constants/taskStatuses';
+import { isFinishedStatusText } from '../constants/taskStatuses';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { buildTaskTableSearchResult } from '../utils/taskTableSearch';
 import { hasPlannedProgressFooter } from '../utils/taskTablePlannedProgress';
@@ -42,7 +42,7 @@ const VIRTUAL_OVERSCAN = 15;
 const TEXT_LIMIT_MEASURE_DEBOUNCE_MS = 200;
 
 function isCompletedRow(row) {
-  return row?.statusText === STATUS_COMPLETED || row?.status === 3;
+  return isFinishedStatusText(row?.statusText) || row?.status === 3;
 }
 
 function getDeadlineSortValue(row) {

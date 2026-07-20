@@ -34,4 +34,34 @@ public class CustomerOrderTrackingController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    /// <summary>Поиск заказа по коду получения (для выдачи на стойке).</summary>
+    [HttpGet("pickup/{code}")]
+    public async Task<ActionResult<PickupOrderLookupDto>> FindByPickupCode(
+        string code,
+        CancellationToken cancellationToken)
+    {
+        var dto = await _service.FindByPickupCodeAsync(code, cancellationToken);
+        if (dto == null)
+            return NotFound(new { error = "Заказ с таким кодом не найден" });
+
+        return Ok(dto);
+    }
+
+    /// <summary>Отметить заказ выданным клиенту.</summary>
+    [HttpPost("pickup/{taskId:int}/issue")]
+    public async Task<IActionResult> MarkPickedUp(
+        int taskId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _service.MarkPickedUpAsync(taskId, cancellationToken);
+            return Ok(new { ok = true });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
 }

@@ -20,11 +20,11 @@ import {
 } from '@mui/icons-material';
 import {
   ACTION_RESUME,
-  STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
   STATUS_PAUSED,
   STATUS_WAITING,
   getInfoMenuItems,
+  isFinishedStatusText,
   isInfoStatus
 } from '../constants/taskStatuses';
 
@@ -54,7 +54,7 @@ export default function EmployeeStatusButtons({
   const statusActionsDisabled = pending || lifecycleBusy;
 
   const status = task.statusText || 'Назначена';
-  const isDone = status === STATUS_COMPLETED;
+  const isDone = isFinishedStatusText(status);
   const isStarted = status === STATUS_IN_PROGRESS;
   const isPaused = status === STATUS_PAUSED;
   const isInfo = isInfoStatus(status);

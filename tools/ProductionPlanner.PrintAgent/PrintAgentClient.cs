@@ -15,6 +15,7 @@ internal sealed class PrintJobDto
     public int Id { get; set; }
     public int TaskId { get; set; }
     public string OrderTitle { get; set; } = "";
+    public string PrimaryComment { get; set; } = "";
     public string PickupCode { get; set; } = "";
     public string Status { get; set; } = "";
 }
@@ -130,7 +131,11 @@ internal sealed class PrintAgentClient : IDisposable
 
             try
             {
-                LabelPrinter.Print(_config.PrinterName, job.OrderTitle, job.PickupCode);
+                LabelPrinter.Print(
+                    _config.PrinterName,
+                    job.OrderTitle,
+                    job.PrimaryComment,
+                    job.PickupCode);
                 await PostAsync($"jobs/{job.Id}/printed", _runToken);
                 StatusChanged?.Invoke($"Напечатано: {job.PickupCode}");
             }

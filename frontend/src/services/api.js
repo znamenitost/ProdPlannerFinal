@@ -501,6 +501,32 @@ export async function createCustomerOrderLink(taskId) {
   return res.json();
 }
 
+/** Поиск заказа по коду получения. */
+export async function lookupPickupOrder(code) {
+  const res = await fetch(
+    `${API_BASE}/customer-orders/pickup/${encodeURIComponent(String(code || '').trim())}`,
+    {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store'
+    }
+  );
+  await throwIfNotOk(res, 'Заказ с таким кодом не найден');
+  return res.json();
+}
+
+/** Отметить заказ выданным. */
+export async function issuePickupOrder(taskId) {
+  const res = await fetch(`${API_BASE}/customer-orders/pickup/${taskId}/issue`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}'
+  });
+  await throwIfNotOk(res, 'Не удалось отметить заказ выданным');
+  return res.json();
+}
+
 // Эндпоинты dev-панели (роль Admin). Мок-время и интервалы — на проде тоже.
 async function debugFetch(url, init = {}) {
   const res = await fetch(`${API_BASE}/debug${url}`, {

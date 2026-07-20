@@ -17,6 +17,7 @@ namespace ProductionPlanner.Migrations
                     "Id" serial NOT NULL,
                     "TaskId" integer NOT NULL,
                     "OrderTitle" character varying(500) NOT NULL,
+                    "PrimaryComment" character varying(500) NOT NULL DEFAULT '',
                     "PickupCode" character varying(8) NOT NULL,
                     "Status" integer NOT NULL,
                     "CreatedAt" timestamp with time zone NOT NULL,

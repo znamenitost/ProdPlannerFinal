@@ -165,14 +165,10 @@ export default function CustomerOrderPage({ token }) {
                     <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.55 }}>
                       Назовите номер получения на стойке выдачи.
                     </Typography>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mt: 0.75, lineHeight: 1.55 }}
-                    >
+                    <Alert severity="warning" sx={{ mt: 1.5, textAlign: 'left' }}>
                       Если заказ забирает курьер — заранее сообщите ему этот номер,
                       без него заказ не выдадут.
-                    </Typography>
+                    </Alert>
                   </Box>
                 )}
               </>

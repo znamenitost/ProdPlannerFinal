@@ -53,7 +53,7 @@ export { getStatusChipColor as getStatusColor } from '../theme/statusColors';
 
 // Иконка статуса
 export const getStatusIcon = (status) => {
-  if (status === 'Готово') return 'CheckCircle';
+  if (status === 'Готово' || status === 'Выдан') return 'CheckCircle';
   if (status === 'Начал') return 'PlayArrow';
   if (status === 'Пауза') return 'Pause';
   return null;
@@ -68,14 +68,16 @@ export const getTypeIcon = (type) => {
 
 // Просрочена ли задача
 export const isOverdue = (deadline, status) => {
-  if (status === 'Готово') return false;
+  if (status === 'Готово' || status === 'Выдан') return false;
   return new Date(deadline) < new Date();
 };
 
 // Прогресс родительской задачи
 export const getParentProgress = (parent) => {
   if (!parent.children || parent.children.length === 0) return 0;
-  const completed = parent.children.filter(c => c.statusText === 'Готово').length;
+  const completed = parent.children.filter(
+    (c) => c.statusText === 'Готово' || c.statusText === 'Выдан'
+  ).length;
   return (completed / parent.children.length) * 100;
 };
 

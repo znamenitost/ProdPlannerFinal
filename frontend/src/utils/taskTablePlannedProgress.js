@@ -1,4 +1,4 @@
-import { STATUS_COMPLETED, STATUS_IN_PROGRESS } from '../constants/taskStatuses.js';
+import { isFinishedStatusText, STATUS_IN_PROGRESS } from '../constants/taskStatuses.js';
 
 /** Задача в статусе «Начал» — единственный кандидат на фоновое обновление % прогресса. */
 export function isTaskStatusInProgress(task) {
@@ -9,7 +9,7 @@ export function isTaskStatusInProgress(task) {
 
 export function isTaskCompleted(task) {
   if (!task) return false;
-  if (task.statusText === STATUS_COMPLETED) return true;
+  if (isFinishedStatusText(task.statusText)) return true;
   return task.status === 3;
 }
 

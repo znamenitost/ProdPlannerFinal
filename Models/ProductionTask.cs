@@ -101,6 +101,9 @@ namespace ProductionPlanner.Models
         /// <summary>Код выдачи для заказчика (буква каталога + 2 цифры), например «А42».</summary>
         [MaxLength(8)]
         public string? PickupCode { get; set; }
+
+        /// <summary>Когда заказ выдали клиенту (null — ещё у нас).</summary>
+        public DateTime? PickedUpAt { get; set; }
         
         public string FullPath => string.IsNullOrEmpty(FolderPath) ? FileName : $"{FolderPath}/{FileName}";
         

@@ -4,6 +4,9 @@ namespace ProductionPlanner.Services.TaskTable;
 
 public static class TaskStatusMapper
 {
+    /// <summary>Отображаемый статус после выдачи клиенту (JobStatus остаётся Completed).</summary>
+    public const string PickedUpText = "Выдан";
+
     public static string ToText(JobStatus status) => status switch
     {
         JobStatus.Assigned => "Назначена",
@@ -18,9 +21,19 @@ public static class TaskStatusMapper
         _ => ""
     };
 
+    /// <summary>Если заказ выдан — «Готово» показываем как «Выдан».</summary>
+    public static string ApplyPickedUpDisplay(ProductionTask task, string statusText)
+    {
+        if (task.PickedUpAt == null)
+            return statusText;
+
+        return statusText == ToText(JobStatus.Completed) ? PickedUpText : statusText;
+    }
+
     public static JobStatus FromText(string statusText) => statusText switch
     {
         "Готово" => JobStatus.Completed,
+        "Выдан" => JobStatus.Completed,
         "Начал" => JobStatus.InProgress,
         "Пауза" => JobStatus.Paused,
         "Назначена" => JobStatus.Assigned,

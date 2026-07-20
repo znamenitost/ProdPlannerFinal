@@ -168,7 +168,7 @@ public class TaskTableService : ITaskTableService
 
             var dto = TaskTableRowDto.FromParent(
                 task,
-                TaskStatusMapper.ToText(task.Status),
+                TaskStatusMapper.ApplyPickedUpDisplay(task, TaskStatusMapper.ToText(task.Status)),
                 hasCurrentUserSubtask: false,
                 workIntervals: intervals,
                 now: now,

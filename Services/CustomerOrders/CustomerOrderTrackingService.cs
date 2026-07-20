@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
@@ -11,6 +12,8 @@ public interface ICustomerOrderTrackingService
 {
     Task<CustomerOrderLinkDto> CreateOrGetLinkAsync(int taskId, string publicBaseUrl, CancellationToken cancellationToken = default);
     Task<CustomerOrderPublicDto?> GetPublicPageAsync(string token, CancellationToken cancellationToken = default);
+    Task<PickupOrderLookupDto?> FindByPickupCodeAsync(string pickupCode, CancellationToken cancellationToken = default);
+    Task MarkPickedUpAsync(int taskId, CancellationToken cancellationToken = default);
 }
 
 public class CustomerOrderTrackingService : ICustomerOrderTrackingService
@@ -98,6 +101,52 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         };
     }
 
+    public async Task<PickupOrderLookupDto?> FindByPickupCodeAsync(
+        string pickupCode,
+        CancellationToken cancellationToken = default)
+    {
+        var code = NormalizePickupCode(pickupCode);
+        if (string.IsNullOrEmpty(code))
+            return null;
+
+        var candidates = await _db.ProductionTasks
+            .AsNoTracking()
+            .Where(t =>
+                !t.HiddenFromTaskTable
+                && t.ParentRowNumber == null
+                && t.PickupCode != null
+                && t.PickupCode != "")
+            .ToListAsync(cancellationToken);
+
+        var task = candidates.FirstOrDefault(t =>
+            string.Equals(t.PickupCode!.Trim(), code, StringComparison.OrdinalIgnoreCase));
+        if (task == null)
+            return null;
+
+        return await ToPickupLookupDtoAsync(task, cancellationToken);
+    }
+
+    public async Task MarkPickedUpAsync(int taskId, CancellationToken cancellationToken = default)
+    {
+        var task = await _db.ProductionTasks
+            .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken)
+            ?? throw new InvalidOperationException("Задача не найдена");
+
+        if (task.HiddenFromTaskTable || task.ParentRowNumber != null)
+            throw new InvalidOperationException("Нельзя выдать эту задачу");
+
+        if (task.PickedUpAt != null)
+            throw new InvalidOperationException("Заказ уже выдан");
+
+        var status = await ResolveEffectiveStatusAsync(task, cancellationToken);
+        if (status != JobStatus.Completed)
+            throw new InvalidOperationException("Заказ ещё не готов к выдаче");
+
+        task.PickedUpAt = DateTime.UtcNow;
+        task.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
     private async Task<List<CustomerOrderPublicItemDto>> LoadCustomerOrdersAsync(
         string customerKey,
         string customerDisplayName,
@@ -105,7 +154,10 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
     {
         var parents = await _db.ProductionTasks
             .AsNoTracking()
-            .Where(t => !t.HiddenFromTaskTable && t.ParentRowNumber == null)
+            .Where(t =>
+                !t.HiddenFromTaskTable
+                && t.ParentRowNumber == null
+                && t.PickedUpAt == null)
             .OrderBy(t => t.DisplayOrder)
             .ThenBy(t => t.Id)
             .ToListAsync(cancellationToken);
@@ -132,16 +184,7 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         }
 
         var parentIds = parents.Select(p => p.Id).ToList();
-        var baselineByTaskId = await _db.TaskComments
-            .AsNoTracking()
-            .Where(c => parentIds.Contains(c.ProductionTaskId) && c.IsBaseline)
-            .OrderBy(c => c.Id)
-            .Select(c => new { c.ProductionTaskId, c.Text })
-            .ToListAsync(cancellationToken);
-
-        var baselineTextByTaskId = baselineByTaskId
-            .GroupBy(c => c.ProductionTaskId)
-            .ToDictionary(g => g.Key, g => (g.First().Text ?? "").Trim());
+        var baselineTextByTaskId = await LoadBaselineCommentsAsync(parentIds, cancellationToken);
 
         var result = new List<CustomerOrderPublicItemDto>(parents.Count);
         foreach (var parent in parents)
@@ -173,6 +216,71 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         }
 
         return result;
+    }
+
+    private async Task<PickupOrderLookupDto> ToPickupLookupDtoAsync(
+        ProductionTask task,
+        CancellationToken cancellationToken)
+    {
+        var customerName = CustomerOrderKey.TryGetDisplayName(task.FolderPath) ?? "";
+        var status = await ResolveEffectiveStatusAsync(task, cancellationToken);
+        var (label, kind) = CustomerOrderPublicStatus.Map(status);
+
+        var baselines = await LoadBaselineCommentsAsync([task.Id], cancellationToken);
+        baselines.TryGetValue(task.Id, out var baselineComment);
+        var primaryComment = !string.IsNullOrWhiteSpace(baselineComment)
+            ? baselineComment!
+            : CustomerOrderKey.ExtractPrimaryComment(task.Comment);
+
+        var canIssue = task.PickedUpAt == null && status == JobStatus.Completed;
+
+        return new PickupOrderLookupDto
+        {
+            TaskId = task.Id,
+            PickupCode = (task.PickupCode ?? "").Trim(),
+            CustomerName = customerName,
+            FileName = (task.FileName ?? "").Trim(),
+            PrimaryComment = primaryComment,
+            Status = task.PickedUpAt != null ? "Выдан" : label,
+            StatusKind = task.PickedUpAt != null ? "pickedUp" : kind,
+            CanIssue = canIssue
+        };
+    }
+
+    private async Task<JobStatus> ResolveEffectiveStatusAsync(
+        ProductionTask task,
+        CancellationToken cancellationToken)
+    {
+        if (!task.IsSplitTask)
+            return task.Status;
+
+        var children = await _db.ProductionTasks
+            .AsNoTracking()
+            .Where(t => t.ParentRowNumber == task.Id)
+            .ToListAsync(cancellationToken);
+
+        return children.Count > 0
+            ? SplitTaskStatusAggregator.ResolveParentStatus(children)
+            : task.Status;
+    }
+
+    private async Task<Dictionary<int, string>> LoadBaselineCommentsAsync(
+        IReadOnlyList<int> parentIds,
+        CancellationToken cancellationToken)
+    {
+        if (parentIds.Count == 0)
+            return new Dictionary<int, string>();
+
+        var baselineByTaskId = await _db.TaskComments
+            .AsNoTracking()
+            .Where(c => parentIds.Contains(c.ProductionTaskId) && c.IsBaseline)
+            .OrderBy(c => c.Id)
+            .Select(c => new { c.ProductionTaskId, c.Text })
+            .ToListAsync(cancellationToken);
+
+        return baselineByTaskId
+            .GroupBy(c => c.ProductionTaskId)
+            .ToDictionary(g => g.Key, g => (g.First().Text ?? "").Trim());
     }
 
     private async Task EnsurePickupCodesForCustomerAsync(
@@ -245,6 +353,15 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         }
 
         return $"{letter}{RandomNumberGenerator.GetInt32(0, 100):D2}";
+    }
+
+    private static string NormalizePickupCode(string? pickupCode)
+    {
+        var raw = (pickupCode ?? "").Trim();
+        if (string.IsNullOrEmpty(raw))
+            return "";
+
+        return raw.ToUpper(CultureInfo.InvariantCulture);
     }
 
     private static string GenerateToken()

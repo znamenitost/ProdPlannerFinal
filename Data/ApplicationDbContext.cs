@@ -226,6 +226,7 @@ namespace ProductionPlanner.Data
             {
                 entity.ToTable("PrintJobs");
                 entity.Property(j => j.OrderTitle).HasMaxLength(500);
+                entity.Property(j => j.PrimaryComment).HasMaxLength(500);
                 entity.Property(j => j.PickupCode).HasMaxLength(8);
                 entity.Property(j => j.ErrorMessage).HasMaxLength(500);
                 entity.Property(j => j.AgentName).HasMaxLength(100);

@@ -70,13 +70,13 @@ public sealed class LabelPrintService : ILabelPrintService
             return;
         }
 
-        var primaryComment = CustomerOrderKey.ExtractPrimaryComment(task.Comment);
-        var title = CustomerOrderKey.BuildOrderTitle(task.FileName, primaryComment, customerName);
+        var fileLabel = StripFileName(task.FileName);
 
         var job = new PrintJob
         {
             TaskId = task.Id,
-            OrderTitle = title,
+            OrderTitle = customerName.Trim(),
+            PrimaryComment = Truncate(fileLabel, 500) ?? "",
             PickupCode = pickupCode,
             Status = PrintJobStatus.Pending,
             CreatedAt = DateTime.UtcNow
@@ -169,6 +169,7 @@ public sealed class LabelPrintService : ILabelPrintService
                     TaskId = job.TaskId,
                     Status = status.ToString(),
                     OrderTitle = job.OrderTitle,
+                    PrimaryComment = job.PrimaryComment,
                     PickupCode = job.PickupCode,
                     ErrorMessage = job.ErrorMessage
                 },
@@ -225,10 +226,19 @@ public sealed class LabelPrintService : ILabelPrintService
         Id = job.Id,
         TaskId = job.TaskId,
         OrderTitle = job.OrderTitle,
+        PrimaryComment = job.PrimaryComment,
         PickupCode = job.PickupCode,
         Status = job.Status.ToString(),
         CreatedAt = job.CreatedAt
     };
+
+    private static string StripFileName(string? fileName)
+    {
+        var name = (fileName ?? "").Trim();
+        if (string.IsNullOrEmpty(name))
+            return "";
+        return Path.GetFileNameWithoutExtension(name);
+    }
 
     private static string? Truncate(string? value, int max)
     {

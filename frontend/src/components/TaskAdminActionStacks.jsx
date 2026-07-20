@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import {
   IconButton,
   Menu,
@@ -26,11 +26,11 @@ import {
 } from '@mui/icons-material';
 import {
   ACTION_RESUME,
-  STATUS_COMPLETED,
   STATUS_IN_PROGRESS,
   STATUS_PAUSED,
   STATUS_WAITING,
   getInfoMenuItems,
+  isFinishedStatusText,
   isInfoStatus
 } from '../constants/taskStatuses';
 
@@ -70,7 +70,7 @@ export default function TaskAdminActionStacks({
   const priorityMarkDisabled = pending;
 
   const status = task?.statusText || 'Назначена';
-  const isDone = status === STATUS_COMPLETED;
+  const isDone = isFinishedStatusText(status);
   const isStarted = status === STATUS_IN_PROGRESS;
   const isPaused = status === STATUS_PAUSED;
   const blocked = isInfoStatus(status);
@@ -126,8 +126,213 @@ export default function TaskAdminActionStacks({
   };
 
   const showWorkflowBlock = showWorkflow && !isDone;
-  const showInfoBlock = Boolean(onSetStatus);
   const infoMenuItems = getInfoMenuItems(status);
+  const showInfoBlock = Boolean(onSetStatus) && infoMenuItems.length > 0;
+
+  const sections = [];
+
+  // 1. Редактировать / Удалить
+  const editDeleteItems = [];
+  if (showEdit) {
+    editDeleteItems.push(
+      <MenuItem
+        key="edit"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleClose();
+          onEdit();
+        }}
+      >
+        <ListItemIcon>
+          <Edit fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>Редактировать</ListItemText>
+      </MenuItem>
+    );
+  }
+  if (onDelete) {
+    editDeleteItems.push(
+      <MenuItem
+        key="delete"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleClose();
+          onDelete();
+        }}
+        sx={{ color: 'error.main' }}
+      >
+        <ListItemIcon>
+          <Delete fontSize="small" color="error" />
+        </ListItemIcon>
+        <ListItemText>Удалить</ListItemText>
+      </MenuItem>
+    );
+  }
+  if (onTogglePriority) {
+    editDeleteItems.push(
+      <MenuItem
+        key="priority"
+        disabled={priorityMarkDisabled}
+        onClick={runPriorityMark(!task?.isPriorityMarked)}
+      >
+        <ListItemIcon>
+          <LocalFireDepartment fontSize="small" color="warning" />
+        </ListItemIcon>
+        <ListItemText>
+          {task?.isPriorityMarked ? 'Убрать пометку' : 'Пометить'}
+        </ListItemText>
+      </MenuItem>
+    );
+  }
+  if (editDeleteItems.length > 0) sections.push(editDeleteItems);
+
+  // 2. Начал / Пауза / Готово
+  if (showWorkflowBlock) {
+    const workflowItems = [];
+    if (canStart || blocked) {
+      workflowItems.push(
+        <MenuItem
+          key="start"
+          disabled={statusWorkflowDisabled}
+          sx={workflowItemSx}
+          onClick={runWorkflow(onStart)}
+        >
+          <ListItemIcon>
+            <PlayArrow fontSize="small" color="success" />
+          </ListItemIcon>
+          <ListItemText>{STATUS_IN_PROGRESS}</ListItemText>
+        </MenuItem>
+      );
+    }
+    if (canResume) {
+      workflowItems.push(
+        <MenuItem
+          key="resume"
+          disabled={statusWorkflowDisabled}
+          sx={workflowItemSx}
+          onClick={runWorkflow(onResume)}
+        >
+          <ListItemIcon>
+            <PlayArrow fontSize="small" color="success" />
+          </ListItemIcon>
+          <ListItemText>{ACTION_RESUME}</ListItemText>
+        </MenuItem>
+      );
+    }
+    if (canPause) {
+      workflowItems.push(
+        <MenuItem
+          key="pause"
+          disabled={statusWorkflowDisabled}
+          sx={workflowItemSx}
+          onClick={runWorkflow(onPause)}
+        >
+          <ListItemIcon>
+            <Pause fontSize="small" color="warning" />
+          </ListItemIcon>
+          <ListItemText>{STATUS_PAUSED}</ListItemText>
+        </MenuItem>
+      );
+    }
+    if (canComplete) {
+      workflowItems.push(
+        <MenuItem
+          key="complete"
+          disabled={statusWorkflowDisabled}
+          sx={workflowItemSx}
+          onClick={runWorkflow(onComplete)}
+        >
+          <ListItemIcon>
+            <CheckCircle fontSize="small" color="primary" />
+          </ListItemIcon>
+          <ListItemText>{STATUS_COMPLETED}</ListItemText>
+        </MenuItem>
+      );
+    }
+    if (workflowItems.length > 0) sections.push(workflowItems);
+  }
+
+  // 3. Интервалы / MAX / ссылка на заказ
+  const metaItems = [];
+  if (onIntervals) {
+    metaItems.push(
+      <MenuItem
+        key="intervals"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleClose();
+          onIntervals();
+        }}
+      >
+        <ListItemIcon>
+          <AccessTime fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>Интервалы</ListItemText>
+      </MenuItem>
+    );
+  }
+  if (onMaxSubscribeToggle) {
+    metaItems.push(
+      <MenuItem
+        key="max"
+        disabled={!maxCanSubscribe && !maxSubscribed}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleClose();
+          void Promise.resolve(onMaxSubscribeToggle(task.id, !maxSubscribed)).catch((err) => {
+            console.error('Ошибка подписки MAX:', err);
+          });
+        }}
+      >
+        <ListItemIcon>
+          {maxSubscribed ? (
+            <NotificationsActive fontSize="small" />
+          ) : (
+            <Notifications fontSize="small" />
+          )}
+        </ListItemIcon>
+        <ListItemText>
+          {maxSubscribed ? 'Отписаться от MAX' : 'Подписаться на MAX'}
+        </ListItemText>
+      </MenuItem>
+    );
+  }
+  if (onCopyOrderLink) {
+    metaItems.push(
+      <MenuItem
+        key="order-link"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleClose();
+          void Promise.resolve(onCopyOrderLink(task)).catch((err) => {
+            console.error('Ошибка копирования ссылки на заказ:', err);
+          });
+        }}
+      >
+        <ListItemIcon>
+          <LinkIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>Ссылка на заказ</ListItemText>
+      </MenuItem>
+    );
+  }
+  if (metaItems.length > 0) sections.push(metaItems);
+
+  // 4. Инфостатусы: Нет изделий / Согласование / …
+  if (showInfoBlock) {
+    sections.push(
+      infoMenuItems.map((item) => (
+        <MenuItem
+          key={item.statusText}
+          disabled={statusWorkflowDisabled}
+          onClick={runInfo(item.statusText)}
+        >
+          <ListItemIcon>{infoMenuIcon(item.kind)}</ListItemIcon>
+          <ListItemText>{item.label}</ListItemText>
+        </MenuItem>
+      ))
+    );
+  }
 
   return (
     <>
@@ -149,170 +354,12 @@ export default function TaskAdminActionStacks({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        {showEdit && (
-          <MenuItem
-            onClick={(e) => {
-              e.stopPropagation();
-              handleClose();
-              onEdit();
-            }}
-          >
-            <ListItemIcon>
-              <Edit fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Редактировать</ListItemText>
-          </MenuItem>
-        )}
-        {onCopyOrderLink && (
-          <MenuItem
-            onClick={(e) => {
-              e.stopPropagation();
-              handleClose();
-              void Promise.resolve(onCopyOrderLink(task)).catch((err) => {
-                console.error('Ошибка копирования ссылки на заказ:', err);
-              });
-            }}
-          >
-            <ListItemIcon>
-              <LinkIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Ссылка на заказ</ListItemText>
-          </MenuItem>
-        )}
-        <MenuItem
-          onClick={(e) => {
-            e.stopPropagation();
-            handleClose();
-            onDelete();
-          }}
-          sx={{ color: 'error.main' }}
-        >
-          <ListItemIcon>
-            <Delete fontSize="small" color="error" />
-          </ListItemIcon>
-          <ListItemText>Удалить</ListItemText>
-        </MenuItem>
-        {onIntervals && (
-          <MenuItem
-            onClick={(e) => {
-              e.stopPropagation();
-              handleClose();
-              onIntervals();
-            }}
-          >
-            <ListItemIcon>
-              <AccessTime fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Интервалы</ListItemText>
-          </MenuItem>
-        )}
-
-        {onMaxSubscribeToggle && (
-          <MenuItem
-            disabled={!maxCanSubscribe && !maxSubscribed}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleClose();
-              void Promise.resolve(onMaxSubscribeToggle(task.id, !maxSubscribed)).catch((err) => {
-                console.error('Ошибка подписки MAX:', err);
-              });
-            }}
-          >
-            <ListItemIcon>
-              {maxSubscribed ? (
-                <NotificationsActive fontSize="small" />
-              ) : (
-                <Notifications fontSize="small" />
-              )}
-            </ListItemIcon>
-            <ListItemText>
-              {maxSubscribed ? 'Отписаться от MAX' : 'Подписаться на MAX'}
-            </ListItemText>
-          </MenuItem>
-        )}
-        {onTogglePriority && (
-          <MenuItem
-            disabled={priorityMarkDisabled}
-            onClick={runPriorityMark(!task?.isPriorityMarked)}
-          >
-            <ListItemIcon>
-              <LocalFireDepartment fontSize="small" color="warning" />
-            </ListItemIcon>
-            <ListItemText>
-              {task?.isPriorityMarked ? 'Убрать пометку' : 'Пометить'}
-            </ListItemText>
-          </MenuItem>
-        )}
-
-        {showWorkflowBlock && (
-          <>
-            <Divider sx={menuDividerSx} />
-            {(canStart || blocked) && (
-              <MenuItem
-                disabled={statusWorkflowDisabled}
-                sx={workflowItemSx}
-                onClick={runWorkflow(onStart)}
-              >
-                <ListItemIcon>
-                  <PlayArrow fontSize="small" color="success" />
-                </ListItemIcon>
-                <ListItemText>{STATUS_IN_PROGRESS}</ListItemText>
-              </MenuItem>
-            )}
-            {canResume && (
-              <MenuItem
-                disabled={statusWorkflowDisabled}
-                sx={workflowItemSx}
-                onClick={runWorkflow(onResume)}
-              >
-                <ListItemIcon>
-                  <PlayArrow fontSize="small" color="success" />
-                </ListItemIcon>
-                <ListItemText>{ACTION_RESUME}</ListItemText>
-              </MenuItem>
-            )}
-            {canPause && (
-              <MenuItem
-                disabled={statusWorkflowDisabled}
-                sx={workflowItemSx}
-                onClick={runWorkflow(onPause)}
-              >
-                <ListItemIcon>
-                  <Pause fontSize="small" color="warning" />
-                </ListItemIcon>
-                <ListItemText>{STATUS_PAUSED}</ListItemText>
-              </MenuItem>
-            )}
-            {canComplete && (
-              <MenuItem
-                disabled={statusWorkflowDisabled}
-                sx={workflowItemSx}
-                onClick={runWorkflow(onComplete)}
-              >
-                <ListItemIcon>
-                  <CheckCircle fontSize="small" color="primary" />
-                </ListItemIcon>
-                <ListItemText>{STATUS_COMPLETED}</ListItemText>
-              </MenuItem>
-            )}
-          </>
-        )}
-
-        {showInfoBlock && infoMenuItems.length > 0 && (
-          <>
-            <Divider sx={menuDividerSx} />
-            {infoMenuItems.map((item) => (
-              <MenuItem
-                key={item.statusText}
-                disabled={statusWorkflowDisabled}
-                onClick={runInfo(item.statusText)}
-              >
-                <ListItemIcon>{infoMenuIcon(item.kind)}</ListItemIcon>
-                <ListItemText>{item.label}</ListItemText>
-              </MenuItem>
-            ))}
-          </>
-        )}
+        {sections.map((items, index) => (
+          <Fragment key={`section-${index}`}>
+            {index > 0 && <Divider sx={menuDividerSx} />}
+            {items}
+          </Fragment>
+        ))}
       </Menu>
     </>
   );

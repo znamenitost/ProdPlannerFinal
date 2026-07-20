@@ -22,6 +22,7 @@ public class TaskStatusMapperTests
 
     [Theory]
     [InlineData("Готово", JobStatus.Completed)]
+    [InlineData("Выдан", JobStatus.Completed)]
     [InlineData("Начал", JobStatus.InProgress)]
     [InlineData("Пауза", JobStatus.Paused)]
     [InlineData("", JobStatus.Assigned)]
@@ -35,5 +36,29 @@ public class TaskStatusMapperTests
     public void FromText_MapsKnownLabels(string text, JobStatus expected)
     {
         Assert.Equal(expected, TaskStatusMapper.FromText(text));
+    }
+
+    [Fact]
+    public void ApplyPickedUpDisplay_ReplacesCompletedWhenPickedUp()
+    {
+        var task = new ProductionTask
+        {
+            Status = JobStatus.Completed,
+            PickedUpAt = DateTime.UtcNow
+        };
+
+        Assert.Equal(
+            TaskStatusMapper.PickedUpText,
+            TaskStatusMapper.ApplyPickedUpDisplay(task, "Готово"));
+        Assert.Equal(
+            "Начал",
+            TaskStatusMapper.ApplyPickedUpDisplay(task, "Начал"));
+    }
+
+    [Fact]
+    public void ApplyPickedUpDisplay_KeepsCompletedWhenNotPickedUp()
+    {
+        var task = new ProductionTask { Status = JobStatus.Completed, PickedUpAt = null };
+        Assert.Equal("Готово", TaskStatusMapper.ApplyPickedUpDisplay(task, "Готово"));
     }
 }

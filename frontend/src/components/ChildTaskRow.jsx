@@ -30,7 +30,7 @@ import EmployeeStatusButtons from './EmployeeStatusButtons';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { childRowSx, highlightedTaskRowSx } from '../theme/surfaces';
-import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
+import { isFinishedStatusText, SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
 import { getSharedGroupAccentColor, getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
 import { getSplitSupplyMode } from '../utils/throughApproval';
 import { getPriorityMarkViewerEmployeeName } from '../utils/taskPriorityMark';
@@ -72,19 +72,19 @@ function ChildTaskRow({
   const supplyMode = getSplitSupplyMode(task, sharedGroupParentTask);
   const isSequentialChild = supplyMode === SUPPLY_MODE_INTERNAL;
   const sequenceOrder = task.sequenceOrder ?? 0;
-  const overdue = task.deadline && task.statusText !== 'Готово' && new Date(task.deadline) < new Date();
+  const overdue = task.deadline && !isFinishedStatusText(task.statusText) && new Date(task.deadline) < new Date();
 
   let isMine = false;
   if (currentUser?.role === 'Admin' && selectedEmployeeForHighlight) {
-    isMine = task.employeeName === selectedEmployeeForHighlight && task.statusText !== 'Готово';
+    isMine = task.employeeName === selectedEmployeeForHighlight && !isFinishedStatusText(task.statusText);
   } else if (currentUser?.role !== 'Admin') {
-    isMine = task.employeeName === currentUser?.fullName && task.statusText !== 'Готово';
+    isMine = task.employeeName === currentUser?.fullName && !isFinishedStatusText(task.statusText);
   }
 
   const canUserManage = () => {
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
-    return task.employeeName === currentUser.fullName && task.statusText !== 'Готово';
+    return task.employeeName === currentUser.fullName && !isFinishedStatusText(task.statusText);
   };
 
   const priorityMarkViewer = getPriorityMarkViewerEmployeeName(currentUser);

@@ -13,7 +13,10 @@ public class PrintJob
 {
     public int Id { get; set; }
     public int TaskId { get; set; }
+    /// <summary>Имя заказчика = последняя папка (например «Арета»).</summary>
     public string OrderTitle { get; set; } = "";
+    /// <summary>Имя файла задачи без расширения (для строки под заголовком).</summary>
+    public string PrimaryComment { get; set; } = "";
     public string PickupCode { get; set; } = "";
     public PrintJobStatus Status { get; set; } = PrintJobStatus.Pending;
     public DateTime CreatedAt { get; set; }
