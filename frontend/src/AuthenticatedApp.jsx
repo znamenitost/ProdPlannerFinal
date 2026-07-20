@@ -32,6 +32,7 @@ import {
   Restaurant,
   TaskAlt,
   Download,
+  Print,
   Notifications,
   LinkOff,
 } from '@mui/icons-material';
@@ -353,6 +354,11 @@ function AuthenticatedAppContent() {
   const handleDownloadFileOpener = () => {
     handleCloseUserMenu();
     window.location.href = '/api/files/download/windows-agent';
+  };
+
+  const handleDownloadPrintAgent = () => {
+    handleCloseUserMenu();
+    window.location.href = '/api/files/download/print-agent';
   };
 
   const handleAvatarUpload = async (event) => {
@@ -691,6 +697,15 @@ function AuthenticatedAppContent() {
             <ListItemText
               primary="Скачать агент"
               secondary="Открытие файлов и превью .cdr в веб-приложении"
+            />
+          </MenuItem>
+        )}
+        {isWindowsClient && (
+          <MenuItem onClick={handleDownloadPrintAgent}>
+            <ListItemIcon><Print fontSize="small" color="primary" /></ListItemIcon>
+            <ListItemText
+              primary="Скачать агент печати"
+              secondary="Этикетки заказов на сетевой принтер"
             />
           </MenuItem>
         )}
