@@ -1,5 +1,5 @@
 import { Box } from '@mui/material';
-import { HelpOutline } from '@mui/icons-material';
+import { QuestionMark } from '@mui/icons-material';
 import LazyTooltip from '../common/LazyTooltip';
 
 /** Маркер «выдан без статуса Готово». */
@@ -22,7 +22,7 @@ export function IssuedWithoutReadyMark({ size = 22, iconSize = 14 }) {
         lineHeight: 0
       })}
     >
-      <HelpOutline sx={{ fontSize: iconSize }} />
+      <QuestionMark sx={{ fontSize: iconSize }} />
     </Box>
   );
 }
