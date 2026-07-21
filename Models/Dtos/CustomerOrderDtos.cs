@@ -16,6 +16,7 @@ public class CustomerOrderPublicDto
 
 public class CustomerOrderPublicItemDto
 {
+    public int TaskId { get; set; }
     public string Title { get; set; } = "";
     public string PickupCode { get; set; } = "";
     public string Status { get; set; } = "";

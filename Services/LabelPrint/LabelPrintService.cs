@@ -12,6 +12,7 @@ namespace ProductionPlanner.Services.LabelPrint;
 public sealed class LabelPrintService : ILabelPrintService
 {
     private readonly ApplicationDbContext _db;
+    private readonly ICustomerOrderTrackingService _customerOrders;
     private readonly IHubContext<PrintHub> _printHub;
     private readonly IHubContext<NotificationHub> _notificationHub;
     private readonly IOptions<PrintAgentOptions> _options;
@@ -19,12 +20,14 @@ public sealed class LabelPrintService : ILabelPrintService
 
     public LabelPrintService(
         ApplicationDbContext db,
+        ICustomerOrderTrackingService customerOrders,
         IHubContext<PrintHub> printHub,
         IHubContext<NotificationHub> notificationHub,
         IOptions<PrintAgentOptions> options,
         ILogger<LabelPrintService> logger)
     {
         _db = db;
+        _customerOrders = customerOrders;
         _printHub = printHub;
         _notificationHub = notificationHub;
         _options = options;
@@ -84,7 +87,7 @@ public sealed class LabelPrintService : ILabelPrintService
         _db.PrintJobs.Add(job);
         await _db.SaveChangesAsync(cancellationToken);
 
-        var dto = ToDto(job);
+        var dto = await ToDtoAsync(job, cancellationToken);
         await _printHub.Clients.Group(PrintHub.AgentsGroup).SendAsync(
             PrintHub.JobAvailableMethod,
             dto,
@@ -104,7 +107,10 @@ public sealed class LabelPrintService : ILabelPrintService
             .Take(50)
             .ToListAsync(cancellationToken);
 
-        return jobs.Select(ToDto).ToList();
+        var result = new List<PrintJobDto>(jobs.Count);
+        foreach (var job in jobs)
+            result.Add(await ToDtoAsync(job, cancellationToken));
+        return result;
     }
 
     public async Task<PrintJobDto?> ClaimJobAsync(
@@ -120,7 +126,7 @@ public sealed class LabelPrintService : ILabelPrintService
         job.AgentName = Truncate(agentName, 100);
         job.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
-        return ToDto(job);
+        return await ToDtoAsync(job, cancellationToken);
     }
 
     public Task<bool> MarkPrintingAsync(int jobId, string? agentName, CancellationToken cancellationToken = default) =>
@@ -221,16 +227,33 @@ public sealed class LabelPrintService : ILabelPrintService
         return $"{letter}XX";
     }
 
-    private static PrintJobDto ToDto(PrintJob job) => new()
+    private async Task<PrintJobDto> ToDtoAsync(PrintJob job, CancellationToken cancellationToken)
     {
-        Id = job.Id,
-        TaskId = job.TaskId,
-        OrderTitle = job.OrderTitle,
-        PrimaryComment = job.PrimaryComment,
-        PickupCode = job.PickupCode,
-        Status = job.Status.ToString(),
-        CreatedAt = job.CreatedAt
-    };
+        var orderPath = "";
+        try
+        {
+            var link = await _customerOrders.CreateOrGetLinkAsync(job.TaskId, "", cancellationToken);
+            var code = (job.PickupCode ?? "").Trim();
+            if (!string.IsNullOrEmpty(link.Path) && !string.IsNullOrEmpty(code))
+                orderPath = $"{link.Path}?c={Uri.EscapeDataString(code)}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Не удалось построить OrderPath для print job {JobId}", job.Id);
+        }
+
+        return new PrintJobDto
+        {
+            Id = job.Id,
+            TaskId = job.TaskId,
+            OrderTitle = job.OrderTitle,
+            PrimaryComment = job.PrimaryComment,
+            PickupCode = job.PickupCode,
+            OrderPath = orderPath,
+            Status = job.Status.ToString(),
+            CreatedAt = job.CreatedAt
+        };
+    }
 
     private static string StripFileName(string? fileName)
     {

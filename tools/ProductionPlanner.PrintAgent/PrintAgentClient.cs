@@ -17,6 +17,7 @@ internal sealed class PrintJobDto
     public string OrderTitle { get; set; } = "";
     public string PrimaryComment { get; set; } = "";
     public string PickupCode { get; set; } = "";
+    public string OrderPath { get; set; } = "";
     public string Status { get; set; } = "";
 }
 
@@ -131,11 +132,13 @@ internal sealed class PrintAgentClient : IDisposable
 
             try
             {
+                var orderUrl = BuildOrderUrl(job.OrderPath);
                 LabelPrinter.Print(
                     _config.PrinterName,
                     job.OrderTitle,
                     job.PrimaryComment,
-                    job.PickupCode);
+                    job.PickupCode,
+                    orderUrl);
                 await PostAsync($"jobs/{job.Id}/printed", _runToken);
                 StatusChanged?.Invoke($"Напечатано: {job.PickupCode}");
             }
@@ -153,6 +156,23 @@ internal sealed class PrintAgentClient : IDisposable
         {
             _printLock.Release();
         }
+    }
+
+    private string? BuildOrderUrl(string? orderPath)
+    {
+        var path = (orderPath ?? "").Trim();
+        if (string.IsNullOrEmpty(path))
+            return null;
+        if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return path;
+
+        var baseUrl = (_config.ServerUrl ?? "").TrimEnd('/');
+        if (string.IsNullOrEmpty(baseUrl))
+            return path;
+        if (!path.StartsWith("/"))
+            path = "/" + path;
+        return baseUrl + path;
     }
 
     private async Task<bool> PostAsync(string relative, CancellationToken cancellationToken)

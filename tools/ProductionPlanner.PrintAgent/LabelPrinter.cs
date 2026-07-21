@@ -1,11 +1,14 @@
 using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Printing;
+using System.Drawing.Text;
+using QRCoder;
 
 namespace ProductionPlanner.PrintAgent;
 
 /// <summary>
-/// Этикетка на всю ширину A4: слева заказчик (~2 см) + имя файла, справа код получения.
+/// Этикетка на всю ширину A4: слева заказчик + имя файла, справа код получения и QR на страницу заказа.
 /// </summary>
 internal static class LabelPrinter
 {
@@ -13,7 +16,8 @@ internal static class LabelPrinter
         string printerName,
         string customerName,
         string fileName,
-        string pickupCode)
+        string pickupCode,
+        string? orderUrl = null)
     {
         if (string.IsNullOrWhiteSpace(printerName))
             throw new InvalidOperationException("Не выбран принтер");
@@ -32,18 +36,19 @@ internal static class LabelPrinter
             if (g == null)
                 return;
 
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
 
             var left = e.MarginBounds.Left;
             var top = e.MarginBounds.Top;
             var fullWidth = e.MarginBounds.Width;
             // Заголовок ~2 см + файл ~7 мм + поля ≈ 3.3 см
             const float labelHeight = 130f;
-            const float codeCellWidth = 160f;
-            var textWidth = fullWidth - codeCellWidth;
-            if (textWidth < 200)
-                textWidth = fullWidth * 0.72f;
+            const float codeCellWidth = 130f;
+            const float qrCellWidth = 118f;
+            var textWidth = fullWidth - codeCellWidth - qrCellWidth;
+            if (textWidth < 180)
+                textWidth = fullWidth * 0.55f;
 
             var header = (customerName ?? "").Trim().ToUpperInvariant();
             if (string.IsNullOrEmpty(header))
@@ -56,20 +61,19 @@ internal static class LabelPrinter
 
             using var outerPen = new Pen(Color.Black, 2.2f);
             using var innerPen = new Pen(Color.Black, 1.5f);
-            // ~2 см высоты заглавных: ≈ 56–58 pt Arial Bold
             using var headerFont = new Font("Arial", 56, FontStyle.Bold);
-            // ~7 мм высоты строки файла ≈ 28 pt
             using var fileFont = new Font("Arial", 28, FontStyle.Regular);
-            using var codeFont = new Font("Arial", 36, FontStyle.Bold);
+            using var codeFont = new Font("Arial", 32, FontStyle.Bold);
             using var codeHintFont = new Font("Arial", 7, FontStyle.Regular);
 
             g.DrawRectangle(outerPen, left, top, fullWidth, labelHeight);
 
             var codeLeft = left + textWidth;
+            var qrLeft = codeLeft + codeCellWidth;
             g.DrawLine(innerPen, codeLeft, top, codeLeft, top + labelHeight);
+            g.DrawLine(innerPen, qrLeft, top, qrLeft, top + labelHeight);
 
             var textPad = 12f;
-            // Полоса заголовка ~2 см (78 hundredths)
             var headerRect = new RectangleF(
                 left + textPad,
                 top + 4f,
@@ -86,7 +90,6 @@ internal static class LabelPrinter
 
             if (!string.IsNullOrEmpty(file))
             {
-                // ~7 мм (≈ 28 hundredths)
                 var fileRect = new RectangleF(
                     left + textPad,
                     top + 86f,
@@ -102,6 +105,14 @@ internal static class LabelPrinter
                     });
             }
 
+            var hintRect = new RectangleF(codeLeft, top + 6f, codeCellWidth, 16f);
+            g.DrawString("получение", codeHintFont, Brushes.Gray, hintRect,
+                new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center
+                });
+
             var codeRect = new RectangleF(codeLeft, top + 22f, codeCellWidth, labelHeight - 40f);
             g.DrawString(code, codeFont, Brushes.Black, codeRect,
                 new StringFormat
@@ -112,18 +123,20 @@ internal static class LabelPrinter
                     FormatFlags = StringFormatFlags.NoWrap
                 });
 
-            var hintRect = new RectangleF(codeLeft, top + 6f, codeCellWidth, 16f);
-            g.DrawString("получение", codeHintFont, Brushes.Gray, hintRect,
-                new StringFormat
+            using (var qrImage = TryCreateQrImage(orderUrl, 96))
+            {
+                if (qrImage != null)
                 {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Center
-                });
+                    var qrX = qrLeft + (qrCellWidth - qrImage.Width) / 2f;
+                    var qrY = top + (labelHeight - qrImage.Height) / 2f;
+                    g.DrawImage(qrImage, qrX, qrY, qrImage.Width, qrImage.Height);
+                }
+            }
 
             var tearY = top + labelHeight + 14f;
             using var dash = new Pen(Color.Gray, 1f)
             {
-                DashStyle = System.Drawing.Drawing2D.DashStyle.Dash
+                DashStyle = DashStyle.Dash
             };
             g.DrawLine(dash, left, tearY, left + fullWidth, tearY);
             using var tearFont = new Font("Arial", 7, FontStyle.Italic);
@@ -133,5 +146,34 @@ internal static class LabelPrinter
         };
 
         doc.Print();
+    }
+
+    private static Bitmap? TryCreateQrImage(string? orderUrl, int sizePx)
+    {
+        var url = (orderUrl ?? "").Trim();
+        if (string.IsNullOrEmpty(url) || sizePx < 16)
+            return null;
+
+        try
+        {
+            using var generator = new QRCodeGenerator();
+            using var data = generator.CreateQrCode(url, QRCodeGenerator.ECCLevel.M);
+            var qr = new QRCode(data);
+            using var raw = qr.GetGraphic(4, Color.Black, Color.White, drawQuietZones: true);
+            var bmp = new Bitmap(sizePx, sizePx);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.Clear(Color.White);
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.DrawImage(raw, 0, 0, sizePx, sizePx);
+            }
+
+            return bmp;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

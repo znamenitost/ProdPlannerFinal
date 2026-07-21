@@ -205,6 +205,7 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
             var (label, kind) = CustomerOrderPublicStatus.Map(status);
             result.Add(new CustomerOrderPublicItemDto
             {
+                TaskId = parent.Id,
                 Title = CustomerOrderKey.BuildOrderTitle(
                     parent.FileName,
                     primaryComment,

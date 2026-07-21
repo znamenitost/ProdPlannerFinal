@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
+  Button,
   Chip,
   CircularProgress,
   Container,
@@ -10,6 +11,9 @@ import {
   Typography
 } from '@mui/material';
 import ParallaxPage from './ParallaxPage';
+import PickupOrderQr, { buildOrderPageUrl } from './PickupOrderQr';
+import useAuth from '../hooks/useAuth';
+import { issuePickupOrder } from '../services/api';
 import './LoginForm.css';
 
 function statusChipColor(kind) {
@@ -18,52 +22,82 @@ function statusChipColor(kind) {
   return 'default';
 }
 
+function readFocusPickupCode() {
+  try {
+    return new URLSearchParams(window.location.search).get('c')?.trim() || '';
+  } catch {
+    return '';
+  }
+}
+
 export default function CustomerOrderPage({ token }) {
+  const { user, authChecking } = useAuth();
+  const isAdmin = user?.role === 'Admin';
+  const focusCode = useMemo(() => readFocusPickupCode(), []);
+
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [issuingTaskId, setIssuingTaskId] = useState(null);
+  const [issueError, setIssueError] = useState('');
+
+  const load = async (signal) => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/public/customer-orders/${encodeURIComponent(token)}`, {
+        signal,
+        cache: 'no-store'
+      });
+      const text = await res.text();
+      let payload = null;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch {
+        throw new Error('Некорректный ответ сервера');
+      }
+      if (!res.ok) {
+        throw new Error(payload?.error || payload?.message || 'Ссылка не найдена');
+      }
+      setData(payload);
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      setError(err.message || 'Не удалось загрузить заказ');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
     const controller = new AbortController();
-
-    async function load() {
-      setLoading(true);
-      setError('');
-      try {
-        const res = await fetch(`/api/public/customer-orders/${encodeURIComponent(token)}`, {
-          signal: controller.signal,
-          cache: 'no-store'
-        });
-        const text = await res.text();
-        let payload = null;
-        try {
-          payload = text ? JSON.parse(text) : null;
-        } catch {
-          throw new Error('Некорректный ответ сервера');
-        }
-        if (!res.ok) {
-          throw new Error(payload?.error || payload?.message || 'Ссылка не найдена');
-        }
-        if (!cancelled) setData(payload);
-      } catch (err) {
-        if (cancelled || err.name === 'AbortError') return;
-        setError(err.message || 'Не удалось загрузить заказ');
-        setData(null);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
+    void load(controller.signal);
+    return () => controller.abort();
   }, [token]);
+
+  useEffect(() => {
+    if (!focusCode || loading || !data?.orders?.length) return;
+    const el = document.getElementById(`pickup-order-${focusCode}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [focusCode, loading, data]);
+
+  const handleIssue = async (order) => {
+    if (!isAdmin || !order?.taskId || order.statusKind !== 'ready' || issuingTaskId) return;
+    setIssuingTaskId(order.taskId);
+    setIssueError('');
+    try {
+      await issuePickupOrder(order.taskId);
+      await load();
+    } catch (err) {
+      setIssueError(err?.message || 'Не удалось отметить заказ выданным');
+    } finally {
+      setIssuingTaskId(null);
+    }
+  };
 
   const readyCount = (data?.orders || []).filter((o) => o.statusKind === 'ready').length;
   const totalCount = data?.orders?.length ?? 0;
+  const showIssueControls = !authChecking && isAdmin;
 
   return (
     <ParallaxPage>
@@ -108,6 +142,12 @@ export default function CustomerOrderPage({ token }) {
                   </Typography>
                 )}
 
+                {issueError && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {issueError}
+                  </Alert>
+                )}
+
                 {totalCount === 0 ? (
                   <Typography
                     variant="body1"
@@ -118,37 +158,75 @@ export default function CustomerOrderPage({ token }) {
                   </Typography>
                 ) : (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {data.orders.map((order, index) => (
-                      <Box key={`${order.pickupCode}-${index}`}>
-                        {index > 0 && <Divider sx={{ mb: 2 }} />}
-                        <Typography
-                          variant="h3"
+                    {data.orders.map((order, index) => {
+                      const code = order.pickupCode || '';
+                      const isFocused =
+                        focusCode &&
+                        code &&
+                        focusCode.localeCompare(code, 'ru', { sensitivity: 'accent' }) === 0;
+                      const canIssue = showIssueControls && order.statusKind === 'ready' && order.taskId;
+                      const busy = issuingTaskId === order.taskId;
+                      const qrUrl = buildOrderPageUrl(token, code);
+
+                      return (
+                        <Box
+                          key={`${code}-${order.taskId || index}`}
+                          id={code ? `pickup-order-${code}` : undefined}
                           sx={{
-                            textAlign: 'center',
-                            letterSpacing: '0.08em',
-                            fontWeight: 700,
-                            mb: 1,
-                            fontSize: { xs: '2.4rem', sm: '3rem' },
-                            lineHeight: 1.1
+                            borderRadius: 2,
+                            outline: isFocused ? '2px solid' : 'none',
+                            outlineColor: 'primary.main',
+                            outlineOffset: 4,
+                            py: isFocused ? 0.5 : 0
                           }}
                         >
-                          {order.pickupCode || '—'}
-                        </Typography>
-                        <Typography
-                          variant="body1"
-                          sx={{ textAlign: 'center', fontWeight: 600, mb: 1 }}
-                        >
-                          {order.title}
-                        </Typography>
-                        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                          <Chip
-                            label={order.status}
-                            color={statusChipColor(order.statusKind)}
-                            variant={order.statusKind === 'queued' ? 'outlined' : 'filled'}
-                          />
+                          {index > 0 && <Divider sx={{ mb: 2 }} />}
+                          <Typography
+                            variant="h3"
+                            sx={{
+                              textAlign: 'center',
+                              letterSpacing: '0.08em',
+                              fontWeight: 700,
+                              mb: 1,
+                              fontSize: { xs: '2.4rem', sm: '3rem' },
+                              lineHeight: 1.1
+                            }}
+                          >
+                            {code || '—'}
+                          </Typography>
+                          <Typography
+                            variant="body1"
+                            sx={{ textAlign: 'center', fontWeight: 600, mb: 1 }}
+                          >
+                            {order.title}
+                          </Typography>
+                          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5 }}>
+                            <Chip
+                              label={order.status}
+                              color={statusChipColor(order.statusKind)}
+                              variant={order.statusKind === 'queued' ? 'outlined' : 'filled'}
+                            />
+                          </Box>
+                          {code && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', mb: canIssue ? 1.5 : 0 }}>
+                              <PickupOrderQr value={qrUrl} size={168} />
+                            </Box>
+                          )}
+                          {canIssue && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                              <Button
+                                variant="contained"
+                                color="success"
+                                onClick={() => void handleIssue(order)}
+                                disabled={busy || Boolean(issuingTaskId)}
+                              >
+                                {busy ? <CircularProgress size={20} color="inherit" /> : 'ВЫДАН'}
+                              </Button>
+                            </Box>
+                          )}
                         </Box>
-                      </Box>
-                    ))}
+                      );
+                    })}
                   </Box>
                 )}
 

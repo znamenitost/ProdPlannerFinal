@@ -7,6 +7,8 @@ public class PrintJobDto
     public string OrderTitle { get; set; } = "";
     public string PrimaryComment { get; set; } = "";
     public string PickupCode { get; set; } = "";
+    /// <summary>Относительный путь страницы заказа, например /t/{token}?c=А42.</summary>
+    public string OrderPath { get; set; } = "";
     public string Status { get; set; } = "";
     public DateTime CreatedAt { get; set; }
 }
