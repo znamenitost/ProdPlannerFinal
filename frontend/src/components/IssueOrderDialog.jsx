@@ -14,7 +14,11 @@ import {
 } from '@mui/material';
 import { AssignmentTurnedIn } from '@mui/icons-material';
 import AppDialogTitle from './ui/AppDialogTitle';
-import { issuePickupOrder, lookupPickupOrder } from '../services/api';
+import {
+  issueAllReadyPickupOrders,
+  issuePickupOrder,
+  lookupPickupOrder
+} from '../services/api';
 
 function statusChipColor(kind) {
   if (kind === 'ready') return 'success';
@@ -30,6 +34,7 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
   const [error, setError] = useState('');
   const [lookingUp, setLookingUp] = useState(false);
   const [issuing, setIssuing] = useState(false);
+  const [issuingAll, setIssuingAll] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -38,11 +43,14 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
     setError('');
     setLookingUp(false);
     setIssuing(false);
+    setIssuingAll(false);
     const timer = window.setTimeout(() => inputRef.current?.focus(), 50);
     return () => window.clearTimeout(timer);
   }, [open]);
 
-  const busy = lookingUp || issuing;
+  const busy = lookingUp || issuing || issuingAll;
+  const readyCount = Number(order?.readyCountForCustomer) || 0;
+  const canIssueAll = Boolean(order?.taskId) && readyCount > 1;
 
   const handleLookup = async () => {
     const trimmed = code.trim();
@@ -69,11 +77,26 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
     setError('');
     try {
       await issuePickupOrder(order.taskId);
-      onIssued?.(order);
+      onIssued?.({ order, mode: 'single' });
       onClose?.();
     } catch (err) {
       setError(err?.message || 'Не удалось отметить заказ выданным');
       setIssuing(false);
+    }
+  };
+
+  const handleIssueAll = async () => {
+    if (!order?.taskId || !canIssueAll || busy) return;
+
+    setIssuingAll(true);
+    setError('');
+    try {
+      const result = await issueAllReadyPickupOrders(order.taskId);
+      onIssued?.({ order, mode: 'all', result });
+      onClose?.();
+    } catch (err) {
+      setError(err?.message || 'Не удалось выдать все готовые заказы');
+      setIssuingAll(false);
     }
   };
 
@@ -199,6 +222,16 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
               />
             </Box>
 
+            {readyCount > 1 && (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ textAlign: 'center' }}
+              >
+                Готовых к выдаче у заказчика: {readyCount}
+              </Typography>
+            )}
+
             {!order.canIssue && order.statusKind !== 'pickedUp' && (
               <Alert severity="warning" sx={{ mt: 0.5 }}>
                 Заказ ещё не готов к выдаче
@@ -212,9 +245,25 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
           </Box>
         )}
       </DialogContent>
-      <DialogActions sx={{ px: { xs: 2, sm: 3 }, pb: 2 }}>
+      <DialogActions
+        sx={{
+          px: { xs: 2, sm: 3 },
+          pb: 2,
+          flexWrap: 'wrap',
+          gap: 1,
+          justifyContent: 'flex-end'
+        }}
+      >
         <Button onClick={onClose} disabled={busy}>
           Отмена
+        </Button>
+        <Button
+          variant="outlined"
+          color="success"
+          onClick={() => void handleIssueAll()}
+          disabled={busy || !canIssueAll}
+        >
+          {issuingAll ? <CircularProgress size={20} color="inherit" /> : 'Выдать все'}
         </Button>
         <Button
           variant="contained"
@@ -222,7 +271,7 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
           onClick={() => void handleIssue()}
           disabled={busy || !order?.canIssue}
         >
-          {issuing ? <CircularProgress size={20} color="inherit" /> : 'ВЫДАН'}
+          {issuing ? <CircularProgress size={20} color="inherit" /> : 'Выдать'}
         </Button>
       </DialogActions>
     </Dialog>

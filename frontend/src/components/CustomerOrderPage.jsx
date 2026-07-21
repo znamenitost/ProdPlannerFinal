@@ -13,7 +13,7 @@ import {
 import ParallaxPage from './ParallaxPage';
 import PickupOrderQr, { buildOrderPageUrl } from './PickupOrderQr';
 import useAuth from '../hooks/useAuth';
-import { issuePickupOrder } from '../services/api';
+import { issueAllReadyPickupOrders, issuePickupOrder } from '../services/api';
 import './LoginForm.css';
 
 function statusChipColor(kind) {
@@ -39,6 +39,7 @@ export default function CustomerOrderPage({ token }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [issuingTaskId, setIssuingTaskId] = useState(null);
+  const [issuingAll, setIssuingAll] = useState(false);
   const [issueError, setIssueError] = useState('');
 
   const load = async (signal) => {
@@ -81,8 +82,17 @@ export default function CustomerOrderPage({ token }) {
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [focusCode, loading, data]);
 
+  const readyOrders = useMemo(
+    () => (data?.orders || []).filter((o) => o.statusKind === 'ready' && o.taskId),
+    [data]
+  );
+  const readyCount = readyOrders.length;
+  const totalCount = data?.orders?.length ?? 0;
+  const showIssueControls = !authChecking && isAdmin;
+  const issueBusy = Boolean(issuingTaskId) || issuingAll;
+
   const handleIssue = async (order) => {
-    if (!isAdmin || !order?.taskId || order.statusKind !== 'ready' || issuingTaskId) return;
+    if (!isAdmin || !order?.taskId || order.statusKind !== 'ready' || issueBusy) return;
     setIssuingTaskId(order.taskId);
     setIssueError('');
     try {
@@ -95,12 +105,23 @@ export default function CustomerOrderPage({ token }) {
     }
   };
 
-  const readyCount = (data?.orders || []).filter((o) => o.statusKind === 'ready').length;
-  const totalCount = data?.orders?.length ?? 0;
-  const showIssueControls = !authChecking && isAdmin;
+  const handleIssueAll = async () => {
+    const anchorId = readyOrders[0]?.taskId;
+    if (!isAdmin || !anchorId || readyCount < 2 || issueBusy) return;
+    setIssuingAll(true);
+    setIssueError('');
+    try {
+      await issueAllReadyPickupOrders(anchorId);
+      await load();
+    } catch (err) {
+      setIssueError(err?.message || 'Не удалось выдать все готовые заказы');
+    } finally {
+      setIssuingAll(false);
+    }
+  };
 
   return (
-    <ParallaxPage>
+    <ParallaxPage className="login-parallax-page--scrollable">
       <Container maxWidth="sm" className="login-content">
         <Box className="login-form-shell">
           <Paper variant="section" sx={{ p: { xs: 3, sm: 4 }, width: '100%' }}>
@@ -142,6 +163,65 @@ export default function CustomerOrderPage({ token }) {
                   </Typography>
                 )}
 
+                {showIssueControls && readyCount > 1 && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      flexWrap: 'wrap',
+                      gap: 1,
+                      mb: 2.5
+                    }}
+                  >
+                    <Button
+                      variant="outlined"
+                      color="success"
+                      onClick={() => void handleIssueAll()}
+                      disabled={issueBusy}
+                    >
+                      {issuingAll ? (
+                        <CircularProgress size={20} color="inherit" />
+                      ) : (
+                        `Выдать все (${readyCount})`
+                      )}
+                    </Button>
+                  </Box>
+                )}
+
+                {totalCount > 0 && (
+                  <Alert
+                    severity="error"
+                    variant="filled"
+                    sx={{
+                      mb: 2.5,
+                      alignItems: 'flex-start',
+                      '& .MuiAlert-message': {
+                        width: '100%',
+                        fontSize: { xs: '1.05rem', sm: '1.15rem' },
+                        fontWeight: 700,
+                        lineHeight: 1.4
+                      },
+                      '& .MuiAlert-icon': {
+                        fontSize: '1.75rem',
+                        mt: 0.15
+                      }
+                    }}
+                  >
+                    Если заказ забирает курьер — заранее сообщите ему номер получения.
+                    Без номера заказ не выдадут.
+                  </Alert>
+                )}
+
+                {totalCount > 0 && (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ textAlign: 'center', mb: 2, lineHeight: 1.55 }}
+                  >
+                    Назовите номер получения на стойке выдачи.
+                  </Typography>
+                )}
+
                 {issueError && (
                   <Alert severity="error" sx={{ mb: 2 }}>
                     {issueError}
@@ -164,7 +244,8 @@ export default function CustomerOrderPage({ token }) {
                         focusCode &&
                         code &&
                         focusCode.localeCompare(code, 'ru', { sensitivity: 'accent' }) === 0;
-                      const canIssue = showIssueControls && order.statusKind === 'ready' && order.taskId;
+                      const canIssue =
+                        showIssueControls && order.statusKind === 'ready' && order.taskId;
                       const busy = issuingTaskId === order.taskId;
                       const qrUrl = buildOrderPageUrl(token, code);
 
@@ -208,7 +289,13 @@ export default function CustomerOrderPage({ token }) {
                             />
                           </Box>
                           {code && (
-                            <Box sx={{ display: 'flex', justifyContent: 'center', mb: canIssue ? 1.5 : 0 }}>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                mb: canIssue ? 1.5 : 0
+                              }}
+                            >
                               <PickupOrderQr value={qrUrl} size={168} />
                             </Box>
                           )}
@@ -218,35 +305,19 @@ export default function CustomerOrderPage({ token }) {
                                 variant="contained"
                                 color="success"
                                 onClick={() => void handleIssue(order)}
-                                disabled={busy || Boolean(issuingTaskId)}
+                                disabled={issueBusy}
                               >
-                                {busy ? <CircularProgress size={20} color="inherit" /> : 'ВЫДАН'}
+                                {busy ? (
+                                  <CircularProgress size={20} color="inherit" />
+                                ) : (
+                                  'Выдать'
+                                )}
                               </Button>
                             </Box>
                           )}
                         </Box>
                       );
                     })}
-                  </Box>
-                )}
-
-                {totalCount > 0 && (
-                  <Box
-                    sx={{
-                      mt: 3,
-                      pt: 2,
-                      borderTop: 1,
-                      borderColor: 'divider',
-                      textAlign: 'center'
-                    }}
-                  >
-                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.55 }}>
-                      Назовите номер получения на стойке выдачи.
-                    </Typography>
-                    <Alert severity="warning" sx={{ mt: 1.5, textAlign: 'left' }}>
-                      Если заказ забирает курьер — заранее сообщите ему этот номер,
-                      без него заказ не выдадут.
-                    </Alert>
                   </Box>
                 )}
               </>

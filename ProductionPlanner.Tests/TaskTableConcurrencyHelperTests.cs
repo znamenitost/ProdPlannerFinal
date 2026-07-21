@@ -24,10 +24,12 @@ public class TaskTableConcurrencyHelperTests
     }
 
     [Fact]
-    public void RequireExpectedUpdatedAt_throws_when_not_sent()
+    public void RequireExpectedUpdatedAt_skips_when_not_sent()
     {
-        Assert.Throws<TaskConcurrencyException>(() =>
+        var ex = Record.Exception(() =>
             TaskTableConcurrencyHelper.RequireExpectedUpdatedAt(1, DateTime.UtcNow, null));
+
+        Assert.Null(ex);
     }
 
     [Fact]

@@ -64,4 +64,21 @@ public class CustomerOrderTrackingController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    /// <summary>Выдать все готовые заказы того же заказчика.</summary>
+    [HttpPost("pickup/{taskId:int}/issue-all")]
+    public async Task<ActionResult<PickupIssueResultDto>> MarkAllReadyPickedUp(
+        int taskId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _service.MarkAllReadyPickedUpAsync(taskId, cancellationToken);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
 }

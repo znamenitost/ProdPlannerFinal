@@ -117,8 +117,11 @@ function CommentItem({ comment, onReply, onDelete, deleting, hideAuthor = false 
   );
 }
 
+const RECIPIENT_ALL = '__all__';
+
 function recipientSelectLabel(selectedIds, contacts) {
   if (!selectedIds.length) return 'Никому (без оповещения)';
+  if (contacts.length > 0 && selectedIds.length === contacts.length) return 'Всем';
   const names = selectedIds
     .map((id) => contacts.find((c) => c.userId === id)?.fullName || id)
     .filter(Boolean);
@@ -234,6 +237,10 @@ export default function CommentDialog({ open, task, pending = false, onChanged, 
   };
 
   const busy = pending || sending || deletingId != null;
+  const allRecipientIds = contacts.map((c) => c.userId);
+  const allRecipientsSelected =
+    allRecipientIds.length > 0 &&
+    allRecipientIds.every((id) => recipientUserIds.includes(id));
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
@@ -310,10 +317,25 @@ export default function CommentDialog({ open, task, pending = false, onChanged, 
             value={recipientUserIds}
             onChange={(e) => {
               const next = e.target.value;
-              setRecipientUserIds(typeof next === 'string' ? next.split(',') : next);
+              const values = typeof next === 'string' ? next.split(',') : next;
+              if (values.includes(RECIPIENT_ALL)) {
+                setRecipientUserIds(allRecipientsSelected ? [] : allRecipientIds);
+                return;
+              }
+              setRecipientUserIds(values.filter((id) => id !== RECIPIENT_ALL));
             }}
             renderValue={(selected) => recipientSelectLabel(selected, contacts)}
           >
+            <MenuItem value={RECIPIENT_ALL} disabled={contacts.length === 0}>
+              <Checkbox
+                checked={allRecipientsSelected}
+                indeterminate={
+                  recipientUserIds.length > 0 && !allRecipientsSelected
+                }
+                size="small"
+              />
+              <ListItemText primary="Всем" />
+            </MenuItem>
             {contacts.map((c) => (
               <MenuItem key={c.userId} value={c.userId}>
                 <Checkbox checked={recipientUserIds.includes(c.userId)} size="small" />

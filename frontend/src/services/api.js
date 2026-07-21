@@ -527,6 +527,18 @@ export async function issuePickupOrder(taskId) {
   return res.json();
 }
 
+/** Выдать все готовые заказы того же заказчика. */
+export async function issueAllReadyPickupOrders(taskId) {
+  const res = await fetch(`${API_BASE}/customer-orders/pickup/${taskId}/issue-all`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}'
+  });
+  await throwIfNotOk(res, 'Не удалось выдать все готовые заказы');
+  return res.json();
+}
+
 // Эндпоинты dev-панели (роль Admin). Мок-время и интервалы — на проде тоже.
 async function debugFetch(url, init = {}) {
   const res = await fetch(`${API_BASE}/debug${url}`, {

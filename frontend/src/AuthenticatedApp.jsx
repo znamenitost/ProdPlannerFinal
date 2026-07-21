@@ -802,9 +802,21 @@ function AuthenticatedAppContent() {
       <IssueOrderDialog
         open={issueOrderDialogOpen}
         onClose={() => setIssueOrderDialogOpen(false)}
-        onIssued={(order) => {
-          const code = String(order?.pickupCode || '').trim();
-          showSuccess(code ? `Заказ «${code}» выдан` : 'Заказ выдан');
+        onIssued={(payload) => {
+          const order = payload?.order ?? payload;
+          const mode = payload?.mode;
+          const result = payload?.result;
+          if (mode === 'all') {
+            const count = Number(result?.issuedCount) || 0;
+            showSuccess(
+              count > 0
+                ? `Выдано заказов: ${count}`
+                : 'Все готовые заказы выданы'
+            );
+          } else {
+            const code = String(order?.pickupCode || '').trim();
+            showSuccess(code ? `Заказ «${code}» выдан` : 'Заказ выдан');
+          }
           refreshTable();
         }}
       />

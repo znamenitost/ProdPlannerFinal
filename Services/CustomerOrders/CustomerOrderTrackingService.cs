@@ -14,6 +14,7 @@ public interface ICustomerOrderTrackingService
     Task<CustomerOrderPublicDto?> GetPublicPageAsync(string token, CancellationToken cancellationToken = default);
     Task<PickupOrderLookupDto?> FindByPickupCodeAsync(string pickupCode, CancellationToken cancellationToken = default);
     Task MarkPickedUpAsync(int taskId, CancellationToken cancellationToken = default);
+    Task<PickupIssueResultDto> MarkAllReadyPickedUpAsync(int taskId, CancellationToken cancellationToken = default);
 }
 
 public class CustomerOrderTrackingService : ICustomerOrderTrackingService
@@ -147,6 +148,62 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<PickupIssueResultDto> MarkAllReadyPickedUpAsync(
+        int taskId,
+        CancellationToken cancellationToken = default)
+    {
+        var anchor = await _db.ProductionTasks
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken)
+            ?? throw new InvalidOperationException("Задача не найдена");
+
+        var displayName = CustomerOrderKey.TryGetDisplayName(anchor.FolderPath)
+            ?? throw new InvalidOperationException("Не удалось определить заказчика");
+        var customerKey = CustomerOrderKey.Normalize(displayName);
+
+        var parents = await _db.ProductionTasks
+            .Where(t =>
+                !t.HiddenFromTaskTable
+                && t.ParentRowNumber == null
+                && t.PickedUpAt == null)
+            .ToListAsync(cancellationToken);
+
+        parents = parents
+            .Where(t => CustomerOrderKey.Matches(t.FolderPath, customerKey))
+            .ToList();
+
+        if (parents.Count == 0)
+            throw new InvalidOperationException("Нет готовых заказов для выдачи");
+
+        var statusById = await ResolveEffectiveStatusesAsync(parents, cancellationToken);
+        var now = DateTime.UtcNow;
+        var codes = new List<string>();
+        var issuedCount = 0;
+
+        foreach (var task in parents)
+        {
+            if (!statusById.TryGetValue(task.Id, out var status) || status != JobStatus.Completed)
+                continue;
+
+            task.PickedUpAt = now;
+            task.UpdatedAt = now;
+            issuedCount++;
+            var code = (task.PickupCode ?? "").Trim();
+            if (!string.IsNullOrEmpty(code))
+                codes.Add(code);
+        }
+
+        if (issuedCount == 0)
+            throw new InvalidOperationException("Нет готовых заказов для выдачи");
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return new PickupIssueResultDto
+        {
+            IssuedCount = issuedCount,
+            PickupCodes = codes
+        };
+    }
+
     private async Task<List<CustomerOrderPublicItemDto>> LoadCustomerOrdersAsync(
         string customerKey,
         string customerDisplayName,
@@ -234,6 +291,7 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
             : CustomerOrderKey.ExtractPrimaryComment(task.Comment);
 
         var canIssue = task.PickedUpAt == null && status == JobStatus.Completed;
+        var readyCount = await CountReadyForCustomerAsync(task, cancellationToken);
 
         return new PickupOrderLookupDto
         {
@@ -244,25 +302,82 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
             PrimaryComment = primaryComment,
             Status = task.PickedUpAt != null ? "Выдан" : label,
             StatusKind = task.PickedUpAt != null ? "pickedUp" : kind,
-            CanIssue = canIssue
+            CanIssue = canIssue,
+            ReadyCountForCustomer = readyCount
         };
+    }
+
+    private async Task<int> CountReadyForCustomerAsync(
+        ProductionTask anchor,
+        CancellationToken cancellationToken)
+    {
+        var displayName = CustomerOrderKey.TryGetDisplayName(anchor.FolderPath);
+        if (string.IsNullOrWhiteSpace(displayName))
+            return 0;
+
+        var customerKey = CustomerOrderKey.Normalize(displayName);
+        var parents = await _db.ProductionTasks
+            .AsNoTracking()
+            .Where(t =>
+                !t.HiddenFromTaskTable
+                && t.ParentRowNumber == null
+                && t.PickedUpAt == null)
+            .ToListAsync(cancellationToken);
+
+        parents = parents
+            .Where(t => CustomerOrderKey.Matches(t.FolderPath, customerKey))
+            .ToList();
+
+        if (parents.Count == 0)
+            return 0;
+
+        var statusById = await ResolveEffectiveStatusesAsync(parents, cancellationToken);
+        return statusById.Count(kv => kv.Value == JobStatus.Completed);
     }
 
     private async Task<JobStatus> ResolveEffectiveStatusAsync(
         ProductionTask task,
         CancellationToken cancellationToken)
     {
-        if (!task.IsSplitTask)
-            return task.Status;
+        var map = await ResolveEffectiveStatusesAsync([task], cancellationToken);
+        return map.TryGetValue(task.Id, out var status) ? status : task.Status;
+    }
 
-        var children = await _db.ProductionTasks
-            .AsNoTracking()
-            .Where(t => t.ParentRowNumber == task.Id)
-            .ToListAsync(cancellationToken);
+    private async Task<Dictionary<int, JobStatus>> ResolveEffectiveStatusesAsync(
+        IReadOnlyList<ProductionTask> parents,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<int, JobStatus>(parents.Count);
+        var splitIds = parents.Where(p => p.IsSplitTask).Select(p => p.Id).ToList();
+        Dictionary<int, List<ProductionTask>> childrenByParent = new();
 
-        return children.Count > 0
-            ? SplitTaskStatusAggregator.ResolveParentStatus(children)
-            : task.Status;
+        if (splitIds.Count > 0)
+        {
+            var children = await _db.ProductionTasks
+                .AsNoTracking()
+                .Where(t => t.ParentRowNumber != null && splitIds.Contains(t.ParentRowNumber.Value))
+                .ToListAsync(cancellationToken);
+
+            childrenByParent = children
+                .GroupBy(c => c.ParentRowNumber!.Value)
+                .ToDictionary(g => g.Key, g => g.ToList());
+        }
+
+        foreach (var parent in parents)
+        {
+            if (parent.IsSplitTask
+                && childrenByParent.TryGetValue(parent.Id, out var kids)
+                && kids.Count > 0)
+            {
+                result[parent.Id] = SplitTaskStatusAggregator.ResolveParentStatus(kids);
+            }
+            else
+            {
+                result[parent.Id] = parent.Status;
+            }
+        }
+
+        return result;
     }
 
     private async Task<Dictionary<int, string>> LoadBaselineCommentsAsync(

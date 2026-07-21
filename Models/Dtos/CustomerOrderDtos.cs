@@ -33,4 +33,13 @@ public class PickupOrderLookupDto
     public string Status { get; set; } = "";
     public string StatusKind { get; set; } = "";
     public bool CanIssue { get; set; }
+
+    /// <summary>Сколько готовых (не выданных) заказов у этого заказчика.</summary>
+    public int ReadyCountForCustomer { get; set; }
+}
+
+public class PickupIssueResultDto
+{
+    public int IssuedCount { get; set; }
+    public List<string> PickupCodes { get; set; } = [];
 }

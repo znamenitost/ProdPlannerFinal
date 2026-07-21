@@ -28,6 +28,7 @@ export default function EditTaskRow({
     employeeName: task.employeeName || '',
     parentRowNumber: task.parentRowNumber,
     statusText: task.statusText || '',
+    updatedAt: task.updatedAt,
     isSplitTask: task.isSplitTask,
     requiresTestBeforeProduction: task.requiresTestBeforeProduction ?? false,
     testEstimateHours: task.testEstimateHours ?? 0,
@@ -46,6 +47,7 @@ export default function EditTaskRow({
       employeeName: task.employeeName || '',
       parentRowNumber: task.parentRowNumber,
       statusText: task.statusText || '',
+      updatedAt: task.updatedAt,
       isSplitTask: task.isSplitTask,
       requiresTestBeforeProduction: task.requiresTestBeforeProduction ?? false,
       testEstimateHours: task.testEstimateHours ?? 0,
@@ -62,6 +64,7 @@ export default function EditTaskRow({
     task.fileName,
     task.comment,
     task.statusText,
+    task.updatedAt,
     task.requiresTestBeforeProduction,
     task.testEstimateHours,
     task.productionEstimateHours
