@@ -27,30 +27,45 @@ function statusChipColor(kind) {
   return 'default';
 }
 
+function isMatchedCode(orderCode, matchedCode) {
+  const a = String(orderCode || '').trim();
+  const b = String(matchedCode || '').trim();
+  if (!a || !b) return false;
+  return a.localeCompare(b, 'ru', { sensitivity: 'accent' }) === 0;
+}
+
 export default function IssueOrderDialog({ open, onClose, onIssued }) {
   const inputRef = useRef(null);
   const [code, setCode] = useState('');
-  const [order, setOrder] = useState(null);
+  const [lookup, setLookup] = useState(null);
   const [error, setError] = useState('');
   const [lookingUp, setLookingUp] = useState(false);
-  const [issuing, setIssuing] = useState(false);
+  const [issuingTaskId, setIssuingTaskId] = useState(null);
   const [issuingAll, setIssuingAll] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setCode('');
-    setOrder(null);
+    setLookup(null);
     setError('');
     setLookingUp(false);
-    setIssuing(false);
+    setIssuingTaskId(null);
     setIssuingAll(false);
     const timer = window.setTimeout(() => inputRef.current?.focus(), 50);
     return () => window.clearTimeout(timer);
   }, [open]);
 
-  const busy = lookingUp || issuing || issuingAll;
-  const readyCount = Number(order?.readyCountForCustomer) || 0;
-  const canIssueAll = Boolean(order?.taskId) && readyCount > 1;
+  const orders = lookup?.orders || [];
+  const matchedCode = lookup?.matchedPickupCode || '';
+  const busy = lookingUp || Boolean(issuingTaskId) || issuingAll;
+  const canIssueAll = orders.length > 1;
+
+  const refreshLookup = async (pickupCode) => {
+    const result = await lookupPickupOrder(pickupCode);
+    setLookup(result);
+    setCode(result.matchedPickupCode || pickupCode);
+    return result;
+  };
 
   const handleLookup = async () => {
     const trimmed = code.trim();
@@ -58,11 +73,9 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
 
     setLookingUp(true);
     setError('');
-    setOrder(null);
+    setLookup(null);
     try {
-      const result = await lookupPickupOrder(trimmed);
-      setOrder(result);
-      setCode(result.pickupCode || trimmed);
+      await refreshLookup(trimmed);
     } catch (err) {
       setError(err?.message || 'Заказ с таким кодом не найден');
     } finally {
@@ -70,29 +83,39 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
     }
   };
 
-  const handleIssue = async () => {
+  const handleIssue = async (order) => {
     if (!order?.taskId || !order.canIssue || busy) return;
 
-    setIssuing(true);
+    setIssuingTaskId(order.taskId);
     setError('');
     try {
       await issuePickupOrder(order.taskId);
       onIssued?.({ order, mode: 'single' });
-      onClose?.();
+
+      const next = await refreshLookup(matchedCode || code.trim() || order.pickupCode);
+      if (!(next?.orders || []).length) {
+        onClose?.();
+      }
     } catch (err) {
       setError(err?.message || 'Не удалось отметить заказ выданным');
-      setIssuing(false);
+    } finally {
+      setIssuingTaskId(null);
     }
   };
 
   const handleIssueAll = async () => {
-    if (!order?.taskId || !canIssueAll || busy) return;
+    const anchorId = orders[0]?.taskId;
+    if (!anchorId || !canIssueAll || busy) return;
 
     setIssuingAll(true);
     setError('');
     try {
-      const result = await issueAllReadyPickupOrders(order.taskId);
-      onIssued?.({ order, mode: 'all', result });
+      const result = await issueAllReadyPickupOrders(anchorId);
+      onIssued?.({
+        order: orders[0],
+        mode: 'all',
+        result
+      });
       onClose?.();
     } catch (err) {
       setError(err?.message || 'Не удалось выдать все заказы');
@@ -125,7 +148,7 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
           onChange={(e) => {
             setCode(e.target.value);
             setError('');
-            if (order) setOrder(null);
+            if (lookup) setLookup(null);
           }}
           onKeyDown={handleCodeKeyDown}
           disabled={busy}
@@ -146,7 +169,7 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
           sx={{ mb: 2 }}
         />
 
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: order || error ? 2 : 0 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: lookup || error ? 2 : 0 }}>
           <Button
             variant="outlined"
             onClick={() => void handleLookup()}
@@ -157,90 +180,103 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
         </Box>
 
         {error && (
-          <Alert severity="error" sx={{ mb: order ? 2 : 0 }}>
+          <Alert severity="error" sx={{ mb: lookup ? 2 : 0 }}>
             {error}
           </Alert>
         )}
 
-        {order && (
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 1.25,
-              p: 2,
-              borderRadius: 2,
-              bgcolor: 'action.hover'
-            }}
-          >
-            <Typography
-              variant="h3"
-              sx={{
-                textAlign: 'center',
-                letterSpacing: '0.1em',
-                fontWeight: 700,
-                fontSize: { xs: '2rem', sm: '2.4rem' },
-                lineHeight: 1.1
-              }}
-            >
-              {order.pickupCode || '—'}
-            </Typography>
-
-            {order.customerName ? (
-              <Typography variant="subtitle1" sx={{ textAlign: 'center', fontWeight: 600 }}>
-                {order.customerName}
+        {lookup && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {lookup.customerName ? (
+              <Typography variant="h6" sx={{ textAlign: 'center', fontWeight: 700 }}>
+                {lookup.customerName}
               </Typography>
             ) : null}
 
-            <Typography variant="body1" sx={{ textAlign: 'center' }}>
-              {order.fileName || '—'}
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ textAlign: 'center' }}
+            >
+              {orders.length === 0
+                ? 'Нет активных заказов к выдаче'
+                : `Заказов к выдаче: ${orders.length}`}
             </Typography>
 
-            {order.primaryComment ? (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ textAlign: 'center', whiteSpace: 'pre-wrap' }}
+            {orders.length > 0 && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 1.25,
+                  maxHeight: 360,
+                  overflowY: 'auto'
+                }}
               >
-                {order.primaryComment}
-              </Typography>
-            ) : (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ textAlign: 'center' }}
-              >
-                Первичный комментарий не указан
-              </Typography>
-            )}
-
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 0.5 }}>
-              <Chip
-                label={order.status}
-                color={statusChipColor(order.statusKind)}
-                variant={order.statusKind === 'queued' ? 'outlined' : 'filled'}
-              />
-            </Box>
-
-            {readyCount > 1 && (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ textAlign: 'center' }}
-              >
-                Заказов к выдаче у заказчика: {readyCount}
-              </Typography>
-            )}
-
-            {order.canIssue && order.statusKind !== 'ready' && order.statusKind !== 'pickedUp' && (
-              <Alert severity="warning" sx={{ mt: 0.5 }}>
-                Статус не «Готово» — после выдачи появится пометка «?»
-              </Alert>
-            )}
-            {order.statusKind === 'pickedUp' && (
-              <Alert severity="info" sx={{ mt: 0.5 }}>
-                Этот заказ уже отмечен как выданный
-              </Alert>
+                {orders.map((order, index) => {
+                  const focused = isMatchedCode(order.pickupCode, matchedCode);
+                  const rowBusy = issuingTaskId === order.taskId;
+                  return (
+                    <Box
+                      key={`${order.taskId}-${order.pickupCode || index}`}
+                      sx={{
+                        p: 1.5,
+                        borderRadius: 2,
+                        bgcolor: 'action.hover',
+                        outline: focused ? '2px solid' : 'none',
+                        outlineColor: 'primary.main',
+                        outlineOffset: 1
+                      }}
+                    >
+                      <Typography
+                        variant="h5"
+                        sx={{
+                          textAlign: 'center',
+                          letterSpacing: '0.08em',
+                          fontWeight: 700,
+                          mb: 0.5
+                        }}
+                      >
+                        {order.pickupCode || '—'}
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{ textAlign: 'center', fontWeight: 600, mb: 1 }}
+                      >
+                        {order.title || '—'}
+                      </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
+                        <Chip
+                          label={order.status}
+                          color={statusChipColor(order.statusKind)}
+                          size="small"
+                          variant={order.statusKind === 'queued' ? 'outlined' : 'filled'}
+                        />
+                      </Box>
+                      {order.canIssue && order.statusKind !== 'ready' && (
+                        <Alert severity="warning" sx={{ mb: 1, py: 0 }}>
+                          Не «Готово» — после выдачи будет «?»
+                        </Alert>
+                      )}
+                      <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                        <Button
+                          variant="contained"
+                          color="error"
+                          size="small"
+                          onClick={() => void handleIssue(order)}
+                          disabled={busy || !order.canIssue}
+                        >
+                          {rowBusy ? (
+                            <CircularProgress size={18} color="inherit" />
+                          ) : (
+                            'Выдать'
+                          )}
+                        </Button>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
             )}
           </Box>
         )}
@@ -258,20 +294,16 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
           Отмена
         </Button>
         <Button
-          variant="outlined"
+          variant="contained"
           color="error"
           onClick={() => void handleIssueAll()}
           disabled={busy || !canIssueAll}
         >
-          {issuingAll ? <CircularProgress size={20} color="inherit" /> : 'Выдать все'}
-        </Button>
-        <Button
-          variant="contained"
-          color="error"
-          onClick={() => void handleIssue()}
-          disabled={busy || !order?.canIssue}
-        >
-          {issuing ? <CircularProgress size={20} color="inherit" /> : 'Выдать'}
+          {issuingAll ? (
+            <CircularProgress size={20} color="inherit" />
+          ) : (
+            `Выдать все${orders.length > 1 ? ` (${orders.length})` : ''}`
+          )}
         </Button>
       </DialogActions>
     </Dialog>

@@ -12,7 +12,7 @@ public interface ICustomerOrderTrackingService
 {
     Task<CustomerOrderLinkDto> CreateOrGetLinkAsync(int taskId, string publicBaseUrl, CancellationToken cancellationToken = default);
     Task<CustomerOrderPublicDto?> GetPublicPageAsync(string token, CancellationToken cancellationToken = default);
-    Task<PickupOrderLookupDto?> FindByPickupCodeAsync(string pickupCode, CancellationToken cancellationToken = default);
+    Task<PickupCustomerLookupDto?> FindByPickupCodeAsync(string pickupCode, CancellationToken cancellationToken = default);
     Task MarkPickedUpAsync(int taskId, CancellationToken cancellationToken = default);
     Task<PickupIssueResultDto> MarkAllReadyPickedUpAsync(int taskId, CancellationToken cancellationToken = default);
 }
@@ -102,7 +102,7 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         };
     }
 
-    public async Task<PickupOrderLookupDto?> FindByPickupCodeAsync(
+    public async Task<PickupCustomerLookupDto?> FindByPickupCodeAsync(
         string pickupCode,
         CancellationToken cancellationToken = default)
     {
@@ -124,7 +124,28 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         if (task == null)
             return null;
 
-        return await ToPickupLookupDtoAsync(task, cancellationToken);
+        var displayName = CustomerOrderKey.TryGetDisplayName(task.FolderPath) ?? "";
+        var customerKey = CustomerOrderKey.Normalize(displayName);
+        if (string.IsNullOrEmpty(customerKey))
+            return null;
+
+        await EnsurePickupCodesForCustomerAsync(customerKey, displayName, cancellationToken);
+
+        var orders = await LoadCustomerOrdersAsync(customerKey, displayName, cancellationToken);
+        return new PickupCustomerLookupDto
+        {
+            CustomerName = displayName,
+            MatchedPickupCode = code,
+            Orders = orders.Select(o => new PickupCustomerOrderItemDto
+            {
+                TaskId = o.TaskId,
+                PickupCode = o.PickupCode,
+                Title = o.Title,
+                Status = o.Status,
+                StatusKind = o.StatusKind,
+                CanIssue = true
+            }).ToList()
+        };
     }
 
     public async Task MarkPickedUpAsync(int taskId, CancellationToken cancellationToken = default)
@@ -272,57 +293,6 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         }
 
         return result;
-    }
-
-    private async Task<PickupOrderLookupDto> ToPickupLookupDtoAsync(
-        ProductionTask task,
-        CancellationToken cancellationToken)
-    {
-        var customerName = CustomerOrderKey.TryGetDisplayName(task.FolderPath) ?? "";
-        var status = await ResolveEffectiveStatusAsync(task, cancellationToken);
-        var (label, kind) = CustomerOrderPublicStatus.Map(status);
-
-        var baselines = await LoadBaselineCommentsAsync([task.Id], cancellationToken);
-        baselines.TryGetValue(task.Id, out var baselineComment);
-        var primaryComment = !string.IsNullOrWhiteSpace(baselineComment)
-            ? baselineComment!
-            : CustomerOrderKey.ExtractPrimaryComment(task.Comment);
-
-        var canIssue = task.PickedUpAt == null;
-        var readyCount = await CountOpenOrdersForCustomerAsync(task, cancellationToken);
-
-        return new PickupOrderLookupDto
-        {
-            TaskId = task.Id,
-            PickupCode = (task.PickupCode ?? "").Trim(),
-            CustomerName = customerName,
-            FileName = (task.FileName ?? "").Trim(),
-            PrimaryComment = primaryComment,
-            Status = task.PickedUpAt != null ? "Выдан" : label,
-            StatusKind = task.PickedUpAt != null ? "pickedUp" : kind,
-            CanIssue = canIssue,
-            ReadyCountForCustomer = readyCount
-        };
-    }
-
-    private async Task<int> CountOpenOrdersForCustomerAsync(
-        ProductionTask anchor,
-        CancellationToken cancellationToken)
-    {
-        var displayName = CustomerOrderKey.TryGetDisplayName(anchor.FolderPath);
-        if (string.IsNullOrWhiteSpace(displayName))
-            return 0;
-
-        var customerKey = CustomerOrderKey.Normalize(displayName);
-        var parents = await _db.ProductionTasks
-            .AsNoTracking()
-            .Where(t =>
-                !t.HiddenFromTaskTable
-                && t.ParentRowNumber == null
-                && t.PickedUpAt == null)
-            .ToListAsync(cancellationToken);
-
-        return parents.Count(t => CustomerOrderKey.Matches(t.FolderPath, customerKey));
     }
 
     private async Task<JobStatus> ResolveEffectiveStatusAsync(

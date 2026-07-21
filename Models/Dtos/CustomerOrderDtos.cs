@@ -23,19 +23,22 @@ public class CustomerOrderPublicItemDto
     public string StatusKind { get; set; } = "";
 }
 
-public class PickupOrderLookupDto
+/// <summary>Поиск по коду: заказчик и все его невыданные заказы.</summary>
+public class PickupCustomerLookupDto
+{
+    public string CustomerName { get; set; } = "";
+    public string MatchedPickupCode { get; set; } = "";
+    public List<PickupCustomerOrderItemDto> Orders { get; set; } = [];
+}
+
+public class PickupCustomerOrderItemDto
 {
     public int TaskId { get; set; }
     public string PickupCode { get; set; } = "";
-    public string CustomerName { get; set; } = "";
-    public string FileName { get; set; } = "";
-    public string PrimaryComment { get; set; } = "";
+    public string Title { get; set; } = "";
     public string Status { get; set; } = "";
     public string StatusKind { get; set; } = "";
     public bool CanIssue { get; set; }
-
-    /// <summary>Сколько ещё не выданных заказов у этого заказчика.</summary>
-    public int ReadyCountForCustomer { get; set; }
 }
 
 public class PickupIssueResultDto
