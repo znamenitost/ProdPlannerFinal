@@ -104,6 +104,9 @@ namespace ProductionPlanner.Models
 
         /// <summary>Когда заказ выдали клиенту (null — ещё у нас).</summary>
         public DateTime? PickedUpAt { get; set; }
+
+        /// <summary>Выдан, пока статус ещё не был «Готово» (сотрудник забыл пометить).</summary>
+        public bool IssuedWithoutReady { get; set; }
         
         public string FullPath => string.IsNullOrEmpty(FolderPath) ? FileName : $"{FolderPath}/{FileName}";
         

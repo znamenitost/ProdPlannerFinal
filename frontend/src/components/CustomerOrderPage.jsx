@@ -82,17 +82,21 @@ export default function CustomerOrderPage({ token }) {
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [focusCode, loading, data]);
 
-  const readyOrders = useMemo(
-    () => (data?.orders || []).filter((o) => o.statusKind === 'ready' && o.taskId),
+  const issuableOrders = useMemo(
+    () => (data?.orders || []).filter((o) => o.taskId),
     [data]
   );
-  const readyCount = readyOrders.length;
+  const issuableCount = issuableOrders.length;
+  const readyCount = useMemo(
+    () => (data?.orders || []).filter((o) => o.statusKind === 'ready').length,
+    [data]
+  );
   const totalCount = data?.orders?.length ?? 0;
   const showIssueControls = !authChecking && isAdmin;
   const issueBusy = Boolean(issuingTaskId) || issuingAll;
 
   const handleIssue = async (order) => {
-    if (!isAdmin || !order?.taskId || order.statusKind !== 'ready' || issueBusy) return;
+    if (!isAdmin || !order?.taskId || issueBusy) return;
     setIssuingTaskId(order.taskId);
     setIssueError('');
     try {
@@ -106,15 +110,15 @@ export default function CustomerOrderPage({ token }) {
   };
 
   const handleIssueAll = async () => {
-    const anchorId = readyOrders[0]?.taskId;
-    if (!isAdmin || !anchorId || readyCount < 2 || issueBusy) return;
+    const anchorId = issuableOrders[0]?.taskId;
+    if (!isAdmin || !anchorId || issuableCount < 2 || issueBusy) return;
     setIssuingAll(true);
     setIssueError('');
     try {
       await issueAllReadyPickupOrders(anchorId);
       await load();
     } catch (err) {
-      setIssueError(err?.message || 'Не удалось выдать все готовые заказы');
+      setIssueError(err?.message || 'Не удалось выдать все заказы');
     } finally {
       setIssuingAll(false);
     }
@@ -163,7 +167,7 @@ export default function CustomerOrderPage({ token }) {
                   </Typography>
                 )}
 
-                {showIssueControls && readyCount > 1 && (
+                {showIssueControls && issuableCount > 1 && (
                   <Box
                     sx={{
                       display: 'flex',
@@ -175,14 +179,14 @@ export default function CustomerOrderPage({ token }) {
                   >
                     <Button
                       variant="outlined"
-                      color="success"
+                      color="error"
                       onClick={() => void handleIssueAll()}
                       disabled={issueBusy}
                     >
                       {issuingAll ? (
                         <CircularProgress size={20} color="inherit" />
                       ) : (
-                        `Выдать все (${readyCount})`
+                        `Выдать все (${issuableCount})`
                       )}
                     </Button>
                   </Box>
@@ -207,8 +211,7 @@ export default function CustomerOrderPage({ token }) {
                       }
                     }}
                   >
-                    Если заказ забирает курьер — заранее сообщите ему номер получения.
-                    Без номера заказ не выдадут.
+                    Если заказ забирает курьер — сообщите ему номер получения.
                   </Alert>
                 )}
 
@@ -244,8 +247,7 @@ export default function CustomerOrderPage({ token }) {
                         focusCode &&
                         code &&
                         focusCode.localeCompare(code, 'ru', { sensitivity: 'accent' }) === 0;
-                      const canIssue =
-                        showIssueControls && order.statusKind === 'ready' && order.taskId;
+                      const canIssue = showIssueControls && order.taskId;
                       const busy = issuingTaskId === order.taskId;
                       const qrUrl = buildOrderPageUrl(token, code);
 
@@ -303,7 +305,7 @@ export default function CustomerOrderPage({ token }) {
                             <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                               <Button
                                 variant="contained"
-                                color="success"
+                                color="error"
                                 onClick={() => void handleIssue(order)}
                                 disabled={issueBusy}
                               >

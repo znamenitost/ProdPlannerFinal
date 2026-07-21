@@ -39,7 +39,7 @@ public class TaskStatusMapperTests
     }
 
     [Fact]
-    public void ApplyPickedUpDisplay_ReplacesCompletedWhenPickedUp()
+    public void ApplyPickedUpDisplay_ReplacesStatusWhenPickedUp()
     {
         var task = new ProductionTask
         {
@@ -51,7 +51,7 @@ public class TaskStatusMapperTests
             TaskStatusMapper.PickedUpText,
             TaskStatusMapper.ApplyPickedUpDisplay(task, "Готово"));
         Assert.Equal(
-            "Начал",
+            TaskStatusMapper.PickedUpText,
             TaskStatusMapper.ApplyPickedUpDisplay(task, "Начал"));
     }
 

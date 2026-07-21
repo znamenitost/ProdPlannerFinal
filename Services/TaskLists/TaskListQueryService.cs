@@ -216,7 +216,7 @@ public class TaskListQueryService : ITaskListQueryService
             SupplyMode = supplyMode,
             SequenceOrder = sequenceOrder,
             SequenceStartBlocked = supplyMode == SupplyMode.InternalProduction && task.Status == JobStatus.Waiting,
-            StatusText = TaskStatusMapper.ToText(task.Status),
+            StatusText = TaskStatusMapper.ApplyPickedUpDisplay(task, TaskStatusMapper.ToText(task.Status)),
             RowNumber = task.Id,
             RiskLevel = riskLevel,
             RequiredHours = hoursNeeded,
@@ -224,7 +224,8 @@ public class TaskListQueryService : ITaskListQueryService
             task.RequiresTestBeforeProduction,
             task.TestEstimateHours,
             task.ProductionEstimateHours,
-            WorkPhase = task.WorkPhase
+            WorkPhase = task.WorkPhase,
+            task.IssuedWithoutReady
         };
     }
 }

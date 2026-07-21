@@ -140,11 +140,11 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
             throw new InvalidOperationException("Заказ уже выдан");
 
         var status = await ResolveEffectiveStatusAsync(task, cancellationToken);
-        if (status != JobStatus.Completed)
-            throw new InvalidOperationException("Заказ ещё не готов к выдаче");
-
         task.PickedUpAt = DateTime.UtcNow;
         task.UpdatedAt = DateTime.UtcNow;
+        if (status != JobStatus.Completed)
+            task.IssuedWithoutReady = true;
+
         await _db.SaveChangesAsync(cancellationToken);
     }
 
@@ -173,7 +173,7 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
             .ToList();
 
         if (parents.Count == 0)
-            throw new InvalidOperationException("Нет готовых заказов для выдачи");
+            throw new InvalidOperationException("Нет заказов для выдачи");
 
         var statusById = await ResolveEffectiveStatusesAsync(parents, cancellationToken);
         var now = DateTime.UtcNow;
@@ -182,19 +182,17 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
 
         foreach (var task in parents)
         {
-            if (!statusById.TryGetValue(task.Id, out var status) || status != JobStatus.Completed)
-                continue;
-
+            statusById.TryGetValue(task.Id, out var status);
             task.PickedUpAt = now;
             task.UpdatedAt = now;
+            if (status != JobStatus.Completed)
+                task.IssuedWithoutReady = true;
+
             issuedCount++;
             var code = (task.PickupCode ?? "").Trim();
             if (!string.IsNullOrEmpty(code))
                 codes.Add(code);
         }
-
-        if (issuedCount == 0)
-            throw new InvalidOperationException("Нет готовых заказов для выдачи");
 
         await _db.SaveChangesAsync(cancellationToken);
         return new PickupIssueResultDto
@@ -290,8 +288,8 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
             ? baselineComment!
             : CustomerOrderKey.ExtractPrimaryComment(task.Comment);
 
-        var canIssue = task.PickedUpAt == null && status == JobStatus.Completed;
-        var readyCount = await CountReadyForCustomerAsync(task, cancellationToken);
+        var canIssue = task.PickedUpAt == null;
+        var readyCount = await CountOpenOrdersForCustomerAsync(task, cancellationToken);
 
         return new PickupOrderLookupDto
         {
@@ -307,7 +305,7 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         };
     }
 
-    private async Task<int> CountReadyForCustomerAsync(
+    private async Task<int> CountOpenOrdersForCustomerAsync(
         ProductionTask anchor,
         CancellationToken cancellationToken)
     {
@@ -324,15 +322,7 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
                 && t.PickedUpAt == null)
             .ToListAsync(cancellationToken);
 
-        parents = parents
-            .Where(t => CustomerOrderKey.Matches(t.FolderPath, customerKey))
-            .ToList();
-
-        if (parents.Count == 0)
-            return 0;
-
-        var statusById = await ResolveEffectiveStatusesAsync(parents, cancellationToken);
-        return statusById.Count(kv => kv.Value == JobStatus.Completed);
+        return parents.Count(t => CustomerOrderKey.Matches(t.FolderPath, customerKey));
     }
 
     private async Task<JobStatus> ResolveEffectiveStatusAsync(

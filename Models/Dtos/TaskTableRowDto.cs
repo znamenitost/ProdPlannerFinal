@@ -13,6 +13,9 @@ public class TaskTableRowDto
     public string StatusText { get; set; } = "";
     public JobStatus Status { get; set; }
     public bool IsPriorityMarked { get; set; }
+
+    /// <summary>Выдан без статуса «Готово» — показать маркер «?».</summary>
+    public bool IssuedWithoutReady { get; set; }
     public DateTime Deadline { get; set; }
     public double EstimateHours { get; set; }
     public string Type { get; set; } = "";
@@ -102,6 +105,7 @@ public class TaskTableRowDto
                 children,
                 priorityMarkViewerEmployeeName,
                 restrictPriorityMarkToViewer),
+            IssuedWithoutReady = parent.IssuedWithoutReady,
             Deadline = parent.Deadline,
             EstimateHours = parent.EstimateHours,
             Type = parent.Type,

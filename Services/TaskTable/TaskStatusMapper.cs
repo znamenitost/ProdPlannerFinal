@@ -21,13 +21,13 @@ public static class TaskStatusMapper
         _ => ""
     };
 
-    /// <summary>Если заказ выдан — «Готово» показываем как «Выдан».</summary>
+    /// <summary>Если заказ выдан — статус показываем как «Выдан».</summary>
     public static string ApplyPickedUpDisplay(ProductionTask task, string statusText)
     {
         if (task.PickedUpAt == null)
             return statusText;
 
-        return statusText == ToText(JobStatus.Completed) ? PickedUpText : statusText;
+        return PickedUpText;
     }
 
     public static JobStatus FromText(string statusText) => statusText switch

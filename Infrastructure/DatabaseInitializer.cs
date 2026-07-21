@@ -104,6 +104,8 @@ public static class DatabaseInitializer
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN PickupCode TEXT NULL");
             if (!columns.Contains("PickedUpAt"))
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN PickedUpAt TEXT NULL");
+            if (!columns.Contains("IssuedWithoutReady"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN IssuedWithoutReady INTEGER NOT NULL DEFAULT 0");
 
             foreach (var alterCmd in alterCommands)
             {

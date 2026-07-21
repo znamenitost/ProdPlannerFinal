@@ -39,6 +39,7 @@ import TaskStatusCell from './taskTable/TaskStatusCell';
 import { taskShowsThroughApproval } from '../utils/throughApproval';
 import { ThroughApprovalMark } from './taskTable/ThroughApprovalChip';
 import { TaskPriorityMark } from './taskTable/TaskPriorityChip';
+import { IssuedWithoutReadyMark } from './taskTable/IssuedWithoutReadyChip';
 
 const blockedButtonSx = { opacity: 0.5 };
 const PROGRESS_MARKS = [0.3, 0.6, 0.9];
@@ -143,6 +144,13 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
               <Tooltip title="В приоритете" arrow>
                 <Box component="span" aria-label="В приоритете">
                   <TaskPriorityMark />
+                </Box>
+              </Tooltip>
+            )}
+            {task?.issuedWithoutReady && (
+              <Tooltip title="Выдан без статуса «Готово»" arrow>
+                <Box component="span" aria-label="Выдан без статуса Готово">
+                  <IssuedWithoutReadyMark />
                 </Box>
               </Tooltip>
             )}

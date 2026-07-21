@@ -94,6 +94,9 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE "ProductionTasks"
                     ADD COLUMN IF NOT EXISTS "PickedUpAt" timestamp with time zone NULL;
 
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "IssuedWithoutReady" boolean NOT NULL DEFAULT false;
+
                 CREATE INDEX IF NOT EXISTS "IX_ProductionTasks_CdrPreviewRetryAt"
                     ON "ProductionTasks" ("CdrPreviewRetryAt");
 
@@ -550,6 +553,9 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE "ProductionTasks"
                     ADD COLUMN IF NOT EXISTS "PickedUpAt" timestamp with time zone NULL;
 
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "IssuedWithoutReady" boolean NOT NULL DEFAULT false;
+
                 CREATE INDEX IF NOT EXISTS "IX_ProductionTasks_PickupCode"
                     ON "ProductionTasks" ("PickupCode");
 
@@ -595,7 +601,20 @@ public static class PostgresSchemaMigrator
                 );
                 """, cancellationToken);
 
-            logger.LogInformation("CustomerOrderTrackings / PickupCode / PickedUpAt проверены/созданы (PostgreSQL).");
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                SELECT '20260721190000_AddIssuedWithoutReady', '10.0.7'
+                WHERE EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '__EFMigrationsHistory'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM "__EFMigrationsHistory"
+                    WHERE "MigrationId" = '20260721190000_AddIssuedWithoutReady'
+                );
+                """, cancellationToken);
+
+            logger.LogInformation("CustomerOrderTrackings / PickupCode / PickedUpAt / IssuedWithoutReady проверены/созданы (PostgreSQL).");
         }
         catch (Exception ex)
         {

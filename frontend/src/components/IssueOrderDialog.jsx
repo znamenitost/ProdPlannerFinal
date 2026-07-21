@@ -95,7 +95,7 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
       onIssued?.({ order, mode: 'all', result });
       onClose?.();
     } catch (err) {
-      setError(err?.message || 'Не удалось выдать все готовые заказы');
+      setError(err?.message || 'Не удалось выдать все заказы');
       setIssuingAll(false);
     }
   };
@@ -228,13 +228,13 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
                 color="text.secondary"
                 sx={{ textAlign: 'center' }}
               >
-                Готовых к выдаче у заказчика: {readyCount}
+                Заказов к выдаче у заказчика: {readyCount}
               </Typography>
             )}
 
-            {!order.canIssue && order.statusKind !== 'pickedUp' && (
+            {order.canIssue && order.statusKind !== 'ready' && order.statusKind !== 'pickedUp' && (
               <Alert severity="warning" sx={{ mt: 0.5 }}>
-                Заказ ещё не готов к выдаче
+                Статус не «Готово» — после выдачи появится пометка «?»
               </Alert>
             )}
             {order.statusKind === 'pickedUp' && (
@@ -259,7 +259,7 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
         </Button>
         <Button
           variant="outlined"
-          color="success"
+          color="error"
           onClick={() => void handleIssueAll()}
           disabled={busy || !canIssueAll}
         >
@@ -267,7 +267,7 @@ export default function IssueOrderDialog({ open, onClose, onIssued }) {
         </Button>
         <Button
           variant="contained"
-          color="success"
+          color="error"
           onClick={() => void handleIssue()}
           disabled={busy || !order?.canIssue}
         >

@@ -24,6 +24,7 @@ import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 import ThroughApprovalChip from './taskTable/ThroughApprovalChip';
 import TaskPriorityChip from './taskTable/TaskPriorityChip';
+import IssuedWithoutReadyChip from './taskTable/IssuedWithoutReadyChip';
 import MaxSubscribeChip from './taskTable/MaxSubscribeChip';
 import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
@@ -332,6 +333,7 @@ function ParentTaskRow({
               childrenTasks={childrenTasks}
               viewerEmployeeName={priorityMarkViewer}
             />
+            <IssuedWithoutReadyChip task={task} />
             {canEdit && <MaxSubscribeChip subscribed={maxSubscribedSet.has(task.id)} />}
           </Box>
         </TableCell>
