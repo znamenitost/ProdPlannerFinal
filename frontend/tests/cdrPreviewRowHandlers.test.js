@@ -59,6 +59,27 @@ describe('cdrPreviewRowHandlers', () => {
     assert.deepEqual(calls[0][1], { x: 5, y: 6 });
   });
 
+  it('uses an explicit parent task as the preview source', () => {
+    const calls = [];
+    const child = { id: 2 };
+    const parent = { id: 1, hasCdrPreview: true };
+    const handlers = getCdrPreviewRowHandlers({
+      task: child,
+      previewTask: parent,
+      onShowCdrPreview: (...args) => calls.push(args)
+    });
+
+    handlers.onContextMenu({
+      clientX: 7,
+      clientY: 8,
+      preventDefault() {}
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][0], parent);
+    assert.deepEqual(calls[0][1], { x: 7, y: 8 });
+  });
+
   it('returns empty object when preview disabled', () => {
     assert.deepEqual(getCdrPreviewRowHandlers({ task: { id: 1 } }), {});
   });

@@ -6,6 +6,11 @@ function workIntervalsKey(task) {
     .join(';');
 }
 
+function previewSourceKey(task) {
+  if (!task) return '';
+  return `${task.id}|${task.folderPath || ''}|${task.fileName || ''}|${task.updatedAt || ''}|${task.hasCdrPreview ? 1 : 0}`;
+}
+
 function pendingLifecycleAffectsRow(prevPending, nextPending, taskId, relatedTaskIds = null) {
   if (prevPending === nextPending) return false;
   if (prevPending === taskId || nextPending === taskId) return true;
@@ -55,6 +60,7 @@ export function areParentRowPropsEqual(prev, next) {
   if (prev.task.commentEditedViaDialog !== next.task.commentEditedViaDialog) return false;
   if (prev.task.commentBadgeCount !== next.task.commentBadgeCount) return false;
   if (prev.task.hasCdrPreview !== next.task.hasCdrPreview) return false;
+  if (previewSourceKey(prev.cdrPreviewSourceTask) !== previewSourceKey(next.cdrPreviewSourceTask)) return false;
   if (prev.isCdrPreviewBuilding?.(prev.task.id) !== next.isCdrPreviewBuilding?.(next.task.id)) return false;
   if (
     childrenPreviewBuildingKey(prev.childrenTasks, prev.isCdrPreviewBuilding)

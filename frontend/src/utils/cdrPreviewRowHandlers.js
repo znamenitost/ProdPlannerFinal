@@ -6,7 +6,7 @@ export function isCdrPreviewSecondaryClick(event) {
 }
 
 /** Обработчики строки таблицы: превью .cdr по ПКМ (Windows — удержание, macOS — клик). */
-export function getCdrPreviewRowHandlers({ task, onShowCdrPreview }) {
+export function getCdrPreviewRowHandlers({ task, previewTask = task, onShowCdrPreview }) {
   if (!onShowCdrPreview) return {};
 
   let lastTriggerMs = 0;
@@ -16,7 +16,7 @@ export function getCdrPreviewRowHandlers({ task, onShowCdrPreview }) {
     if (now - lastTriggerMs < 400) return;
     lastTriggerMs = now;
     event.preventDefault();
-    onShowCdrPreview(task, { x: event.clientX, y: event.clientY });
+    onShowCdrPreview(previewTask, { x: event.clientX, y: event.clientY });
   };
 
   return {

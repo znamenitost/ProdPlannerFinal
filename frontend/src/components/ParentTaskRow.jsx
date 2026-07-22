@@ -68,6 +68,7 @@ function ParentTaskRow({
   onOpenFile,
   onOpenFolder,
   onShowCdrPreview,
+  cdrPreviewSourceTask = task,
   onStart,
   onPause,
   onResume,
@@ -152,6 +153,7 @@ function ParentTaskRow({
   const taskColumnFullText = task.isFuss ? taskColumnLabel : (task.folderPath || '');
   const cdrPreviewRowHandlers = getCdrPreviewRowHandlers({
     task,
+    previewTask: cdrPreviewSourceTask,
     onShowCdrPreview,
   });
 

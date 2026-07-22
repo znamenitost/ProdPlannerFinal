@@ -473,6 +473,13 @@ export default function TaskTable({
     const displayPreviewBuilding = shouldPromoteSingleChild
       ? table.isCdrPreviewBuilding(children[0].id) || table.isCdrPreviewBuilding(parent.id)
       : table.isCdrPreviewBuilding(parent.id);
+    const cdrPreviewSourceTask = shouldPromoteSingleChild
+      ? (children[0]?.hasCdrPreview
+          ? children[0]
+          : parent?.hasCdrPreview
+            ? parent
+            : children[0])
+      : displayTask;
     const displayChildren = shouldPromoteSingleChild ? [] : children;
     const isExpanded = table.expandedRows.has(parent.id)
       || (searchResult.autoExpandIds.has(parent.id) && !shouldPromoteSingleChild);
@@ -497,6 +504,7 @@ export default function TaskTable({
         onOpenFile={table.handleOpenFile}
         onOpenFolder={table.handleOpenFolder}
         onShowCdrPreview={DEV_CDR_PREVIEW_ENABLED ? table.handleShowCdrPreview : undefined}
+        cdrPreviewSourceTask={cdrPreviewSourceTask}
         onStart={table.handleStartTask}
         onPause={table.handlePauseTask}
         onResume={table.handleResumeTask}
