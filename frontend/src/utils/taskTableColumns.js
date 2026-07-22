@@ -1,30 +1,3 @@
-export function hasNewRowAssigneeDetails(newRow) {
-  if (!newRow) return false;
-
-  const parts = newRow.assigneeParts;
-  if (newRow.isSharedTask && Array.isArray(parts) && parts.length >= 2) {
-    return parts.every(
-      (p) =>
-        Boolean(p?.employeeName?.trim()) &&
-        Number(p?.allocatedHours) >= 0.5 &&
-        Boolean(String(p?.taskType || '').trim())
-    );
-  }
-
-  if (newRow.employeeName?.trim()) {
-    const hours = Number(newRow.estimateHours);
-    return hours >= 0.5 && Array.isArray(newRow.types) && newRow.types.length > 0;
-  }
-
-  return false;
-}
-
-export function shouldShowHoursTypeColumns(newRow) {
-  if (!newRow) return true;
-  if (newRow.isFuss) return true;
-  return hasNewRowAssigneeDetails(newRow);
-}
-
 export const COLLAPSED_COLUMN_SX = {
   display: 'none',
   width: 0,

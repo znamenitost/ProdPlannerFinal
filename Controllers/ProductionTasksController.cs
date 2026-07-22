@@ -166,23 +166,6 @@ public class ProductionTasksController : ControllerBase
             or JobStatus.InStock;
     }
 
-    private static bool IsEmployeePriorityMarkOnlyUpdate(UpdateTaskRequest request, TaskTableRowDto task)
-    {
-        if (!request.PriorityMarked.HasValue)
-            return false;
-
-        if (request.SequenceOverride)
-            return false;
-
-        if (!string.IsNullOrEmpty(request.StatusText)
-            && !string.Equals(request.StatusText, task.StatusText, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
     [HttpPost("table/row")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateTableRow(
@@ -361,12 +344,14 @@ public class ProductionTasksController : ControllerBase
                 if (!isOwnTask)
                     return Forbid();
 
-                var commentOnly = IsEmployeeCommentOnlyUpdate(request, task);
-                var priorityMarkOnly = IsEmployeePriorityMarkOnlyUpdate(request, task);
-                if (!commentOnly && !priorityMarkOnly && !IsEmployeeAllowedStatusUpdate(request))
+                if (request.PriorityMarked.HasValue)
                     return Forbid();
 
-                if (task.IsFuss && !commentOnly && !priorityMarkOnly && IsEmployeeAllowedStatusUpdate(request))
+                var commentOnly = IsEmployeeCommentOnlyUpdate(request, task);
+                if (!commentOnly && !IsEmployeeAllowedStatusUpdate(request))
+                    return Forbid();
+
+                if (task.IsFuss && !commentOnly && IsEmployeeAllowedStatusUpdate(request))
                     return Forbid();
 
                 var expectedUpdatedAt = request.ExpectedUpdatedAt;
@@ -383,9 +368,9 @@ public class ProductionTasksController : ControllerBase
                     Type = task.Type,
                     EmployeeName = task.EmployeeName,
                     ParentRowNumber = task.ParentRowNumber,
-                    StatusText = (commentOnly || priorityMarkOnly) ? null : request.StatusText,
-                    PriorityMarked = priorityMarkOnly ? request.PriorityMarked : null,
-                    SequenceOverride = (commentOnly || priorityMarkOnly) ? false : request.SequenceOverride,
+                    StatusText = commentOnly ? null : request.StatusText,
+                    PriorityMarked = null,
+                    SequenceOverride = commentOnly ? false : request.SequenceOverride,
                     CommentEditedViaDialog = commentOnly ? request.CommentEditedViaDialog : null,
                     ExpectedUpdatedAt = expectedUpdatedAt
                 };

@@ -7,7 +7,6 @@ import useTaskTableChildren from './useTaskTableChildren';
 import useTaskTableActions from './useTaskTableActions';
 import useTaskTableModals from './useTaskTableModals';
 import usePlanningWarnings from './usePlanningWarnings';
-import { shouldShowHoursTypeColumns } from '../../utils/taskTableColumns';
 import { handleTaskTableHubEvent } from '../../utils/taskTableHubHandler';
 import { DEV_CDR_PREVIEW_ENABLED, formatDevTaskFilePath } from '../../utils/devCdrPreviewConfig';
 import { loadTaskCdrPreview } from '../../utils/devCdrPreviewService';
@@ -333,7 +332,7 @@ export default function useTaskTableController({
     applyPlanningWarnings
   });
 
-  const showHoursTypeColumns = shouldShowHoursTypeColumns(rowsState.newRow);
+  const showHoursTypeColumns = true;
 
   const handleOpenIntervals = useCallback(async (task) => {
     try {

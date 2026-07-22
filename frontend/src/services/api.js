@@ -168,7 +168,7 @@ export function buildTaskUpdatePayload(task, employeeName, statusText, extra) {
     employeeName: task.employeeName ?? employeeName ?? '',
     parentRowNumber: task.parentRowNumber ?? null,
     statusText: statusText ?? task.statusText,
-    priorityMarked: extra?.priorityMarked ?? task.isPriorityMarked ?? null,
+    priorityMarked: extra?.priorityMarked ?? null,
     sequenceOverride: extra?.sequenceOverride ?? false,
     expectedUpdatedAt: task.updatedAt ?? null,
     commentEditedViaDialog: extra?.commentEditedViaDialog ?? null
