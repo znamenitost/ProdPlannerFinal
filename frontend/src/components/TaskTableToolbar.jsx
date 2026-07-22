@@ -20,7 +20,6 @@ import ExpandableSearchField from './taskTable/ExpandableSearchField';
 export default function TaskTableToolbar({
   isAdmin,
   onAddNew,
-  onAddFuss,
   highlightMyTasks,
   onToggleHighlight,
   columnVisibility,
@@ -36,6 +35,8 @@ export default function TaskTableToolbar({
   onHideCompletedSortChange,
   hideCompletedInSharedSort,
   onHideCompletedInSharedSortChange,
+  showFuss,
+  onShowFussChange,
   searchQuery,
   onSearchQueryChange,
   showPlannedProgress,
@@ -199,6 +200,18 @@ export default function TaskTableToolbar({
             />
             <ListItemText primary="Скрыть готовые в общих" />
           </MenuItem>
+          {isAdmin && onShowFussChange && (
+            <MenuItem onClick={() => onShowFussChange(!showFuss)}>
+              <Checkbox
+                size="small"
+                checked={Boolean(showFuss)}
+                disableRipple
+                tabIndex={-1}
+                sx={{ pointerEvents: 'none' }}
+              />
+              <ListItemText primary="Показать суету" />
+            </MenuItem>
+          )}
         </Menu>
         <TaskTableColumnSettings
           visibility={columnVisibility}
@@ -210,11 +223,6 @@ export default function TaskTableToolbar({
         {isAdmin && (
           <Button variant="contained" color="success" startIcon={<Add />} onClick={onAddNew}>
             Новая задача
-          </Button>
-        )}
-        {!isAdmin && onAddFuss && (
-          <Button variant="contained" color="info" startIcon={<Add />} onClick={onAddFuss}>
-            Добавить задачу
           </Button>
         )}
       </Box>

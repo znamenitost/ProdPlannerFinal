@@ -14,7 +14,6 @@ import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import SplitTaskModal from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
 import NewTaskRow from './NewTaskRow';
-import NewFussTaskRow from './NewFussTaskRow';
 import EditTaskRow from './EditTaskRow';
 import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
@@ -43,6 +42,7 @@ const VIRTUAL_OVERSCAN = 15;
 const TEXT_LIMIT_MEASURE_DEBOUNCE_MS = 200;
 
 function isCompletedRow(row) {
+  if (row?.isFuss) return false;
   return isFinishedStatusText(row?.statusText) || row?.status === 3;
 }
 
@@ -138,7 +138,9 @@ export default function TaskTable({
     hideCompletedSort,
     setHideCompletedSort,
     hideCompletedInSharedSort,
-    setHideCompletedInSharedSort
+    setHideCompletedInSharedSort,
+    showFuss,
+    setShowFuss
   } = useTaskTableSortSettings(currentUser);
   const [searchQuery, setSearchQuery] = useUserPreference(currentUser, 'taskTable.searchQuery', '');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
@@ -150,6 +152,7 @@ export default function TaskTable({
     selectedEmployeeForHighlight,
     excludeCompleted: excludeCompletedFromApi,
     searchQuery: debouncedSearchQuery,
+    showFuss: isAdmin ? showFuss : false,
     getAutoSearchMinutes: autoSearchSettings.getAutoSearchMinutes
   });
   const sortOptions = useMemo(
@@ -540,7 +543,6 @@ export default function TaskTable({
       <TaskTableToolbar
         isAdmin={isAdmin}
         onAddNew={table.handleAddNewRow}
-        onAddFuss={table.handleAddFussRow}
         highlightMyTasks={table.highlightMyTasks}
         onToggleHighlight={table.toggleHighlight}
         columnVisibility={columnSettings.visibility}
@@ -556,6 +558,8 @@ export default function TaskTable({
         onHideCompletedSortChange={setHideCompletedSort}
         hideCompletedInSharedSort={hideCompletedInSharedSort}
         onHideCompletedInSharedSortChange={setHideCompletedInSharedSort}
+        showFuss={showFuss}
+        onShowFussChange={isAdmin ? setShowFuss : undefined}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         showPlannedProgress={plannedProgressPref.showPlannedProgress}
@@ -583,18 +587,7 @@ export default function TaskTable({
             showHoursTypeColumns={table.showHoursTypeColumns}
           />
           <TableBody>
-            {table.newRow?.isFuss && !isAdmin && (
-              <NewFussTaskRow
-                newRow={table.newRow}
-                setNewRow={table.setNewRow}
-                onSave={table.handleSaveFussRow}
-                onCancel={() => table.setNewRow(null)}
-                employeeName={currentUser?.fullName}
-                showHoursTypeColumns={table.showHoursTypeColumns}
-                columnVisibility={columnSettings.visibility}
-              />
-            )}
-            {table.newRow && !table.newRow.isFuss && isAdmin && (
+            {table.newRow && isAdmin && (
               <NewTaskRow
                 newRow={table.newRow}
                 setNewRow={table.setNewRow}

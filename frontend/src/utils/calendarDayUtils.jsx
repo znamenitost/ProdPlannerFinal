@@ -135,6 +135,16 @@ export function getWorkColor(taskId, completed) {
   return tokens.work[taskId % tokens.work.length];
 }
 
+/** Сегменты «Суеты» — те же цвета, но полупрозрачные. */
+export function isFussTimelineSegment(segment) {
+  if (segment?.isFuss) return true;
+  const fileName = String(segment?.fileName || '');
+  const title = String(segment?.taskTitle || '');
+  return fileName.startsWith('Суета') || title.startsWith('Суета');
+}
+
+export const FUSS_TIMELINE_OPACITY = 0.5;
+
 export function getPlannedBlockColor(block, theme) {
   if (block?.statusText === STATUS_PENDING_APPROVAL || block?.statusText === 'На согласовании') {
     return theme.palette.warning.main;

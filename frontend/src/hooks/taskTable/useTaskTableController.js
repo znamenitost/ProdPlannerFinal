@@ -22,9 +22,10 @@ export default function useTaskTableController({
   selectedEmployeeForHighlight,
   excludeCompleted = false,
   searchQuery = '',
+  showFuss = false,
   getAutoSearchMinutes = () => 0
 }) {
-  const { showError, showWarning, showSuccess, confirm } = useUiFeedback();
+  const { showError, showWarning, showSuccess, confirm, promptInput } = useUiFeedback();
   const api = useTaskTableApi();
   const {
     planningWarnings,
@@ -93,7 +94,8 @@ export default function useTaskTableController({
     selectedEmployeeForHighlight,
     onCalendarRefresh,
     excludeCompleted,
-    searchQuery
+    searchQuery,
+    showFuss
   });
 
   const childrenState = useTaskTableChildren(api);
@@ -117,6 +119,7 @@ export default function useTaskTableController({
     showWarning,
     showSuccess,
     confirm,
+    promptInput,
     applyPlanningWarnings,
     getAutoSearchMinutes
   });

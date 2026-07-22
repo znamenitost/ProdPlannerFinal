@@ -13,6 +13,7 @@ public interface ITaskTableService
         string? search = null,
         bool viewerIsAdmin = true,
         string? viewerUserId = null,
+        bool showFuss = false,
         CancellationToken cancellationToken = default);
     Task<TaskTableRowDto?> GetRowDtoAsync(
         int id,
@@ -20,12 +21,11 @@ public interface ITaskTableService
         bool viewerIsAdmin = true,
         string? viewerUserId = null,
         CancellationToken cancellationToken = default);
-        Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(
+    Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(
         CreateTaskRequest request,
         CancellationToken cancellationToken = default);
-    Task<TaskTableServiceResult<ProductionTask>> CreateFussRowAsync(
+    Task<TaskTableServiceResult<ProductionTask>> EnsureFussTaskAsync(
         string employeeName,
-        string comment,
         CancellationToken cancellationToken = default);
     Task<TaskTableServiceResult<ProductionTask>> UpdateRowAsync(
         int id,

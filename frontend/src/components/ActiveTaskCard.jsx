@@ -40,6 +40,7 @@ import { taskShowsThroughApproval } from '../utils/throughApproval';
 import { ThroughApprovalMark } from './taskTable/ThroughApprovalChip';
 import { TaskPriorityMark } from './taskTable/TaskPriorityChip';
 import { IssuedWithoutReadyMark } from './taskTable/IssuedWithoutReadyChip';
+import { FussTaskMark } from './taskTable/FussTaskChip';
 
 const blockedButtonSx = { opacity: 0.5 };
 const PROGRESS_MARKS = [0.3, 0.6, 0.9];
@@ -88,13 +89,15 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
   const sequenceBlocked = isSequenceBlocked(task, statusLabel) || task.status === 8;
   const blocked = showInfoStatus || sequenceBlocked;
   const showStatusChip = shouldShowActiveTaskStatusChip(task, statusLabel);
+  const isFuss = Boolean(task?.isFuss);
   const isAssignedLike = task.status === 0 || task.status === 6 || task.status === 7;
   const isInProgress = task.status === 1;
   const isPaused = task.status === 2;
   const isCompleted = task.status === 3;
-  const showWorkflowButtons = !isCompleted && (
+  const canRestartFuss = isFuss && isCompleted;
+  const showWorkflowButtons = canRestartFuss || (!isCompleted && (
     sequenceBlocked || showInfoStatus || (!blocked && (isAssignedLike || isInProgress || isPaused))
-  );
+  ));
   const canComplete = isInProgress || isPaused;
   const primaryAction = isPaused ? 'resume' : isInProgress ? 'pause' : 'start';
   const primaryLabel = isPaused ? ACTION_RESUME : isInProgress ? STATUS_PAUSED : STATUS_IN_PROGRESS;
@@ -125,18 +128,27 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-            <IconButton
-              size="small"
-              color="primary"
-              onClick={() => onOpenFile(task.file)}
-              aria-label="Открыть файл"
-            >
-              <FolderOpen fontSize="small" />
-            </IconButton>
+            {!isFuss && (
+              <IconButton
+                size="small"
+                color="primary"
+                onClick={() => onOpenFile(task.file)}
+                aria-label="Открыть файл"
+              >
+                <FolderOpen fontSize="small" />
+              </IconButton>
+            )}
             {taskShowsThroughApproval(task) && (
               <Tooltip title="Через согласование" arrow>
                 <Box component="span" aria-label="Через согласование">
                   <ThroughApprovalMark />
+                </Box>
+              </Tooltip>
+            )}
+            {task?.isFuss && (
+              <Tooltip title="Суета" arrow>
+                <Box component="span" aria-label="Суета">
+                  <FussTaskMark />
                 </Box>
               </Tooltip>
             )}

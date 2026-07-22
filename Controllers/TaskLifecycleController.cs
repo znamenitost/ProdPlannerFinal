@@ -41,6 +41,7 @@ public class TaskLifecycleController : ControllerBase
     public async Task<IActionResult> Start(
         int id,
         [FromQuery] string? employee = null,
+        [FromBody] StartTaskRequest? request = null,
         CancellationToken cancellationToken = default)
     {
         return await RunLifecycle(id, "Start", async () =>
@@ -49,8 +50,25 @@ public class TaskLifecycleController : ControllerBase
             if (task == null)
                 return NotFound(new { error = $"Задача с id {id} не найдена" });
 
-            await _lifecycle.StartTaskAsync(id, _timeService.Now, cancellationToken);
-            return await BuildLifecycleResultAsync("Задача запущена", id, task.ParentRowNumber, employee, cancellationToken);
+            try
+            {
+                await _lifecycle.StartTaskAsync(
+                    id,
+                    _timeService.Now,
+                    request?.Comment,
+                    cancellationToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+
+            return await BuildLifecycleResultAsync(
+                "Задача запущена",
+                id,
+                task.ParentRowNumber,
+                employee,
+                cancellationToken);
         });
     }
 

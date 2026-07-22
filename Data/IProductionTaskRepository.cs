@@ -70,6 +70,16 @@ namespace ProductionPlanner.Data
             int pageSize,
             bool excludeCompleted = false,
             string? search = null,
+            bool includeFuss = false,
+            string? fussViewerEmployeeName = null,
+            CancellationToken cancellationToken = default);
+        Task<ProductionTask?> GetFussTaskByEmployeeAsync(
+            string employeeName,
+            CancellationToken cancellationToken = default);
+        /// <summary>Скрывает лишние задачи «Суета» сотрудника, оставляя keepTaskId.</summary>
+        Task HideDuplicateFussTasksAsync(
+            string employeeName,
+            int keepTaskId,
             CancellationToken cancellationToken = default);
         Task HideTaskFromTableAsync(int taskId, CancellationToken cancellationToken = default);
         Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken = default);

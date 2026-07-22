@@ -24,6 +24,7 @@ import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
 import ThroughApprovalChip from './taskTable/ThroughApprovalChip';
 import TaskPriorityChip from './taskTable/TaskPriorityChip';
+import FussTaskChip from './taskTable/FussTaskChip';
 import MaxSubscribeChip from './taskTable/MaxSubscribeChip';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
 import EmployeeStatusButtons from './EmployeeStatusButtons';
@@ -232,6 +233,7 @@ function ChildTaskRow({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
           <TaskStatusCell statusText={task.statusText} task={task} />
           <ThroughApprovalChip task={task} />
+          <FussTaskChip task={task} />
           <TaskPriorityChip task={task} viewerEmployeeName={priorityMarkViewer} />
           {isAdmin && <MaxSubscribeChip subscribed={maxSubscribed} />}
         </Box>

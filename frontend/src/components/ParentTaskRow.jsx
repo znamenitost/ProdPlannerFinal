@@ -25,6 +25,7 @@ import TaskStatusCell from './taskTable/TaskStatusCell';
 import ThroughApprovalChip from './taskTable/ThroughApprovalChip';
 import TaskPriorityChip from './taskTable/TaskPriorityChip';
 import IssuedWithoutReadyChip from './taskTable/IssuedWithoutReadyChip';
+import FussTaskChip from './taskTable/FussTaskChip';
 import MaxSubscribeChip from './taskTable/MaxSubscribeChip';
 import ChildTaskRow from './ChildTaskRow';
 import TaskAdminActionStacks from './TaskAdminActionStacks';
@@ -33,6 +34,7 @@ import TableTruncatedTooltip from './taskTable/TableTruncatedTooltip';
 import LazyTooltip from './common/LazyTooltip';
 import TaskPlannedProgressFooter from './taskTable/TaskPlannedProgressFooter';
 import TaskFileNameCell from './taskTable/TaskFileNameCell';
+import { getFussTaskTitle } from './TaskTitleTwoLines';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
 import { alpha } from '@mui/material/styles';
@@ -144,6 +146,10 @@ function ParentTaskRow({
 
   const fullFilePath = `${task.folderPath || ''}/${task.fileName || ''}`.replace(/\/\//g, '/');
   const shortFolderPath = getLastPathSegment(task.folderPath);
+  const taskColumnLabel = task.isFuss
+    ? getFussTaskTitle(task)
+    : (shortFolderPath || task.folderPath || '—');
+  const taskColumnFullText = task.isFuss ? taskColumnLabel : (task.folderPath || '');
   const cdrPreviewRowHandlers = getCdrPreviewRowHandlers({
     task,
     onShowCdrPreview,
@@ -267,7 +273,7 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell sx={columnCellSx('task', columnVisibility, showHoursTypeColumns, COL_TASK)}>
-          <TableTruncatedTooltip fullText={task.folderPath || ''} limit={limit}>
+          <TableTruncatedTooltip fullText={taskColumnFullText} limit={limit}>
             <Typography
               variant="body2"
               sx={{
@@ -275,16 +281,16 @@ function ParentTaskRow({
                 ...cellDisplayTextSx
               }}
             >
-              {needsTooltip(shortFolderPath || task.folderPath, limit)
-                ? truncateText(shortFolderPath || task.folderPath, limit)
-                : shortFolderPath || task.folderPath || '—'}
+              {needsTooltip(taskColumnLabel, limit)
+                ? truncateText(taskColumnLabel, limit)
+                : taskColumnLabel}
             </Typography>
           </TableTruncatedTooltip>
         </TableCell>
 
         <TableCell sx={columnCellSx('file', columnVisibility, showHoursTypeColumns, COL_FILE)}>
           <TaskFileNameCell
-            fileName={task.fileName}
+            fileName={task.isFuss ? '' : task.fileName}
             task={task}
             textLimit={limit}
             previewBuilding={isCdrPreviewBuilding(task.id)}
@@ -330,6 +336,7 @@ function ParentTaskRow({
               task={task}
             />
             <ThroughApprovalChip task={task} childrenTasks={childrenTasks} />
+            <FussTaskChip task={task} />
             <TaskPriorityChip
               task={task}
               childrenTasks={childrenTasks}

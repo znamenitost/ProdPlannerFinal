@@ -55,12 +55,13 @@ export default function EmployeeStatusButtons({
   const statusActionsDisabled = pending || lifecycleBusy;
 
   const status = task.statusText || 'Назначена';
+  const isFuss = Boolean(task?.isFuss);
   const isDone = isFinishedStatusText(status);
   const isStarted = status === STATUS_IN_PROGRESS;
   const isPaused = status === STATUS_PAUSED;
   const isInfo = isInfoStatus(status);
   const isWaiting = status === STATUS_WAITING || task?.sequenceStartBlocked;
-  const canStart = !isDone && !isStarted && !isPaused;
+  const canStart = (!isDone || isFuss) && !isStarted && !isPaused;
   const canPause = isStarted;
   const canResume = isPaused;
   // «Готово» становится доступным только после нажатия «Начал» (либо в паузе после старта).
@@ -110,7 +111,7 @@ export default function EmployeeStatusButtons({
     });
   };
 
-  if (isDone) return null;
+  if (isDone && !isFuss) return null;
 
   const hasWorkflow = canStart || canPause || canResume || canComplete || isInfo;
   const hasInfo = Boolean(onSetStatus);

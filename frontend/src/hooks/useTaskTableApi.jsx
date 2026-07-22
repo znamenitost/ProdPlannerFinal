@@ -51,6 +51,9 @@ export default function useTaskTableApi() {
     if (options.excludeCompleted) {
       url += '&excludeCompleted=true';
     }
+    if (options.showFuss) {
+      url += '&showFuss=true';
+    }
     const search = String(options.search ?? '').trim();
     if (search) {
       url += `&search=${encodeURIComponent(search)}`;
@@ -95,15 +98,6 @@ export default function useTaskTableApi() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
-    });
-    return await handleResponse(response);
-  }, [handleResponse]);
-
-  const createFussRow = useCallback(async (comment) => {
-    const response = await fetch('/api/tasks/table/row/fuss', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ comment })
     });
     return await handleResponse(response);
   }, [handleResponse]);
@@ -161,8 +155,12 @@ export default function useTaskTableApi() {
     return url;
   }, []);
 
-  const startTask = useCallback(async (rowId, selectedEmployee = '') => {
-    const response = await fetch(lifecycleUrl(rowId, 'start', selectedEmployee), { method: 'POST' });
+  const startTask = useCallback(async (rowId, selectedEmployee = '', comment = null) => {
+    const response = await fetch(lifecycleUrl(rowId, 'start', selectedEmployee), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(comment ? { comment } : {})
+    });
     return await handleResponse(response);
   }, [handleResponse, lifecycleUrl]);
 
@@ -227,7 +225,6 @@ export default function useTaskTableApi() {
     loadRows,
     loadChildren,
     createRow,
-    createFussRow,
     updateRow,
     getIntervals,
     updateIntervals,
@@ -240,7 +237,7 @@ export default function useTaskTableApi() {
     openFolder,
     getTaskForSplit,
     splitTask
-  }), [fetchTableRow, loadRows, loadChildren, createRow, createFussRow, updateRow, getIntervals, updateIntervals, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, openFolder, getTaskForSplit, splitTask]);
+  }), [fetchTableRow, loadRows, loadChildren, createRow, updateRow, getIntervals, updateIntervals, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, openFolder, getTaskForSplit, splitTask]);
 
   return api;
 }

@@ -134,12 +134,48 @@ public class TaskLifecycleService : ITaskLifecycleService
             TaskStatusMapper.ToText(parent.Status));
     }
 
-    public async Task StartTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
+    public async Task StartTaskAsync(
+        int taskId,
+        DateTime now,
+        string? comment = null,
+        CancellationToken cancellationToken = default)
     {
         var startTime = _workHours.GetNextWorkStart(now);
+        var trimmedComment = comment?.Trim();
 
         await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
         {
+            var task = await _repo.GetTaskByIdAsync(taskId, ct);
+            if (task == null)
+                throw new InvalidOperationException($"Задача с id {taskId} не найдена");
+
+            if (task.IsFuss)
+            {
+                if (string.IsNullOrWhiteSpace(trimmedComment))
+                    throw new InvalidOperationException("Для «Суеты» укажите комментарий перед стартом.");
+
+                task.Comment = trimmedComment;
+                task.CommentEditedViaDialog = true;
+                task.FolderPath = "";
+                task.FileName = string.IsNullOrWhiteSpace(task.EmployeeName)
+                    ? "Суета"
+                    : $"Суета ({task.EmployeeName.Trim()})";
+                task.UpdatedAt = now;
+                await _repo.UpdateTaskTableFieldsAsync(task, cancellationToken: ct);
+
+                if (task.Status == JobStatus.Completed)
+                {
+                    await RequireStatusTransitionAsync(
+                        taskId,
+                        [JobStatus.Completed],
+                        JobStatus.Assigned,
+                        now,
+                        new TaskStatusPatch { Progress = 0, ClearCompletedAt = true },
+                        action: "новый цикл суеты",
+                        ct);
+                }
+            }
+
             await CloseOpenIntervalsInTransactionAsync(taskId, now, ct);
 
             await RequireStatusTransitionAsync(
@@ -160,13 +196,13 @@ public class TaskLifecycleService : ITaskLifecycleService
             await _repo.SaveChangesAsync(ct);
         }, cancellationToken);
 
-        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
-        if (task == null) return;
+        var started = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
+        if (started == null) return;
 
-        if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-            await UpdateParentStatusAsync(task.Id, cancellationToken);
+        if (started.ParentRowNumber.HasValue && started.IsSplitTask)
+            await UpdateParentStatusAsync(started.Id, cancellationToken);
 
-        await _notificationService.NotifyStatusChangedAsync(task, "InProgress");
+        await _notificationService.NotifyStatusChangedAsync(started, "InProgress");
     }
 
     public async Task PauseTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default)
@@ -262,9 +298,10 @@ public class TaskLifecycleService : ITaskLifecycleService
             // Без этого % > 0 для Approved/InStock записывались бы в задачу, оставляя её
             // без открытого WorkInterval — задача с прогрессом, но без отметки начала работы.
             if (newProgress > 0
+                && !task.IsFuss
                 && task.Status is JobStatus.Assigned or JobStatus.Approved or JobStatus.InStock)
             {
-                await StartTaskAsync(taskId, now, ct);
+                await StartTaskAsync(taskId, now, cancellationToken: ct);
                 task = await _repo.GetTaskByIdAsync(taskId, ct);
                 if (task == null) return;
             }

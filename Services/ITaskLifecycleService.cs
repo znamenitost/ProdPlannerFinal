@@ -4,7 +4,11 @@ namespace ProductionPlanner.Services
 {
     public interface ITaskLifecycleService
     {
-        Task StartTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default);
+        Task StartTaskAsync(
+            int taskId,
+            DateTime now,
+            string? comment = null,
+            CancellationToken cancellationToken = default);
         Task PauseTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default);
         Task ResumeTaskAsync(int taskId, DateTime now, CancellationToken cancellationToken = default);
         Task UpdateProgressAsync(int taskId, double newProgress, DateTime now, CancellationToken cancellationToken = default);

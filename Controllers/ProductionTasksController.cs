@@ -66,6 +66,7 @@ public class ProductionTasksController : ControllerBase
         [FromQuery] string? employee = null,
         [FromQuery] bool excludeCompleted = false,
         [FromQuery] string? search = null,
+        [FromQuery] bool showFuss = false,
         CancellationToken cancellationToken = default)
     {
         try
@@ -82,6 +83,7 @@ public class ProductionTasksController : ControllerBase
                 search,
                 isAdmin,
                 currentUser.Id,
+                showFuss,
                 cancellationToken);
             return Ok(result);
         }
@@ -215,9 +217,7 @@ public class ProductionTasksController : ControllerBase
     }
 
     [HttpPost("table/row/fuss")]
-    public async Task<IActionResult> CreateFussTableRow(
-        [FromBody] CreateFussTaskRequest request,
-        CancellationToken cancellationToken = default)
+    public async Task<IActionResult> EnsureFussTableRow(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -226,24 +226,17 @@ public class ProductionTasksController : ControllerBase
             if (string.IsNullOrWhiteSpace(currentUser.FullName))
                 return BadRequest(new { error = "У пользователя не задано имя." });
 
-            var result = await _tableService.CreateFussRowAsync(
+            var result = await _tableService.EnsureFussTaskAsync(
                 currentUser.FullName,
-                request.Comment,
                 cancellationToken);
             if (result.Error != null)
                 return BadRequest(new { error = result.Error });
-
-            await _taskComments.SeedInitialCommentAsync(
-                result.Data!,
-                currentUser,
-                authorIsAdmin: await _userManager.IsInRoleAsync(currentUser, "Admin"),
-                cancellationToken);
 
             return Ok(await BuildSaveResponseAsync(result.Data!, parts: null, cancellationToken));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка в CreateFussTableRow");
+            _logger.LogError(ex, "Ошибка в EnsureFussTableRow");
             return StatusCode(500, new { error = ex.Message });
         }
     }

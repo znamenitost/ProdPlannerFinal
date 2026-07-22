@@ -125,8 +125,14 @@ namespace ProductionPlanner.Models
         {
             get
             {
-                if (IsFuss && !string.IsNullOrWhiteSpace(Comment))
-                    return Comment.Trim();
+                if (IsFuss)
+                {
+                    if (!string.IsNullOrWhiteSpace(FileName))
+                        return FileName.Trim();
+                    if (!string.IsNullOrWhiteSpace(EmployeeName))
+                        return $"Суета ({EmployeeName.Trim()})";
+                    return "Суета";
+                }
 
                 if (!string.IsNullOrEmpty(FolderPath))
                 {

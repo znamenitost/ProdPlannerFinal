@@ -71,6 +71,7 @@ export default function TaskAdminActionStacks({
   const priorityMarkDisabled = pending;
 
   const status = task?.statusText || 'Назначена';
+  const isFuss = Boolean(task?.isFuss);
   const isDone = isFinishedStatusText(status);
   const isStarted = status === STATUS_IN_PROGRESS;
   const isPaused = status === STATUS_PAUSED;
@@ -92,12 +93,12 @@ export default function TaskAdminActionStacks({
     setAnchorEl(null);
   };
 
-  const canStart = !isStarted && !isPaused;
+  const canStart = (!isDone || isFuss) && !isStarted && !isPaused;
   const canPause = isStarted;
   const canResume = isPaused;
   // «Готово» доступно только после нажатия «Начал» (или из паузы). В инфостатусах сначала
   // нужно их снять через «Начал» (workflow сам подтвердит) — это совпадает со спецификацией.
-  const canComplete = isStarted || isPaused;
+  const canComplete = !isDone && (isStarted || isPaused);
 
   const runWorkflow = (lifecycleAction) => (event) => {
     event.stopPropagation();
@@ -126,7 +127,7 @@ export default function TaskAdminActionStacks({
     });
   };
 
-  const showWorkflowBlock = showWorkflow && !isDone;
+  const showWorkflowBlock = showWorkflow && (!isDone || isFuss);
   const infoMenuItems = getInfoMenuItems(status);
   const showInfoBlock = Boolean(onSetStatus) && infoMenuItems.length > 0;
 

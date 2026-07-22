@@ -68,13 +68,23 @@ public class TaskTableService : ITaskTableService
         string? search = null,
         bool viewerIsAdmin = true,
         string? viewerUserId = null,
+        bool showFuss = false,
         CancellationToken cancellationToken = default)
     {
+        if (!viewerIsAdmin && !string.IsNullOrWhiteSpace(targetEmployeeName))
+            await EnsureFussTaskAsync(targetEmployeeName, cancellationToken);
+
+        // Админ: суета только при showFuss. Сотрудник: всегда своя суета.
+        var includeFuss = viewerIsAdmin ? showFuss : true;
+        var fussViewer = viewerIsAdmin ? null : targetEmployeeName;
+
         var pageResult = await _repo.GetRootTasksPaginatedAsync(
             page,
             pageSize,
             excludeCompleted,
             search,
+            includeFuss,
+            fussViewer,
             cancellationToken);
 
         if (pageResult.Items.Count == 0)
@@ -346,28 +356,32 @@ public class TaskTableService : ITaskTableService
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }
 
-    public async Task<TaskTableServiceResult<ProductionTask>> CreateFussRowAsync(
+    public async Task<TaskTableServiceResult<ProductionTask>> EnsureFussTaskAsync(
         string employeeName,
-        string comment,
         CancellationToken cancellationToken = default)
     {
-        var trimmedComment = comment?.Trim() ?? "";
-        if (string.IsNullOrWhiteSpace(trimmedComment))
-            return TaskTableServiceResult<ProductionTask>.Fail("Комментарий обязателен.");
-
         if (string.IsNullOrWhiteSpace(employeeName))
             return TaskTableServiceResult<ProductionTask>.Fail("Не указан сотрудник.");
+
+        var trimmedEmployee = employeeName.Trim();
+        var existing = await _repo.GetFussTaskByEmployeeAsync(trimmedEmployee, cancellationToken);
+        if (existing != null)
+        {
+            // Старые «созданные по кнопке» суеты — скрываем, оставляем самую раннюю.
+            await _repo.HideDuplicateFussTasksAsync(trimmedEmployee, existing.Id, cancellationToken);
+            return TaskTableServiceResult<ProductionTask>.Ok(existing);
+        }
 
         var task = new ProductionTask
         {
             DisplayOrder = -1,
             FolderPath = "",
-            FileName = "",
-            Comment = trimmedComment,
+            FileName = $"Суета ({trimmedEmployee})",
+            Comment = "",
             Deadline = null,
             EstimateHours = 0,
             Type = "Суета",
-            EmployeeName = employeeName.Trim(),
+            EmployeeName = trimmedEmployee,
             Status = JobStatus.Assigned,
             Progress = 0,
             ActualHours = 0,
@@ -380,8 +394,6 @@ public class TaskTableService : ITaskTableService
 
         await _repo.AddTaskAsync(task, cancellationToken);
         await _repo.AppendRootDisplayOrderAsync(task.Id, cancellationToken);
-
-        await _notificationService.NotifyNewTaskAsync(task);
 
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }
@@ -467,6 +479,7 @@ public class TaskTableService : ITaskTableService
             task.CommentEditedViaDialog = true;
         if (task.IsFuss)
         {
+            task.FolderPath = "";
             task.Deadline = null;
             task.EstimateHours = 0;
             task.Type = "Суета";
@@ -487,6 +500,13 @@ public class TaskTableService : ITaskTableService
             task.EmployeeName = request.EmployeeName ?? task.EmployeeName;
         else
             task.EmployeeName = "";
+        if (task.IsFuss)
+        {
+            task.FolderPath = "";
+            task.FileName = string.IsNullOrWhiteSpace(task.EmployeeName)
+                ? "Суета"
+                : $"Суета ({task.EmployeeName.Trim()})";
+        }
         task.ParentRowNumber = request.ParentRowNumber;
         task.UpdatedAt = _timeService.Now;
 
@@ -1136,6 +1156,7 @@ public class TaskTableService : ITaskTableService
             task.CommentEditedViaDialog = true;
         if (task.IsFuss)
         {
+            task.FolderPath = "";
             task.Deadline = null;
             task.EstimateHours = 0;
             task.Type = "Суета";
@@ -1152,6 +1173,13 @@ public class TaskTableService : ITaskTableService
             task.EmployeeName = request.EmployeeName ?? task.EmployeeName;
         else
             task.EmployeeName = "";
+        if (task.IsFuss)
+        {
+            task.FolderPath = "";
+            task.FileName = string.IsNullOrWhiteSpace(task.EmployeeName)
+                ? "Суета"
+                : $"Суета ({task.EmployeeName.Trim()})";
+        }
         task.ParentRowNumber = request.ParentRowNumber;
     }
 }

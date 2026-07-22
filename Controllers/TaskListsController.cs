@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Services.TaskLists;
+using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Controllers;
 
@@ -15,17 +16,20 @@ public class TaskListsController : ControllerBase
 {
     private readonly ITaskListQueryService _taskLists;
     private readonly IEmployeeAssignmentLoadService _assignmentLoad;
+    private readonly ITaskTableService _tableService;
     private readonly IAppTimeService _timeService;
     private readonly UserManager<User> _userManager;
 
     public TaskListsController(
         ITaskListQueryService taskLists,
         IEmployeeAssignmentLoadService assignmentLoad,
+        ITaskTableService tableService,
         IAppTimeService timeService,
         UserManager<User> userManager)
     {
         _taskLists = taskLists;
         _assignmentLoad = assignmentLoad;
+        _tableService = tableService;
         _timeService = timeService;
         _userManager = userManager;
     }
@@ -56,6 +60,7 @@ public class TaskListsController : ControllerBase
 
         if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
 
+        await _tableService.EnsureFussTaskAsync(employee, cancellationToken);
         var result = await _taskLists.GetActiveTasksAsync(employee, _timeService.Now, cancellationToken);
         return Ok(result);
     }

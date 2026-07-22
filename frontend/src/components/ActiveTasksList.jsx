@@ -44,6 +44,7 @@ import {
   isInfoStatus,
   isSequenceBlocked
 } from '../constants/taskStatuses';
+import { promptFussStartComment } from '../utils/fussStart';
 
 function getDeadlineSortValue(task) {
   if (!task?.deadline) return Number.POSITIVE_INFINITY;
@@ -63,7 +64,7 @@ export default function ActiveTasksList({
   sectionSx,
   employee = ''
 }) {
-  const { showError, showWarning, confirm } = useUiFeedback();
+  const { showError, showWarning, confirm, promptInput } = useUiFeedback();
   const { user } = useAuth();
   const { data: tasks = [] } = useActiveTasksQuery(employee, Boolean(employee));
   const [pendingTaskId, setPendingTaskId] = useState(null);
@@ -110,10 +111,17 @@ export default function ActiveTasksList({
 
   const runGuardedAction = useCallback(async (task, action, progress = null) => {
     if (pendingTaskIdRef.current != null) return;
+
+    let fussComment = null;
+    if (action === 'start' && task?.isFuss) {
+      fussComment = await promptFussStartComment(promptInput);
+      if (!fussComment) return;
+    }
+
     setPendingTask(task.id);
 
     const runApi = async () => {
-      if (action === 'start') await startTask(task.id);
+      if (action === 'start') await startTask(task.id, fussComment);
       else if (action === 'pause') await pauseTask(task.id);
       else if (action === 'resume') await resumeTask(task.id);
       else if (action === 'progress') await setProgress(task.id, progress);
@@ -140,7 +148,7 @@ export default function ActiveTasksList({
     } finally {
       setPendingTask(null);
     }
-  }, [confirm, employee, onUpdate, setPendingTask, showError]);
+  }, [confirm, employee, onUpdate, promptInput, setPendingTask, showError]);
 
   const openFile = useCallback((filePath) => {
     if (!filePath) {

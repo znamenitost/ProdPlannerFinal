@@ -15,6 +15,8 @@ import {
   getTimelineRange,
   getWidth,
   getWorkColor,
+  isFussTimelineSegment,
+  FUSS_TIMELINE_OPACITY,
   isSameCalendarDay
 } from '../../utils/calendarDayUtils';
 import TimelineHourAxis from './TimelineHourAxis';
@@ -125,7 +127,7 @@ export default function TimelineSegments({
                 height: `${segmentHeight}px`,
                 top: `${topPos}px`,
                 backgroundColor: getWorkColor(segment.taskId, segment.completed),
-                opacity: 0.85,
+                opacity: isFussTimelineSegment(segment) ? FUSS_TIMELINE_OPACITY : 0.85,
                 cursor: 'pointer',
                 ...calendarBlockLayoutTransitionSx,
                 borderRadius: '2px',

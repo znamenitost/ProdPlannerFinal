@@ -110,11 +110,12 @@ async function throwApiError(res, fallback) {
   await failResponse(res, fallback);
 }
 
-export async function startTask(id) {
+export async function startTask(id, comment = null) {
   const res = await fetch(`${API_BASE}/tasks/${id}/start`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(comment ? { comment } : {})
   });
   if (!res.ok) await throwApiError(res, 'Ошибка запуска задачи');
 }

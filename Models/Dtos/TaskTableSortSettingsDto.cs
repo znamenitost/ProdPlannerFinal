@@ -9,4 +9,7 @@ public class TaskTableSortSettingsDto
     public bool HideCompletedSort { get; set; }
 
     public bool HideCompletedInSharedSort { get; set; }
+
+    /// <summary>Админ: показывать задачи «Суета» в таблице.</summary>
+    public bool ShowFuss { get; set; }
 }

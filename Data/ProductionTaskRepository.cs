@@ -45,7 +45,7 @@ namespace ProductionPlanner.Data
                 .AsNoTracking()
                 .Where(t => employeeNames.Contains(t.EmployeeName)
                             && !t.HiddenFromTaskTable
-                            && t.Status != JobStatus.Completed
+                            && (t.Status != JobStatus.Completed || t.IsFuss)
                             && !(t.IsSplitTask && t.ParentRowNumber == null))
                 .ToListAsync(cancellationToken);
         }
@@ -512,32 +512,47 @@ namespace ProductionPlanner.Data
             int pageSize,
             bool excludeCompleted = false,
             string? search = null,
+            bool includeFuss = false,
+            string? fussViewerEmployeeName = null,
             CancellationToken cancellationToken = default)
         {
             var query = _context.ProductionTasks
                 .AsNoTracking()
                 .Where(t => t.ParentRowNumber == null && !t.HiddenFromTaskTable);
 
+            if (!includeFuss)
+            {
+                query = query.Where(t => !t.IsFuss);
+            }
+            else if (!string.IsNullOrWhiteSpace(fussViewerEmployeeName))
+            {
+                // Сотрудник: обычные задачи + только своя суета.
+                query = query.Where(t =>
+                    !t.IsFuss
+                    || t.EmployeeName == fussViewerEmployeeName);
+            }
+
             if (excludeCompleted)
             {
                 query = query.Where(t =>
-                    t.Status != JobStatus.Completed
-                    && (!t.IsSplitTask
-                        || !_context.TaskSplits.Any(s => s.ParentRowNumber == t.Id)
-                        || _context.TaskSplits
-                            .Where(s => s.ParentRowNumber == t.Id)
-                            .Join(
-                                _context.ProductionTasks,
-                                s => s.ChildTaskId,
-                                c => c.Id,
-                                (s, c) => c)
-                            .Any(c => c.Status != JobStatus.Completed)));
+                    t.IsFuss
+                    || (t.Status != JobStatus.Completed
+                        && (!t.IsSplitTask
+                            || !_context.TaskSplits.Any(s => s.ParentRowNumber == t.Id)
+                            || _context.TaskSplits
+                                .Where(s => s.ParentRowNumber == t.Id)
+                                .Join(
+                                    _context.ProductionTasks,
+                                    s => s.ChildTaskId,
+                                    c => c.Id,
+                                    (s, c) => c)
+                                .Any(c => c.Status != JobStatus.Completed))));
             }
 
             query = query.ApplyToRootTasks(_context, search);
 
             query = query
-                .OrderBy(t => t.Status == JobStatus.Completed)
+                .OrderBy(t => t.Status == JobStatus.Completed && !t.IsFuss)
                 .ThenByDescending(t => t.DisplayOrder)
                 .ThenByDescending(t => t.Id);
 
@@ -554,6 +569,43 @@ namespace ProductionPlanner.Data
                 Page = page,
                 PageSize = pageSize
             };
+        }
+
+        public async Task<ProductionTask?> GetFussTaskByEmployeeAsync(
+            string employeeName,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(employeeName))
+                return null;
+
+            return await _context.ProductionTasks
+                .AsNoTracking()
+                .Where(t => t.IsFuss
+                    && !t.HiddenFromTaskTable
+                    && t.ParentRowNumber == null
+                    && t.EmployeeName == employeeName)
+                .OrderBy(t => t.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        public async Task HideDuplicateFussTasksAsync(
+            string employeeName,
+            int keepTaskId,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(employeeName))
+                return;
+
+            await _context.ProductionTasks
+                .Where(t => t.IsFuss
+                    && !t.HiddenFromTaskTable
+                    && t.ParentRowNumber == null
+                    && t.EmployeeName == employeeName
+                    && t.Id != keepTaskId)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.HiddenFromTaskTable, true)
+                        .SetProperty(t => t.UpdatedAt, ToDbDateTime(_timeService.Now)),
+                    cancellationToken);
         }
 
         public async Task HideTaskFromTableAsync(

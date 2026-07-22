@@ -14,14 +14,15 @@ export const queryKeys = {
   completedAll: (employee) => ['app', 'completedTasks', employee],
   dailyReport: (employee, dateKey = 'today') => ['app', 'dailyReport', employee, dateKey],
   dailyReportAll: (employee) => ['app', 'dailyReport', employee],
-  taskTable: (page, pageSize, employeeFilter, excludeCompleted = false, search = '') => [
+  taskTable: (page, pageSize, employeeFilter, excludeCompleted = false, search = '', showFuss = false) => [
     'app',
     'taskTable',
     page,
     pageSize,
     employeeFilter || '',
     excludeCompleted,
-    search || ''
+    search || '',
+    showFuss
   ],
   taskTableAll: () => ['app', 'taskTable'],
   deadlineRisks: (employee) => ['app', 'deadlineRisks', employee],

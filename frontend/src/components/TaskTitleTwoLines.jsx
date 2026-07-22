@@ -7,8 +7,16 @@ import {
 import { getLastPathSegment } from '../utils/taskHelpers';
 
 /** Заголовок (столбец «Задача») + имя файла (столбец «Файл»), как в таблице. */
+export function getFussTaskTitle(task) {
+  if (!task) return 'Суета';
+  if (task.fileName?.trim()) return task.fileName.trim();
+  if (task.employeeName?.trim()) return `Суета (${task.employeeName.trim()})`;
+  return 'Суета';
+}
+
 export function getTaskHeading(task) {
   if (!task) return '—';
+  if (task.isFuss) return getFussTaskTitle(task);
   const fromPath = getLastPathSegment(task.folderPath);
   if (fromPath) return fromPath;
   if (task.heading) return task.heading;
@@ -18,6 +26,7 @@ export function getTaskHeading(task) {
 
 export function getTaskFileLabel(task) {
   if (!task) return '—';
+  if (task.isFuss) return '—';
   if (task.fileName) return task.fileName;
   if (task.file) {
     const parts = String(task.file).replace(/\\/g, '/').split('/');

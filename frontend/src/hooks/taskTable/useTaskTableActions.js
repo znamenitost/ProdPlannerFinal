@@ -15,6 +15,7 @@ import {
   getDevCdrDefaultFileName
 } from '../../utils/devCdrPreviewConfig';
 import { startCdrAutoSearchAfterSave } from '../../utils/cdrAutoSearch';
+import { promptFussStartComment } from '../../utils/fussStart';
 
 function kickOffCdrAutoSearch({ taskId, folderPath, fileName, autoSearchMinutes, showWarning }) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return;
@@ -46,6 +47,7 @@ export default function useTaskTableActions({
   showWarning,
   showSuccess,
   confirm,
+  promptInput,
   applyPlanningWarnings,
   getAutoSearchMinutes = () => 0
 }) {
@@ -363,8 +365,18 @@ export default function useTaskTableActions({
   ]);
 
   const handleStartTask = useCallback(
-    (row) => runLifecycleAction(api.startTask, row),
-    [api.startTask, runLifecycleAction]
+    async (row) => {
+      let comment = null;
+      if (row?.isFuss) {
+        comment = await promptFussStartComment(promptInput);
+        if (!comment) return;
+      }
+      await runLifecycleAction(
+        (id, employee) => api.startTask(id, employee, comment),
+        row
+      );
+    },
+    [api, promptInput, runLifecycleAction]
   );
   const handlePauseTask = useCallback(
     (row) => runLifecycleAction(api.pauseTask, row),
@@ -477,37 +489,6 @@ export default function useTaskTableActions({
     });
   }, [setNewRow]);
 
-  const handleAddFussRow = useCallback(() => {
-    setNewRow({
-      isFuss: true,
-      comment: ''
-    });
-  }, [setNewRow]);
-
-  const handleSaveFussRow = useCallback(async () => {
-    if (!newRow?.isFuss) return;
-    if (savingNewRowRef.current) return;
-
-    const comment = (newRow.comment || '').trim();
-    if (!comment) {
-      showWarning('Укажите комментарий задачи');
-      return;
-    }
-
-    savingNewRowRef.current = true;
-    try {
-      const raw = await api.createFussRow(comment);
-      unwrapTaskSaveResponse(raw);
-      setNewRow(null);
-      void refresh();
-    } catch (err) {
-      console.error('Ошибка сохранения суеты:', err);
-      showError(err.message || 'Ошибка сохранения задачи');
-    } finally {
-      savingNewRowRef.current = false;
-    }
-  }, [api, newRow, refresh, setNewRow, showError, showWarning]);
-
   const handleEditRow = useCallback((id) => {
     setEditingId(id);
   }, [setEditingId]);
@@ -539,8 +520,6 @@ export default function useTaskTableActions({
     handleTogglePriority,
     handleDeleteRow,
     handleAddNewRow,
-    handleAddFussRow,
-    handleSaveFussRow,
     handleEditRow,
     handleCopyOrderLink
   };
