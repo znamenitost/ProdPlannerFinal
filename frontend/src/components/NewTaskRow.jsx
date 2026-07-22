@@ -130,13 +130,13 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, { ...COL_ACTIONS, px: 0 })}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <IconButton size="small" color="primary" onClick={onSave} aria-label="Сохранить" sx={{ p: 0.125 }}>
-            <Save sx={{ fontSize: 18 }} />
+      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <IconButton size="small" color="primary" onClick={onSave} aria-label="Сохранить">
+            <Save fontSize="small" />
           </IconButton>
-          <IconButton size="small" color="error" onClick={onCancel} aria-label="Отмена" sx={{ p: 0.125 }}>
-            <Cancel sx={{ fontSize: 18 }} />
+          <IconButton size="small" color="error" onClick={onCancel} aria-label="Отмена">
+            <Cancel fontSize="small" />
           </IconButton>
         </Box>
       </TableCell>

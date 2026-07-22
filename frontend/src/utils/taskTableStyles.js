@@ -32,12 +32,12 @@ export const COL_COMPACT = { width: '1%', whiteSpace: 'nowrap', verticalAlign: '
 export const COL_EMPLOYEE = { width: '1%', whiteSpace: 'nowrap', verticalAlign: 'middle' };
 export const COL_STATUS = { width: '1%', whiteSpace: 'nowrap', verticalAlign: 'middle' };
 export const COL_ACTIONS = {
-  width: 40,
-  minWidth: 40,
-  maxWidth: 40,
+  width: 84,
+  minWidth: 84,
+  maxWidth: 84,
   whiteSpace: 'nowrap',
   verticalAlign: 'middle',
-  px: 0.25,
+  px: 0.5,
   py: 0.5,
   boxSizing: 'border-box',
   overflow: 'hidden',
