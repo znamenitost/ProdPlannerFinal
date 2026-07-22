@@ -256,7 +256,7 @@ namespace ProductionPlanner.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime>("Deadline")
+                    b.Property<DateTime?>("Deadline")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("DisplayOrder")
@@ -282,6 +282,9 @@ namespace ProductionPlanner.Migrations
                         .HasColumnType("text");
 
                     b.Property<bool>("HiddenFromTaskTable")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsFuss")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsSplitTask")

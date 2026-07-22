@@ -214,6 +214,40 @@ public class ProductionTasksController : ControllerBase
         }
     }
 
+    [HttpPost("table/row/fuss")]
+    public async Task<IActionResult> CreateFussTableRow(
+        [FromBody] CreateFussTaskRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (currentUser == null) return Unauthorized();
+            if (string.IsNullOrWhiteSpace(currentUser.FullName))
+                return BadRequest(new { error = "У пользователя не задано имя." });
+
+            var result = await _tableService.CreateFussRowAsync(
+                currentUser.FullName,
+                request.Comment,
+                cancellationToken);
+            if (result.Error != null)
+                return BadRequest(new { error = result.Error });
+
+            await _taskComments.SeedInitialCommentAsync(
+                result.Data!,
+                currentUser,
+                authorIsAdmin: await _userManager.IsInRoleAsync(currentUser, "Admin"),
+                cancellationToken);
+
+            return Ok(await BuildSaveResponseAsync(result.Data!, parts: null, cancellationToken));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в CreateFussTableRow");
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
     [HttpGet("table/row/{id}/comments")]
     public async Task<IActionResult> GetTaskComments(int id, CancellationToken cancellationToken = default)
     {
@@ -337,6 +371,9 @@ public class ProductionTasksController : ControllerBase
                 var commentOnly = IsEmployeeCommentOnlyUpdate(request, task);
                 var priorityMarkOnly = IsEmployeePriorityMarkOnlyUpdate(request, task);
                 if (!commentOnly && !priorityMarkOnly && !IsEmployeeAllowedStatusUpdate(request))
+                    return Forbid();
+
+                if (task.IsFuss && !commentOnly && !priorityMarkOnly && IsEmployeeAllowedStatusUpdate(request))
                     return Forbid();
 
                 var expectedUpdatedAt = request.ExpectedUpdatedAt;

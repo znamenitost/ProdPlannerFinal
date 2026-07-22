@@ -7,8 +7,17 @@ export default function TaskHoursCell({
   requiresTestBeforeProduction = false,
   testEstimateHours = 0,
   productionEstimateHours = 0,
-  fallback = '0.0'
+  fallback = '0.0',
+  isFuss = false
 }) {
+  if (isFuss) {
+    return (
+      <Typography variant="body2" sx={cellDisplayTextSx}>
+        —
+      </Typography>
+    );
+  }
+
   const showSplit = requiresTestBeforeProduction
     && testEstimateHours > 0
     && productionEstimateHours > 0;

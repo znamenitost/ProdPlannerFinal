@@ -29,4 +29,8 @@ public static class AppDateTime
 
     public static int CompareDeadlineToAppNow(DateTime deadlineFromDb, DateTime appNow) =>
         DbToUtc(deadlineFromDb).CompareTo(AppNowToUtc(appNow));
+
+    /// <summary>Нет дедлайна — не просрочен (сравнение как «после сейчас»).</summary>
+    public static int CompareDeadlineToAppNow(DateTime? deadlineFromDb, DateTime appNow) =>
+        deadlineFromDb.HasValue ? CompareDeadlineToAppNow(deadlineFromDb.Value, appNow) : 1;
 }

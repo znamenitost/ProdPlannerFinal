@@ -192,7 +192,7 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
           >
             <Chip label={task.type} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
             {showStatusChip && (
-              <TaskStatusCell statusText={statusLabel} label={statusLabel} />
+              <TaskStatusCell statusText={statusLabel} label={statusLabel} task={task} />
             )}
           </Stack>
 
@@ -224,7 +224,7 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
                 </Button>
               </>
             )}
-            {!blocked && !isCompleted && (
+            {!blocked && !isCompleted && !task.isFuss && (
               <>
                 {PROGRESS_MARKS.map((p) => (
                   <Button

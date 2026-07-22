@@ -159,7 +159,7 @@ public class TaskListQueryService : ITaskListQueryService
             task.CompletedAt,
             task.Progress,
             task.Status,
-            StatusText = TaskStatusMapper.ToText(task.Status),
+            StatusText = TaskStatusMapper.ToDisplayText(task),
             RowNumber = task.Id,
             workIntervals = intervals.Select(i => new
             {
@@ -167,7 +167,8 @@ public class TaskListQueryService : ITaskListQueryService
                 i.ProductionTaskId,
                 startTime = i.StartTime,
                 endTime = i.EndTime
-            })
+            }),
+            task.IsFuss
         };
 
     public async Task<List<DeadlineRisk>> GetDeadlineRisksAsync(
@@ -216,7 +217,7 @@ public class TaskListQueryService : ITaskListQueryService
             SupplyMode = supplyMode,
             SequenceOrder = sequenceOrder,
             SequenceStartBlocked = supplyMode == SupplyMode.InternalProduction && task.Status == JobStatus.Waiting,
-            StatusText = TaskStatusMapper.ApplyPickedUpDisplay(task, TaskStatusMapper.ToText(task.Status)),
+            StatusText = TaskStatusMapper.ToDisplayText(task),
             RowNumber = task.Id,
             RiskLevel = riskLevel,
             RequiredHours = hoursNeeded,
@@ -225,7 +226,8 @@ public class TaskListQueryService : ITaskListQueryService
             task.TestEstimateHours,
             task.ProductionEstimateHours,
             WorkPhase = task.WorkPhase,
-            task.IssuedWithoutReady
+            task.IssuedWithoutReady,
+            task.IsFuss
         };
     }
 }

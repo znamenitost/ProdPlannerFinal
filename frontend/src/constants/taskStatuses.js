@@ -1,5 +1,6 @@
 /** Тексты статусов — совпадают с TaskStatusMapper на бэкенде. */
 export const STATUS_ASSIGNED = 'Назначена';
+export const STATUS_FUSS = 'Суета';
 export const STATUS_IN_PROGRESS = 'Начал';
 /** Подпись кнопки возобновления (не статус в БД). */
 export const ACTION_RESUME = 'Продолжить';
@@ -47,6 +48,7 @@ export function isInfoStatus(statusText) {
 
 /** Чип статуса в активных задачах: инфостатусы, их решения и блокировка этапа. */
 export function shouldShowActiveTaskStatusChip(task, statusText) {
+  if (task?.isFuss) return true;
   const text = normalizeStatusText(statusText);
   if (isInfoStatus(text)) return true;
   if (text === STATUS_APPROVED || text === STATUS_IN_STOCK) return true;

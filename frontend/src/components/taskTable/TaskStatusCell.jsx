@@ -2,7 +2,7 @@ import { Chip } from '@mui/material';
 import { getStatusIcon } from '../../utils/taskHelpers';
 import { getStatusChipColor } from '../../theme/statusColors';
 
-export default function TaskStatusCell({ statusText, label }) {
+export default function TaskStatusCell({ statusText, label, task }) {
   const displayLabel = label ?? statusText ?? 'Назначена';
   const displayStatus = statusText || 'Назначена';
   const icon = getStatusIcon(displayStatus);
@@ -12,7 +12,7 @@ export default function TaskStatusCell({ statusText, label }) {
       icon={icon || undefined}
       label={displayLabel}
       size="small"
-      color={getStatusChipColor(displayStatus)}
+      color={getStatusChipColor(displayStatus, task)}
       variant="filled"
       sx={{
         fontSize: '0.7rem',

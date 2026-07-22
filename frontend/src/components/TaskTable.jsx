@@ -14,6 +14,7 @@ import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import SplitTaskModal from './SplitTaskModal';
 import TaskTableHead from './TaskTableHead';
 import NewTaskRow from './NewTaskRow';
+import NewFussTaskRow from './NewFussTaskRow';
 import EditTaskRow from './EditTaskRow';
 import ParentTaskRow from './ParentTaskRow';
 import TaskTableToolbar from './TaskTableToolbar';
@@ -539,6 +540,7 @@ export default function TaskTable({
       <TaskTableToolbar
         isAdmin={isAdmin}
         onAddNew={table.handleAddNewRow}
+        onAddFuss={table.handleAddFussRow}
         highlightMyTasks={table.highlightMyTasks}
         onToggleHighlight={table.toggleHighlight}
         columnVisibility={columnSettings.visibility}
@@ -581,7 +583,18 @@ export default function TaskTable({
             showHoursTypeColumns={table.showHoursTypeColumns}
           />
           <TableBody>
-            {table.newRow && isAdmin && (
+            {table.newRow?.isFuss && !isAdmin && (
+              <NewFussTaskRow
+                newRow={table.newRow}
+                setNewRow={table.setNewRow}
+                onSave={table.handleSaveFussRow}
+                onCancel={() => table.setNewRow(null)}
+                employeeName={currentUser?.fullName}
+                showHoursTypeColumns={table.showHoursTypeColumns}
+                columnVisibility={columnSettings.visibility}
+              />
+            )}
+            {table.newRow && !table.newRow.isFuss && isAdmin && (
               <NewTaskRow
                 newRow={table.newRow}
                 setNewRow={table.setNewRow}

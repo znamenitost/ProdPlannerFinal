@@ -6,6 +6,7 @@ import {
 } from '../constants/taskStatuses';
 
 export function getTaskBorderColor(task, theme) {
+  if (task?.isFuss) return theme.palette.info.main;
   const text = task.statusText ?? task.statusLabel ?? '';
   if (text === STATUS_PENDING_APPROVAL || isPendingApprovalCalendar(text)) {
     return theme.palette.warning.main;

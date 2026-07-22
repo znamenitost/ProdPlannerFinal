@@ -205,6 +205,7 @@ function ChildTaskRow({
           requiresTestBeforeProduction={task.requiresTestBeforeProduction}
           testEstimateHours={task.testEstimateHours}
           productionEstimateHours={task.productionEstimateHours}
+          isFuss={task.isFuss}
         />
       </TableCell>
 
@@ -229,7 +230,7 @@ function ChildTaskRow({
 
       <TableCell sx={columnCellSx('status', columnVisibility, showHoursTypeColumns, COL_STATUS)}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
-          <TaskStatusCell statusText={task.statusText} />
+          <TaskStatusCell statusText={task.statusText} task={task} />
           <ThroughApprovalChip task={task} />
           <TaskPriorityChip task={task} viewerEmployeeName={priorityMarkViewer} />
           {isAdmin && <MaxSubscribeChip subscribed={maxSubscribed} />}
@@ -268,7 +269,7 @@ function ChildTaskRow({
             onPause={onPause}
             onResume={onResume}
             onComplete={onComplete}
-            onSetStatus={onSetStatus}
+            onSetStatus={task.isFuss ? null : onSetStatus}
             onTogglePriority={onTogglePriority}
           />
           )}

@@ -282,8 +282,10 @@ public class TaskNotificationService : ITaskNotificationService
         return _webPush.SendAsync(offlineRecipients, title, body, "/", tag);
     }
 
-    private static string FormatDeadlineBody(DateTime deadline) =>
-        $"Дедлайн: {deadline:dd.MM.yyyy HH:mm}";
+    private static string FormatDeadlineBody(DateTime? deadline) =>
+        deadline.HasValue
+            ? $"Дедлайн: {deadline.Value:dd.MM.yyyy HH:mm}"
+            : "";
 
     private static string[] AffectedEmployees(params string?[] employeeNames) =>
         employeeNames

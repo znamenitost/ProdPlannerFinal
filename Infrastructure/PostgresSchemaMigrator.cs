@@ -97,6 +97,12 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE "ProductionTasks"
                     ADD COLUMN IF NOT EXISTS "IssuedWithoutReady" boolean NOT NULL DEFAULT false;
 
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "IsFuss" boolean NOT NULL DEFAULT false;
+
+                ALTER TABLE "ProductionTasks"
+                    ALTER COLUMN "Deadline" DROP NOT NULL;
+
                 CREATE INDEX IF NOT EXISTS "IX_ProductionTasks_CdrPreviewRetryAt"
                     ON "ProductionTasks" ("CdrPreviewRetryAt");
 
@@ -614,7 +620,20 @@ public static class PostgresSchemaMigrator
                 );
                 """, cancellationToken);
 
-            logger.LogInformation("CustomerOrderTrackings / PickupCode / PickedUpAt / IssuedWithoutReady проверены/созданы (PostgreSQL).");
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                SELECT '20260722120000_AddFussTasks', '10.0.7'
+                WHERE EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '__EFMigrationsHistory'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM "__EFMigrationsHistory"
+                    WHERE "MigrationId" = '20260722120000_AddFussTasks'
+                );
+                """, cancellationToken);
+
+            logger.LogInformation("CustomerOrderTrackings / PickupCode / PickedUpAt / IssuedWithoutReady / IsFuss проверены/созданы (PostgreSQL).");
         }
         catch (Exception ex)
         {

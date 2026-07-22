@@ -15,8 +15,8 @@ namespace ProductionPlanner.Services
         public List<ScheduledSlot> GetSchedule(List<ProductionTask> activeTasks, DateTime now)
         {
             var tasks = activeTasks
-                .Where(t => t.Status != JobStatus.Completed)
-                .OrderBy(t => t.Deadline)
+                .Where(t => t.Status != JobStatus.Completed && !t.IsFuss)
+                .OrderBy(t => t.Deadline ?? DateTime.MaxValue)
                 .ToList();
 
             var result = new List<ScheduledSlot>();
@@ -51,17 +51,19 @@ namespace ProductionPlanner.Services
         {
             var risks = new List<DeadlineRisk>();
 
-            foreach (var task in activeTasks.Where(t => t.Status != JobStatus.Completed && t.Progress < 0.99))
+            foreach (var task in activeTasks.Where(t =>
+                         !t.IsFuss && t.Status != JobStatus.Completed && t.Progress < 0.99))
             {
                 var (riskLevel, hoursNeeded, workHoursUntilDeadline) =
                     DeadlineRiskEvaluator.Evaluate(task, now, _workHours);
 
-                if (!DeadlineRiskEvaluator.ShouldShowInBanner(riskLevel, task.Deadline, now))
+                if (!task.Deadline.HasValue
+                    || !DeadlineRiskEvaluator.ShouldShowInBanner(riskLevel, task.Deadline, now))
                     continue;
 
                 var message = BuildRiskMessage(
                     riskLevel,
-                    task.Deadline,
+                    task.Deadline.Value,
                     hoursNeeded,
                     workHoursUntilDeadline);
 
@@ -70,7 +72,7 @@ namespace ProductionPlanner.Services
                     TaskId = task.Id,
                     TaskTitle = task.TaskDisplayName,
                     FileName = task.FileName,
-                    Deadline = task.Deadline,
+                    Deadline = task.Deadline.Value,
                     RequiredHours = hoursNeeded,
                     AvailableHoursBeforeDeadline = workHoursUntilDeadline,
                     RiskLevel = riskLevel,
@@ -90,15 +92,19 @@ namespace ProductionPlanner.Services
 
             var alerts = new List<QueueOverloadAlert>();
 
-            foreach (var task in activeTasks.Where(t => t.Status != JobStatus.Completed && t.Progress < 0.99))
+            foreach (var task in activeTasks.Where(t =>
+                         !t.IsFuss && t.Status != JobStatus.Completed && t.Progress < 0.99))
             {
-                if (AppDateTime.CompareDeadlineToAppNow(task.Deadline, now) < 0)
+                if (!task.Deadline.HasValue)
+                    continue;
+
+                if (AppDateTime.CompareDeadlineToAppNow(task.Deadline.Value, now) < 0)
                     continue;
 
                 if (!lastEndByTask.TryGetValue(task.Id, out var plannedEnd))
                     continue;
 
-                var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(task.Deadline);
+                var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(task.Deadline.Value);
                 if (plannedEnd <= deadlineMoscow)
                     continue;
 
@@ -108,7 +114,7 @@ namespace ProductionPlanner.Services
                     TaskTitle = task.TaskDisplayName,
                     FileName = task.FileName,
                     EmployeeName = task.EmployeeName,
-                    Deadline = task.Deadline,
+                    Deadline = task.Deadline.Value,
                     PlannedEnd = plannedEnd,
                     Message =
                         $"В очереди план заканчивается {plannedEnd:dd.MM HH:mm} — позже дедлайна {deadlineMoscow:dd.MM HH:mm}. " +

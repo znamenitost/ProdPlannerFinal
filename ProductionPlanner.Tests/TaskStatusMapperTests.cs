@@ -27,6 +27,7 @@ public class TaskStatusMapperTests
     [InlineData("Пауза", JobStatus.Paused)]
     [InlineData("", JobStatus.Assigned)]
     [InlineData("Назначена", JobStatus.Assigned)]
+    [InlineData("Суета", JobStatus.Assigned)]
     [InlineData("Согласование", JobStatus.PendingApproval)]
     [InlineData("На согласовании", JobStatus.PendingApproval)]
     [InlineData("Нет изделий", JobStatus.NoItems)]
@@ -60,5 +61,19 @@ public class TaskStatusMapperTests
     {
         var task = new ProductionTask { Status = JobStatus.Completed, PickedUpAt = null };
         Assert.Equal("Готово", TaskStatusMapper.ApplyPickedUpDisplay(task, "Готово"));
+    }
+
+    [Fact]
+    public void ToDisplayText_FussAssigned_ShowsFussLabel()
+    {
+        var task = new ProductionTask { Status = JobStatus.Assigned, IsFuss = true };
+        Assert.Equal(TaskStatusMapper.FussAssignedText, TaskStatusMapper.ToDisplayText(task));
+    }
+
+    [Fact]
+    public void ToDisplayText_FussCompleted_ShowsCompleted()
+    {
+        var task = new ProductionTask { Status = JobStatus.Completed, IsFuss = true };
+        Assert.Equal("Готово", TaskStatusMapper.ToDisplayText(task));
     }
 }

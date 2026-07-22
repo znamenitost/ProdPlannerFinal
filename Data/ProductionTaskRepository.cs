@@ -257,7 +257,7 @@ namespace ProductionPlanner.Data
             CancellationToken cancellationToken = default)
         {
             var updatedAt = ToDbDateTime(task.UpdatedAt == default ? _timeService.Now : task.UpdatedAt);
-            var deadline = ToDbDateTime(task.Deadline);
+            var deadline = task.Deadline.HasValue ? ToDbDateTime(task.Deadline.Value) : (DateTime?)null;
             var completedAt = task.CompletedAt.HasValue ? ToDbDateTime(task.CompletedAt.Value) : (DateTime?)null;
             var testPhaseCompletedAt = task.TestPhaseCompletedAt.HasValue
                 ? ToDbDateTime(task.TestPhaseCompletedAt.Value)

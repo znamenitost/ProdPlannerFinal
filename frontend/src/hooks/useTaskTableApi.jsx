@@ -99,6 +99,15 @@ export default function useTaskTableApi() {
     return await handleResponse(response);
   }, [handleResponse]);
 
+  const createFussRow = useCallback(async (comment) => {
+    const response = await fetch('/api/tasks/table/row/fuss', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comment })
+    });
+    return await handleResponse(response);
+  }, [handleResponse]);
+
   const updateRow = useCallback(async (id, rowData) => {
     const response = await fetch(`/api/tasks/table/row/${id}`, {
       method: 'PUT',
@@ -218,6 +227,7 @@ export default function useTaskTableApi() {
     loadRows,
     loadChildren,
     createRow,
+    createFussRow,
     updateRow,
     getIntervals,
     updateIntervals,
@@ -230,7 +240,7 @@ export default function useTaskTableApi() {
     openFolder,
     getTaskForSplit,
     splitTask
-  }), [fetchTableRow, loadRows, loadChildren, createRow, updateRow, getIntervals, updateIntervals, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, openFolder, getTaskForSplit, splitTask]);
+  }), [fetchTableRow, loadRows, loadChildren, createRow, createFussRow, updateRow, getIntervals, updateIntervals, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, openFolder, getTaskForSplit, splitTask]);
 
   return api;
 }

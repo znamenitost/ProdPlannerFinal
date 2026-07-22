@@ -1,6 +1,9 @@
 /** MUI Chip `color` for task status labels */
-export function getStatusChipColor(status) {
+export function getStatusChipColor(status, task) {
+  if (task?.isFuss) return 'info';
+
   const text = typeof status === 'string' ? status.trim() : '';
+  if (text === 'Суета') return 'info';
   if (text === 'Готово' || text === 'Выдан' || text === 'Согласовано' || text === 'В наличии') return 'success';
   if (text === 'Начал') return 'info';
   if (text === 'Пауза') return 'warning';
@@ -10,8 +13,8 @@ export function getStatusChipColor(status) {
   return 'default';
 }
 
-export function getStatusIconColor(status) {
-  const chip = getStatusChipColor(status);
+export function getStatusIconColor(status, task) {
+  const chip = getStatusChipColor(status, task);
   if (chip === 'default') return 'text.secondary';
   return `${chip}.main`;
 }

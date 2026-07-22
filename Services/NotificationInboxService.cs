@@ -16,14 +16,14 @@ public class NotificationInboxService : INotificationInboxService
         _timeService = timeService;
     }
 
-    public Task<long> EnqueueNewTaskAsync(string userId, int taskId, string title, DateTime deadline) =>
+    public Task<long> EnqueueNewTaskAsync(string userId, int taskId, string title, DateTime? deadline) =>
         EnqueueAsync(userId, "NewTask", taskId, title, deadline);
 
     public Task<long> EnqueueTaskReadyToStartAsync(
         string userId,
         int taskId,
         string title,
-        DateTime deadline,
+        DateTime? deadline,
         JobStatus readyStatus) =>
         EnqueueAsync(
             userId,
@@ -32,13 +32,13 @@ public class NotificationInboxService : INotificationInboxService
             title,
             deadline);
 
-    public Task<long> EnqueueSequentialStageReadyAsync(string userId, int taskId, string title, DateTime deadline) =>
+    public Task<long> EnqueueSequentialStageReadyAsync(string userId, int taskId, string title, DateTime? deadline) =>
         EnqueueAsync(userId, "SequentialStageReady", taskId, title, deadline);
 
-    public Task<long> EnqueueTaskCommentAddedAsync(string userId, int taskId, string title, DateTime deadline) =>
+    public Task<long> EnqueueTaskCommentAddedAsync(string userId, int taskId, string title, DateTime? deadline) =>
         EnqueueAsync(userId, "TaskCommentAdded", taskId, title, deadline);
 
-    private async Task<long> EnqueueAsync(string userId, string type, int taskId, string title, DateTime deadline)
+    private async Task<long> EnqueueAsync(string userId, string type, int taskId, string title, DateTime? deadline)
     {
         var notification = new UserNotification
         {

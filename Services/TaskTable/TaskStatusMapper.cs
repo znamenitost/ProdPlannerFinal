@@ -7,6 +7,9 @@ public static class TaskStatusMapper
     /// <summary>Отображаемый статус после выдачи клиенту (JobStatus остаётся Completed).</summary>
     public const string PickedUpText = "Выдан";
 
+    /// <summary>Отображаемый статус Assigned для задач «Суета».</summary>
+    public const string FussAssignedText = "Суета";
+
     public static string ToText(JobStatus status) => status switch
     {
         JobStatus.Assigned => "Назначена",
@@ -30,6 +33,24 @@ public static class TaskStatusMapper
         return PickedUpText;
     }
 
+    /// <summary>Для «Суеты» Assigned показываем как «Суета», не «Назначена».</summary>
+    public static string ApplyFussAssignedDisplay(ProductionTask task, string statusText)
+    {
+        if (!task.IsFuss)
+            return statusText;
+
+        if (string.IsNullOrEmpty(statusText) || statusText == "Назначена")
+            return FussAssignedText;
+
+        return statusText;
+    }
+
+    public static string ToDisplayText(ProductionTask task) =>
+        ApplyFussAssignedDisplay(task, ApplyPickedUpDisplay(task, ToText(task.Status)));
+
+    public static string FormatStatus(ProductionTask task, string statusText) =>
+        ApplyFussAssignedDisplay(task, ApplyPickedUpDisplay(task, statusText));
+
     public static JobStatus FromText(string statusText) => statusText switch
     {
         "Готово" => JobStatus.Completed,
@@ -37,6 +58,7 @@ public static class TaskStatusMapper
         "Начал" => JobStatus.InProgress,
         "Пауза" => JobStatus.Paused,
         "Назначена" => JobStatus.Assigned,
+        "Суета" => JobStatus.Assigned,
         "Согласование" => JobStatus.PendingApproval,
         "На согласовании" => JobStatus.PendingApproval,
         "Нет изделий" => JobStatus.NoItems,

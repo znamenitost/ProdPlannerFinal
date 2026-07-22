@@ -20,8 +20,12 @@ public interface ITaskTableService
         bool viewerIsAdmin = true,
         string? viewerUserId = null,
         CancellationToken cancellationToken = default);
-    Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(
+        Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(
         CreateTaskRequest request,
+        CancellationToken cancellationToken = default);
+    Task<TaskTableServiceResult<ProductionTask>> CreateFussRowAsync(
+        string employeeName,
+        string comment,
         CancellationToken cancellationToken = default);
     Task<TaskTableServiceResult<ProductionTask>> UpdateRowAsync(
         int id,

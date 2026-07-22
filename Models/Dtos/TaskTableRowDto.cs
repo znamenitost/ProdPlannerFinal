@@ -16,7 +16,11 @@ public class TaskTableRowDto
 
     /// <summary>Выдан без статуса «Готово» — показать маркер «?».</summary>
     public bool IssuedWithoutReady { get; set; }
-    public DateTime Deadline { get; set; }
+
+    /// <summary>Номинальная задача «Суета» (без дедлайна и выделенных часов).</summary>
+    public bool IsFuss { get; set; }
+
+    public DateTime? Deadline { get; set; }
     public double EstimateHours { get; set; }
     public string Type { get; set; } = "";
     public string EmployeeName { get; set; } = "";
@@ -106,6 +110,7 @@ public class TaskTableRowDto
                 priorityMarkViewerEmployeeName,
                 restrictPriorityMarkToViewer),
             IssuedWithoutReady = parent.IssuedWithoutReady,
+            IsFuss = parent.IsFuss,
             Deadline = parent.Deadline,
             EstimateHours = parent.EstimateHours,
             Type = parent.Type,
@@ -123,7 +128,9 @@ public class TaskTableRowDto
                 ? PlannedTimeProgressCalculator.GetSplitParentPercent(children!, childIntervals, at)
                 : PlannedTimeProgressCalculator.GetPercent(
                     parent, progressIntervals, at, phaseEstimate),
-            ShowPlannedTimeProgress = isSplitWithChildren
+            ShowPlannedTimeProgress = parent.IsFuss
+                ? false
+                : isSplitWithChildren
                 ? PlannedTimeProgressCalculator.ShouldShowSplitParent(children!, childIntervals, statusText)
                 : PlannedTimeProgressCalculator.ShouldShow(parent, progressIntervals, phaseEstimate)
                     || statusText is "Начал" or "Пауза",

@@ -310,6 +310,7 @@ function ParentTaskRow({
             requiresTestBeforeProduction={task.requiresTestBeforeProduction}
             testEstimateHours={task.testEstimateHours}
             productionEstimateHours={task.productionEstimateHours}
+            isFuss={task.isFuss}
           />
         </TableCell>
 
@@ -326,6 +327,7 @@ function ParentTaskRow({
             <TaskStatusCell
               statusText={task.statusText}
               label={hasChildren ? displayStatus : undefined}
+              task={task}
             />
             <ThroughApprovalChip task={task} childrenTasks={childrenTasks} />
             <TaskPriorityChip
@@ -345,16 +347,16 @@ function ParentTaskRow({
                 task={task}
                 pending={pendingLifecycleTaskId === task.id}
                 lifecycleBusy={lifecycleBusy}
-                onEdit={() => onEdit(task.id)}
+                onEdit={task.isFuss ? undefined : () => onEdit(task.id)}
                 onDelete={() => onDelete(task.id)}
-                onCopyOrderLink={onCopyOrderLink}
-                onIntervals={hasChildren ? undefined : () => onOpenIntervals(task)}
+                onCopyOrderLink={task.isFuss ? undefined : onCopyOrderLink}
+                onIntervals={hasChildren || task.isFuss ? undefined : () => onOpenIntervals(task)}
                 onStart={onStart}
                 onPause={onPause}
                 onResume={onResume}
                 onComplete={onComplete}
-                onSetStatus={hasChildren ? null : onSetStatus}
-                onTogglePriority={hasChildren ? null : onTogglePriority}
+                onSetStatus={hasChildren || task.isFuss ? null : onSetStatus}
+                onTogglePriority={hasChildren || task.isFuss ? null : onTogglePriority}
                 showWorkflow={!hasChildren}
                 maxSubscribed={maxSubscribedSet.has(task.id)}
                 maxCanSubscribe={maxCanSubscribe}
@@ -370,7 +372,7 @@ function ParentTaskRow({
                 onPause={onPause}
                 onResume={onResume}
                 onComplete={onComplete}
-                onSetStatus={onSetStatus}
+                onSetStatus={task.isFuss ? null : onSetStatus}
                 onTogglePriority={onTogglePriority}
               />
             )}

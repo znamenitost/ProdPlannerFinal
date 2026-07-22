@@ -119,13 +119,16 @@ public class WeekCalendarService : IWeekCalendarService
         var completedThisDay = completedTasks.Where(t =>
             t.CompletedAt.HasValue
             && AppDateTime.ToMoscowWallClockFromDb(t.CompletedAt.Value).Date == day.Date);
-        var netSaved = completedThisDay.Sum(t => t.EstimateHours - t.ActualHours);
+        var netSaved = completedThisDay
+            .Where(t => !t.IsFuss)
+            .Sum(t => t.EstimateHours - t.ActualHours);
 
         var deadlines = employeeTasks
-            .Where(t => AppDateTime.ToMoscowWallClockFromDb(t.Deadline).Date == day.Date)
+            .Where(t => t.Deadline.HasValue
+                && AppDateTime.ToMoscowWallClockFromDb(t.Deadline.Value).Date == day.Date)
             .Select(t => new CalendarDeadlineDto
             {
-                Deadline = t.Deadline,
+                Deadline = t.Deadline!.Value,
                 Status = t.Status.ToString(),
                 Progress = t.Progress,
                 TaskId = t.Id,
@@ -183,7 +186,7 @@ public class WeekCalendarService : IWeekCalendarService
                     Title = slot.Task.TaskDisplayName,
                     FolderPath = slot.Task.FolderPath ?? "",
                     FileName = slot.Task.FileName ?? "",
-                    StatusText = TaskTable.TaskStatusMapper.ToText(slot.Task.Status)
+                    StatusText = TaskTable.TaskStatusMapper.ToDisplayText(slot.Task)
                 });
             }
 
@@ -243,7 +246,7 @@ public class WeekCalendarService : IWeekCalendarService
 
         foreach (var task in employeeTasks)
         {
-            var statusText = TaskTable.TaskStatusMapper.ToText(task.Status);
+            var statusText = TaskTable.TaskStatusMapper.ToDisplayText(task);
             foreach (var interval in task.WorkIntervals)
             {
                 if (task.Status == JobStatus.Completed && interval.EndTime == null)

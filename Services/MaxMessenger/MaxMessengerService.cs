@@ -189,9 +189,9 @@ public sealed class MaxMessengerService : IMaxMessengerService
 
         var title = TaskNotificationService.GetNotificationTitle(task);
         var employee = string.IsNullOrWhiteSpace(task.EmployeeName) ? "—" : task.EmployeeName.Trim();
-        var deadline = task.Deadline == default
+        var deadline = !task.Deadline.HasValue
             ? "—"
-            : task.Deadline.ToString("d MMMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
+            : task.Deadline.Value.ToString("d MMMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
 
         var text = $"""
             **Статус задачи изменён**

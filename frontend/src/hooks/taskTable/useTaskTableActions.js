@@ -477,6 +477,37 @@ export default function useTaskTableActions({
     });
   }, [setNewRow]);
 
+  const handleAddFussRow = useCallback(() => {
+    setNewRow({
+      isFuss: true,
+      comment: ''
+    });
+  }, [setNewRow]);
+
+  const handleSaveFussRow = useCallback(async () => {
+    if (!newRow?.isFuss) return;
+    if (savingNewRowRef.current) return;
+
+    const comment = (newRow.comment || '').trim();
+    if (!comment) {
+      showWarning('Укажите комментарий задачи');
+      return;
+    }
+
+    savingNewRowRef.current = true;
+    try {
+      const raw = await api.createFussRow(comment);
+      unwrapTaskSaveResponse(raw);
+      setNewRow(null);
+      void refresh();
+    } catch (err) {
+      console.error('Ошибка сохранения суеты:', err);
+      showError(err.message || 'Ошибка сохранения задачи');
+    } finally {
+      savingNewRowRef.current = false;
+    }
+  }, [api, newRow, refresh, setNewRow, showError, showWarning]);
+
   const handleEditRow = useCallback((id) => {
     setEditingId(id);
   }, [setEditingId]);
@@ -508,6 +539,8 @@ export default function useTaskTableActions({
     handleTogglePriority,
     handleDeleteRow,
     handleAddNewRow,
+    handleAddFussRow,
+    handleSaveFussRow,
     handleEditRow,
     handleCopyOrderLink
   };

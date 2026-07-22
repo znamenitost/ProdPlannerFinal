@@ -39,8 +39,13 @@ namespace ProductionPlanner.Models
 
         /// <summary>Комментарий хотя бы раз сохраняли через диалог (иконка в таблице).</summary>
         public bool CommentEditedViaDialog { get; set; }
+
+        /// <summary>
+        /// Номинальная «Суета»: без дедлайна и выделенных часов, только факт работы.
+        /// </summary>
+        public bool IsFuss { get; set; }
         
-        public DateTime Deadline { get; set; }
+        public DateTime? Deadline { get; set; }
         public double EstimateHours { get; set; }
         
         private string? _type;
@@ -120,6 +125,9 @@ namespace ProductionPlanner.Models
         {
             get
             {
+                if (IsFuss && !string.IsNullOrWhiteSpace(Comment))
+                    return Comment.Trim();
+
                 if (!string.IsNullOrEmpty(FolderPath))
                 {
                     var segments = FolderPath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);

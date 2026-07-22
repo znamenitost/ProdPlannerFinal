@@ -88,10 +88,9 @@ public class UpdateTaskRequest
     public string? FileName { get; set; }
     public string? Comment { get; set; }
 
-    [Required]
-    public DateTime Deadline { get; set; }
+    public DateTime? Deadline { get; set; }
 
-    [Range(0.01, 1000)]
+    [Range(0, 1000)]
     public double EstimateHours { get; set; }
 
     public string? Type { get; set; }

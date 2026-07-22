@@ -37,6 +37,7 @@ export const getStatusIcon = (status, size = 16) => {
     case 'Завершена':
       return <CheckCircle sx={sx} />;
     case 'Назначена':
+    case 'Суета':
       return <HourglassEmpty sx={sx} />;
     case 'Ожидание':
       return <HourglassEmpty sx={{ ...sx, opacity: 0.6 }} />;

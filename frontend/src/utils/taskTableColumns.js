@@ -20,7 +20,9 @@ export function hasNewRowAssigneeDetails(newRow) {
 }
 
 export function shouldShowHoursTypeColumns(newRow) {
-  return !newRow || hasNewRowAssigneeDetails(newRow);
+  if (!newRow) return true;
+  if (newRow.isFuss) return true;
+  return hasNewRowAssigneeDetails(newRow);
 }
 
 export const COLLAPSED_COLUMN_SX = {

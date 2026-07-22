@@ -307,7 +307,8 @@ public class TaskLifecycleService : ITaskLifecycleService
             var estimateForStats = TestPhaseWorkflow.IsProductionPhase(task)
                 ? task.ProductionEstimateHours
                 : task.EstimateHours;
-            await _statsService.AddSavedHoursAsync(task.EmployeeName, estimateForStats, now);
+            if (!task.IsFuss)
+                await _statsService.AddSavedHoursAsync(task.EmployeeName, estimateForStats, now);
 
             if (task.ParentRowNumber.HasValue && task.IsSplitTask)
                 await UpdateParentStatusAsync(task.Id, cancellationToken);
@@ -372,7 +373,8 @@ public class TaskLifecycleService : ITaskLifecycleService
                 AppDateTime.ToMoscowWallClockFromDb(start),
                 AppDateTime.ToMoscowWallClockFromDb(end)));
         double saved = phaseEstimate - completionHours;
-        await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
+        if (!task.IsFuss)
+            await _statsService.AddSavedHoursAsync(task.EmployeeName, saved, now);
 
         if (task.ParentRowNumber.HasValue && task.IsSplitTask)
             await UpdateParentStatusAsync(task.Id, cancellationToken);

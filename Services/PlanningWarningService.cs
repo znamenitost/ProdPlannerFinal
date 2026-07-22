@@ -60,7 +60,10 @@ public class PlanningWarningService : IPlanningWarningService
 
         foreach (var task in candidates)
         {
-            if (AppDateTime.CompareDeadlineToAppNow(task.Deadline, now) < 0)
+            if (task.IsFuss || !task.Deadline.HasValue)
+                continue;
+
+            if (AppDateTime.CompareDeadlineToAppNow(task.Deadline.Value, now) < 0)
                 continue;
 
             var (riskLevel, hoursNeeded, available) =
@@ -75,11 +78,11 @@ public class PlanningWarningService : IPlanningWarningService
                     TaskTitle = task.TaskDisplayName,
                     FileName = task.FileName,
                     EmployeeName = task.EmployeeName,
-                    Deadline = task.Deadline,
+                    Deadline = task.Deadline.Value,
                     RequiredHours = hoursNeeded,
                     AvailableHours = available,
                     Message =
-                        $"«{task.TaskDisplayName}»: до дедлайна {FormatDeadline(task.Deadline)} " +
+                        $"«{task.TaskDisplayName}»: до дедлайна {FormatDeadline(task.Deadline.Value)} " +
                         $"осталось {available:0.#} раб. ч, нужно {hoursNeeded:0.#} ч — даже без очереди не успеть."
                 });
             }
@@ -87,7 +90,7 @@ public class PlanningWarningService : IPlanningWarningService
             if (!lastEndByTask.TryGetValue(task.Id, out var plannedEnd))
                 continue;
 
-            var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(task.Deadline);
+            var deadlineMoscow = AppDateTime.ToMoscowWallClockFromDb(task.Deadline.Value);
             if (plannedEnd <= deadlineMoscow)
                 continue;
 
@@ -98,7 +101,7 @@ public class PlanningWarningService : IPlanningWarningService
                 TaskTitle = task.TaskDisplayName,
                 FileName = task.FileName,
                 EmployeeName = task.EmployeeName,
-                Deadline = task.Deadline,
+                Deadline = task.Deadline.Value,
                 PlannedEnd = plannedEnd,
                 RequiredHours = hoursNeeded,
                 AvailableHours = available,

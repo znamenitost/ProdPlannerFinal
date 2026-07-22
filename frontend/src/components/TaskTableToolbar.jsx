@@ -20,6 +20,7 @@ import ExpandableSearchField from './taskTable/ExpandableSearchField';
 export default function TaskTableToolbar({
   isAdmin,
   onAddNew,
+  onAddFuss,
   highlightMyTasks,
   onToggleHighlight,
   columnVisibility,
@@ -209,6 +210,11 @@ export default function TaskTableToolbar({
         {isAdmin && (
           <Button variant="contained" color="success" startIcon={<Add />} onClick={onAddNew}>
             Новая задача
+          </Button>
+        )}
+        {!isAdmin && onAddFuss && (
+          <Button variant="contained" color="info" startIcon={<Add />} onClick={onAddFuss}>
+            Добавить задачу
           </Button>
         )}
       </Box>

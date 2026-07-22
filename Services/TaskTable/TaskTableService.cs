@@ -168,7 +168,7 @@ public class TaskTableService : ITaskTableService
 
             var dto = TaskTableRowDto.FromParent(
                 task,
-                TaskStatusMapper.ApplyPickedUpDisplay(task, TaskStatusMapper.ToText(task.Status)),
+                TaskStatusMapper.ToDisplayText(task),
                 hasCurrentUserSubtask: false,
                 workIntervals: intervals,
                 now: now,
@@ -346,6 +346,46 @@ public class TaskTableService : ITaskTableService
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }
 
+    public async Task<TaskTableServiceResult<ProductionTask>> CreateFussRowAsync(
+        string employeeName,
+        string comment,
+        CancellationToken cancellationToken = default)
+    {
+        var trimmedComment = comment?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(trimmedComment))
+            return TaskTableServiceResult<ProductionTask>.Fail("Комментарий обязателен.");
+
+        if (string.IsNullOrWhiteSpace(employeeName))
+            return TaskTableServiceResult<ProductionTask>.Fail("Не указан сотрудник.");
+
+        var task = new ProductionTask
+        {
+            DisplayOrder = -1,
+            FolderPath = "",
+            FileName = "",
+            Comment = trimmedComment,
+            Deadline = null,
+            EstimateHours = 0,
+            Type = "Суета",
+            EmployeeName = employeeName.Trim(),
+            Status = JobStatus.Assigned,
+            Progress = 0,
+            ActualHours = 0,
+            IsFuss = true,
+            ParentRowNumber = null,
+            IsSplitTask = false,
+            CreatedAt = _timeService.Now,
+            UpdatedAt = _timeService.Now
+        };
+
+        await _repo.AddTaskAsync(task, cancellationToken);
+        await _repo.AppendRootDisplayOrderAsync(task.Id, cancellationToken);
+
+        await _notificationService.NotifyNewTaskAsync(task);
+
+        return TaskTableServiceResult<ProductionTask>.Ok(task);
+    }
+
     public async Task<TaskTableServiceResult<ProductionTask>> UpdateRowAsync(
         int id,
         UpdateTaskRequest request,
@@ -425,9 +465,22 @@ public class TaskTableService : ITaskTableService
         task.Comment = request.Comment ?? task.Comment;
         if (request.CommentEditedViaDialog == true)
             task.CommentEditedViaDialog = true;
-        task.Deadline = request.Deadline;
-        task.EstimateHours = request.EstimateHours;
-        task.Type = request.Type ?? task.Type;
+        if (task.IsFuss)
+        {
+            task.Deadline = null;
+            task.EstimateHours = 0;
+            task.Type = "Суета";
+        }
+        else
+        {
+            if (!request.Deadline.HasValue)
+                return TaskTableServiceResult<ProductionTask>.Fail("Укажите дедлайн.");
+            if (request.EstimateHours < 0.01)
+                return TaskTableServiceResult<ProductionTask>.Fail("Укажите выделенные часы.");
+            task.Deadline = request.Deadline;
+            task.EstimateHours = request.EstimateHours;
+            task.Type = request.Type ?? task.Type;
+        }
         if (request.PriorityMarked.HasValue)
             task.IsPriorityMarked = request.PriorityMarked.Value;
         if (!isSplitParent)
@@ -459,6 +512,14 @@ public class TaskTableService : ITaskTableService
             var newStatus = TaskStatusMapper.FromText(request.StatusText);
             if (newStatus != task.Status)
             {
+                if (task.IsFuss
+                    && (TaskStatusMapper.IsEmployeeInfoStatus(newStatus)
+                        || newStatus is JobStatus.Approved or JobStatus.InStock or JobStatus.Waiting))
+                {
+                    return TaskTableServiceResult<ProductionTask>.Fail(
+                        "Для задачи «Суета» доступны только Начал, Пауза и Готово.");
+                }
+
                 if (newStatus == JobStatus.Approved && task.Status != JobStatus.PendingApproval)
                     return TaskTableServiceResult<ProductionTask>.Fail("Согласовано можно выставить только для задачи «Согласование».");
                 if (newStatus == JobStatus.InStock && task.Status != JobStatus.NoItems)
@@ -822,7 +883,7 @@ public class TaskTableService : ITaskTableService
             },
             cancellationToken);
 
-        if (!string.IsNullOrEmpty(full.EmployeeName))
+        if (!full.IsFuss && !string.IsNullOrEmpty(full.EmployeeName))
             await _statsService.AddSavedHoursAsync(full.EmployeeName, full.EstimateHours - actualHours, now);
 
         var completed = await _repo.GetTaskByIdAsync(task.Id, cancellationToken);
@@ -1073,9 +1134,18 @@ public class TaskTableService : ITaskTableService
         task.Comment = request.Comment ?? task.Comment;
         if (request.CommentEditedViaDialog == true)
             task.CommentEditedViaDialog = true;
-        task.Deadline = request.Deadline;
-        task.EstimateHours = request.EstimateHours;
-        task.Type = request.Type ?? task.Type;
+        if (task.IsFuss)
+        {
+            task.Deadline = null;
+            task.EstimateHours = 0;
+            task.Type = "Суета";
+        }
+        else
+        {
+            task.Deadline = request.Deadline;
+            task.EstimateHours = request.EstimateHours;
+            task.Type = request.Type ?? task.Type;
+        }
         if (request.PriorityMarked.HasValue)
             task.IsPriorityMarked = request.PriorityMarked.Value;
         if (!isSplitParent)
