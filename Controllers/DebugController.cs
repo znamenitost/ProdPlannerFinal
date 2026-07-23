@@ -299,7 +299,7 @@ public class DebugController : ControllerBase
             task.ActualHours = actualHours;
             task.UpdatedAt = now;
 
-            if (string.IsNullOrWhiteSpace(task.EmployeeName))
+            if (task.IsFuss || string.IsNullOrWhiteSpace(task.EmployeeName))
                 continue;
 
             var savedHours = task.EstimateHours - actualHours;

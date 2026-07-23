@@ -30,7 +30,6 @@ export default function TaskCommentCell({
   const comment = String(task.comment || '').trim();
   const displayComment = normalizeCommentPreviewForDisplay(comment);
   const displayText = formatCommentForDisplay(displayComment, limit);
-  const commentEditedViaDialog = Boolean(task.commentEditedViaDialog);
   const badgeCount = Math.max(0, Number(task.commentBadgeCount) || 0);
   const showTooltip = Boolean(comment) && (
     needsTooltip(displayComment, limit)
@@ -96,28 +95,19 @@ export default function TaskCommentCell({
       >
         <IconButton
           size="small"
-          color={commentEditedViaDialog ? 'inherit' : iconButtonColor}
+          color={iconButtonColor}
           onClick={() => onOpenComment(task)}
           aria-label="Открыть комментарии"
-          sx={{
-            p: 0.5,
-            ...(commentEditedViaDialog ? { color: 'grey.700' } : null)
-          }}
+          sx={{ p: 0.5 }}
         >
-          <CommentIcon
-            fontSize="small"
-            sx={{
-              fontSize: 14,
-              color: commentEditedViaDialog ? 'grey.700' : 'inherit'
-            }}
-          />
+          <CommentIcon fontSize="small" sx={{ fontSize: 14 }} />
         </IconButton>
         {badgeCount > 0 ? (
           <Typography
             component="span"
             aria-label={`Непрочитанных комментариев: ${badgeCount}`}
             sx={{
-              color: 'warning.dark',
+              color: 'common.black',
               fontWeight: 800,
               fontSize: '0.75rem',
               lineHeight: 1,

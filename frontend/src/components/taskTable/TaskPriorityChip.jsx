@@ -16,7 +16,7 @@ export function TaskPriorityMark({ size = 22, iconSize = 14 }) {
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: '50%',
-        bgcolor: theme.palette.warning.main,
+        bgcolor: theme.palette.error.dark,
         color: theme.palette.common.white,
         verticalAlign: 'middle',
         lineHeight: 0

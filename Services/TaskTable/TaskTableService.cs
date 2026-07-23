@@ -735,14 +735,17 @@ public class TaskTableService : ITaskTableService
                 updatedIntervals,
                 workHoursBetween);
 
-            await TransferSavedHoursAsync(
-                task.EmployeeName,
-                task.EmployeeName,
-                oldSaved,
-                newSaved,
-                task.CompletedAt,
-                now,
-                cancellationToken);
+            if (!task.IsFuss)
+            {
+                await TransferSavedHoursAsync(
+                    task.EmployeeName,
+                    task.EmployeeName,
+                    oldSaved,
+                    newSaved,
+                    task.CompletedAt,
+                    now,
+                    cancellationToken);
+            }
 
             task.ActualHours = newActualHours;
             task.UpdatedAt = now;
@@ -1004,14 +1007,17 @@ public class TaskTableService : ITaskTableService
         var oldSaved = original.EstimateHours - original.ActualHours;
         var newSaved = request.EstimateHours - original.ActualHours;
 
-        await TransferSavedHoursAsync(
-            oldEmployeeName,
-            newEmployeeName,
-            oldSaved,
-            newSaved,
-            original.CompletedAt,
-            now,
-            cancellationToken);
+        if (!original.IsFuss)
+        {
+            await TransferSavedHoursAsync(
+                oldEmployeeName,
+                newEmployeeName,
+                oldSaved,
+                newSaved,
+                original.CompletedAt,
+                now,
+                cancellationToken);
+        }
 
         original.FolderPath = request.FolderPath ?? original.FolderPath;
         original.FileName = request.FileName ?? original.FileName;

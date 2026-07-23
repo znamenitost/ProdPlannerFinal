@@ -278,8 +278,8 @@ export default function CompletedTasksList({ employee, embedded = false }) {
           </TableHead>
           <TableBody>
             {completed.map((task) => {
-              const diff = task.estimateHours - task.actualHours;
-              const isPositive = diff >= 0;
+              const diff = task.isFuss ? null : task.estimateHours - task.actualHours;
+              const isPositive = diff != null && diff >= 0;
               const workPeriod = formatWorkPeriod(task.workIntervals);
               return (
                 <TableRow
@@ -324,7 +324,7 @@ export default function CompletedTasksList({ employee, embedded = false }) {
                   </TableCell>
                   <TableCell align="right">
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {task.estimateHours.toFixed(1)} ч
+                      {task.isFuss ? '—' : `${task.estimateHours.toFixed(1)} ч`}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
@@ -333,14 +333,18 @@ export default function CompletedTasksList({ employee, embedded = false }) {
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    <Chip
-                      size="small"
-                      icon={isPositive ? <TrendingUp /> : <TrendingDown />}
-                      label={`${isPositive ? '+' : ''}${diff.toFixed(1)} ч`}
-                      color={isPositive ? 'success' : 'error'}
-                      variant="outlined"
-                      sx={{ fontWeight: 500 }}
-                    />
+                    {task.isFuss ? (
+                      <Typography variant="body2" color="text.secondary">—</Typography>
+                    ) : (
+                      <Chip
+                        size="small"
+                        icon={isPositive ? <TrendingUp /> : <TrendingDown />}
+                        label={`${isPositive ? '+' : ''}${diff.toFixed(1)} ч`}
+                        color={isPositive ? 'success' : 'error'}
+                        variant="outlined"
+                        sx={{ fontWeight: 500 }}
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               );

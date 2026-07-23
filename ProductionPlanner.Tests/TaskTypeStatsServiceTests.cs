@@ -24,6 +24,8 @@ public class TaskTypeStatsServiceTests
             Task(11, "Сборка", JobStatus.Completed, actual: 4, isSplit: true, parent: 10),
             // not completed — exclude
             Task(20, "Резка", JobStatus.InProgress, actual: 1, isSplit: false, parent: null),
+            // perpetual fuss task — exclude from production statistics
+            Task(25, "Суета", JobStatus.Completed, actual: 8, isSplit: false, parent: null, isFuss: true),
             // empty type
             Task(30, "", JobStatus.Completed, actual: 1.5, isSplit: false, parent: null)
         );
@@ -108,7 +110,8 @@ public class TaskTypeStatsServiceTests
         JobStatus status,
         double actual,
         bool isSplit,
-        int? parent) =>
+        int? parent,
+        bool isFuss = false) =>
         new()
         {
             Id = id,
@@ -120,6 +123,7 @@ public class TaskTypeStatsServiceTests
             Status = status,
             ActualHours = actual,
             IsSplitTask = isSplit,
+            IsFuss = isFuss,
             ParentRowNumber = parent,
             Deadline = new DateTime(2026, 7, 20),
             CreatedAt = new DateTime(2026, 7, 1),

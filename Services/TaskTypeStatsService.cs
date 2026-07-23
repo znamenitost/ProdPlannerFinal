@@ -33,6 +33,7 @@ public sealed class TaskTypeStatsService : ITaskTypeStatsService
         var leaves = await _db.ProductionTasks
             .AsNoTracking()
             .Where(t => t.Status == JobStatus.Completed
+                        && !t.IsFuss
                         && !(t.IsSplitTask && t.ParentRowNumber == null))
             .Select(t => new { t.Type, t.ActualHours })
             .ToListAsync(cancellationToken);

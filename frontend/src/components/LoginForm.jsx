@@ -1,20 +1,18 @@
 import { useEffect, useState } from 'react';
-import { 
-  Paper, 
-  TextField, 
-  Button, 
-  Typography, 
-  Alert, 
+import {
+  Paper,
+  TextField,
+  Button,
+  Typography,
+  Alert,
   Box,
   Container,
   Avatar,
-  Card,
-  CardActionArea,
-  CardContent
+  Badge,
+  ToggleButton,
+  ToggleButtonGroup
 } from '@mui/material';
-import { Login as LoginIcon, Person, AdminPanelSettings } from '@mui/icons-material';
-import { alpha } from '@mui/material/styles';
-import { createMuiTransition } from '../theme/motion';
+import { Check as CheckIcon, Login as LoginIcon, Person, AdminPanelSettings } from '@mui/icons-material';
 import {
   avatarThumbUrl,
   normalizeLoginEmployees,
@@ -23,6 +21,107 @@ import {
 import ParallaxPage from './ParallaxPage';
 import { ADMIN_LOGIN_ACCOUNTS } from '../constants/adminLoginAccounts';
 import './LoginForm.css';
+
+/** Exclusive account pick — ToggleButtonGroup + Avatar Badge (MUI docs). */
+function LoginAccountPicker({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+  avatarSize = 64
+}) {
+  return (
+    <ToggleButtonGroup
+      color="primary"
+      value={value}
+      exclusive
+      onChange={(_event, next) => {
+        if (next !== null) onChange(next);
+      }}
+      aria-label={ariaLabel}
+      fullWidth
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 1.5,
+        '& .MuiToggleButtonGroup-grouped': {
+          border: 1,
+          borderColor: 'divider',
+          borderRadius: '10px !important',
+          marginLeft: 0,
+          flex: '1 1 120px'
+        }
+      }}
+    >
+      {options.map((opt) => {
+        const selected = value === opt.value;
+        return (
+          <ToggleButton
+            key={opt.value}
+            value={opt.value}
+            aria-label={opt.value}
+            sx={{
+              flexDirection: 'column',
+              gap: 1,
+              py: 2,
+              textTransform: 'none'
+            }}
+          >
+            <Badge
+              overlap="circular"
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              badgeContent={<CheckIcon sx={{ fontSize: 14 }} />}
+              color="primary"
+              invisible={!selected}
+              sx={{
+                '& .MuiBadge-badge': {
+                  width: 22,
+                  height: 22,
+                  borderRadius: '50%',
+                  border: (theme) => `2px solid ${theme.palette.background.paper}`,
+                  p: 0
+                }
+              }}
+            >
+              <Avatar
+                alt={opt.value}
+                src={opt.avatarSrc}
+                slotProps={{
+                  img: {
+                    loading: 'lazy',
+                    decoding: 'async',
+                    fetchpriority: 'low'
+                  }
+                }}
+                sx={{
+                  width: avatarSize,
+                  height: avatarSize,
+                  fontSize: avatarSize > 56 ? '1.5rem' : '1.25rem',
+                  bgcolor: 'primary.light',
+                  ...(selected
+                    ? {
+                        outline: (theme) => `3px solid ${theme.palette.primary.main}`,
+                        outlineOffset: 2
+                      }
+                    : null)
+                }}
+              >
+                {opt.value[0]}
+              </Avatar>
+            </Badge>
+            <Typography
+              variant={avatarSize > 56 ? 'body1' : 'body2'}
+              color="inherit"
+              sx={{ fontWeight: selected ? 600 : 400 }}
+            >
+              {opt.value}
+            </Typography>
+          </ToggleButton>
+        );
+      })}
+    </ToggleButtonGroup>
+  );
+}
 
 export default function LoginForm({ onLogin }) {
   const [loginType, setLoginType] = useState('employee'); // 'employee' or 'admin'
@@ -256,122 +355,32 @@ export default function LoginForm({ onLogin }) {
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                       Выберите сотрудника:
                     </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2 }}>
-                      {employees.map((emp) => {
-                        const avatarSrc = emp.id ? avatarThumbUrl(emp.id) : undefined;
-
-                        return (
-                        <Card
-                          key={emp.fullName}
-                          sx={(theme) => ({
-                            flex: 1,
-                            border: selectedEmployee === emp.fullName
-                              ? `2px solid ${theme.palette.primary.main}`
-                              : `1px solid ${alpha(theme.palette.divider, 1)}`,
-                            bgcolor: selectedEmployee === emp.fullName
-                              ? alpha(theme.palette.primary.main, 0.08)
-                              : alpha('#ffffff', 0.5),
-                            transition: createMuiTransition(theme, [
-                              'box-shadow',
-                              'border-color',
-                              'background-color'
-                            ]),
-                            '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.light }
-                          })}
-                        >
-                          <CardActionArea
-                            onClick={() => setSelectedEmployee(emp.fullName)}
-                            aria-pressed={selectedEmployee === emp.fullName}
-                          >
-                          <CardContent sx={{ textAlign: 'center', py: 2 }}>
-                            <Avatar
-                              src={avatarSrc}
-                              slotProps={{
-                                img: {
-                                  loading: 'lazy',
-                                  decoding: 'async',
-                                  fetchpriority: 'low',
-                                },
-                              }}
-                              sx={{ width: 64, height: 64, fontSize: '1.5rem', mx: 'auto', mb: 1, bgcolor: 'primary.light' }}
-                            >
-                              {emp.fullName[0]}
-                            </Avatar>
-                            <Typography variant="body1" sx={{ fontWeight: selectedEmployee === emp.fullName ? 600 : 400 }}>
-                              {emp.fullName}
-                            </Typography>
-                          </CardContent>
-                          </CardActionArea>
-                        </Card>
-                        );
-                      })}
-                    </Box>
+                    <LoginAccountPicker
+                      ariaLabel="Выберите сотрудника"
+                      value={selectedEmployee}
+                      onChange={setSelectedEmployee}
+                      avatarSize={64}
+                      options={employees.map((emp) => ({
+                        value: emp.fullName,
+                        avatarSrc: emp.id ? avatarThumbUrl(emp.id) : undefined
+                      }))}
+                    />
                   </>
                 ) : (
                   <>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                       Выберите администратора:
                     </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 2 }}>
-                      {admins.map((admin) => {
-                        const avatarSrc = admin.id ? avatarThumbUrl(admin.id) : admin.avatarUrl;
-                        return (
-                        <Card
-                          key={admin.email}
-                          sx={(theme) => ({
-                            flex: '1 1 calc(50% - 8px)',
-                            minWidth: 120,
-                            border: selectedAdmin === admin.fullName
-                              ? `2px solid ${theme.palette.primary.main}`
-                              : `1px solid ${alpha(theme.palette.divider, 1)}`,
-                            bgcolor: selectedAdmin === admin.fullName
-                              ? alpha(theme.palette.primary.main, 0.08)
-                              : alpha('#ffffff', 0.5),
-                            transition: createMuiTransition(theme, [
-                              'box-shadow',
-                              'border-color',
-                              'background-color'
-                            ]),
-                            '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.light }
-                          })}
-                        >
-                          <CardActionArea
-                            onClick={() => setSelectedAdmin(admin.fullName)}
-                            aria-pressed={selectedAdmin === admin.fullName}
-                          >
-                            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-                              <Avatar
-                                src={avatarSrc}
-                                slotProps={{
-                                  img: {
-                                    loading: 'lazy',
-                                    decoding: 'async',
-                                    fetchpriority: 'low',
-                                  },
-                                }}
-                                sx={{
-                                  width: 56,
-                                  height: 56,
-                                  fontSize: '1.25rem',
-                                  mx: 'auto',
-                                  mb: 1,
-                                  bgcolor: 'primary.light'
-                                }}
-                              >
-                                {admin.fullName[0]}
-                              </Avatar>
-                              <Typography
-                                variant="body2"
-                                sx={{ fontWeight: selectedAdmin === admin.fullName ? 600 : 400 }}
-                              >
-                                {admin.fullName}
-                              </Typography>
-                            </CardContent>
-                          </CardActionArea>
-                        </Card>
-                        );
-                      })}
-                    </Box>
+                    <LoginAccountPicker
+                      ariaLabel="Выберите администратора"
+                      value={selectedAdmin}
+                      onChange={setSelectedAdmin}
+                      avatarSize={56}
+                      options={admins.map((admin) => ({
+                        value: admin.fullName,
+                        avatarSrc: admin.id ? avatarThumbUrl(admin.id) : admin.avatarUrl
+                      }))}
+                    />
                     <TextField
                       label="Пароль"
                       type="password"

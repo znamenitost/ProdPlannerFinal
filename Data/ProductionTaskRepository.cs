@@ -72,8 +72,8 @@ namespace ProductionPlanner.Data
                 .Select(g => new CompletedTasksAggregateStats
                 {
                     TotalTasks = g.Count(),
-                    TotalEstimate = g.Sum(t => t.EstimateHours),
-                    TotalActual = g.Sum(t => t.ActualHours)
+                    TotalEstimate = g.Sum(t => t.IsFuss ? 0 : t.EstimateHours),
+                    TotalActual = g.Sum(t => t.IsFuss ? 0 : t.ActualHours)
                 })
                 .ToListAsync(cancellationToken);
 
