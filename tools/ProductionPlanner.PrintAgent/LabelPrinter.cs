@@ -8,10 +8,18 @@ using QRCoder;
 namespace ProductionPlanner.PrintAgent;
 
 /// <summary>
-/// Этикетка на всю ширину A4: слева заказчик + имя файла, справа код получения и QR на страницу заказа.
+/// Термоэтикетка 75×120 мм:
+/// слева 30×120 — название из столбца «Задача» (текст вдоль длинной стороны);
+/// справа две ячейки 40×60 — QR и номер заказа (код получения).
 /// </summary>
 internal static class LabelPrinter
 {
+    private const float LabelWidthMm = 75f;
+    private const float LabelHeightMm = 120f;
+    private const float LeftColMm = 30f;
+    private const float RightColMm = 40f;
+    private const float RightCellMm = 60f;
+
     public static void Print(
         string printerName,
         string customerName,
@@ -27,8 +35,12 @@ internal static class LabelPrinter
         if (!doc.PrinterSettings.IsValid)
             throw new InvalidOperationException("Принтер недоступен: " + printerName);
 
+        // PaperSize — сотые дюйма.
+        var paperW = MmToHundredthsInch(LabelWidthMm);
+        var paperH = MmToHundredthsInch(LabelHeightMm);
+        doc.DefaultPageSettings.PaperSize = new PaperSize("Label75x120", paperW, paperH);
         doc.DefaultPageSettings.Landscape = false;
-        doc.DefaultPageSettings.Margins = new Margins(28, 28, 28, 28);
+        doc.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
 
         doc.PrintPage += (_, e) =>
         {
@@ -36,116 +48,184 @@ internal static class LabelPrinter
             if (g == null)
                 return;
 
+            g.PageUnit = GraphicsUnit.Millimeter;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
 
-            var left = e.MarginBounds.Left;
-            var top = e.MarginBounds.Top;
-            var fullWidth = e.MarginBounds.Width;
-            // Заголовок ~2 см + файл ~7 мм + поля ≈ 3.3 см
-            const float labelHeight = 130f;
-            const float codeCellWidth = 130f;
-            const float qrCellWidth = 118f;
-            var textWidth = fullWidth - codeCellWidth - qrCellWidth;
-            if (textWidth < 180)
-                textWidth = fullWidth * 0.55f;
+            // 30+40=70 → центрируем контент в 75 мм.
+            var contentW = LeftColMm + RightColMm;
+            var originX = (LabelWidthMm - contentW) / 2f;
+            var originY = 0f;
 
-            var header = (customerName ?? "").Trim().ToUpperInvariant();
-            if (string.IsNullOrEmpty(header))
-                header = "ЗАКАЗ";
+            var taskTitle = (customerName ?? "").Trim();
+            if (string.IsNullOrEmpty(taskTitle))
+                taskTitle = (fileName ?? "").Trim();
+            if (string.IsNullOrEmpty(taskTitle))
+                taskTitle = "ЗАКАЗ";
 
-            var file = (fileName ?? "").Trim();
             var code = (pickupCode ?? "").Trim();
             if (string.IsNullOrEmpty(code))
                 code = "—";
 
-            using var outerPen = new Pen(Color.Black, 2.2f);
-            using var innerPen = new Pen(Color.Black, 1.5f);
-            using var headerFont = new Font("Arial", 56, FontStyle.Bold);
-            using var fileFont = new Font("Arial", 28, FontStyle.Regular);
-            using var codeFont = new Font("Arial", 32, FontStyle.Bold);
-            using var codeHintFont = new Font("Arial", 7, FontStyle.Regular);
+            var left = originX;
+            var top = originY;
+            var rightColLeft = left + LeftColMm;
 
-            g.DrawRectangle(outerPen, left, top, fullWidth, labelHeight);
+            using var outerPen = new Pen(Color.Black, 0.35f);
+            using var innerPen = new Pen(Color.Black, 0.25f);
 
-            var codeLeft = left + textWidth;
-            var qrLeft = codeLeft + codeCellWidth;
-            g.DrawLine(innerPen, codeLeft, top, codeLeft, top + labelHeight);
-            g.DrawLine(innerPen, qrLeft, top, qrLeft, top + labelHeight);
+            g.DrawRectangle(outerPen, left, top, contentW, LabelHeightMm);
+            g.DrawLine(innerPen, rightColLeft, top, rightColLeft, top + LabelHeightMm);
+            g.DrawLine(innerPen, rightColLeft, top + RightCellMm, left + contentW, top + RightCellMm);
 
-            var textPad = 12f;
-            var headerRect = new RectangleF(
-                left + textPad,
-                top + 4f,
-                textWidth - textPad * 2,
-                78f);
-            g.DrawString(header, headerFont, Brushes.Black, headerRect,
-                new StringFormat
-                {
-                    Alignment = StringAlignment.Near,
-                    LineAlignment = StringAlignment.Center,
-                    Trimming = StringTrimming.EllipsisCharacter,
-                    FormatFlags = StringFormatFlags.NoWrap
-                });
-
-            if (!string.IsNullOrEmpty(file))
-            {
-                var fileRect = new RectangleF(
-                    left + textPad,
-                    top + 86f,
-                    textWidth - textPad * 2,
-                    36f);
-                g.DrawString(file, fileFont, Brushes.Black, fileRect,
-                    new StringFormat
-                    {
-                        Alignment = StringAlignment.Near,
-                        LineAlignment = StringAlignment.Center,
-                        Trimming = StringTrimming.EllipsisCharacter,
-                        FormatFlags = StringFormatFlags.NoWrap
-                    });
-            }
-
-            var hintRect = new RectangleF(codeLeft, top + 6f, codeCellWidth, 16f);
-            g.DrawString("получение", codeHintFont, Brushes.Gray, hintRect,
-                new StringFormat
-                {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Center
-                });
-
-            var codeRect = new RectangleF(codeLeft, top + 22f, codeCellWidth, labelHeight - 40f);
-            g.DrawString(code, codeFont, Brushes.Black, codeRect,
-                new StringFormat
-                {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Center,
-                    Trimming = StringTrimming.EllipsisCharacter,
-                    FormatFlags = StringFormatFlags.NoWrap
-                });
-
-            using (var qrImage = TryCreateQrImage(orderUrl, 96))
-            {
-                if (qrImage != null)
-                {
-                    var qrX = qrLeft + (qrCellWidth - qrImage.Width) / 2f;
-                    var qrY = top + (labelHeight - qrImage.Height) / 2f;
-                    g.DrawImage(qrImage, qrX, qrY, qrImage.Width, qrImage.Height);
-                }
-            }
-
-            var tearY = top + labelHeight + 14f;
-            using var dash = new Pen(Color.Gray, 1f)
-            {
-                DashStyle = DashStyle.Dash
-            };
-            g.DrawLine(dash, left, tearY, left + fullWidth, tearY);
-            using var tearFont = new Font("Arial", 7, FontStyle.Italic);
-            g.DrawString("отрыв", tearFont, Brushes.Gray, left + fullWidth - 36f, tearY + 2f);
+            DrawRotatedTaskTitle(g, taskTitle, left, top, LeftColMm, LabelHeightMm);
+            DrawQrCell(g, orderUrl, rightColLeft, top, RightColMm, RightCellMm);
+            DrawOrderNumberCell(g, code, rightColLeft, top + RightCellMm, RightColMm, RightCellMm);
 
             e.HasMorePages = false;
         };
 
         doc.Print();
+    }
+
+    private static void DrawRotatedTaskTitle(
+        Graphics g,
+        string text,
+        float x,
+        float y,
+        float widthMm,
+        float heightMm)
+    {
+        // Текст вдоль длинной стороны (120 мм): читается снизу вверх.
+        var state = g.Save();
+        try
+        {
+            g.TranslateTransform(x + widthMm, y);
+            g.RotateTransform(90f);
+
+            // После поворота: ширина = 120 мм (бывшая высота), высота = 30 мм (бывшая ширина).
+            var pad = 2f;
+            var rect = new RectangleF(pad, pad, heightMm - pad * 2f, widthMm - pad * 2f);
+
+            var fontSize = FitFontSize(g, text, rect.Width, rect.Height, 28f, 8f);
+            using var font = new Font("Arial", fontSize, FontStyle.Bold, GraphicsUnit.Point);
+            using var format = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center,
+                Trimming = StringTrimming.EllipsisCharacter
+            };
+            g.DrawString(text.ToUpperInvariant(), font, Brushes.Black, rect, format);
+        }
+        finally
+        {
+            g.Restore(state);
+        }
+    }
+
+    private static void DrawQrCell(
+        Graphics g,
+        string? orderUrl,
+        float x,
+        float y,
+        float widthMm,
+        float heightMm)
+    {
+        var pad = 3f;
+        var maxSide = Math.Min(widthMm, heightMm) - pad * 2f;
+        if (maxSide < 8f)
+            return;
+
+        using var qrImage = TryCreateQrImage(orderUrl, MmToPixels(g, maxSide));
+        if (qrImage == null)
+        {
+            using var hintFont = new Font("Arial", 8f, FontStyle.Regular, GraphicsUnit.Point);
+            g.DrawString(
+                "нет QR",
+                hintFont,
+                Brushes.Gray,
+                new RectangleF(x, y, widthMm, heightMm),
+                new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center
+                });
+            return;
+        }
+
+        var drawW = maxSide;
+        var drawH = maxSide;
+        var qrX = x + (widthMm - drawW) / 2f;
+        var qrY = y + (heightMm - drawH) / 2f;
+        g.DrawImage(qrImage, qrX, qrY, drawW, drawH);
+    }
+
+    private static void DrawOrderNumberCell(
+        Graphics g,
+        string code,
+        float x,
+        float y,
+        float widthMm,
+        float heightMm)
+    {
+        var pad = 2f;
+        var hintH = 8f;
+        var hintRect = new RectangleF(x + pad, y + 3f, widthMm - pad * 2f, hintH);
+        using (var hintFont = new Font("Arial", 7f, FontStyle.Regular, GraphicsUnit.Point))
+        {
+            g.DrawString(
+                "заказ",
+                hintFont,
+                Brushes.Gray,
+                hintRect,
+                new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center
+                });
+        }
+
+        var codeRect = new RectangleF(
+            x + pad,
+            y + hintH + 2f,
+            widthMm - pad * 2f,
+            heightMm - hintH - 6f);
+        var fontSize = FitFontSize(g, code, codeRect.Width, codeRect.Height, 36f, 10f);
+        using var codeFont = new Font("Arial", fontSize, FontStyle.Bold, GraphicsUnit.Point);
+        g.DrawString(
+            code,
+            codeFont,
+            Brushes.Black,
+            codeRect,
+            new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center,
+                Trimming = StringTrimming.EllipsisCharacter,
+                FormatFlags = StringFormatFlags.NoWrap
+            });
+    }
+
+    private static float FitFontSize(
+        Graphics g,
+        string text,
+        float maxWidthMm,
+        float maxHeightMm,
+        float maxPt,
+        float minPt)
+    {
+        for (var size = maxPt; size >= minPt; size -= 1f)
+        {
+            using var font = new Font("Arial", size, FontStyle.Bold, GraphicsUnit.Point);
+            var measured = g.MeasureString(text, font);
+            // MeasureString возвращает единицы PageUnit (мм).
+            if (measured.Width <= maxWidthMm && measured.Height <= maxHeightMm)
+                return size;
+        }
+
+        return minPt;
     }
 
     private static Bitmap? TryCreateQrImage(string? orderUrl, int sizePx)
@@ -175,5 +255,15 @@ internal static class LabelPrinter
         {
             return null;
         }
+    }
+
+    private static int MmToHundredthsInch(float mm) =>
+        (int)Math.Round(mm / 25.4f * 100f);
+
+    private static int MmToPixels(Graphics g, float mm)
+    {
+        // При PageUnit=Millimeter DpiX всё ещё в пикселях на дюйм.
+        var px = (int)Math.Round(mm / 25.4f * g.DpiX);
+        return Math.Max(px, 64);
     }
 }

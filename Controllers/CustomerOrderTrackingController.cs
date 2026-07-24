@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductionPlanner.Models.Dtos;
 using ProductionPlanner.Services.CustomerOrders;
+using ProductionPlanner.Services.LabelPrint;
 
 namespace ProductionPlanner.Controllers;
 
@@ -11,10 +12,14 @@ namespace ProductionPlanner.Controllers;
 public class CustomerOrderTrackingController : ControllerBase
 {
     private readonly ICustomerOrderTrackingService _service;
+    private readonly ILabelPrintService _labelPrint;
 
-    public CustomerOrderTrackingController(ICustomerOrderTrackingService service)
+    public CustomerOrderTrackingController(
+        ICustomerOrderTrackingService service,
+        ILabelPrintService labelPrint)
     {
         _service = service;
+        _labelPrint = labelPrint;
     }
 
     /// <summary>Создаёт или возвращает публичную ссылку на страницу заказов заказчика задачи.</summary>
@@ -27,6 +32,23 @@ public class CustomerOrderTrackingController : ControllerBase
         {
             var baseUrl = $"{Request.Scheme}://{Request.Host.Value}";
             var dto = await _service.CreateOrGetLinkAsync(taskId, baseUrl, cancellationToken);
+            return Ok(dto);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Ставит этикетку заказа в очередь PrintAgent.</summary>
+    [HttpPost("print/{taskId:int}")]
+    public async Task<ActionResult<PrintJobDto>> PrintLabel(
+        int taskId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var dto = await _labelPrint.EnqueueManualAsync(taskId, cancellationToken);
             return Ok(dto);
         }
         catch (InvalidOperationException ex)

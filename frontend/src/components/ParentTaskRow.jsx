@@ -79,6 +79,7 @@ function ParentTaskRow({
   onEdit,
   onDelete,
   onCopyOrderLink,
+  onPrintOrderLabel,
   onOpenComment,
   onOpenIntervals,
   canEdit,
@@ -359,6 +360,7 @@ function ParentTaskRow({
                 onEdit={task.isFuss ? undefined : () => onEdit(task.id)}
                 onDelete={() => onDelete(task.id)}
                 onCopyOrderLink={task.isFuss ? undefined : onCopyOrderLink}
+                onPrintOrderLabel={task.isFuss ? undefined : onPrintOrderLabel}
                 onIntervals={hasChildren || task.isFuss ? undefined : () => onOpenIntervals(task)}
                 onStart={onStart}
                 onPause={onPause}
@@ -414,6 +416,7 @@ function ParentTaskRow({
           onEdit={onEdit}
           onDelete={onDelete}
           onCopyOrderLink={onCopyOrderLink}
+          onPrintOrderLabel={onPrintOrderLabel}
           onOpenComment={onOpenComment}
           onOpenIntervals={onOpenIntervals}
           isAdmin={canEdit}

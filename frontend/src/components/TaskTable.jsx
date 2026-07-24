@@ -515,6 +515,7 @@ export default function TaskTable({
         onEdit={table.handleEditRow}
         onDelete={table.handleDeleteRow}
         onCopyOrderLink={table.handleCopyOrderLink}
+        onPrintOrderLabel={table.handlePrintOrderLabel}
         onOpenComment={table.handleOpenComment}
         onOpenIntervals={table.handleOpenIntervals}
         canEdit={isAdmin}

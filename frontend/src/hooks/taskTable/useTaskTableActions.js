@@ -1,6 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
 import { combineDateTime, DEFAULT_TIME } from '../../utils/dateTimeHelpers';
-import { buildTaskUpdatePayload, createCustomerOrderLink } from '../../services/api';
+import {
+  buildTaskUpdatePayload,
+  createCustomerOrderLink,
+  printCustomerOrderLabel
+} from '../../services/api';
 import { runWorkflowWithSequenceGuard } from '../../utils/supplyStatusWorkflow';
 import {
   SUPPLY_MODE_COOPERATIVE,
@@ -508,6 +512,18 @@ export default function useTaskTableActions({
     }
   }, [showError, showSuccess]);
 
+  const handlePrintOrderLabel = useCallback(async (task) => {
+    const taskId = typeof task === 'object' ? task?.id : task;
+    if (!taskId) return;
+    try {
+      const job = await printCustomerOrderLabel(taskId);
+      const code = job?.pickupCode ? ` (${job.pickupCode})` : '';
+      showSuccess?.(`Этикетка отправлена на печать${code}`);
+    } catch (err) {
+      showError(err.message || 'Не удалось отправить этикетку на печать');
+    }
+  }, [showError, showSuccess]);
+
   return {
     pendingLifecycleTaskId,
     handleSaveNewRow,
@@ -521,6 +537,7 @@ export default function useTaskTableActions({
     handleDeleteRow,
     handleAddNewRow,
     handleEditRow,
-    handleCopyOrderLink
+    handleCopyOrderLink,
+    handlePrintOrderLabel
   };
 }

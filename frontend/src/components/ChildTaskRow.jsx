@@ -52,6 +52,7 @@ function ChildTaskRow({
   onEdit,
   onDelete,
   onCopyOrderLink,
+  onPrintOrderLabel,
   onOpenComment,
   onOpenIntervals,
   isAdmin = false,
@@ -249,6 +250,7 @@ function ChildTaskRow({
               onEdit={() => onEdit(task.id)}
               onDelete={() => onDelete(task.id)}
               onCopyOrderLink={onCopyOrderLink}
+              onPrintOrderLabel={onPrintOrderLabel}
               onIntervals={() => onOpenIntervals(task)}
               onStart={onStart}
               onPause={onPause}

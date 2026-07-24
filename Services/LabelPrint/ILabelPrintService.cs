@@ -7,6 +7,9 @@ public interface ILabelPrintService
     /// <summary>Ставит этикетку в очередь, если задача — финально готовый заказ (не этап split).</summary>
     Task TryEnqueueForCompletedTaskAsync(int taskId, CancellationToken cancellationToken = default);
 
+    /// <summary>Ручная печать из меню задачи (повтор разрешён).</summary>
+    Task<PrintJobDto> EnqueueManualAsync(int taskId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<PrintJobDto>> GetPendingJobsAsync(CancellationToken cancellationToken = default);
 
     Task<PrintJobDto?> ClaimJobAsync(int jobId, string? agentName, CancellationToken cancellationToken = default);

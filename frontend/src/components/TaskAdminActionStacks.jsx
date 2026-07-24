@@ -22,7 +22,8 @@ import {
   LocalFireDepartment,
   Notifications,
   NotificationsActive,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Print as PrintIcon
 } from '@mui/icons-material';
 import {
   ACTION_RESUME,
@@ -52,6 +53,7 @@ export default function TaskAdminActionStacks({
   onEdit,
   onDelete,
   onCopyOrderLink,
+  onPrintOrderLabel,
   onIntervals,
   onStart,
   onPause,
@@ -315,6 +317,25 @@ export default function TaskAdminActionStacks({
           <LinkIcon fontSize="small" />
         </ListItemIcon>
         <ListItemText>Ссылка на заказ</ListItemText>
+      </MenuItem>
+    );
+  }
+  if (onPrintOrderLabel) {
+    metaItems.push(
+      <MenuItem
+        key="print-order"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleClose();
+          void Promise.resolve(onPrintOrderLabel(task)).catch((err) => {
+            console.error('Ошибка печати этикетки заказа:', err);
+          });
+        }}
+      >
+        <ListItemIcon>
+          <PrintIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>Распечатать заказ</ListItemText>
       </MenuItem>
     );
   }

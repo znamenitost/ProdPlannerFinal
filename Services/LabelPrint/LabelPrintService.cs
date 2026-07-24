@@ -51,13 +51,6 @@ public sealed class LabelPrintService : ILabelPrintService
         if (task.ParentRowNumber.HasValue && task.IsSplitTask)
             return;
 
-        var customerName = CustomerOrderKey.TryGetDisplayName(task.FolderPath);
-        if (string.IsNullOrWhiteSpace(customerName))
-        {
-            _logger.LogDebug("Пропуск этикетки для задачи {TaskId}: нет папки заказчика", taskId);
-            return;
-        }
-
         var alreadyQueued = await _db.PrintJobs
             .AsNoTracking()
             .AnyAsync(j =>
@@ -66,12 +59,38 @@ public sealed class LabelPrintService : ILabelPrintService
         if (alreadyQueued)
             return;
 
+        try
+        {
+            await EnqueueCoreAsync(task, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogDebug(ex, "Пропуск автопечати для задачи {TaskId}", taskId);
+        }
+    }
+
+    public async Task<PrintJobDto> EnqueueManualAsync(int taskId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_options.Value.AccessToken))
+            throw new InvalidOperationException("Печать этикеток не настроена на сервере");
+
+        var task = await _db.ProductionTasks
+            .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken)
+            ?? throw new InvalidOperationException("Задача не найдена");
+
+        return await EnqueueCoreAsync(task, cancellationToken);
+    }
+
+    private async Task<PrintJobDto> EnqueueCoreAsync(ProductionTask task, CancellationToken cancellationToken)
+    {
+        var customerName = CustomerOrderKey.TryGetDisplayName(task.FolderPath);
+        if (string.IsNullOrWhiteSpace(customerName))
+            throw new InvalidOperationException(
+                "Не удалось определить заказчика: укажите путь к папке клиента");
+
         var pickupCode = await EnsurePickupCodeAsync(task, customerName, cancellationToken);
         if (string.IsNullOrWhiteSpace(pickupCode))
-        {
-            _logger.LogWarning("Не удалось выдать PickupCode для задачи {TaskId}", task.Id);
-            return;
-        }
+            throw new InvalidOperationException("Не удалось выдать код получения");
 
         var fileLabel = StripFileName(task.FileName);
 
@@ -96,6 +115,8 @@ public sealed class LabelPrintService : ILabelPrintService
         _logger.LogInformation(
             "Этикетка поставлена в очередь: job {JobId}, task {TaskId}, code {Code}",
             job.Id, job.TaskId, job.PickupCode);
+
+        return dto;
     }
 
     public async Task<IReadOnlyList<PrintJobDto>> GetPendingJobsAsync(CancellationToken cancellationToken = default)
