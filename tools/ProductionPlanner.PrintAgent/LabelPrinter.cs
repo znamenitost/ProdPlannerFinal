@@ -8,9 +8,9 @@ using QRCoder;
 namespace ProductionPlanner.PrintAgent;
 
 /// <summary>
-/// Термоэтикетка 75×120 мм:
-/// слева 30×120 — название из столбца «Задача» (текст вдоль длинной стороны);
-/// справа две ячейки 40×60 — QR и номер заказа (код получения).
+/// Термоэтикетка 75×120 мм (X×Y):
+/// слева 30×120 — «Задача», текст вдоль оси Y (поворот 90°);
+/// справа две ячейки 40×60 — QR и номер заказа.
 /// </summary>
 internal static class LabelPrinter
 {
@@ -35,12 +35,9 @@ internal static class LabelPrinter
         if (!doc.PrinterSettings.IsValid)
             throw new InvalidOperationException("Принтер недоступен: " + printerName);
 
-        // PaperSize — сотые дюйма.
-        var paperW = MmToHundredthsInch(LabelWidthMm);
-        var paperH = MmToHundredthsInch(LabelHeightMm);
-        doc.DefaultPageSettings.PaperSize = new PaperSize("Label75x120", paperW, paperH);
-        doc.DefaultPageSettings.Landscape = false;
         doc.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
+        doc.OriginAtMargins = false;
+        ApplyLabelPaper(doc);
 
         doc.PrintPage += (_, e) =>
         {
@@ -48,16 +45,35 @@ internal static class LabelPrinter
             if (g == null)
                 return;
 
-            g.PageUnit = GraphicsUnit.Millimeter;
+            // Рисуем в сотых дюйма — надёжнее для термодрайверов, чем PageUnit=mm.
+            g.PageUnit = GraphicsUnit.Display;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             g.InterpolationMode = InterpolationMode.NearestNeighbor;
             g.PixelOffsetMode = PixelOffsetMode.Half;
 
-            // 30+40=70 → центрируем контент в 75 мм.
-            var contentW = LeftColMm + RightColMm;
-            var originX = (LabelWidthMm - contentW) / 2f;
+            var pageW = Mm(LabelWidthMm);
+            var pageH = Mm(LabelHeightMm);
+            var leftCol = Mm(LeftColMm);
+            var rightCol = Mm(RightColMm);
+            var rightCell = Mm(RightCellMm);
+            var contentW = leftCol + rightCol;
+            var originX = (pageW - contentW) / 2f;
             var originY = 0f;
+
+            // Если драйвер подставил другой PaperSize — вписываем в доступную область.
+            var bounds = e.PageBounds;
+            if (bounds.Width > 0 && bounds.Height > 0)
+            {
+                var scale = Math.Min(bounds.Width / pageW, bounds.Height / pageH);
+                if (scale > 0f && scale < 0.999f)
+                {
+                    g.TranslateTransform(
+                        (bounds.Width - pageW * scale) / 2f,
+                        (bounds.Height - pageH * scale) / 2f);
+                    g.ScaleTransform(scale, scale);
+                }
+            }
 
             var taskTitle = (customerName ?? "").Trim();
             if (string.IsNullOrEmpty(taskTitle))
@@ -71,18 +87,18 @@ internal static class LabelPrinter
 
             var left = originX;
             var top = originY;
-            var rightColLeft = left + LeftColMm;
+            var rightColLeft = left + leftCol;
 
-            using var outerPen = new Pen(Color.Black, 0.35f);
-            using var innerPen = new Pen(Color.Black, 0.25f);
+            using var outerPen = new Pen(Color.Black, 2f);
+            using var innerPen = new Pen(Color.Black, 1.5f);
 
-            g.DrawRectangle(outerPen, left, top, contentW, LabelHeightMm);
-            g.DrawLine(innerPen, rightColLeft, top, rightColLeft, top + LabelHeightMm);
-            g.DrawLine(innerPen, rightColLeft, top + RightCellMm, left + contentW, top + RightCellMm);
+            g.DrawRectangle(outerPen, left, top, contentW, pageH);
+            g.DrawLine(innerPen, rightColLeft, top, rightColLeft, top + pageH);
+            g.DrawLine(innerPen, rightColLeft, top + rightCell, left + contentW, top + rightCell);
 
-            DrawRotatedTaskTitle(g, taskTitle, left, top, LeftColMm, LabelHeightMm);
-            DrawQrCell(g, orderUrl, rightColLeft, top, RightColMm, RightCellMm);
-            DrawOrderNumberCell(g, code, rightColLeft, top + RightCellMm, RightColMm, RightCellMm);
+            DrawRotatedTaskTitle(g, taskTitle, left, top, leftCol, pageH);
+            DrawQrCell(g, orderUrl, rightColLeft, top, rightCol, rightCell);
+            DrawOrderNumberCell(g, code, rightColLeft, top + rightCell, rightCol, rightCell);
 
             e.HasMorePages = false;
         };
@@ -90,27 +106,61 @@ internal static class LabelPrinter
         doc.Print();
     }
 
+    private static void ApplyLabelPaper(PrintDocument doc)
+    {
+        var targetW = MmToHundredthsInch(LabelWidthMm);
+        var targetH = MmToHundredthsInch(LabelHeightMm);
+
+        PaperSize? best = null;
+        var bestScore = int.MaxValue;
+        foreach (PaperSize size in doc.PrinterSettings.PaperSizes)
+        {
+            var score = Math.Abs(size.Width - targetW) + Math.Abs(size.Height - targetH);
+            var scoreRotated = Math.Abs(size.Width - targetH) + Math.Abs(size.Height - targetW);
+            var local = Math.Min(score, scoreRotated);
+            if (local < bestScore)
+            {
+                bestScore = local;
+                best = size;
+            }
+        }
+
+        // Допуск ~3 мм: берём размер из драйвера, иначе задаём свой.
+        if (best != null && bestScore <= MmToHundredthsInch(3f) * 2)
+        {
+            doc.DefaultPageSettings.PaperSize = best;
+            // Если драйвер отдал 120×75, а нам нужно 75×120 — включаем landscape.
+            if (Math.Abs(best.Width - targetH) + Math.Abs(best.Height - targetW)
+                < Math.Abs(best.Width - targetW) + Math.Abs(best.Height - targetH))
+            {
+                doc.DefaultPageSettings.Landscape = true;
+            }
+        }
+        else
+        {
+            doc.DefaultPageSettings.PaperSize = new PaperSize("Label75x120", targetW, targetH);
+        }
+    }
+
     private static void DrawRotatedTaskTitle(
         Graphics g,
         string text,
         float x,
         float y,
-        float widthMm,
-        float heightMm)
+        float width,
+        float height)
     {
-        // Текст вдоль длинной стороны (120 мм): читается снизу вверх.
+        // Текст вдоль Y: после поворота +90° читается сверху вниз по длинной стороне.
         var state = g.Save();
         try
         {
-            g.TranslateTransform(x + widthMm, y);
+            g.TranslateTransform(x + width, y);
             g.RotateTransform(90f);
 
-            // После поворота: ширина = 120 мм (бывшая высота), высота = 30 мм (бывшая ширина).
-            var pad = 2f;
-            var rect = new RectangleF(pad, pad, heightMm - pad * 2f, widthMm - pad * 2f);
-
-            var fontSize = FitFontSize(g, text, rect.Width, rect.Height, 28f, 8f);
-            using var font = new Font("Arial", fontSize, FontStyle.Bold, GraphicsUnit.Point);
+            var pad = Mm(2f);
+            var rect = new RectangleF(pad, pad, height - pad * 2f, width - pad * 2f);
+            var fontSize = FitFontSize(g, text, rect.Width, rect.Height, 28f, 9f);
+            using var font = new Font("Arial", fontSize, FontStyle.Bold);
             using var format = new StringFormat
             {
                 Alignment = StringAlignment.Center,
@@ -130,23 +180,24 @@ internal static class LabelPrinter
         string? orderUrl,
         float x,
         float y,
-        float widthMm,
-        float heightMm)
+        float width,
+        float height)
     {
-        var pad = 3f;
-        var maxSide = Math.Min(widthMm, heightMm) - pad * 2f;
-        if (maxSide < 8f)
+        var pad = Mm(2.5f);
+        var maxSide = Math.Min(width, height) - pad * 2f;
+        if (maxSide < Mm(8f))
             return;
 
-        using var qrImage = TryCreateQrImage(orderUrl, MmToPixels(g, maxSide));
+        var sizePx = Math.Max(128, (int)Math.Round(maxSide));
+        using var qrImage = TryCreateQrImage(orderUrl, sizePx);
         if (qrImage == null)
         {
-            using var hintFont = new Font("Arial", 8f, FontStyle.Regular, GraphicsUnit.Point);
+            using var hintFont = new Font("Arial", 8f, FontStyle.Regular);
             g.DrawString(
                 "нет QR",
                 hintFont,
                 Brushes.Gray,
-                new RectangleF(x, y, widthMm, heightMm),
+                new RectangleF(x, y, width, height),
                 new StringFormat
                 {
                     Alignment = StringAlignment.Center,
@@ -155,11 +206,9 @@ internal static class LabelPrinter
             return;
         }
 
-        var drawW = maxSide;
-        var drawH = maxSide;
-        var qrX = x + (widthMm - drawW) / 2f;
-        var qrY = y + (heightMm - drawH) / 2f;
-        g.DrawImage(qrImage, qrX, qrY, drawW, drawH);
+        var qrX = x + (width - maxSide) / 2f;
+        var qrY = y + (height - maxSide) / 2f;
+        g.DrawImage(qrImage, qrX, qrY, maxSide, maxSide);
     }
 
     private static void DrawOrderNumberCell(
@@ -167,13 +216,13 @@ internal static class LabelPrinter
         string code,
         float x,
         float y,
-        float widthMm,
-        float heightMm)
+        float width,
+        float height)
     {
-        var pad = 2f;
-        var hintH = 8f;
-        var hintRect = new RectangleF(x + pad, y + 3f, widthMm - pad * 2f, hintH);
-        using (var hintFont = new Font("Arial", 7f, FontStyle.Regular, GraphicsUnit.Point))
+        var pad = Mm(2f);
+        var hintH = Mm(8f);
+        var hintRect = new RectangleF(x + pad, y + Mm(3f), width - pad * 2f, hintH);
+        using (var hintFont = new Font("Arial", 7f, FontStyle.Regular))
         {
             g.DrawString(
                 "заказ",
@@ -189,11 +238,11 @@ internal static class LabelPrinter
 
         var codeRect = new RectangleF(
             x + pad,
-            y + hintH + 2f,
-            widthMm - pad * 2f,
-            heightMm - hintH - 6f);
-        var fontSize = FitFontSize(g, code, codeRect.Width, codeRect.Height, 36f, 10f);
-        using var codeFont = new Font("Arial", fontSize, FontStyle.Bold, GraphicsUnit.Point);
+            y + hintH + Mm(2f),
+            width - pad * 2f,
+            height - hintH - Mm(6f));
+        var fontSize = FitFontSize(g, code, codeRect.Width, codeRect.Height, 36f, 12f);
+        using var codeFont = new Font("Arial", fontSize, FontStyle.Bold);
         g.DrawString(
             code,
             codeFont,
@@ -211,17 +260,16 @@ internal static class LabelPrinter
     private static float FitFontSize(
         Graphics g,
         string text,
-        float maxWidthMm,
-        float maxHeightMm,
+        float maxWidth,
+        float maxHeight,
         float maxPt,
         float minPt)
     {
         for (var size = maxPt; size >= minPt; size -= 1f)
         {
-            using var font = new Font("Arial", size, FontStyle.Bold, GraphicsUnit.Point);
+            using var font = new Font("Arial", size, FontStyle.Bold);
             var measured = g.MeasureString(text, font);
-            // MeasureString возвращает единицы PageUnit (мм).
-            if (measured.Width <= maxWidthMm && measured.Height <= maxHeightMm)
+            if (measured.Width <= maxWidth && measured.Height <= maxHeight)
                 return size;
         }
 
@@ -257,13 +305,8 @@ internal static class LabelPrinter
         }
     }
 
-    private static int MmToHundredthsInch(float mm) =>
-        (int)Math.Round(mm / 25.4f * 100f);
+    private static float Mm(float mm) => mm / 25.4f * 100f;
 
-    private static int MmToPixels(Graphics g, float mm)
-    {
-        // При PageUnit=Millimeter DpiX всё ещё в пикселях на дюйм.
-        var px = (int)Math.Round(mm / 25.4f * g.DpiX);
-        return Math.Max(px, 64);
-    }
+    private static int MmToHundredthsInch(float mm) =>
+        (int)Math.Round(Mm(mm));
 }
