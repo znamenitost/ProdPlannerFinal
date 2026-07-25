@@ -7,7 +7,8 @@ export default function TaskPlannedProgressFooter({
   colSpan,
   hideForSplitParent = false,
   enabled = false,
-  color = 'success'
+  color = 'success',
+  actionsColumnSx = COL_ACTIONS
 }) {
   const show = task.showPlannedTimeProgress ?? false;
 
@@ -49,7 +50,7 @@ export default function TaskPlannedProgressFooter({
       </TableCell>
       <TableCell
         sx={{
-          ...COL_ACTIONS,
+          ...actionsColumnSx,
           p: 0,
           height: 5,
           lineHeight: 0,

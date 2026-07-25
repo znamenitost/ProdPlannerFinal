@@ -97,7 +97,8 @@ function ParentTaskRow({
   maxCanSubscribe = false,
   onMaxSubscribeToggle,
   forceCommentTooltipTaskId = null,
-  onForceCommentTooltipClose
+  onForceCommentTooltipClose,
+  actionsColumnSx = COL_ACTIONS
 }) {
   const maxSubscribedSet = useMemo(
     () => new Set((maxSubscribedTaskIds || []).map(Number)),
@@ -350,8 +351,8 @@ function ParentTaskRow({
           </Box>
         </TableCell>
 
-        <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start' }}>
+        <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, actionsColumnSx)}>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' }}>
             {canEdit && canDelete && (
               <TaskAdminActionStacks
                 task={task}
@@ -396,6 +397,7 @@ function ParentTaskRow({
         colSpan={tableColSpan}
         enabled={showPlannedProgress}
         color={hasChildren ? 'primary' : 'success'}
+        actionsColumnSx={actionsColumnSx}
       />
 
       {hasChildren && isExpanded && (childrenTasks || []).map((child, index) => (
@@ -434,6 +436,7 @@ function ParentTaskRow({
           onMaxSubscribeToggle={onMaxSubscribeToggle}
           forceCommentTooltipTaskId={forceCommentTooltipTaskId}
           onForceCommentTooltipClose={onForceCommentTooltipClose}
+          actionsColumnSx={actionsColumnSx}
         />
       ))}
     </Fragment>

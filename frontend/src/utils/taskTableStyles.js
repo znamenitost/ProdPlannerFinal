@@ -31,13 +31,14 @@ export const COL_DEADLINE_INPUT = {
 export const COL_COMPACT = { width: '1%', whiteSpace: 'nowrap', verticalAlign: 'middle' };
 export const COL_EMPLOYEE = { width: '1%', whiteSpace: 'nowrap', verticalAlign: 'middle' };
 export const COL_STATUS = { width: '1%', whiteSpace: 'nowrap', verticalAlign: 'middle' };
+/** Одна кнопка ⋮ со стандартными отступами IconButton size=small */
 export const COL_ACTIONS = {
-  width: 84,
-  minWidth: 84,
-  maxWidth: 84,
+  width: 40,
+  minWidth: 40,
+  maxWidth: 40,
   whiteSpace: 'nowrap',
   verticalAlign: 'middle',
-  px: 0.5,
+  px: 0.25,
   py: 0.5,
   boxSizing: 'border-box',
   overflow: 'hidden',
@@ -46,6 +47,15 @@ export const COL_ACTIONS = {
   right: 0,
   bgcolor: 'background.paper',
   zIndex: 1
+};
+
+/** Сохранить + Отмена при создании/редактировании строки */
+export const COL_ACTIONS_DUAL = {
+  ...COL_ACTIONS,
+  width: 84,
+  minWidth: 84,
+  maxWidth: 84,
+  px: 0.5
 };
 
 /** MUI 9 TextField supports only outlined | filled | standard; custom variant crashes on mount. */

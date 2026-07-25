@@ -18,7 +18,7 @@ import {
   COL_COMMENT,
   COL_EMPLOYEE,
   COL_STATUS,
-  COL_ACTIONS,
+  COL_ACTIONS_DUAL,
   TASK_TABLE_TEXT_FIELD_PROPS
 } from '../utils/taskTableStyles';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
@@ -130,7 +130,7 @@ export default function NewTaskRow({
         />
       </TableCell>
 
-      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
+      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS_DUAL)}>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'center' }}>
           <IconButton size="small" color="primary" onClick={onSave} aria-label="Сохранить">
             <Save fontSize="small" />

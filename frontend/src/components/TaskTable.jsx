@@ -28,6 +28,7 @@ import { TextLimitProvider } from '../context/TextLimitContext';
 import { isFinishedStatusText } from '../constants/taskStatuses';
 import { taskTableColumnCount } from '../utils/taskTableColumns';
 import { buildTaskTableSearchResult } from '../utils/taskTableSearch';
+import { COL_ACTIONS, COL_ACTIONS_DUAL } from '../utils/taskTableStyles';
 import { hasPlannedProgressFooter } from '../utils/taskTablePlannedProgress';
 import useTaskTablePlannedProgressPreference from '../hooks/taskTable/useTaskTablePlannedProgressPreference';
 import useTaskTablePlannedProgressPolling from '../hooks/taskTable/useTaskTablePlannedProgressPolling';
@@ -452,6 +453,9 @@ export default function TaskTable({
         )
       : 0;
 
+  const actionsColumnSx =
+    table.newRow || table.editingId ? COL_ACTIONS_DUAL : COL_ACTIONS;
+
   const renderTaskRow = (parent) => {
     const allowedChildIds = searchResult.childrenFilter?.get(parent.id);
     const children = prepareParentChildren({
@@ -536,6 +540,7 @@ export default function TaskTable({
         onMaxSubscribeToggle={isAdmin ? onMaxSubscribeToggle : undefined}
         forceCommentTooltipTaskId={focusCommentTooltipTaskId}
         onForceCommentTooltipClose={handleForceCommentTooltipClose}
+        actionsColumnSx={actionsColumnSx}
       />
     );
   };
@@ -594,6 +599,7 @@ export default function TaskTable({
           <TaskTableHead
             columnVisibility={columnSettings.visibility}
             showHoursTypeColumns={table.showHoursTypeColumns}
+            actionsColumnSx={actionsColumnSx}
           />
           <TableBody>
             {table.newRow && isAdmin && (

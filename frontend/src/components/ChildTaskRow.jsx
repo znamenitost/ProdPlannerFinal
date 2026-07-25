@@ -69,7 +69,8 @@ function ChildTaskRow({
   maxCanSubscribe = false,
   onMaxSubscribeToggle,
   forceCommentTooltipTaskId = null,
-  onForceCommentTooltipClose
+  onForceCommentTooltipClose,
+  actionsColumnSx = COL_ACTIONS
 }) {
   const supplyMode = getSplitSupplyMode(task, sharedGroupParentTask);
   const isSequentialChild = supplyMode === SUPPLY_MODE_INTERNAL;
@@ -240,8 +241,8 @@ function ChildTaskRow({
         </Box>
       </TableCell>
 
-      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS)}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
+      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, actionsColumnSx)}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center', justifyContent: 'center' }}>
           {isAdmin && onEdit && onDelete && (
             <TaskAdminActionStacks
               task={task}
@@ -284,6 +285,7 @@ function ChildTaskRow({
       task={task}
       colSpan={tableColSpan}
       enabled={showPlannedProgress}
+      actionsColumnSx={actionsColumnSx}
     />
     </>
   );

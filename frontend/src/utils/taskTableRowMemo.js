@@ -82,6 +82,7 @@ export function areParentRowPropsEqual(prev, next) {
   if (prev.selectedEmployeeForHighlight !== next.selectedEmployeeForHighlight) return false;
   if (prev.showHoursTypeColumns !== next.showHoursTypeColumns) return false;
   if (prev.columnVisibility !== next.columnVisibility) return false;
+  if (prev.actionsColumnSx !== next.actionsColumnSx) return false;
   if (prev.textLimit !== next.textLimit) return false;
   if (prev.canEdit !== next.canEdit || prev.canDelete !== next.canDelete || prev.canChangeStatus !== next.canChangeStatus) return false;
   if (!sameChildren(prev.childrenTasks, next.childrenTasks)) return false;
@@ -138,6 +139,7 @@ export function areChildRowPropsEqual(prev, next) {
   if (prev.selectedEmployeeForHighlight !== next.selectedEmployeeForHighlight) return false;
   if (prev.showHoursTypeColumns !== next.showHoursTypeColumns) return false;
   if (prev.columnVisibility !== next.columnVisibility) return false;
+  if (prev.actionsColumnSx !== next.actionsColumnSx) return false;
   if (prev.textLimit !== next.textLimit) return false;
   if (prev.canChangeStatus !== next.canChangeStatus) return false;
   if (prev.sharedGroupParentTask?.id !== next.sharedGroupParentTask?.id) return false;

@@ -3,7 +3,7 @@ import { TableRow, TableCell, TextField, IconButton, Box, Typography, CircularPr
 import { Save, Cancel, Edit, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
 import { draftRowSx } from '../theme/surfaces';
-import { TASK_TABLE_TEXT_FIELD_PROPS, withTaskTableTextFieldSx } from '../utils/taskTableStyles';
+import { COL_ACTIONS_DUAL, TASK_TABLE_TEXT_FIELD_PROPS, withTaskTableTextFieldSx } from '../utils/taskTableStyles';
 import { columnCellSx } from '../utils/taskTableColumns';
 import { COLLAPSED_COLUMN_SX } from '../utils/taskTableColumns';
 export default function EditTaskRow({
@@ -150,8 +150,8 @@ export default function EditTaskRow({
 
       <TableCell sx={COLLAPSED_COLUMN_SX} />
 
-      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, { width: '12%' })}>
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
+      <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS_DUAL)}>
+        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', justifyContent: 'center' }}>
           <IconButton size="small" color="primary" onClick={handleSave} aria-label="Сохранить">
             <Save fontSize="small" />
           </IconButton>

@@ -3,7 +3,11 @@ import { alpha } from '@mui/material/styles';
 import { COL_ACTIONS } from '../utils/taskTableStyles';
 import { columnCellSx } from '../utils/taskTableColumns';
 
-export default function TaskTableHead({ columnVisibility, showHoursTypeColumns }) {
+export default function TaskTableHead({
+  columnVisibility,
+  showHoursTypeColumns,
+  actionsColumnSx = COL_ACTIONS
+}) {
   const headCell = (columnId, label, sx = {}) => (
     <TableCell
       sx={{
@@ -32,7 +36,7 @@ export default function TaskTableHead({ columnVisibility, showHoursTypeColumns }
         <TableCell
           sx={{
             ...columnCellSx('actions', columnVisibility, showHoursTypeColumns, {
-              ...COL_ACTIONS,
+              ...actionsColumnSx,
               fontWeight: 600,
               zIndex: 3
             })
