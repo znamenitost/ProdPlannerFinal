@@ -43,8 +43,12 @@ public class TaskListsController : ControllerBase
         var currentUser = await _userManager.GetUserAsync(User);
         if (currentUser == null) return Unauthorized();
 
+        var requestedEmployee = employee.Trim();
+        var currentUserEmployee = string.IsNullOrWhiteSpace(currentUser.FullName)
+            ? string.Empty
+            : currentUser.FullName.Trim();
         var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
-        if (!isAdmin && !string.Equals(employee, currentUser.FullName, StringComparison.Ordinal))
+        if (!isAdmin && !string.Equals(requestedEmployee, currentUserEmployee, StringComparison.Ordinal))
             return Forbid();
 
         return null;
@@ -55,13 +59,14 @@ public class TaskListsController : ControllerBase
         [FromQuery] string employee,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(employee))
+        if (string.IsNullOrWhiteSpace(employee))
             return BadRequest(new { error = "Employee name is required" });
+        var normalizedEmployee = employee.Trim();
 
-        if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
+        if (await EnsureCanQueryEmployeeAsync(normalizedEmployee) is { } denied) return denied;
 
-        await _tableService.EnsureFussTaskAsync(employee, cancellationToken);
-        var result = await _taskLists.GetActiveTasksAsync(employee, _timeService.Now, cancellationToken);
+        await _tableService.EnsureFussTaskAsync(normalizedEmployee, cancellationToken);
+        var result = await _taskLists.GetActiveTasksAsync(normalizedEmployee, _timeService.Now, cancellationToken);
         return Ok(result);
     }
 
@@ -73,12 +78,13 @@ public class TaskListsController : ControllerBase
         [FromQuery] string statsPeriod = "week",
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(employee))
+        if (string.IsNullOrWhiteSpace(employee))
             return BadRequest(new { error = "Employee name is required" });
+        var normalizedEmployee = employee.Trim();
 
-        if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
+        if (await EnsureCanQueryEmployeeAsync(normalizedEmployee) is { } denied) return denied;
 
-        var result = await _taskLists.GetCompletedTasksAsync(employee, page, pageSize, statsPeriod, _timeService.Now, cancellationToken);
+        var result = await _taskLists.GetCompletedTasksAsync(normalizedEmployee, page, pageSize, statsPeriod, _timeService.Now, cancellationToken);
         return Ok(result);
     }
 
@@ -88,10 +94,11 @@ public class TaskListsController : ControllerBase
         [FromQuery] string? date,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(employee))
+        if (string.IsNullOrWhiteSpace(employee))
             return BadRequest(new { error = "Employee name is required" });
+        var normalizedEmployee = employee.Trim();
 
-        if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
+        if (await EnsureCanQueryEmployeeAsync(normalizedEmployee) is { } denied) return denied;
 
         DateTime? reportDate = null;
         if (!string.IsNullOrWhiteSpace(date))
@@ -110,7 +117,7 @@ public class TaskListsController : ControllerBase
         }
 
         var result = await _taskLists.GetDailyWorkReportAsync(
-            employee,
+            normalizedEmployee,
             _timeService.Now,
             reportDate,
             cancellationToken);
@@ -122,12 +129,13 @@ public class TaskListsController : ControllerBase
         [FromQuery] string employee,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(employee))
+        if (string.IsNullOrWhiteSpace(employee))
             return BadRequest(new { error = "Employee name is required" });
+        var normalizedEmployee = employee.Trim();
 
-        if (await EnsureCanQueryEmployeeAsync(employee) is { } denied) return denied;
+        if (await EnsureCanQueryEmployeeAsync(normalizedEmployee) is { } denied) return denied;
 
-        var risks = await _taskLists.GetDeadlineRisksAsync(employee, _timeService.Now, cancellationToken);
+        var risks = await _taskLists.GetDeadlineRisksAsync(normalizedEmployee, _timeService.Now, cancellationToken);
         return Ok(risks);
     }
 

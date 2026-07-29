@@ -71,12 +71,13 @@ public class TaskTableService : ITaskTableService
         bool showFuss = false,
         CancellationToken cancellationToken = default)
     {
-        if (!viewerIsAdmin && !string.IsNullOrWhiteSpace(targetEmployeeName))
-            await EnsureFussTaskAsync(targetEmployeeName, cancellationToken);
+        var normalizedTargetEmployeeName = (targetEmployeeName ?? string.Empty).Trim();
+        if (!viewerIsAdmin && normalizedTargetEmployeeName.Length > 0)
+            await EnsureFussTaskAsync(normalizedTargetEmployeeName, cancellationToken);
 
         // Админ: суета только при showFuss. Сотрудник: всегда своя суета.
         var includeFuss = viewerIsAdmin ? showFuss : true;
-        var fussViewer = viewerIsAdmin ? null : targetEmployeeName;
+        var fussViewer = viewerIsAdmin ? null : normalizedTargetEmployeeName;
 
         var pageResult = await _repo.GetRootTasksPaginatedAsync(
             page,
@@ -114,7 +115,7 @@ public class TaskTableService : ITaskTableService
                 .ToDictionary(g => g.Key, g => (IReadOnlyList<WorkInterval>)g.ToList());
         var now = _timeService.Now;
         var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync(parentIds, cancellationToken);
-        var (priorityMarkViewer, restrictPriorityMark) = GetPriorityMarkScope(targetEmployeeName, viewerIsAdmin);
+        var (priorityMarkViewer, restrictPriorityMark) = GetPriorityMarkScope(normalizedTargetEmployeeName, viewerIsAdmin);
 
         var rows = pageResult.Items.Select(parent =>
         {
@@ -122,7 +123,7 @@ public class TaskTableService : ITaskTableService
             var (statusText, hasSubtask) = SplitTaskStatusAggregator.Aggregate(
                 parent,
                 children,
-                targetEmployeeName);
+                normalizedTargetEmployeeName);
             intervalsByTask.TryGetValue(parent.Id, out var intervals);
             intervals ??= Array.Empty<WorkInterval>();
             var dto = TaskTableRowDto.FromParent(
@@ -157,6 +158,7 @@ public class TaskTableService : ITaskTableService
         string? viewerUserId = null,
         CancellationToken cancellationToken = default)
     {
+        var normalizedTargetEmployeeName = (targetEmployeeName ?? string.Empty).Trim();
         var task = await _repo.GetTaskByIdAsync(id, cancellationToken, includeIntervals: true);
         if (task == null)
             return null;
@@ -168,7 +170,7 @@ public class TaskTableService : ITaskTableService
         var hasCdrPreview = previewIds.Contains(id);
         var now = _timeService.Now;
         var intervals = (IReadOnlyList<WorkInterval>)(task.WorkIntervals ?? []);
-        var (priorityMarkViewer, restrictPriorityMark) = GetPriorityMarkScope(targetEmployeeName, viewerIsAdmin);
+        var (priorityMarkViewer, restrictPriorityMark) = GetPriorityMarkScope(normalizedTargetEmployeeName, viewerIsAdmin);
 
         if (task.ParentRowNumber != null)
         {
@@ -200,7 +202,7 @@ public class TaskTableService : ITaskTableService
         var (statusText, hasSubtask) = SplitTaskStatusAggregator.Aggregate(
             task,
             children ?? [],
-            targetEmployeeName);
+            normalizedTargetEmployeeName);
 
         IReadOnlyDictionary<int, IReadOnlyList<WorkInterval>>? childIntervalsByTask = null;
         if (task.IsSplitTask && children is { Count: > 0 })

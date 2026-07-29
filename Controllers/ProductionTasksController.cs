@@ -52,9 +52,15 @@ public class ProductionTasksController : ControllerBase
             return (null, null);
 
         var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
-        var targetEmployeeName = (isAdmin && !string.IsNullOrEmpty(employee))
-            ? employee
-            : currentUser.FullName;
+        var requestedEmployeeName = string.IsNullOrWhiteSpace(employee)
+            ? null
+            : employee.Trim();
+        var currentUserName = string.IsNullOrWhiteSpace(currentUser.FullName)
+            ? null
+            : currentUser.FullName.Trim();
+        var targetEmployeeName = (isAdmin && !string.IsNullOrEmpty(requestedEmployeeName))
+            ? requestedEmployeeName
+            : currentUserName;
 
         return (currentUser, targetEmployeeName);
     }

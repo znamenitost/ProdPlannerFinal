@@ -35,6 +35,7 @@ import { isFinishedStatusText, SUPPLY_MODE_INTERNAL } from '../constants/taskSta
 import { getSharedGroupAccentColor, getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
 import { getSplitSupplyMode } from '../utils/throughApproval';
 import { getPriorityMarkViewerEmployeeName } from '../utils/taskPriorityMark';
+import { isSameEmployeeName } from '../utils/employeeNameMatch';
 
 function ChildTaskRow({
   task,
@@ -79,15 +80,15 @@ function ChildTaskRow({
 
   let isMine = false;
   if (currentUser?.role === 'Admin' && selectedEmployeeForHighlight) {
-    isMine = task.employeeName === selectedEmployeeForHighlight && !isFinishedStatusText(task.statusText);
+    isMine = isSameEmployeeName(task.employeeName, selectedEmployeeForHighlight) && !isFinishedStatusText(task.statusText);
   } else if (currentUser?.role !== 'Admin') {
-    isMine = task.employeeName === currentUser?.fullName && !isFinishedStatusText(task.statusText);
+    isMine = isSameEmployeeName(task.employeeName, currentUser?.fullName) && !isFinishedStatusText(task.statusText);
   }
 
   const canUserManage = () => {
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
-    return task.employeeName === currentUser.fullName && !isFinishedStatusText(task.statusText);
+    return isSameEmployeeName(task.employeeName, currentUser.fullName) && !isFinishedStatusText(task.statusText);
   };
 
   const priorityMarkViewer = getPriorityMarkViewerEmployeeName(currentUser);

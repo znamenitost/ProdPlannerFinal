@@ -59,6 +59,7 @@ import {
 import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
 import { getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
 import { getPriorityMarkViewerEmployeeName } from '../utils/taskPriorityMark';
+import { isSameEmployeeName } from '../utils/employeeNameMatch';
 
 function ParentTaskRow({
   task,
@@ -114,7 +115,7 @@ function ParentTaskRow({
 
     if (Array.isArray(childrenTasks) && childrenTasks.length > 0) {
       return childrenTasks.some(
-        (child) => child.employeeName === employeeName && !isFinishedStatusText(child.statusText)
+        (child) => isSameEmployeeName(child.employeeName, employeeName) && !isFinishedStatusText(child.statusText)
       );
     }
 
@@ -122,7 +123,7 @@ function ParentTaskRow({
       .split('/')
       .map((name) => name.trim())
       .filter(Boolean);
-    return splitEmployees.includes(employeeName);
+    return splitEmployees.some((name) => isSameEmployeeName(name, employeeName));
   };
 
   // ========== ПОДСВЕТКА ДЛЯ АДМИНИСТРАТОРА И СОТРУДНИКА ==========
@@ -133,14 +134,14 @@ function ParentTaskRow({
       if (hasChildren) {
         isMine = !isExpanded && hasActiveSubtaskForEmployee(selectedEmployeeForHighlight);
       } else {
-        isMine = task.employeeName === selectedEmployeeForHighlight && !isFinishedStatusText(task.statusText);
+        isMine = isSameEmployeeName(task.employeeName, selectedEmployeeForHighlight) && !isFinishedStatusText(task.statusText);
       }
     }
     else if (currentUser?.role !== 'Admin') {
       if (hasChildren) {
         isMine = !isExpanded && hasActiveSubtaskForEmployee(currentUser?.fullName);
       } else {
-        isMine = task.employeeName === currentUser?.fullName && !isFinishedStatusText(task.statusText);
+        isMine = isSameEmployeeName(task.employeeName, currentUser?.fullName) && !isFinishedStatusText(task.statusText);
       }
     }
   }
@@ -163,7 +164,7 @@ function ParentTaskRow({
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
     if (!hasChildren) {
-      return task.employeeName === currentUser.fullName && !isFinishedStatusText(task.statusText);
+      return isSameEmployeeName(task.employeeName, currentUser.fullName) && !isFinishedStatusText(task.statusText);
     }
     return false;
   };
