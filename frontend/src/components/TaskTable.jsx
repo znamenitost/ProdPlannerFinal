@@ -236,6 +236,8 @@ export default function TaskTable({
     onFocusCommentTooltipConsumed?.();
   }, [onFocusCommentTooltipConsumed]);
 
+  const noopToggleExpand = useCallback(() => {}, []);
+
   useEffect(() => {
     const taskId = Number(focusCommentTooltipTaskId);
     if (!Number.isFinite(taskId) || taskId <= 0) return undefined;
@@ -504,7 +506,7 @@ export default function TaskTable({
         task={displayTask}
         childrenTasks={displayChildren}
         isExpanded={isExpanded}
-        onToggleExpand={shouldPromoteSingleChild ? () => {} : table.toggleExpand}
+        onToggleExpand={shouldPromoteSingleChild ? noopToggleExpand : table.toggleExpand}
         onOpenFile={table.handleOpenFile}
         onOpenFolder={table.handleOpenFolder}
         onShowCdrPreview={DEV_CDR_PREVIEW_ENABLED ? table.handleShowCdrPreview : undefined}
@@ -532,9 +534,8 @@ export default function TaskTable({
         columnVisibility={columnSettings.visibility}
         textLimit={columnSettings.textLimit}
         showPlannedProgress={showPlannedProgress}
-        isCdrPreviewBuilding={(taskId) =>
-          taskId === displayTask.id ? displayPreviewBuilding : table.isCdrPreviewBuilding(taskId)
-        }
+        isCdrPreviewBuilding={table.isCdrPreviewBuilding}
+        cdrPreviewBuilding={displayPreviewBuilding}
         maxSubscribedTaskIds={isAdmin ? maxSubscribedTaskIds : []}
         maxCanSubscribe={isAdmin && maxCanSubscribe}
         onMaxSubscribeToggle={isAdmin ? onMaxSubscribeToggle : undefined}
@@ -605,7 +606,6 @@ export default function TaskTable({
             {table.newRow && isAdmin && (
               <NewTaskRow
                 newRow={table.newRow}
-                setNewRow={table.setNewRow}
                 onSave={table.handleSaveNewRow}
                 onCancel={() => table.setNewRow(null)}
                 onOpenAssigneeModal={table.handleOpenNewSharedModal}

@@ -6,12 +6,21 @@ namespace ProductionPlanner.Tests;
 public class TaskTableConcurrencyHelperTests
 {
     [Fact]
-    public void UpdatedAtMatches_allows_small_clock_skew()
+    public void UpdatedAtMatches_allows_serialization_noise()
     {
         var stored = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
-        var expected = stored.AddMilliseconds(500);
+        var expected = stored.AddTicks(5_000); // 0.5 мс — шум округления микросекунд/JSON
 
         Assert.True(TaskTableConcurrencyHelper.UpdatedAtMatches(stored, expected));
+    }
+
+    [Fact]
+    public void UpdatedAtMatches_rejects_concurrent_save_within_two_seconds()
+    {
+        var stored = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
+        var expected = stored.AddMilliseconds(200);
+
+        Assert.False(TaskTableConcurrencyHelper.UpdatedAtMatches(stored, expected));
     }
 
     [Fact]
@@ -38,9 +47,19 @@ public class TaskTableConcurrencyHelperTests
         var stored = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
 
         var ex = Record.Exception(() =>
-            TaskTableConcurrencyHelper.RequireExpectedUpdatedAt(7, stored, stored.AddMilliseconds(200)));
+            TaskTableConcurrencyHelper.RequireExpectedUpdatedAt(7, stored, stored));
 
         Assert.Null(ex);
+    }
+
+    [Fact]
+    public void RequireExpectedUpdatedAt_throws_on_fast_concurrent_save()
+    {
+        var stored = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
+        var expected = stored.AddMilliseconds(500);
+
+        Assert.Throws<TaskConcurrencyException>(() =>
+            TaskTableConcurrencyHelper.RequireExpectedUpdatedAt(7, stored, expected));
     }
 
     [Fact]

@@ -243,7 +243,19 @@ export default function useTaskTableController({
     let promise = key ? cdrPreviewCacheRef.current.get(key) : null;
     if (!promise) {
       promise = loadTaskCdrPreview(task);
-      if (key) cdrPreviewCacheRef.current.set(key, promise);
+      if (key) {
+        // LRU: при переполнении освобождаем самый старый blob URL.
+        if (cdrPreviewCacheRef.current.size >= 12) {
+          const oldestKey = cdrPreviewCacheRef.current.keys().next().value;
+          const oldest = cdrPreviewCacheRef.current.get(oldestKey);
+          cdrPreviewCacheRef.current.delete(oldestKey);
+          Promise.resolve(oldest).then((result) => {
+            const url = result?.preview?.url || result?.url;
+            if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url);
+          }).catch(() => {});
+        }
+        cdrPreviewCacheRef.current.set(key, promise);
+      }
     }
     return promise;
   }, []);
@@ -260,15 +272,31 @@ export default function useTaskTableController({
     });
   }, [api, showError]);
 
+  const revokeCdrPreviewCache = useCallback(() => {
+    for (const promise of cdrPreviewCacheRef.current.values()) {
+      Promise.resolve(promise).then((result) => {
+        const url = result?.preview?.url || result?.url;
+        if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url);
+      }).catch(() => {});
+    }
+    cdrPreviewCacheRef.current.clear();
+  }, []);
+
   const handleCloseCdrPreview = useCallback(() => {
     cdrPreviewLoadRef.current += 1;
     detachCdrPreviewRmbListeners();
+    // Blob остаётся в кэше до unmount / LRU eviction — иначе повторное открытие
+    // получит уже revoked URL.
     setCdrPreviewOpen(false);
     setCdrPreviewTask(null);
     setCdrPreviewData(null);
     setCdrPreviewPending(false);
     setCdrPreviewAnchor(null);
   }, [detachCdrPreviewRmbListeners]);
+
+  useEffect(() => () => {
+    revokeCdrPreviewCache();
+  }, [revokeCdrPreviewCache]);
 
   const handleShowCdrPreview = useCallback(async (task, anchor) => {
     if (!DEV_CDR_PREVIEW_ENABLED) return;

@@ -67,9 +67,14 @@ function formatFirstAttemptFailureMessage(folderPath, fileName, errMessage = '')
 
 async function tryBuildPreview(taskId, folderPath, fileName) {
   const stored = await fetchTaskCdrPreview(taskId);
-  if (stored) return true;
+  if (stored) {
+    // Нужен только факт наличия — blob URL сразу освобождаем.
+    if (stored.url?.startsWith('blob:')) URL.revokeObjectURL(stored.url);
+    return true;
+  }
 
   const preview = await buildTaskCdrPreview(taskId, folderPath, fileName);
+  if (preview?.url?.startsWith('blob:')) URL.revokeObjectURL(preview.url);
   return Boolean(preview);
 }
 

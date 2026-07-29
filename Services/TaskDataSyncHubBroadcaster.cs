@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
+using ProductionPlanner.Data;
 using ProductionPlanner.Hubs;
 using ProductionPlanner.Models;
 
@@ -37,27 +38,44 @@ public sealed class TaskDataSyncHubBroadcaster : ITaskDataSyncHubBroadcaster, ID
     };
 
     private readonly IHubContext<NotificationHub> _hubContext;
+    private readonly PostCommitOutbox _postCommitOutbox;
     private readonly ILogger<TaskDataSyncHubBroadcaster> _logger;
     private readonly ConcurrentDictionary<int, ProgressDebounceEntry> _progressEntries = new();
 
     public TaskDataSyncHubBroadcaster(
         IHubContext<NotificationHub> hubContext,
+        PostCommitOutbox postCommitOutbox,
         ILogger<TaskDataSyncHubBroadcaster> logger)
     {
         _hubContext = hubContext;
+        _postCommitOutbox = postCommitOutbox;
         _logger = logger;
     }
 
     public Task BroadcastAsync(string method, string[] affectedEmployees, params object?[] args)
     {
-        var groups = ResolveGroups(method, affectedEmployees);
-        if (groups.Count == 0)
-            return Task.CompletedTask;
+        return _postCommitOutbox.EnqueueOrRunAsync(() =>
+        {
+            var groups = ResolveGroups(method, affectedEmployees);
+            if (groups.Count == 0)
+                return Task.CompletedTask;
 
-        return _hubContext.Clients.Groups(groups).SendCoreAsync(method, args);
+            return _hubContext.Clients.Groups(groups).SendCoreAsync(method, args);
+        });
     }
 
     public void ScheduleProgressChanged(ProductionTask task, double progress, string[] affectedEmployees)
+    {
+        // Дебаунс-таймер ставим только после commit, чтобы клиенты не получали
+        // прогресс откаченной транзакции.
+        _ = _postCommitOutbox.EnqueueOrRunAsync(() =>
+        {
+            ScheduleProgressChangedCore(task, progress, affectedEmployees);
+            return Task.CompletedTask;
+        });
+    }
+
+    private void ScheduleProgressChangedCore(ProductionTask task, double progress, string[] affectedEmployees)
     {
         var entry = _progressEntries.GetOrAdd(task.Id, _ => new ProgressDebounceEntry { TaskId = task.Id });
 

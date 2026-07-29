@@ -110,17 +110,17 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         if (string.IsNullOrEmpty(code))
             return null;
 
-        var candidates = await _db.ProductionTasks
+        // Коды выдаёт только AllocatePickupCode — всегда верхний регистр без пробелов,
+        // поэтому точное сравнение в SQL эквивалентно прежнему OrdinalIgnoreCase
+        // и использует индекс по PickupCode вместо полной выгрузки задач.
+        var task = await _db.ProductionTasks
             .AsNoTracking()
-            .Where(t =>
+            .FirstOrDefaultAsync(t =>
                 !t.HiddenFromTaskTable
                 && t.ParentRowNumber == null
                 && t.PickupCode != null
-                && t.PickupCode != "")
-            .ToListAsync(cancellationToken);
-
-        var task = candidates.FirstOrDefault(t =>
-            string.Equals(t.PickupCode!.Trim(), code, StringComparison.OrdinalIgnoreCase));
+                && t.PickupCode == code,
+                cancellationToken);
         if (task == null)
             return null;
 
@@ -182,16 +182,11 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
             ?? throw new InvalidOperationException("Не удалось определить заказчика");
         var customerKey = CustomerOrderKey.Normalize(displayName);
 
-        var parents = await _db.ProductionTasks
-            .Where(t =>
-                !t.HiddenFromTaskTable
-                && t.ParentRowNumber == null
-                && t.PickedUpAt == null)
-            .ToListAsync(cancellationToken);
-
-        parents = parents
-            .Where(t => CustomerOrderKey.Matches(t.FolderPath, customerKey))
-            .ToList();
+        var parents = await LoadParentsForCustomerAsync(
+            customerKey,
+            onlyNotPickedUp: true,
+            asNoTracking: false,
+            cancellationToken);
 
         if (parents.Count == 0)
             throw new InvalidOperationException("Нет заказов для выдачи");
@@ -228,22 +223,19 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         string customerDisplayName,
         CancellationToken cancellationToken)
     {
-        var parents = await _db.ProductionTasks
-            .AsNoTracking()
-            .Where(t =>
-                !t.HiddenFromTaskTable
-                && t.ParentRowNumber == null
-                && t.PickedUpAt == null)
-            .OrderBy(t => t.DisplayOrder)
-            .ThenBy(t => t.Id)
-            .ToListAsync(cancellationToken);
-
-        parents = parents
-            .Where(t => CustomerOrderKey.Matches(t.FolderPath, customerKey))
-            .ToList();
+        var parents = await LoadParentsForCustomerAsync(
+            customerKey,
+            onlyNotPickedUp: true,
+            asNoTracking: true,
+            cancellationToken);
 
         if (parents.Count == 0)
             return [];
+
+        parents = parents
+            .OrderBy(t => t.DisplayOrder)
+            .ThenBy(t => t.Id)
+            .ToList();
 
         var splitParentIds = parents.Where(p => p.IsSplitTask).Select(p => p.Id).ToList();
         Dictionary<int, List<ProductionTask>> childrenByParent = new();
@@ -293,6 +285,41 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Корневые задачи заказчика без полной выгрузки таблицы: сначала из БД забираются
+    /// только различные FolderPath (строки-указатели), точный CustomerOrderKey.Matches
+    /// применяется к ним в памяти, затем догружаются полные строки по равенству пути.
+    /// Семантика фильтра заказчика та же, что при выборке всех задач.
+    /// </summary>
+    private async Task<List<ProductionTask>> LoadParentsForCustomerAsync(
+        string customerKey,
+        bool onlyNotPickedUp,
+        bool asNoTracking,
+        CancellationToken cancellationToken)
+    {
+        IQueryable<ProductionTask> baseQuery = _db.ProductionTasks
+            .Where(t => !t.HiddenFromTaskTable && t.ParentRowNumber == null);
+        if (onlyNotPickedUp)
+            baseQuery = baseQuery.Where(t => t.PickedUpAt == null);
+
+        var candidatePaths = await baseQuery
+            .Select(t => t.FolderPath)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var matchedPaths = candidatePaths
+            .Where(p => CustomerOrderKey.Matches(p, customerKey))
+            .ToList();
+        if (matchedPaths.Count == 0)
+            return [];
+
+        var query = baseQuery.Where(t => matchedPaths.Contains(t.FolderPath));
+        if (asNoTracking)
+            query = query.AsNoTracking();
+
+        return await query.ToListAsync(cancellationToken);
     }
 
     private async Task<JobStatus> ResolveEffectiveStatusAsync(
@@ -364,13 +391,11 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         string customerDisplayName,
         CancellationToken cancellationToken)
     {
-        var parents = await _db.ProductionTasks
-            .Where(t => !t.HiddenFromTaskTable && t.ParentRowNumber == null)
-            .ToListAsync(cancellationToken);
-
-        parents = parents
-            .Where(t => CustomerOrderKey.Matches(t.FolderPath, customerKey))
-            .ToList();
+        var parents = await LoadParentsForCustomerAsync(
+            customerKey,
+            onlyNotPickedUp: false,
+            asNoTracking: false,
+            cancellationToken);
 
         if (parents.Count == 0)
             return;

@@ -134,7 +134,9 @@ public sealed class WebPushService : IWebPushService
             tag = string.IsNullOrWhiteSpace(tag) ? safeUrl : tag.Trim()
         }, JsonOptions);
 
-        var client = new WebPushClient();
+        // WebPushClient владеет внутренним HttpClient — без Dispose под нагрузкой
+        // копятся сокеты (socket exhaustion).
+        using var client = new WebPushClient();
         var vapid = new VapidDetails(_options.Subject, _options.PublicKey, _options.PrivateKey);
         var stale = new List<WebPushSubscription>();
 

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using ProductionPlanner.Data;
 using ProductionPlanner.Hubs;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services.MaxMessenger;
@@ -16,6 +17,7 @@ public class TaskNotificationService : ITaskNotificationService
     private readonly IMaxMessengerService _maxMessenger;
     private readonly IWebPushService _webPush;
     private readonly NotificationConnectionRegistry _connections;
+    private readonly PostCommitOutbox _postCommitOutbox;
     private readonly ILogger<TaskNotificationService> _logger;
 
     public TaskNotificationService(
@@ -26,6 +28,7 @@ public class TaskNotificationService : ITaskNotificationService
         IMaxMessengerService maxMessenger,
         IWebPushService webPush,
         NotificationConnectionRegistry connections,
+        PostCommitOutbox postCommitOutbox,
         ILogger<TaskNotificationService> logger)
     {
         _hubContext = hubContext;
@@ -35,6 +38,7 @@ public class TaskNotificationService : ITaskNotificationService
         _maxMessenger = maxMessenger;
         _webPush = webPush;
         _connections = connections;
+        _postCommitOutbox = postCommitOutbox;
         _logger = logger;
     }
 
@@ -104,14 +108,17 @@ public class TaskNotificationService : ITaskNotificationService
             newStatus,
             AffectedEmployees(task.EmployeeName));
 
-        try
+        await _postCommitOutbox.EnqueueOrRunAsync(async () =>
         {
-            await _maxMessenger.NotifyTaskStatusChangedAsync(task, newStatus);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "MAX: не удалось отправить уведомление о статусе задачи {TaskId}", task.Id);
-        }
+            try
+            {
+                await _maxMessenger.NotifyTaskStatusChangedAsync(task, newStatus);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "MAX: не удалось отправить уведомление о статусе задачи {TaskId}", task.Id);
+            }
+        });
     }
 
     public Task NotifyProgressChangedAsync(ProductionTask task, double progress)
@@ -261,9 +268,12 @@ public class TaskNotificationService : ITaskNotificationService
 
     private Task SendToGroupsAsync(IReadOnlyList<string> groups, string method, params object?[] args)
     {
-        if (groups.Count == 0)
-            return Task.CompletedTask;
-        return _hubContext.Clients.Groups(groups).SendCoreAsync(method, args);
+        return _postCommitOutbox.EnqueueOrRunAsync(() =>
+        {
+            if (groups.Count == 0)
+                return Task.CompletedTask;
+            return _hubContext.Clients.Groups(groups).SendCoreAsync(method, args);
+        });
     }
 
     private Task SendOfflineWebPushAsync(
@@ -272,14 +282,19 @@ public class TaskNotificationService : ITaskNotificationService
         string body,
         string tag)
     {
-        var offlineRecipients = userIds
-            .Where(id => !string.IsNullOrWhiteSpace(id) && _connections.CountForUser(id) == 0)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-        if (offlineRecipients.Count == 0)
-            return Task.CompletedTask;
+        // Проверка «онлайн ли пользователь» осмысленна на момент отправки —
+        // поэтому откладывается вместе с отправкой до commit.
+        return _postCommitOutbox.EnqueueOrRunAsync(() =>
+        {
+            var offlineRecipients = userIds
+                .Where(id => !string.IsNullOrWhiteSpace(id) && _connections.CountForUser(id) == 0)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (offlineRecipients.Count == 0)
+                return Task.CompletedTask;
 
-        return _webPush.SendAsync(offlineRecipients, title, body, "/", tag);
+            return _webPush.SendAsync(offlineRecipients, title, body, "/", tag);
+        });
     }
 
     private static string FormatDeadlineBody(DateTime? deadline) =>

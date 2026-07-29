@@ -37,25 +37,31 @@ export default function useTaskTableModals({
     setSplitModalInitialParts(null);
   }, []);
 
-  const handleOpenNewSharedModal = useCallback(() => {
+  const handleOpenNewSharedModal = useCallback((draftOverride = null) => {
+    const source = draftOverride || newRow;
+    if (!source) return;
+
+    // Синхронизируем текстовые поля локального draft в parent state до открытия модалки.
+    if (draftOverride) setNewRow(draftOverride);
+
     setSplitModalMode('draft');
     setSplitModalTask({
-      estimateHours: newRow.estimateHours,
-      fileName: newRow.fileName,
-      folderPath: newRow.folderPath,
-      taskExecutionMode: newRow.taskExecutionMode
+      estimateHours: source.estimateHours,
+      fileName: source.fileName,
+      folderPath: source.folderPath,
+      taskExecutionMode: source.taskExecutionMode
     });
-    let initialParts = apiPartsToModalParts(newRow.assigneeParts, employees, taskTypes);
-    if (!initialParts?.length && newRow.employeeName) {
+    let initialParts = apiPartsToModalParts(source.assigneeParts, employees, taskTypes);
+    if (!initialParts?.length && source.employeeName) {
       initialParts = [{
-        employeeName: newRow.employeeName,
-        taskTypes: newRow.types?.length ? newRow.types : [],
-        hours: Number(newRow.estimateHours) || 0
+        employeeName: source.employeeName,
+        taskTypes: source.types?.length ? source.types : [],
+        hours: Number(source.estimateHours) || 0
       }];
     }
     setSplitModalInitialParts(initialParts);
     setSplitModalOpen(true);
-  }, [newRow, employees, taskTypes]);
+  }, [newRow, employees, taskTypes, setNewRow]);
 
   const handleDraftApply = useCallback((apiParts, _parts, executionMode) => {
     const isShared = apiParts.length >= 2;

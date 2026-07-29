@@ -241,9 +241,17 @@ public class TaskLifecycleService : ITaskLifecycleService
             if (task == null) continue;
 
             if (task.Status == JobStatus.InProgress)
+            {
                 await PauseTaskAsync(taskId, workDayEnd, cancellationToken);
-            else
-                await _repo.CloseOpenIntervalsAsync(taskId, workDayEnd, cancellationToken);
+                continue;
+            }
+
+            // Тот же lifecycle-lock, что у Start/Resume: иначе параллельный старт
+            // может открыть новый интервал рядом с «закрытием» конца дня.
+            await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
+            {
+                await _repo.CloseOpenIntervalsAsync(taskId, workDayEnd, ct);
+            }, cancellationToken);
         }
     }
 

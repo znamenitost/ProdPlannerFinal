@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from 'react';
 import {
   TableRow,
   TableCell,
@@ -22,30 +23,66 @@ import {
   TASK_TABLE_TEXT_FIELD_PROPS
 } from '../utils/taskTableStyles';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
+
+/**
+ * Локальный draft для текстовых полей: keystroke не поднимает state в TaskTable
+ * (иначе memo строк бесполезен и таблица перерисовывается на каждый символ).
+ * Назначения из модалки приходят через newRow и мержатся в draft.
+ */
 export default function NewTaskRow({
   newRow,
-  setNewRow,
   onSave,
   onCancel,
   onOpenAssigneeModal,
   showHoursTypeColumns = true,
   columnVisibility
 }) {
-  const isShared = newRow.isSharedTask && (newRow.assigneeParts?.length ?? 0) >= 2;
-  const isSequential = newRow.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL;
-  const hasAssignees = isShared || Boolean(newRow.employeeName);
+  const [draft, setDraft] = useState(newRow);
+
+  useEffect(() => {
+    setDraft((prev) => ({
+      ...prev,
+      assigneeParts: newRow.assigneeParts,
+      isSharedTask: newRow.isSharedTask,
+      estimateHours: newRow.estimateHours,
+      employeeName: newRow.employeeName,
+      types: newRow.types,
+      taskExecutionMode: newRow.taskExecutionMode,
+      requiresTestBeforeProduction: newRow.requiresTestBeforeProduction,
+      testEstimateHours: newRow.testEstimateHours,
+      productionEstimateHours: newRow.productionEstimateHours
+    }));
+  }, [
+    newRow.assigneeParts,
+    newRow.isSharedTask,
+    newRow.estimateHours,
+    newRow.employeeName,
+    newRow.types,
+    newRow.taskExecutionMode,
+    newRow.requiresTestBeforeProduction,
+    newRow.testEstimateHours,
+    newRow.productionEstimateHours
+  ]);
+
+  const handleFieldChange = useCallback((field, value) => {
+    setDraft((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
+  const isShared = draft.isSharedTask && (draft.assigneeParts?.length ?? 0) >= 2;
+  const isSequential = draft.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL;
+  const hasAssignees = isShared || Boolean(draft.employeeName);
   const hoursDisplay =
-    newRow.estimateHours !== '' && newRow.estimateHours != null && !Number.isNaN(Number(newRow.estimateHours))
-      ? `${Number(newRow.estimateHours).toFixed(1)} ч`
+    draft.estimateHours !== '' && draft.estimateHours != null && !Number.isNaN(Number(draft.estimateHours))
+      ? `${Number(draft.estimateHours).toFixed(1)} ч`
       : '—';
 
   const assigneeLabel = () => {
     if (isShared) {
       return isSequential
-        ? `Последов. · ${newRow.assigneeParts.length} эт.`
-        : `Общая · ${newRow.assigneeParts.length}`;
+        ? `Последов. · ${draft.assigneeParts.length} эт.`
+        : `Общая · ${draft.assigneeParts.length}`;
     }
-    if (newRow.employeeName) return newRow.employeeName;
+    if (draft.employeeName) return draft.employeeName;
     return 'Участники';
   };
 
@@ -59,8 +96,8 @@ export default function NewTaskRow({
         <TextField
           {...TASK_TABLE_TEXT_FIELD_PROPS}
           placeholder="Путь к папке"
-          value={newRow.folderPath || ''}
-          onChange={(e) => setNewRow({ ...newRow, folderPath: e.target.value })}
+          value={draft.folderPath || ''}
+          onChange={(e) => handleFieldChange('folderPath', e.target.value)}
         />
       </TableCell>
 
@@ -68,8 +105,8 @@ export default function NewTaskRow({
         <TextField
           {...TASK_TABLE_TEXT_FIELD_PROPS}
           placeholder="Имя файла"
-          value={newRow.fileName || ''}
-          onChange={(e) => setNewRow({ ...newRow, fileName: e.target.value })}
+          value={draft.fileName || ''}
+          onChange={(e) => handleFieldChange('fileName', e.target.value)}
         />
       </TableCell>
 
@@ -77,15 +114,15 @@ export default function NewTaskRow({
         <TextField
           {...TASK_TABLE_TEXT_FIELD_PROPS}
           placeholder="Комментарий"
-          value={newRow.comment}
-          onChange={(e) => setNewRow({ ...newRow, comment: e.target.value })}
+          value={draft.comment}
+          onChange={(e) => handleFieldChange('comment', e.target.value)}
         />
       </TableCell>
 
       <TableCell sx={columnCellSx('deadline', columnVisibility, showHoursTypeColumns, DEADLINE_COLUMN_SX)}>
         <DeadlineDateTimePicker
-          value={newRow.deadline}
-          onChange={(deadline) => setNewRow({ ...newRow, deadline })}
+          value={draft.deadline}
+          onChange={(deadline) => handleFieldChange('deadline', deadline)}
           hideLabel
         />
       </TableCell>
@@ -98,13 +135,17 @@ export default function NewTaskRow({
 
       <TableCell sx={typeColumnSx(columnVisibility, showHoursTypeColumns)}>
         <Typography variant="body2" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-          {isShared ? '—' : (newRow.types?.length ? newRow.types.join(', ') : '—')}
+          {isShared ? '—' : (draft.types?.length ? draft.types.join(', ') : '—')}
         </Typography>
       </TableCell>
 
       <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, COL_EMPLOYEE)}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-          <IconButton size="small" onClick={onOpenAssigneeModal} aria-label="Назначить сотрудников">
+          <IconButton
+            size="small"
+            onClick={() => onOpenAssigneeModal(draft)}
+            aria-label="Назначить сотрудников"
+          >
             <PeopleAlt fontSize="small" color={hasAssignees ? (isShared ? 'secondary' : 'action') : 'disabled'} />
           </IconButton>
           <Typography variant="caption" sx={{ color: hasAssignees ? 'text.primary' : 'text.disabled', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -132,7 +173,7 @@ export default function NewTaskRow({
 
       <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS_DUAL)}>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <IconButton size="small" color="primary" onClick={onSave} aria-label="Сохранить">
+          <IconButton size="small" color="primary" onClick={() => onSave(draft)} aria-label="Сохранить">
             <Save fontSize="small" />
           </IconButton>
           <IconButton size="small" color="error" onClick={onCancel} aria-label="Отмена">

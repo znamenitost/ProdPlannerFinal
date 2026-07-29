@@ -21,10 +21,17 @@ namespace ProductionPlanner.Data
         private static readonly SemaphoreSlim DisplayOrderLock = new(1, 1);
         private const long DisplayOrderAdvisoryLockKey = 7_326_001L;
 
-        public ProductionTaskRepository(ApplicationDbContext context, IAppTimeService timeService)
+        private readonly PostCommitOutbox _postCommitOutbox;
+
+        public ProductionTaskRepository(
+            ApplicationDbContext context,
+            IAppTimeService timeService,
+            PostCommitOutbox? postCommitOutbox = null)
         {
             _context = context;
             _timeService = timeService;
+            _postCommitOutbox = postCommitOutbox
+                ?? new PostCommitOutbox(Microsoft.Extensions.Logging.Abstractions.NullLogger<PostCommitOutbox>.Instance);
         }
 
         public async Task<List<ProductionTask>> GetActiveTasksAsync(
@@ -254,6 +261,7 @@ namespace ProductionPlanner.Data
         public async Task UpdateTaskTableFieldsAsync(
             ProductionTask task,
             bool includeStatusFields = false,
+            DateTime? concurrencyToken = null,
             CancellationToken cancellationToken = default)
         {
             var updatedAt = ToDbDateTime(task.UpdatedAt == default ? _timeService.Now : task.UpdatedAt);
@@ -263,11 +271,17 @@ namespace ProductionPlanner.Data
                 ? ToDbDateTime(task.TestPhaseCompletedAt.Value)
                 : (DateTime?)null;
 
-            var query = _context.ProductionTasks.Where(t => t.Id == task.Id);
+            // concurrencyToken — UpdatedAt, прочитанный до правки: WHERE гарантирует,
+            // что между проверкой OCC и записью строку никто не изменил.
+            var query = concurrencyToken.HasValue
+                ? _context.ProductionTasks.Where(t =>
+                    t.Id == task.Id && t.UpdatedAt == ToDbDateTime(concurrencyToken.Value))
+                : _context.ProductionTasks.Where(t => t.Id == task.Id);
 
+            int affected;
             if (includeStatusFields)
             {
-                await query.ExecuteUpdateAsync(
+                affected = await query.ExecuteUpdateAsync(
                     s => s.SetProperty(t => t.FolderPath, task.FolderPath)
                         .SetProperty(t => t.FileName, task.FileName)
                         .SetProperty(t => t.Comment, task.Comment)
@@ -286,22 +300,30 @@ namespace ProductionPlanner.Data
                         .SetProperty(t => t.TestPhaseCompletedAt, testPhaseCompletedAt)
                         .SetProperty(t => t.UpdatedAt, updatedAt),
                     cancellationToken);
-                return;
+            }
+            else
+            {
+                affected = await query.ExecuteUpdateAsync(
+                    s => s.SetProperty(t => t.FolderPath, task.FolderPath)
+                        .SetProperty(t => t.FileName, task.FileName)
+                        .SetProperty(t => t.Comment, task.Comment)
+                        .SetProperty(t => t.Deadline, deadline)
+                        .SetProperty(t => t.EstimateHours, task.EstimateHours)
+                        .SetProperty(t => t.Type, task.Type)
+                        .SetProperty(t => t.EmployeeName, task.EmployeeName)
+                        .SetProperty(t => t.ParentRowNumber, task.ParentRowNumber)
+                        .SetProperty(t => t.IsPriorityMarked, task.IsPriorityMarked)
+                        .SetProperty(t => t.CommentEditedViaDialog, task.CommentEditedViaDialog)
+                        .SetProperty(t => t.UpdatedAt, updatedAt),
+                    cancellationToken);
             }
 
-            await query.ExecuteUpdateAsync(
-                s => s.SetProperty(t => t.FolderPath, task.FolderPath)
-                    .SetProperty(t => t.FileName, task.FileName)
-                    .SetProperty(t => t.Comment, task.Comment)
-                    .SetProperty(t => t.Deadline, deadline)
-                    .SetProperty(t => t.EstimateHours, task.EstimateHours)
-                    .SetProperty(t => t.Type, task.Type)
-                    .SetProperty(t => t.EmployeeName, task.EmployeeName)
-                    .SetProperty(t => t.ParentRowNumber, task.ParentRowNumber)
-                    .SetProperty(t => t.IsPriorityMarked, task.IsPriorityMarked)
-                    .SetProperty(t => t.CommentEditedViaDialog, task.CommentEditedViaDialog)
-                    .SetProperty(t => t.UpdatedAt, updatedAt),
-                cancellationToken);
+            if (concurrencyToken.HasValue && affected == 0)
+            {
+                throw new TaskConcurrencyException(
+                    task.Id,
+                    "Задача была изменена другим действием. Обновите таблицу и повторите.");
+            }
         }
 
         public async Task DeleteTaskAsync(int id, CancellationToken cancellationToken = default)
@@ -534,19 +556,33 @@ namespace ProductionPlanner.Data
 
             if (excludeCompleted)
             {
+                // Вместо коррелированных EXISTS на каждую строку (Count + страница)
+                // предвычисляем два множества id: родители со сплитом и родители
+                // с незавершёнными детьми. Семантика фильтра та же.
+                var splitParentIds = await _context.TaskSplits
+                    .AsNoTracking()
+                    .Select(s => s.ParentRowNumber)
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
+
+                var parentsWithIncompleteChild = await _context.TaskSplits
+                    .AsNoTracking()
+                    .Join(
+                        _context.ProductionTasks,
+                        s => s.ChildTaskId,
+                        c => c.Id,
+                        (s, c) => new { s.ParentRowNumber, c.Status })
+                    .Where(x => x.Status != JobStatus.Completed)
+                    .Select(x => x.ParentRowNumber)
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
+
                 query = query.Where(t =>
                     t.IsFuss
                     || (t.Status != JobStatus.Completed
                         && (!t.IsSplitTask
-                            || !_context.TaskSplits.Any(s => s.ParentRowNumber == t.Id)
-                            || _context.TaskSplits
-                                .Where(s => s.ParentRowNumber == t.Id)
-                                .Join(
-                                    _context.ProductionTasks,
-                                    s => s.ChildTaskId,
-                                    c => c.Id,
-                                    (s, c) => c)
-                                .Any(c => c.Status != JobStatus.Completed))));
+                            || !splitParentIds.Contains(t.Id)
+                            || parentsWithIncompleteChild.Contains(t.Id))));
             }
 
             query = query.ApplyToRootTasks(_context, search);
@@ -759,6 +795,9 @@ namespace ProductionPlanner.Data
             await strategy.ExecuteAsync(async () =>
             {
                 await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+                // Scope per attempt: при повторной попытке strategy накопленные
+                // уведомления неудачной попытки отбрасываются вместе с транзакцией.
+                using var outboxScope = _postCommitOutbox.BeginScope();
                 try
                 {
                     await action(cancellationToken);
@@ -769,6 +808,10 @@ namespace ProductionPlanner.Data
                     await transaction.RollbackAsync(cancellationToken);
                     throw;
                 }
+
+                // SignalR / push только после фиксации: клиенты не должны читать
+                // незакоммиченные или уже откаченные данные.
+                await _postCommitOutbox.FlushAsync();
             });
         }
 

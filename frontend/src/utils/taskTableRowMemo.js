@@ -61,7 +61,15 @@ export function areParentRowPropsEqual(prev, next) {
   if (prev.task.commentBadgeCount !== next.task.commentBadgeCount) return false;
   if (prev.task.hasCdrPreview !== next.task.hasCdrPreview) return false;
   if (previewSourceKey(prev.cdrPreviewSourceTask) !== previewSourceKey(next.cdrPreviewSourceTask)) return false;
-  if (prev.isCdrPreviewBuilding?.(prev.task.id) !== next.isCdrPreviewBuilding?.(next.task.id)) return false;
+  const prevBuilding =
+    prev.cdrPreviewBuilding != null
+      ? Boolean(prev.cdrPreviewBuilding)
+      : Boolean(prev.isCdrPreviewBuilding?.(prev.task.id));
+  const nextBuilding =
+    next.cdrPreviewBuilding != null
+      ? Boolean(next.cdrPreviewBuilding)
+      : Boolean(next.isCdrPreviewBuilding?.(next.task.id));
+  if (prevBuilding !== nextBuilding) return false;
   if (
     childrenPreviewBuildingKey(prev.childrenTasks, prev.isCdrPreviewBuilding)
     !== childrenPreviewBuildingKey(next.childrenTasks, next.isCdrPreviewBuilding)
@@ -103,7 +111,6 @@ export function areParentRowPropsEqual(prev, next) {
     prev.onPrintOrderLabel === next.onPrintOrderLabel &&
     prev.onOpenComment === next.onOpenComment &&
     prev.onOpenIntervals === next.onOpenIntervals &&
-    prev.isCdrPreviewBuilding === next.isCdrPreviewBuilding &&
     prev.forceCommentTooltipTaskId === next.forceCommentTooltipTaskId &&
     prev.onForceCommentTooltipClose === next.onForceCommentTooltipClose &&
     prev.currentUser === next.currentUser

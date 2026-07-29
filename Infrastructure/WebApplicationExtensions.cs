@@ -27,6 +27,7 @@ public static class WebApplicationExtensions
         services.AddScoped<ITaskLifecycleService, TaskLifecycleService>();
         services.AddScoped<IEmployeeStatsService, EmployeeStatsService>();
         services.AddScoped<IProductionTaskRepository, ProductionTaskRepository>();
+        services.AddSingleton<PostCommitOutbox>();
         services.AddScoped<ITaskSplitService, TaskSplitService>();
         services.AddSingleton<ITaskDataSyncHubBroadcaster, TaskDataSyncHubBroadcaster>();
         services.AddScoped<ITaskNotificationService, TaskNotificationService>();

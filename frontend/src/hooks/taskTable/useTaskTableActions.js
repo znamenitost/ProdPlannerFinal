@@ -184,13 +184,14 @@ export default function useTaskTableActions({
     onCalendarRefresh
   ]);
 
-  const handleSaveNewRow = useCallback(async () => {
-    if (savingNewRowRef.current) return;
+  const handleSaveNewRow = useCallback(async (draft) => {
+    const row = draft || newRow;
+    if (!row || savingNewRowRef.current) return;
     savingNewRowRef.current = true;
 
     try {
-      const isShared = newRow.isSharedTask && newRow.assigneeParts?.length >= 2;
-      const hasSingleAssignee = Boolean(newRow.employeeName);
+      const isShared = row.isSharedTask && row.assigneeParts?.length >= 2;
+      const hasSingleAssignee = Boolean(row.employeeName);
 
       if (!isShared && !hasSingleAssignee) {
         showWarning('Назначьте сотрудника и часы через иконку участников');
@@ -198,26 +199,26 @@ export default function useTaskTableActions({
       }
 
       const payload = {
-        folderPath: newRow.folderPath,
-        fileName: newRow.fileName,
-        comment: newRow.comment,
-        deadline: newRow.deadline,
+        folderPath: row.folderPath,
+        fileName: row.fileName,
+        comment: row.comment,
+        deadline: row.deadline,
         parentRowNumber: null
       };
 
       if (isShared) {
-        payload.parts = newRow.assigneeParts;
-        payload.estimateHours = newRow.assigneeParts.reduce(
+        payload.parts = row.assigneeParts;
+        payload.estimateHours = row.assigneeParts.reduce(
           (s, p) => s + (p.allocatedHours || 0),
           0
         );
         payload.supplyMode =
-          newRow.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL
+          row.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL
             ? SUPPLY_MODE_INTERNAL
             : SUPPLY_MODE_COOPERATIVE;
-      } else if (newRow.requiresTestBeforeProduction) {
-        const testH = parseFloat(newRow.testEstimateHours);
-        const prodH = parseFloat(newRow.productionEstimateHours);
+      } else if (row.requiresTestBeforeProduction) {
+        const testH = parseFloat(row.testEstimateHours);
+        const prodH = parseFloat(row.productionEstimateHours);
         if (!testH || testH < 0.5 || !prodH || prodH < 0.5) {
           showWarning('Укажите часы теста и основной части (от 0.5)');
           return;
@@ -226,23 +227,23 @@ export default function useTaskTableActions({
         payload.testEstimateHours = testH;
         payload.productionEstimateHours = prodH;
         payload.estimateHours = testH + prodH;
-        payload.type = (newRow.types || []).join(', ');
-        payload.employeeName = newRow.employeeName;
+        payload.type = (row.types || []).join(', ');
+        payload.employeeName = row.employeeName;
       } else {
-        const hours = parseFloat(newRow.estimateHours);
+        const hours = parseFloat(row.estimateHours);
         if (!hours || hours < 0.5 || hours > 24) {
           showWarning('Укажите часы в назначениях (от 0.5 до 24)');
           return;
         }
         payload.estimateHours = hours;
-        payload.type = (newRow.types || []).join(', ');
-        payload.employeeName = newRow.employeeName;
+        payload.type = (row.types || []).join(', ');
+        payload.employeeName = row.employeeName;
       }
 
       const raw = await api.createRow(payload);
       const { task: created, planningWarnings } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
-      const wasShared = newRow.isSharedTask;
+      const wasShared = row.isSharedTask;
       setNewRow(null);
       if (created?.id) {
         kickOffCdrAutoSearch({

@@ -35,6 +35,7 @@ export default function EditTaskRow({
     productionEstimateHours: task.productionEstimateHours ?? 0
   }));
 
+  // Новая сессия редактирования — полная синхронизация с props.
   useEffect(() => {
     setLocalTask({
       id: task.id,
@@ -53,18 +54,38 @@ export default function EditTaskRow({
       testEstimateHours: task.testEstimateHours ?? 0,
       productionEstimateHours: task.productionEstimateHours ?? 0
     });
+  }, [task.id]);
+
+  // Hub / refetch обновляет updatedAt для OCC, не затирая черновик полей формы.
+  useEffect(() => {
+    setLocalTask((prev) => (
+      prev.id === task.id && prev.updatedAt !== task.updatedAt
+        ? { ...prev, updatedAt: task.updatedAt }
+        : prev
+    ));
+  }, [task.id, task.updatedAt]);
+
+  // Назначения из модалки (employee/hours/type) приходят через props задачи.
+  useEffect(() => {
+    setLocalTask((prev) => {
+      if (prev.id !== task.id) return prev;
+      return {
+        ...prev,
+        estimateHours: task.estimateHours || 0,
+        type: task.type || '',
+        employeeName: task.employeeName || '',
+        isSplitTask: task.isSplitTask,
+        requiresTestBeforeProduction: task.requiresTestBeforeProduction ?? false,
+        testEstimateHours: task.testEstimateHours ?? 0,
+        productionEstimateHours: task.productionEstimateHours ?? 0
+      };
+    });
   }, [
     task.id,
     task.estimateHours,
-    task.isSplitTask,
     task.type,
     task.employeeName,
-    task.deadline,
-    task.folderPath,
-    task.fileName,
-    task.comment,
-    task.statusText,
-    task.updatedAt,
+    task.isSplitTask,
     task.requiresTestBeforeProduction,
     task.testEstimateHours,
     task.productionEstimateHours

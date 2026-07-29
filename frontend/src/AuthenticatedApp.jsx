@@ -40,19 +40,21 @@ import {
   AssignmentTurnedIn,
 } from '@mui/icons-material';
 import CurrentDateTime from './components/CurrentDateTime';
-import WeekCalendar from './components/WeekCalendar';
 import DeadlineWarnings from './components/DeadlineWarnings';
 import ActiveTasksList from './components/ActiveTasksList';
-import CompletedTasksSection from './components/CompletedTasksSection';
-import TaskTable from './components/TaskTable';
 import LunchBreakOverlay from './components/LunchBreakOverlay';
 import DeployMaintenanceOverlay from './components/DeployMaintenanceOverlay';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
 import MaxLinkDialog from './components/MaxLinkDialog';
 import IssueOrderDialog from './components/IssueOrderDialog';
-import ChatDrawer, { ChatHeaderButton } from './components/chat/ChatDrawer';
 import FileOpenSettingsDialog from './components/FileOpenSettingsDialog';
+import ChatHeaderButton from './components/chat/ChatHeaderButton';
+import { LoadingState } from './components/LoadingState';
 
+const WeekCalendar = lazy(() => import('./components/WeekCalendar'));
+const CompletedTasksSection = lazy(() => import('./components/CompletedTasksSection'));
+const TaskTable = lazy(() => import('./components/TaskTable'));
+const ChatDrawer = lazy(() => import('./components/chat/ChatDrawer'));
 const TaskTypeStatsDialog = lazy(() => import('./components/TaskTypeStatsDialog'));
 import { ensureFileOpenSettingsLoaded } from './utils/fileOpenSettingsCache';
 import useMaxMessenger from './hooks/useMaxMessenger';
@@ -95,6 +97,9 @@ function AuthenticatedAppContent() {
     showLoading('Считаем статистику по типам задач…');
     setTaskTypeStatsOpen(true);
   }, [showLoading]);
+  const handleOpenFileOpenSettings = useCallback(() => {
+    setFileOpenSettingsOpen(true);
+  }, []);
 
   useEffect(() => {
     void ensureFileOpenSettingsLoaded();
@@ -116,6 +121,9 @@ function AuthenticatedAppContent() {
   const [chatFocusConversationId, setChatFocusConversationId] = useState(null);
   const [chatActiveConversationId, setChatActiveConversationId] = useState(null);
   const [focusCommentTooltipTaskId, setFocusCommentTooltipTaskId] = useState(null);
+  const handleFocusCommentTooltipConsumed = useCallback(() => {
+    setFocusCommentTooltipTaskId(null);
+  }, []);
   const fileInputRef = useRef(null);
   const maxMessenger = useMaxMessenger(user);
   const {
@@ -651,7 +659,7 @@ function AuthenticatedAppContent() {
 
           <MotionSwitch transitionKey={activeTab}>
             {activeTab === 0 && (
-              <>
+              <Suspense fallback={<LoadingState />}>
                 <WeekCalendar employee={employee} />
                 {!isAdmin && <DeadlineWarnings employee={employee} />}
                 <ActiveTasksList
@@ -664,24 +672,26 @@ function AuthenticatedAppContent() {
                   isAdmin={isAdmin}
                 />
                 <CompletedTasksSection employee={employee} />
-              </>
+              </Suspense>
             )}
             {activeTab === 1 && (
-              <TaskTable
-                onCalendarRefresh={refreshCalendar}
-                onRegisterHubHandler={registerTableHubHandler}
-                userRole={user?.role}
-                currentUser={user}
-                selectedEmployeeForHighlight={employee}
-                maxSubscribedTaskIds={maxMessenger.subscribedTaskIds}
-                maxCanSubscribe={maxMessenger.canSubscribe}
-                onMaxSubscribeToggle={handleMaxSubscribeToggle}
-                focusCommentTooltipTaskId={focusCommentTooltipTaskId}
-                onFocusCommentTooltipConsumed={() => setFocusCommentTooltipTaskId(null)}
-                onOpenFileOpenSettings={isAdmin ? () => setFileOpenSettingsOpen(true) : undefined}
-                onOpenTaskTypeStats={isAdmin ? openTaskTypeStats : undefined}
-                taskTypeStatsOpen={taskTypeStatsOpen}
-              />
+              <Suspense fallback={<LoadingState />}>
+                <TaskTable
+                  onCalendarRefresh={refreshCalendar}
+                  onRegisterHubHandler={registerTableHubHandler}
+                  userRole={user?.role}
+                  currentUser={user}
+                  selectedEmployeeForHighlight={employee}
+                  maxSubscribedTaskIds={maxMessenger.subscribedTaskIds}
+                  maxCanSubscribe={maxMessenger.canSubscribe}
+                  onMaxSubscribeToggle={handleMaxSubscribeToggle}
+                  focusCommentTooltipTaskId={focusCommentTooltipTaskId}
+                  onFocusCommentTooltipConsumed={handleFocusCommentTooltipConsumed}
+                  onOpenFileOpenSettings={isAdmin ? handleOpenFileOpenSettings : undefined}
+                  onOpenTaskTypeStats={isAdmin ? openTaskTypeStats : undefined}
+                  taskTypeStatsOpen={taskTypeStatsOpen}
+                />
+              </Suspense>
             )}
           </MotionSwitch>
         </Container>
@@ -844,15 +854,19 @@ function AuthenticatedAppContent() {
         </Suspense>
       )}
 
-      <ChatDrawer
-        open={chatOpen}
-        onClose={handleCloseChat}
-        user={user}
-        hubConnection={hubConnection}
-        onUnreadMaybeChanged={refreshUnread}
-        initialConversationId={chatFocusConversationId}
-        onActiveConversationChange={setChatActiveConversationId}
-      />
+      {chatOpen && (
+        <Suspense fallback={null}>
+          <ChatDrawer
+            open={chatOpen}
+            onClose={handleCloseChat}
+            user={user}
+            hubConnection={hubConnection}
+            onUnreadMaybeChanged={refreshUnread}
+            initialConversationId={chatFocusConversationId}
+            onActiveConversationChange={setChatActiveConversationId}
+          />
+        </Suspense>
+      )}
 
       <PushNotificationSnackbars
         notifications={allPushNotifications}

@@ -43,6 +43,7 @@ namespace ProductionPlanner.Data
         Task UpdateTaskTableFieldsAsync(
             ProductionTask task,
             bool includeStatusFields = false,
+            DateTime? concurrencyToken = null,
             CancellationToken cancellationToken = default);
         Task DeleteTaskAsync(int id, CancellationToken cancellationToken = default);
         Task DetachTasksFromSplitAsync(IReadOnlyList<int> childTaskIds, CancellationToken cancellationToken = default);

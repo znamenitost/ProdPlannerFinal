@@ -94,6 +94,8 @@ function ParentTaskRow({
   textLimit: limit = 23,
   showPlannedProgress = false,
   isCdrPreviewBuilding = () => false,
+  /** Переопределение индикатора сборки превью для самой строки (promote single child). */
+  cdrPreviewBuilding = null,
   maxSubscribedTaskIds = [],
   maxCanSubscribe = false,
   onMaxSubscribeToggle,
@@ -298,7 +300,11 @@ function ParentTaskRow({
             fileName={task.isFuss ? '' : task.fileName}
             task={task}
             textLimit={limit}
-            previewBuilding={isCdrPreviewBuilding(task.id)}
+            previewBuilding={
+              cdrPreviewBuilding != null
+                ? Boolean(cdrPreviewBuilding)
+                : isCdrPreviewBuilding(task.id)
+            }
           />
         </TableCell>
 

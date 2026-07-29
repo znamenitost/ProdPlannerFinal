@@ -424,6 +424,8 @@ public class TaskTableService : ITaskTableService
             return TaskTableServiceResult<ProductionTask>.Missing();
 
         TaskTableConcurrencyHelper.RequireExpectedUpdatedAt(id, task.UpdatedAt, request.ExpectedUpdatedAt);
+        // Токен версии до перезаписи UpdatedAt — для атомарного WHERE в ExecuteUpdate.
+        var concurrencyToken = request.ExpectedUpdatedAt.HasValue ? task.UpdatedAt : (DateTime?)null;
 
         var isSplitParent = task.IsSplitTask && task.ParentRowNumber == null;
         if (!isSplitParent
@@ -623,6 +625,7 @@ public class TaskTableService : ITaskTableService
         await _repo.UpdateTaskTableFieldsAsync(
             task,
             includeStatusFields: statusChangedTo != null && !completedViaLifecycle,
+            concurrencyToken: concurrencyToken,
             cancellationToken: cancellationToken);
         if (TaskStatusMapper.IsEmployeeInfoStatus(task.Status)
             && task.ParentRowNumber.HasValue
@@ -661,6 +664,22 @@ public class TaskTableService : ITaskTableService
         int taskId,
         UpdateWorkIntervalsRequest request,
         CancellationToken cancellationToken = default)
+    {
+        // Тот же lifecycle-lock, что и у Start/Pause/Complete: правка интервалов
+        // меняет статус (InProgress→Paused) и не должна пересекаться с ними.
+        TaskTableServiceResult<List<WorkIntervalEditDto>>? result = null;
+        await _repo.ExecuteWithTaskLifecycleLockAsync(taskId, async ct =>
+        {
+            result = await UpdateIntervalsCoreAsync(taskId, request, ct);
+        }, cancellationToken);
+
+        return result ?? TaskTableServiceResult<List<WorkIntervalEditDto>>.Missing();
+    }
+
+    private async Task<TaskTableServiceResult<List<WorkIntervalEditDto>>> UpdateIntervalsCoreAsync(
+        int taskId,
+        UpdateWorkIntervalsRequest request,
+        CancellationToken cancellationToken)
     {
         var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null)

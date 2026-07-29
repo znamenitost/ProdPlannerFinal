@@ -81,6 +81,10 @@ public class ProductionTasksController : ControllerBase
             if (currentUser == null) return Unauthorized();
             var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
 
+            // Защита от неограниченных выборок: большой pageSize раздувает payload и память.
+            page = Math.Max(page, 1);
+            pageSize = Math.Clamp(pageSize, 1, 100);
+
             var result = await _tableService.GetRowsAsync(
                 page,
                 pageSize,
