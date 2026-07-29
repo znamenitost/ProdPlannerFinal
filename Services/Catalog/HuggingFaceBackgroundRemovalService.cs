@@ -6,16 +6,11 @@ using Microsoft.Extensions.Options;
 namespace ProductionPlanner.Services.Catalog;
 
 /// <summary>
-/// Calls a public Hugging Face Gradio Space (BRIA RMBG) to remove image backgrounds.
-/// Flow: POST /gradio_api/call/{api} → poll SSE → download PNG.
+/// Calls Hugging Face Gradio Space (BRIA RMBG) to remove image backgrounds.
+/// Upload file → queue call → read SSE → download PNG.
 /// </summary>
 public sealed class HuggingFaceBackgroundRemovalService : IBackgroundRemovalService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
-
     private readonly HttpClient _http;
     private readonly HuggingFaceOptions _options;
     private readonly ILogger<HuggingFaceBackgroundRemovalService> _logger;
@@ -51,28 +46,53 @@ public sealed class HuggingFaceBackgroundRemovalService : IBackgroundRemovalServ
             return new BackgroundRemovalResult(false, null, "Space не настроен");
 
         var apiName = string.IsNullOrWhiteSpace(_options.ApiName) ? "image" : _options.ApiName.Trim().Trim('/');
-        var dataUrl = $"data:{mime};base64,{Convert.ToBase64String(imageBytes)}";
         var safeName = string.IsNullOrWhiteSpace(fileName) ? "logo.png" : Path.GetFileName(fileName);
+        if (string.IsNullOrWhiteSpace(Path.GetExtension(safeName)))
+            safeName += mime switch
+            {
+                "image/jpeg" => ".jpg",
+                "image/webp" => ".webp",
+                _ => ".png"
+            };
+
+        // Bound total wait so reverse-proxies (1gb) don't return an opaque 502 first.
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(50));
+        var ct = timeoutCts.Token;
 
         try
         {
-            var eventId = await SubmitAsync(baseUrl, apiName, dataUrl, mime, safeName, cancellationToken);
-            if (string.IsNullOrWhiteSpace(eventId))
-                return new BackgroundRemovalResult(false, null, "Не удалось запустить обработку");
+            var uploadedPath = await UploadAsync(baseUrl, imageBytes, mime, safeName, ct);
+            if (string.IsNullOrWhiteSpace(uploadedPath))
+                return new BackgroundRemovalResult(false, null, "Не удалось загрузить изображение в модель");
 
-            var pngUrl = await WaitForPngUrlAsync(baseUrl, apiName, eventId, cancellationToken);
+            var eventId = await SubmitAsync(baseUrl, apiName, uploadedPath, mime, safeName, ct);
+            if (string.IsNullOrWhiteSpace(eventId))
+                return new BackgroundRemovalResult(false, null, "Не удалось запустить обработку (проверьте HuggingFace:Token)");
+
+            var pngUrl = await WaitForPngUrlAsync(baseUrl, apiName, eventId, ct);
             if (string.IsNullOrWhiteSpace(pngUrl))
                 return new BackgroundRemovalResult(false, null, "Модель не вернула результат");
 
-            var pngBytes = await DownloadAsync(pngUrl, cancellationToken);
+            var pngBytes = await DownloadAsync(pngUrl, ct);
             if (pngBytes is null || pngBytes.Length == 0)
                 return new BackgroundRemovalResult(false, null, "Не удалось скачать результат");
 
             return new BackgroundRemovalResult(true, pngBytes, null);
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Hugging Face background removal timed out");
+            return new BackgroundRemovalResult(false, null, "Таймаут удаления фона. Попробуйте ещё раз через минуту.");
+        }
         catch (OperationCanceledException)
         {
             throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Hugging Face HTTP failed");
+            return new BackgroundRemovalResult(false, null, "Сервер не достучался до Hugging Face (исходящий HTTPS)");
         }
         catch (Exception ex)
         {
@@ -81,22 +101,55 @@ public sealed class HuggingFaceBackgroundRemovalService : IBackgroundRemovalServ
         }
     }
 
-    private async Task<string?> SubmitAsync(
+    private async Task<string?> UploadAsync(
         string baseUrl,
-        string apiName,
-        string dataUrl,
+        byte[] imageBytes,
         string mime,
         string fileName,
         CancellationToken cancellationToken)
     {
-        var payload = new
+        using var form = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(imageBytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(mime);
+        form.Add(fileContent, "files", fileName);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/gradio_api/upload")
         {
-            data = new object[]
+            Content = form
+        };
+        ApplyAuth(request);
+
+        using var response = await _http.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("HF upload failed: HTTP {Status} {Body}", (int)response.StatusCode, Truncate(body));
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(body);
+        if (doc.RootElement.ValueKind == JsonValueKind.Array && doc.RootElement.GetArrayLength() > 0)
+            return doc.RootElement[0].GetString();
+        return null;
+    }
+
+    private async Task<string?> SubmitAsync(
+        string baseUrl,
+        string apiName,
+        string uploadedPath,
+        string mime,
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        // Gradio FileData: path from /upload (preferred over huge data URLs).
+        var payload = new Dictionary<string, object?>
+        {
+            ["data"] = new object[]
             {
                 new Dictionary<string, object?>
                 {
-                    ["path"] = null,
-                    ["url"] = dataUrl,
+                    ["path"] = uploadedPath,
+                    ["url"] = $"{baseUrl}/gradio_api/file={uploadedPath}",
                     ["orig_name"] = fileName,
                     ["mime_type"] = mime,
                     ["meta"] = new Dictionary<string, string> { ["_type"] = "gradio.FileData" }
@@ -104,30 +157,20 @@ public sealed class HuggingFaceBackgroundRemovalService : IBackgroundRemovalServ
             }
         };
 
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"{baseUrl}/gradio_api/call/{apiName}");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/gradio_api/call/{apiName}");
         ApplyAuth(request);
-        request.Content = new StringContent(
-            JsonSerializer.Serialize(payload),
-            Encoding.UTF8,
-            "application/json");
+        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
         using var response = await _http.SendAsync(request, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning(
-                "HF Space submit failed: HTTP {Status} {Body}",
-                (int)response.StatusCode,
-                Truncate(body));
+            _logger.LogWarning("HF submit failed: HTTP {Status} {Body}", (int)response.StatusCode, Truncate(body));
             return null;
         }
 
         using var doc = JsonDocument.Parse(body);
-        if (doc.RootElement.TryGetProperty("event_id", out var idEl))
-            return idEl.GetString();
-        return null;
+        return doc.RootElement.TryGetProperty("event_id", out var idEl) ? idEl.GetString() : null;
     }
 
     private async Task<string?> WaitForPngUrlAsync(
@@ -140,6 +183,7 @@ public sealed class HuggingFaceBackgroundRemovalService : IBackgroundRemovalServ
             HttpMethod.Get,
             $"{baseUrl}/gradio_api/call/{apiName}/{eventId}");
         ApplyAuth(request);
+        request.Headers.Accept.ParseAdd("text/event-stream");
 
         using var response = await _http.SendAsync(
             request,
@@ -148,10 +192,7 @@ public sealed class HuggingFaceBackgroundRemovalService : IBackgroundRemovalServ
         if (!response.IsSuccessStatusCode)
         {
             var err = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning(
-                "HF Space poll failed: HTTP {Status} {Body}",
-                (int)response.StatusCode,
-                Truncate(err));
+            _logger.LogWarning("HF poll failed: HTTP {Status} {Body}", (int)response.StatusCode, Truncate(err));
             return null;
         }
 
@@ -190,7 +231,7 @@ public sealed class HuggingFaceBackgroundRemovalService : IBackgroundRemovalServ
                     return ExtractPngUrl(dataJson);
                 if (string.Equals(eventName, "error", StringComparison.OrdinalIgnoreCase))
                 {
-                    _logger.LogWarning("HF Space error event: {Data}", Truncate(dataJson));
+                    _logger.LogWarning("HF error event: {Data}", Truncate(dataJson));
                     return null;
                 }
 
@@ -199,7 +240,6 @@ public sealed class HuggingFaceBackgroundRemovalService : IBackgroundRemovalServ
             }
         }
 
-        // Some servers omit the trailing blank line after the last event.
         if (string.Equals(eventName, "complete", StringComparison.OrdinalIgnoreCase) && dataBuilder.Length > 0)
             return ExtractPngUrl(dataBuilder.ToString());
 
@@ -213,21 +253,17 @@ public sealed class HuggingFaceBackgroundRemovalService : IBackgroundRemovalServ
         if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
             return null;
 
-        // Returns: [sliderImages, pngFile] — prefer the dedicated PNG file (index 1).
         if (root.GetArrayLength() >= 2)
         {
-            var fileEl = root[1];
-            var url = TryGetUrl(fileEl);
+            var url = TryGetUrl(root[1]);
             if (!string.IsNullOrWhiteSpace(url))
                 return url;
         }
 
-        // Fallback: walk any FileData-like objects.
         foreach (var el in root.EnumerateArray())
         {
             var url = TryGetUrl(el);
-            if (!string.IsNullOrWhiteSpace(url) &&
-                url.Contains(".png", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(url) && url.Contains(".png", StringComparison.OrdinalIgnoreCase))
                 return url;
         }
 
@@ -250,9 +286,7 @@ public sealed class HuggingFaceBackgroundRemovalService : IBackgroundRemovalServ
     {
         if (el.ValueKind != JsonValueKind.Object)
             return null;
-        if (el.TryGetProperty("url", out var urlEl))
-            return urlEl.GetString();
-        return null;
+        return el.TryGetProperty("url", out var urlEl) ? urlEl.GetString() : null;
     }
 
     private async Task<byte[]?> DownloadAsync(string url, CancellationToken cancellationToken)

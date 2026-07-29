@@ -138,7 +138,8 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
       setLogoUrl(next);
       patch({ logoDataUrl: next });
     } catch (err) {
-      setBgError(err?.message || 'Не удалось удалить фон');
+      const msg = err?.message || 'Не удалось удалить фон';
+      setBgError(msg.includes('502') ? 'Сервис удаления фона не ответил (таймаут или нет доступа к Hugging Face). Попробуйте ещё раз.' : msg);
     } finally {
       setRemovingBg(false);
     }

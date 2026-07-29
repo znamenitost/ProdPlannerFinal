@@ -71,7 +71,8 @@ public static class WebApplicationExtensions
 
         services.AddHttpClient<IBackgroundRemovalService, HuggingFaceBackgroundRemovalService>(client =>
         {
-            client.Timeout = TimeSpan.FromMinutes(3);
+            // Keep under typical reverse-proxy limits on shared hosting.
+            client.Timeout = TimeSpan.FromSeconds(55);
         });
 
         return services;
