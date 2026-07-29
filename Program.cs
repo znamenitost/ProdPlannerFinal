@@ -29,8 +29,9 @@ if (args.Length > 0 && args[0].Equals("generate-app-offline", StringComparison.O
 
 var builder = WebApplication.CreateBuilder(args);
 
-if (builder.Environment.IsProduction())
-    builder.Configuration.AddJsonFile("appsettings.Production.local.json", optional: true);
+builder.Configuration.AddJsonFile(
+    $"appsettings.{builder.Environment.EnvironmentName}.local.json",
+    optional: true);
 
 var logsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "logs");
 Directory.CreateDirectory(logsDirectory);
@@ -125,6 +126,8 @@ builder.Services.AddAuthorization();
 builder.Services.Configure<MaxBotOptions>(builder.Configuration.GetSection(MaxBotOptions.SectionName));
 builder.Services.Configure<WebPushOptions>(builder.Configuration.GetSection(WebPushOptions.SectionName));
 builder.Services.Configure<PrintAgentOptions>(builder.Configuration.GetSection(PrintAgentOptions.SectionName));
+builder.Services.Configure<ProductionPlanner.Services.Catalog.HuggingFaceOptions>(
+    builder.Configuration.GetSection(ProductionPlanner.Services.Catalog.HuggingFaceOptions.SectionName));
 builder.Services.AddProductionPlannerServices();
 builder.Services.AddSingleton<NotificationConnectionRegistry>();
 builder.Services.AddSignalR(options =>

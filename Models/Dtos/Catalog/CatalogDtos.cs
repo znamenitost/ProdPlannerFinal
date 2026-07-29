@@ -101,3 +101,7 @@ public record CatalogCheckoutResponse(
     string PublicNumber,
     decimal TotalAmount,
     IReadOnlyList<int> TaskIds);
+
+public record CatalogRemoveBackgroundRequest(string ImageDataUrl, string? FileName = null);
+
+public record CatalogRemoveBackgroundResponse(string ImageDataUrl);

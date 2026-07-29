@@ -6,5 +6,11 @@
     "AccessToken": "ВАШ_ТОКЕН_БОТА_MAX",
     "WebhookSecret": "случайная_строка_5_256",
     "BotUsername": "имя_бота_без_@"
+  },
+  "HuggingFace": {
+    "Token": "hf_ВАШ_КЛЮЧ",
+    "SpaceBaseUrl": "https://briaai-bria-rmbg-2-0.hf.space",
+    "ApiName": "image",
+    "MaxUploadBytes": 5242880
   }
 }

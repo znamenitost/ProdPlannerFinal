@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   ButtonGroup,
+  CircularProgress,
   Stack,
   Typography
 } from '@mui/material';
@@ -16,7 +17,8 @@ import {
   KeyboardArrowDown as ArrowDownIcon,
   RotateRight as RotateRightIcon,
   Download as DownloadIcon,
-  UploadFile as UploadFileIcon
+  UploadFile as UploadFileIcon,
+  AutoFixHigh as AutoFixHighIcon
 } from '@mui/icons-material';
 import {
   GALLERY_FRAME_SX,
@@ -25,6 +27,7 @@ import {
   PRODUCT_STAGE_SX,
   galleryContentSx
 } from './galleryFrame';
+import { removeCatalogLogoBackground } from '../api';
 
 /**
  * budl.svg / bud.svg = 45 × 95.1022 mm, budm.svg = 41.0993 × 66.1002 mm.
@@ -53,8 +56,14 @@ const maskLayerSx = (maskUrl) =>
       }
     : {};
 
+function isRasterDataUrl(dataUrl) {
+  return /^data:image\/(png|jpe?g|webp);base64,/i.test(dataUrl || '');
+}
+
 export default function MockupPanel({ zone, baseImageUrl, transform, onChange }) {
   const [logoUrl, setLogoUrl] = useState(transform?.logoDataUrl || '');
+  const [removingBg, setRemovingBg] = useState(false);
+  const [bgError, setBgError] = useState('');
 
   const zoneBox = useMemo(() => {
     if (!zone?.maskUrl) return { left: 0, top: 0, width: '100%', height: '100%' };
@@ -62,6 +71,7 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
   }, [zone?.maskUrl]);
 
   const productBaseUrl = baseImageUrl || zone?.baseImageUrl || zone?.maskUrl;
+  const canRemoveBg = Boolean(logoUrl) && isRasterDataUrl(logoUrl) && !removingBg;
 
   const previewStyle = useMemo(() => {
     const scale = transform?.scale ?? 1;
@@ -88,6 +98,7 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
 
   const onFile = (file) => {
     if (!file) return;
+    setBgError('');
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result || '');
@@ -114,6 +125,23 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
       logoDataUrl: logoUrl || transform?.logoDataUrl,
       ...partial
     });
+  };
+
+  const onRemoveBackground = async () => {
+    if (!canRemoveBg) return;
+    setRemovingBg(true);
+    setBgError('');
+    try {
+      const result = await removeCatalogLogoBackground(logoUrl);
+      const next = result?.imageDataUrl;
+      if (!next) throw new Error('Пустой ответ');
+      setLogoUrl(next);
+      patch({ logoDataUrl: next });
+    } catch (err) {
+      setBgError(err?.message || 'Не удалось удалить фон');
+    } finally {
+      setRemovingBg(false);
+    }
   };
 
   return (
@@ -175,6 +203,19 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
               onChange={(e) => onFile(e.target.files?.[0])}
             />
           </Button>
+          {logoUrl && (
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={!canRemoveBg}
+              onClick={onRemoveBackground}
+              startIcon={
+                removingBg ? <CircularProgress size={14} color="inherit" /> : <AutoFixHighIcon />
+              }
+            >
+              {removingBg ? 'Удаляю фон…' : 'Убрать фон'}
+            </Button>
+          )}
           {zone.templateUrl && (
             <Button
               href={zone.templateUrl}
@@ -187,6 +228,18 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
             </Button>
           )}
         </Stack>
+
+        {bgError && (
+          <Alert severity="warning" variant="outlined" sx={{ py: 0.25 }}>
+            {bgError}
+          </Alert>
+        )}
+
+        {logoUrl && !isRasterDataUrl(logoUrl) && (
+          <Typography variant="caption" color="text.secondary">
+            Удаление фона работает для PNG, JPEG и WebP (не для SVG).
+          </Typography>
+        )}
 
         <ButtonGroup size="small" variant="outlined" aria-label="Трансформация логотипа">
           <Button

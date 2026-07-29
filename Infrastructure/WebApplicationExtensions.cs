@@ -69,6 +69,11 @@ public static class WebApplicationExtensions
         });
         services.AddScoped<IMaxMessengerService, MaxMessengerService>();
 
+        services.AddHttpClient<IBackgroundRemovalService, HuggingFaceBackgroundRemovalService>(client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(3);
+        });
+
         return services;
     }
 
