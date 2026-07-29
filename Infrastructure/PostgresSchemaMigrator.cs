@@ -44,6 +44,8 @@ public static class PostgresSchemaMigrator
         await ApplyCustomerOrderTrackingPatchAsync(db, logger, cancellationToken);
         await ApplyPrintJobsPatchAsync(db, logger, cancellationToken);
         await ApplyWebPushSubscriptionsPatchAsync(db, logger, cancellationToken);
+        await ApplyCatalogTablesPatchAsync(db, logger, cancellationToken);
+        await ApplyCatalogProductTabsPatchAsync(db, logger, cancellationToken);
         await ApplyPhase2PerformanceIndexesPatchAsync(db, logger, cancellationToken);
     }
 
@@ -737,6 +739,199 @@ public static class PostgresSchemaMigrator
         catch (Exception ex)
         {
             logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (WebPushSubscriptions)");
+            throw;
+        }
+    }
+
+    private static async Task ApplyCatalogTablesPatchAsync(
+        ApplicationDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "CatalogCategories" (
+                    "Id" serial NOT NULL,
+                    "Name" character varying(120) NOT NULL,
+                    "Slug" character varying(120) NOT NULL,
+                    "SortOrder" integer NOT NULL DEFAULT 0,
+                    CONSTRAINT "PK_CatalogCategories" PRIMARY KEY ("Id")
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_CatalogCategories_Slug"
+                    ON "CatalogCategories" ("Slug");
+
+                CREATE TABLE IF NOT EXISTS "CatalogProducts" (
+                    "Id" serial NOT NULL,
+                    "CategoryId" integer NULL,
+                    "Slug" character varying(120) NOT NULL,
+                    "Name" character varying(200) NOT NULL,
+                    "Description" character varying(2000) NOT NULL DEFAULT '',
+                    "TaskType" character varying(100) NOT NULL DEFAULT 'Каталог',
+                    "DefaultEstimateHours" double precision NOT NULL DEFAULT 1,
+                    "IsPublished" boolean NOT NULL DEFAULT true,
+                    "SortOrder" integer NOT NULL DEFAULT 0,
+                    "CreatedAt" timestamp with time zone NOT NULL,
+                    "UpdatedAt" timestamp with time zone NOT NULL,
+                    CONSTRAINT "PK_CatalogProducts" PRIMARY KEY ("Id"),
+                    CONSTRAINT "FK_CatalogProducts_CatalogCategories_CategoryId"
+                        FOREIGN KEY ("CategoryId") REFERENCES "CatalogCategories" ("Id") ON DELETE SET NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_CatalogProducts_Slug"
+                    ON "CatalogProducts" ("Slug");
+
+                CREATE TABLE IF NOT EXISTS "CatalogProductVariants" (
+                    "Id" serial NOT NULL,
+                    "ProductId" integer NOT NULL,
+                    "Sku" character varying(80) NOT NULL DEFAULT '',
+                    "ColorName" character varying(80) NOT NULL DEFAULT '',
+                    "ColorHex" character varying(16) NOT NULL DEFAULT '#CCCCCC',
+                    "PreviewImageUrl" character varying(500) NULL,
+                    "IsAvailable" boolean NOT NULL DEFAULT true,
+                    "SortOrder" integer NOT NULL DEFAULT 0,
+                    CONSTRAINT "PK_CatalogProductVariants" PRIMARY KEY ("Id"),
+                    CONSTRAINT "FK_CatalogProductVariants_CatalogProducts_ProductId"
+                        FOREIGN KEY ("ProductId") REFERENCES "CatalogProducts" ("Id") ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS "IX_CatalogProductVariants_ProductId_Sku"
+                    ON "CatalogProductVariants" ("ProductId", "Sku");
+
+                CREATE TABLE IF NOT EXISTS "CatalogProductImages" (
+                    "Id" serial NOT NULL,
+                    "ProductId" integer NOT NULL,
+                    "VariantId" integer NULL,
+                    "Kind" integer NOT NULL DEFAULT 0,
+                    "Url" character varying(500) NOT NULL,
+                    "Caption" character varying(200) NULL,
+                    "SortOrder" integer NOT NULL DEFAULT 0,
+                    CONSTRAINT "PK_CatalogProductImages" PRIMARY KEY ("Id"),
+                    CONSTRAINT "FK_CatalogProductImages_CatalogProducts_ProductId"
+                        FOREIGN KEY ("ProductId") REFERENCES "CatalogProducts" ("Id") ON DELETE CASCADE,
+                    CONSTRAINT "FK_CatalogProductImages_CatalogProductVariants_VariantId"
+                        FOREIGN KEY ("VariantId") REFERENCES "CatalogProductVariants" ("Id") ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS "CatalogPriceTiers" (
+                    "Id" serial NOT NULL,
+                    "ProductId" integer NOT NULL,
+                    "MinQty" integer NOT NULL,
+                    "MaxQty" integer NULL,
+                    "PricePerUnit" numeric(12,2) NOT NULL,
+                    "SortOrder" integer NOT NULL DEFAULT 0,
+                    CONSTRAINT "PK_CatalogPriceTiers" PRIMARY KEY ("Id"),
+                    CONSTRAINT "FK_CatalogPriceTiers_CatalogProducts_ProductId"
+                        FOREIGN KEY ("ProductId") REFERENCES "CatalogProducts" ("Id") ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS "CatalogArtworkZones" (
+                    "Id" serial NOT NULL,
+                    "ProductId" integer NOT NULL,
+                    "Name" character varying(120) NOT NULL DEFAULT 'Основная',
+                    "BaseImageUrl" character varying(500) NULL,
+                    "MaskUrl" character varying(500) NULL,
+                    "MaterialUrl" character varying(500) NULL,
+                    "SpecularUrl" character varying(500) NULL,
+                    "MethodPreset" character varying(40) NOT NULL DEFAULT 'uv',
+                    "SpecsJson" character varying(2000) NOT NULL DEFAULT '[]',
+                    "TemplateUrl" character varying(500) NULL,
+                    "SortOrder" integer NOT NULL DEFAULT 0,
+                    CONSTRAINT "PK_CatalogArtworkZones" PRIMARY KEY ("Id"),
+                    CONSTRAINT "FK_CatalogArtworkZones_CatalogProducts_ProductId"
+                        FOREIGN KEY ("ProductId") REFERENCES "CatalogProducts" ("Id") ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS "CatalogOrders" (
+                    "Id" serial NOT NULL,
+                    "PublicNumber" character varying(32) NOT NULL DEFAULT '',
+                    "Status" integer NOT NULL DEFAULT 0,
+                    "CustomerName" character varying(200) NOT NULL,
+                    "Phone" character varying(80) NULL,
+                    "Telegram" character varying(120) NULL,
+                    "Email" character varying(200) NULL,
+                    "Comment" character varying(2000) NOT NULL DEFAULT '',
+                    "TotalAmount" numeric(14,2) NOT NULL DEFAULT 0,
+                    "DesiredDeadline" timestamp with time zone NULL,
+                    "CreatedAt" timestamp with time zone NOT NULL,
+                    CONSTRAINT "PK_CatalogOrders" PRIMARY KEY ("Id")
+                );
+                CREATE INDEX IF NOT EXISTS "IX_CatalogOrders_PublicNumber"
+                    ON "CatalogOrders" ("PublicNumber");
+
+                CREATE TABLE IF NOT EXISTS "CatalogOrderLines" (
+                    "Id" serial NOT NULL,
+                    "OrderId" integer NOT NULL,
+                    "ProductId" integer NOT NULL,
+                    "VariantId" integer NOT NULL,
+                    "Quantity" integer NOT NULL,
+                    "UnitPrice" numeric(12,2) NOT NULL,
+                    "LineTotal" numeric(14,2) NOT NULL,
+                    "ProductNameSnapshot" character varying(200) NOT NULL DEFAULT '',
+                    "ColorNameSnapshot" character varying(80) NOT NULL DEFAULT '',
+                    "SkuSnapshot" character varying(80) NOT NULL DEFAULT '',
+                    "MockupTransformJson" character varying(2000) NULL,
+                    "LogoFileUrl" character varying(500) NULL,
+                    "ProductionTaskId" integer NULL,
+                    CONSTRAINT "PK_CatalogOrderLines" PRIMARY KEY ("Id"),
+                    CONSTRAINT "FK_CatalogOrderLines_CatalogOrders_OrderId"
+                        FOREIGN KEY ("OrderId") REFERENCES "CatalogOrders" ("Id") ON DELETE CASCADE,
+                    CONSTRAINT "FK_CatalogOrderLines_CatalogProducts_ProductId"
+                        FOREIGN KEY ("ProductId") REFERENCES "CatalogProducts" ("Id") ON DELETE RESTRICT,
+                    CONSTRAINT "FK_CatalogOrderLines_CatalogProductVariants_VariantId"
+                        FOREIGN KEY ("VariantId") REFERENCES "CatalogProductVariants" ("Id") ON DELETE RESTRICT,
+                    CONSTRAINT "FK_CatalogOrderLines_ProductionTasks_ProductionTaskId"
+                        FOREIGN KEY ("ProductionTaskId") REFERENCES "ProductionTasks" ("Id") ON DELETE SET NULL
+                );
+                """, cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                SELECT '20260725120000_AddCatalog', '10.0.7'
+                WHERE EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '__EFMigrationsHistory'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM "__EFMigrationsHistory"
+                    WHERE "MigrationId" = '20260725120000_AddCatalog'
+                );
+                """, cancellationToken);
+
+            logger.LogInformation("Таблицы каталога проверены/созданы (PostgreSQL).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (Catalog)");
+            throw;
+        }
+    }
+
+    private static async Task ApplyCatalogProductTabsPatchAsync(
+        ApplicationDbContext db,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS "CatalogProductTabs" (
+                    "Id" serial NOT NULL,
+                    "ProductId" integer NOT NULL,
+                    "Type" integer NOT NULL DEFAULT 0,
+                    "Label" character varying(80) NOT NULL DEFAULT '',
+                    "IsEnabled" boolean NOT NULL DEFAULT true,
+                    "SortOrder" integer NOT NULL DEFAULT 0,
+                    CONSTRAINT "PK_CatalogProductTabs" PRIMARY KEY ("Id"),
+                    CONSTRAINT "FK_CatalogProductTabs_CatalogProducts_ProductId"
+                        FOREIGN KEY ("ProductId") REFERENCES "CatalogProducts" ("Id") ON DELETE CASCADE
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_CatalogProductTabs_ProductId_Type"
+                    ON "CatalogProductTabs" ("ProductId", "Type");
+                """, cancellationToken);
+            logger.LogInformation("Таблица CatalogProductTabs проверена/создана (PostgreSQL).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка при обновлении схемы PostgreSQL (CatalogProductTabs)");
             throw;
         }
     }

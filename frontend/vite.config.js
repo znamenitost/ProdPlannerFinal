@@ -81,6 +81,10 @@ export default defineConfig({
         target: 'http://localhost:5234',
         changeOrigin: true,
       },
+      '/catalog/uploads': {
+        target: 'http://localhost:5234',
+        changeOrigin: true,
+      },
       '/notificationHub': {
         target: 'http://localhost:5234',
         ws: true,

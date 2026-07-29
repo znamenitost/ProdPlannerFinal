@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
 using ProductionPlanner.Services;
+using ProductionPlanner.Services.Catalog;
 
 namespace ProductionPlanner.Infrastructure;
 
@@ -46,6 +47,15 @@ public static class DatabaseInitializer
         }
 
         await IdentitySeedService.SeedAsync(scope.ServiceProvider);
+
+        try
+        {
+            await CatalogSeedService.SeedIfEmptyAsync(db, logger);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Не удалось заполнить демо-каталог");
+        }
 
         try
         {
@@ -106,6 +116,8 @@ public static class DatabaseInitializer
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN PickedUpAt TEXT NULL");
             if (!columns.Contains("IssuedWithoutReady"))
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN IssuedWithoutReady INTEGER NOT NULL DEFAULT 0");
+            if (!columns.Contains("IsFuss"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN IsFuss INTEGER NOT NULL DEFAULT 0");
 
             foreach (var alterCmd in alterCommands)
             {
@@ -127,6 +139,7 @@ public static class DatabaseInitializer
             await EnsureCustomerOrderTrackingsSqliteAsync(connection, logger);
             await EnsurePrintJobsSqliteAsync(connection, logger);
             await EnsureWebPushSubscriptionsSqliteAsync(connection, logger);
+            await EnsureCatalogTablesSqliteAsync(connection, logger);
             await ApplyPhase2PerformanceIndexesSqliteAsync(connection, logger);
             await connection.CloseAsync();
         }
@@ -599,5 +612,137 @@ public static class DatabaseInitializer
             """;
         await cmd.ExecuteNonQueryAsync();
         logger.LogInformation("Таблица WebPushSubscriptions проверена/создана.");
+    }
+
+    private static async Task EnsureCatalogTablesSqliteAsync(
+        System.Data.Common.DbConnection connection,
+        ILogger logger)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS CatalogCategories (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Name TEXT NOT NULL,
+                Slug TEXT NOT NULL,
+                SortOrder INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_CatalogCategories_Slug ON CatalogCategories(Slug);
+
+            CREATE TABLE IF NOT EXISTS CatalogProducts (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                CategoryId INTEGER NULL,
+                Slug TEXT NOT NULL,
+                Name TEXT NOT NULL,
+                Description TEXT NOT NULL DEFAULT '',
+                TaskType TEXT NOT NULL DEFAULT 'Каталог',
+                DefaultEstimateHours REAL NOT NULL DEFAULT 1,
+                IsPublished INTEGER NOT NULL DEFAULT 1,
+                SortOrder INTEGER NOT NULL DEFAULT 0,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NOT NULL,
+                FOREIGN KEY (CategoryId) REFERENCES CatalogCategories(Id) ON DELETE SET NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_CatalogProducts_Slug ON CatalogProducts(Slug);
+
+            CREATE TABLE IF NOT EXISTS CatalogProductVariants (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ProductId INTEGER NOT NULL,
+                Sku TEXT NOT NULL DEFAULT '',
+                ColorName TEXT NOT NULL DEFAULT '',
+                ColorHex TEXT NOT NULL DEFAULT '#CCCCCC',
+                PreviewImageUrl TEXT NULL,
+                IsAvailable INTEGER NOT NULL DEFAULT 1,
+                SortOrder INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (ProductId) REFERENCES CatalogProducts(Id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS IX_CatalogProductVariants_ProductId_Sku
+                ON CatalogProductVariants(ProductId, Sku);
+
+            CREATE TABLE IF NOT EXISTS CatalogProductImages (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ProductId INTEGER NOT NULL,
+                VariantId INTEGER NULL,
+                Kind INTEGER NOT NULL DEFAULT 0,
+                Url TEXT NOT NULL,
+                Caption TEXT NULL,
+                SortOrder INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (ProductId) REFERENCES CatalogProducts(Id) ON DELETE CASCADE,
+                FOREIGN KEY (VariantId) REFERENCES CatalogProductVariants(Id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS CatalogPriceTiers (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ProductId INTEGER NOT NULL,
+                MinQty INTEGER NOT NULL,
+                MaxQty INTEGER NULL,
+                PricePerUnit TEXT NOT NULL,
+                SortOrder INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (ProductId) REFERENCES CatalogProducts(Id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS CatalogArtworkZones (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ProductId INTEGER NOT NULL,
+                Name TEXT NOT NULL DEFAULT 'Основная',
+                BaseImageUrl TEXT NULL,
+                MaskUrl TEXT NULL,
+                MaterialUrl TEXT NULL,
+                SpecularUrl TEXT NULL,
+                MethodPreset TEXT NOT NULL DEFAULT 'uv',
+                SpecsJson TEXT NOT NULL DEFAULT '[]',
+                TemplateUrl TEXT NULL,
+                SortOrder INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (ProductId) REFERENCES CatalogProducts(Id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS CatalogProductTabs (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ProductId INTEGER NOT NULL,
+                Type INTEGER NOT NULL DEFAULT 0,
+                Label TEXT NOT NULL DEFAULT '',
+                IsEnabled INTEGER NOT NULL DEFAULT 1,
+                SortOrder INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (ProductId) REFERENCES CatalogProducts(Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_CatalogProductTabs_ProductId_Type
+                ON CatalogProductTabs(ProductId, Type);
+
+            CREATE TABLE IF NOT EXISTS CatalogOrders (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                PublicNumber TEXT NOT NULL DEFAULT '',
+                Status INTEGER NOT NULL DEFAULT 0,
+                CustomerName TEXT NOT NULL,
+                Phone TEXT NULL,
+                Telegram TEXT NULL,
+                Email TEXT NULL,
+                Comment TEXT NOT NULL DEFAULT '',
+                TotalAmount TEXT NOT NULL DEFAULT '0',
+                DesiredDeadline TEXT NULL,
+                CreatedAt TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS IX_CatalogOrders_PublicNumber ON CatalogOrders(PublicNumber);
+
+            CREATE TABLE IF NOT EXISTS CatalogOrderLines (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                OrderId INTEGER NOT NULL,
+                ProductId INTEGER NOT NULL,
+                VariantId INTEGER NOT NULL,
+                Quantity INTEGER NOT NULL,
+                UnitPrice TEXT NOT NULL,
+                LineTotal TEXT NOT NULL,
+                ProductNameSnapshot TEXT NOT NULL DEFAULT '',
+                ColorNameSnapshot TEXT NOT NULL DEFAULT '',
+                SkuSnapshot TEXT NOT NULL DEFAULT '',
+                MockupTransformJson TEXT NULL,
+                LogoFileUrl TEXT NULL,
+                ProductionTaskId INTEGER NULL,
+                FOREIGN KEY (OrderId) REFERENCES CatalogOrders(Id) ON DELETE CASCADE,
+                FOREIGN KEY (ProductId) REFERENCES CatalogProducts(Id) ON DELETE RESTRICT,
+                FOREIGN KEY (VariantId) REFERENCES CatalogProductVariants(Id) ON DELETE RESTRICT,
+                FOREIGN KEY (ProductionTaskId) REFERENCES ProductionTasks(Id) ON DELETE SET NULL
+            );
+            """;
+        await cmd.ExecuteNonQueryAsync();
+        logger.LogInformation("Таблицы каталога проверены/созданы (SQLite).");
     }
 }

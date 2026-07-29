@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640">
+  <rect width="640" height="640" fill="#FAFBFD"/>
+  <rect x="230" y="180" width="180" height="280" rx="28" fill="none" stroke="#8FAEC9" stroke-width="3"/>
+  <rect x="275" y="250" width="90" height="90" rx="8" fill="none" stroke="#6E92B3" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="320" y="300" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" font-size="18" fill="#6E92B3">18×18</text>
+  <text x="320" y="520" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" font-size="24" fill="#637080">Зона нанесения</text>
+</svg>

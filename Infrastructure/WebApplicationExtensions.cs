@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Net.Http.Headers;
 using ProductionPlanner.Data;
 using ProductionPlanner.Hubs;
@@ -11,6 +12,7 @@ using ProductionPlanner.Services.TaskCdrPreview;
 using ProductionPlanner.Services.TaskTable;
 using ProductionPlanner.Services.MaxMessenger;
 using ProductionPlanner.Services.CustomerOrders;
+using ProductionPlanner.Services.Catalog;
 using ProductionPlanner.Services.LabelPrint;
 
 namespace ProductionPlanner.Infrastructure;
@@ -31,6 +33,9 @@ public static class WebApplicationExtensions
         services.AddScoped<INotificationInboxService, NotificationInboxService>();
         services.AddScoped<ITaskCommentService, TaskCommentService>();
         services.AddScoped<ICustomerOrderTrackingService, CustomerOrderTrackingService>();
+        services.AddScoped<ICatalogService, CatalogService>();
+        services.AddScoped<ICatalogOrderService, CatalogOrderService>();
+        services.AddScoped<ICatalogAdminService, CatalogAdminService>();
         services.AddScoped<ILabelPrintService, LabelPrintService>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<IWebPushService, WebPushService>();
@@ -90,6 +95,7 @@ public static class WebApplicationExtensions
 
         app.UseStaticFiles(new StaticFileOptions
         {
+            ContentTypeProvider = CreateCatalogContentTypes(),
             OnPrepareResponse = ctx =>
             {
                 var name = Path.GetFileName(ctx.File.Name);
@@ -149,5 +155,13 @@ public static class WebApplicationExtensions
             await context.Response.WriteAsync(html);
         });
         return app;
+    }
+
+    private static FileExtensionContentTypeProvider CreateCatalogContentTypes()
+    {
+        var provider = new FileExtensionContentTypeProvider();
+        provider.Mappings[".cdr"] = "application/x-coreldraw";
+        provider.Mappings[".webp"] = "image/webp";
+        return provider;
     }
 }

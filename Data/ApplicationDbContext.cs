@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
+using ProductionPlanner.Models.Catalog;
 
 namespace ProductionPlanner.Data
 {
@@ -72,6 +73,15 @@ namespace ProductionPlanner.Data
         public DbSet<TaskCommentReadState> TaskCommentReadStates { get; set; }
         public DbSet<CustomerOrderTracking> CustomerOrderTrackings { get; set; }
         public DbSet<PrintJob> PrintJobs { get; set; }
+        public DbSet<CatalogCategory> CatalogCategories { get; set; }
+        public DbSet<CatalogProduct> CatalogProducts { get; set; }
+        public DbSet<CatalogProductVariant> CatalogProductVariants { get; set; }
+        public DbSet<CatalogProductImage> CatalogProductImages { get; set; }
+        public DbSet<CatalogPriceTier> CatalogPriceTiers { get; set; }
+        public DbSet<CatalogArtworkZone> CatalogArtworkZones { get; set; }
+        public DbSet<CatalogProductTab> CatalogProductTabs { get; set; }
+        public DbSet<CatalogOrder> CatalogOrders { get; set; }
+        public DbSet<CatalogOrderLine> CatalogOrderLines { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -232,6 +242,105 @@ namespace ProductionPlanner.Data
                 entity.Property(j => j.AgentName).HasMaxLength(100);
                 entity.HasIndex(j => new { j.Status, j.CreatedAt });
                 entity.HasIndex(j => j.TaskId);
+            });
+
+            modelBuilder.Entity<CatalogCategory>(entity =>
+            {
+                entity.ToTable("CatalogCategories");
+                entity.HasIndex(c => c.Slug).IsUnique();
+            });
+
+            modelBuilder.Entity<CatalogProduct>(entity =>
+            {
+                entity.ToTable("CatalogProducts");
+                entity.HasIndex(p => p.Slug).IsUnique();
+                entity.HasOne(p => p.Category)
+                    .WithMany(c => c.Products)
+                    .HasForeignKey(p => p.CategoryId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.Property(p => p.DefaultEstimateHours).HasPrecision(10, 2);
+            });
+
+            modelBuilder.Entity<CatalogProductVariant>(entity =>
+            {
+                entity.ToTable("CatalogProductVariants");
+                entity.HasOne(v => v.Product)
+                    .WithMany(p => p.Variants)
+                    .HasForeignKey(v => v.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(v => new { v.ProductId, v.Sku });
+            });
+
+            modelBuilder.Entity<CatalogProductImage>(entity =>
+            {
+                entity.ToTable("CatalogProductImages");
+                entity.HasOne(i => i.Product)
+                    .WithMany(p => p.Images)
+                    .HasForeignKey(i => i.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(i => i.Variant)
+                    .WithMany(v => v.Images)
+                    .HasForeignKey(i => i.VariantId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<CatalogPriceTier>(entity =>
+            {
+                entity.ToTable("CatalogPriceTiers");
+                entity.HasOne(t => t.Product)
+                    .WithMany(p => p.PriceTiers)
+                    .HasForeignKey(t => t.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.Property(t => t.PricePerUnit).HasPrecision(12, 2);
+            });
+
+            modelBuilder.Entity<CatalogArtworkZone>(entity =>
+            {
+                entity.ToTable("CatalogArtworkZones");
+                entity.HasOne(z => z.Product)
+                    .WithMany(p => p.ArtworkZones)
+                    .HasForeignKey(z => z.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<CatalogProductTab>(entity =>
+            {
+                entity.ToTable("CatalogProductTabs");
+                entity.HasOne(t => t.Product)
+                    .WithMany(p => p.Tabs)
+                    .HasForeignKey(t => t.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(t => new { t.ProductId, t.Type }).IsUnique();
+            });
+
+            modelBuilder.Entity<CatalogOrder>(entity =>
+            {
+                entity.ToTable("CatalogOrders");
+                entity.HasIndex(o => o.PublicNumber);
+                entity.Property(o => o.TotalAmount).HasPrecision(14, 2);
+            });
+
+            modelBuilder.Entity<CatalogOrderLine>(entity =>
+            {
+                entity.ToTable("CatalogOrderLines");
+                entity.HasOne(l => l.Order)
+                    .WithMany(o => o.Lines)
+                    .HasForeignKey(l => l.OrderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(l => l.Product)
+                    .WithMany()
+                    .HasForeignKey(l => l.ProductId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(l => l.Variant)
+                    .WithMany()
+                    .HasForeignKey(l => l.VariantId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(l => l.ProductionTask)
+                    .WithMany()
+                    .HasForeignKey(l => l.ProductionTaskId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.Property(l => l.UnitPrice).HasPrecision(12, 2);
+                entity.Property(l => l.LineTotal).HasPrecision(14, 2);
             });
 
             modelBuilder.Entity<ProductionTask>()

@@ -115,7 +115,7 @@ public class AuthSessionService : IAuthSessionService
 
     private async Task<IReadOnlyList<LoginAdminDto>> LoadLoginAdminsAsync()
     {
-        return await _userManager.Users
+        var admins = await _userManager.Users
             .AsNoTracking()
             .Where(u => u.Role == "Admin" && u.IsActive)
             .OrderBy(u => u.FullName)
@@ -127,6 +127,13 @@ public class AuthSessionService : IAuthSessionService
                 AvatarUrl = u.AvatarUrl
             })
             .ToListAsync();
+
+        // Павел — нижний ряд в пикере логина (полная ширина).
+        var featured = AuthAdmins.DeployPrepareFullName;
+        return admins
+            .OrderBy(a => string.Equals(a.FullName, featured, StringComparison.Ordinal) ? 1 : 0)
+            .ThenBy(a => a.FullName, StringComparer.Ordinal)
+            .ToList();
     }
 
     private async Task<AuthUserDto> MapUserAsync(User user)

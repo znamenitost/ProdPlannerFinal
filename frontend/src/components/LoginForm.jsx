@@ -19,7 +19,11 @@ import {
   parseLoginEmployeesBootstrap,
 } from '../utils/loginEmployeesBootstrap';
 import ParallaxPage from './ParallaxPage';
-import { ADMIN_LOGIN_ACCOUNTS } from '../constants/adminLoginAccounts';
+import {
+  ADMIN_LOGIN_ACCOUNTS,
+  DEPLOY_PREPARE_ADMIN_FULL_NAME,
+  sortAdminLoginAccounts
+} from '../constants/adminLoginAccounts';
 import './LoginForm.css';
 
 /** Exclusive account pick — ToggleButtonGroup + Avatar Badge (MUI docs). */
@@ -28,7 +32,8 @@ function LoginAccountPicker({
   value,
   onChange,
   ariaLabel,
-  avatarSize = 64
+  avatarSize = 64,
+  fullWidthLast = false
 }) {
   return (
     <ToggleButtonGroup
@@ -53,8 +58,9 @@ function LoginAccountPicker({
         }
       }}
     >
-      {options.map((opt) => {
+      {options.map((opt, index) => {
         const selected = value === opt.value;
+        const isLastFullWidth = fullWidthLast && index === options.length - 1 && options.length > 1;
         return (
           <ToggleButton
             key={opt.value}
@@ -64,7 +70,8 @@ function LoginAccountPicker({
               flexDirection: 'column',
               gap: 1,
               py: 2,
-              textTransform: 'none'
+              textTransform: 'none',
+              ...(isLastFullWidth ? { flex: '1 1 100% !important' } : null)
             }}
           >
             <Badge
@@ -127,15 +134,16 @@ export default function LoginForm({ onLogin }) {
   const [loginType, setLoginType] = useState('employee'); // 'employee' or 'admin'
   const [selectedEmployee, setSelectedEmployee] = useState('Дима');
   const [employees, setEmployees] = useState(() => parseLoginEmployeesBootstrap());
-  const [admins, setAdmins] = useState(() => ADMIN_LOGIN_ACCOUNTS);
-  const [selectedAdmin, setSelectedAdmin] = useState(ADMIN_LOGIN_ACCOUNTS[0].fullName);
+  const [admins, setAdmins] = useState(() => sortAdminLoginAccounts(ADMIN_LOGIN_ACCOUNTS));
+  const [selectedAdmin, setSelectedAdmin] = useState(DEPLOY_PREPARE_ADMIN_FULL_NAME);
   const [adminPassword, setAdminPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const selectedAdminAccount = admins.find((a) => a.fullName === selectedAdmin)
+    ?? admins.find((a) => a.fullName === DEPLOY_PREPARE_ADMIN_FULL_NAME)
     ?? admins[0]
-    ?? ADMIN_LOGIN_ACCOUNTS[0];
+    ?? ADMIN_LOGIN_ACCOUNTS[ADMIN_LOGIN_ACCOUNTS.length - 1];
 
   useEffect(() => {
     let cancelled = false;
@@ -220,12 +228,15 @@ export default function LoginForm({ onLogin }) {
         const payload = await response.json();
         if (cancelled) return;
 
-        const normalized = normalizeLoginAdmins(payload);
+        const normalized = sortAdminLoginAccounts(normalizeLoginAdmins(payload));
         if (normalized.length === 0) return;
 
         setAdmins(normalized);
         setSelectedAdmin((prev) =>
-          normalized.some((admin) => admin.fullName === prev) ? prev : normalized[0].fullName
+          normalized.some((admin) => admin.fullName === prev)
+            ? prev
+            : (normalized.find((a) => a.fullName === DEPLOY_PREPARE_ADMIN_FULL_NAME)?.fullName
+              ?? normalized[0].fullName)
         );
       } catch {
         // fallback to static admin list
@@ -376,6 +387,7 @@ export default function LoginForm({ onLogin }) {
                       value={selectedAdmin}
                       onChange={setSelectedAdmin}
                       avatarSize={56}
+                      fullWidthLast
                       options={admins.map((admin) => ({
                         value: admin.fullName,
                         avatarSrc: admin.id ? avatarThumbUrl(admin.id) : admin.avatarUrl
