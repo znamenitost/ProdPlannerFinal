@@ -263,6 +263,23 @@ function AuthenticatedAppContent() {
     onMaintenanceDetected: handleDeployMaintenanceDetected
   });
 
+  // Страховка на случай полной потери SignalR (например, транспорт заблокирован
+  // хостингом): пока хаб не подключён, активная вкладка обновляется по таймеру.
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  const dataRefreshRef = useRef({ refreshTable, refreshCalendar });
+  dataRefreshRef.current = { refreshTable, refreshCalendar };
+  useEffect(() => {
+    if (!user?.isAuthenticated || deployMaintenanceActive) return undefined;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      if (hubConnection?.state === 'Connected') return;
+      if (activeTabRef.current === 1) dataRefreshRef.current.refreshTable();
+      else dataRefreshRef.current.refreshCalendar();
+    }, 45000);
+    return () => clearInterval(timer);
+  }, [user?.isAuthenticated, deployMaintenanceActive, hubConnection]);
+
   const { unreadCount, refreshUnread } = useChatUnread(user, hubConnection, {
     enabled: Boolean(user?.isAuthenticated) && !deployMaintenanceActive
   });

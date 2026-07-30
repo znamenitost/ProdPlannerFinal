@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import CatalogShell from './CatalogShell';
 import {
+  adminCheckBackgroundRemovalHealth,
   adminCreateCategory,
   adminCreateProduct,
   adminFetchTree
@@ -40,6 +41,7 @@ export default function CatalogAdminPage() {
   const [tabs, setTabs] = useState(['photo']);
   const [catName, setCatName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [hfCheck, setHfCheck] = useState(null);
 
   const reload = async () => {
     setLoading(true);
@@ -125,10 +127,41 @@ export default function CatalogAdminPage() {
               Категории (брелки, фурнитура, кейкапы…) → товары внутри. Откройте товар, чтобы настроить вкладки и медиа.
             </Typography>
           </Box>
-          <Button size="small" variant="outlined" onClick={() => setCategoryOpen(true)}>
-            + Категория
-          </Button>
+          <Stack direction="row" gap={1}>
+            <Button
+              size="small"
+              variant="text"
+              disabled={hfCheck?.loading}
+              onClick={async () => {
+                setHfCheck({ loading: true });
+                try {
+                  const d = await adminCheckBackgroundRemovalHealth();
+                  setHfCheck({ loading: false, data: d });
+                } catch (e) {
+                  setHfCheck({ loading: false, error: e.message });
+                }
+              }}
+            >
+              {hfCheck?.loading ? 'Проверяю HF…' : 'Проверить HF'}
+            </Button>
+            <Button size="small" variant="outlined" onClick={() => setCategoryOpen(true)}>
+              + Категория
+            </Button>
+          </Stack>
         </Stack>
+
+        {hfCheck && !hfCheck.loading && (
+          <Alert severity={hfCheck.error || !hfCheck.data?.reachable ? 'error' : 'success'}>
+            {hfCheck.error && `Проверка не выполнена: ${hfCheck.error}`}
+            {!hfCheck.error && hfCheck.data?.reachable &&
+              `Сервер достучался до Hugging Face: HTTP ${hfCheck.data.httpStatus} за ${hfCheck.data.elapsedMs} мс` +
+              (hfCheck.data.proxyEnabled ? ' (через прокси)' : '')}
+            {!hfCheck.error && hfCheck.data && !hfCheck.data.reachable &&
+              `Сервер НЕ достучался до Hugging Face (${hfCheck.data.spaceBaseUrl}): ` +
+              `${hfCheck.data.errorKind || 'ошибка'} — ${hfCheck.data.errorMessage || 'нет деталей'} ` +
+              `(${hfCheck.data.elapsedMs} мс${hfCheck.data.proxyEnabled ? ', через прокси' : ', прокси не настроен'})`}
+          </Alert>
+        )}
 
         {loading && (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>

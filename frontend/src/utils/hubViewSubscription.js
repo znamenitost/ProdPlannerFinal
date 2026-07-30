@@ -14,23 +14,27 @@ export function resolveCalendarEmployee({ activeTab, employee, userFullName, isA
 }
 
 async function invokeSafe(connection, method, ...args) {
-  if (!connection || connection.state !== signalR.HubConnectionState.Connected) return;
+  if (!connection || connection.state !== signalR.HubConnectionState.Connected) return false;
   try {
     await connection.invoke(method, ...args);
+    return true;
   } catch (err) {
     console.warn(`SignalR ${method} failed:`, err?.message ?? err);
+    return false;
   }
 }
 
 /**
  * Синхронизирует группы table-viewers / calendar-viewers:{имя} с открытой вкладкой.
- * @returns состояние для следующего вызова (включая lastJoinedCalendarEmployee)
+ * @returns состояние для следующего вызова (включая lastJoinedCalendarEmployee);
+ * joinFailed=true — вступление в группу не подтверждено, нужна повторная попытка.
  */
 export async function syncHubViewGroups(connection, previous, next) {
   if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
     return {
       ...next,
-      lastJoinedCalendarEmployee: previous?.lastJoinedCalendarEmployee ?? null
+      lastJoinedCalendarEmployee: previous?.lastJoinedCalendarEmployee ?? null,
+      joinFailed: true
     };
   }
 
@@ -38,24 +42,26 @@ export async function syncHubViewGroups(connection, previous, next) {
   const isTable = next.activeTab === 1;
   const prevJoined = previous?.lastJoinedCalendarEmployee ?? null;
   const nextJoined = next.activeTab === 0 ? next.calendarEmployee : null;
+  let joinFailed = false;
 
   if (wasTable && !isTable) {
     await invokeSafe(connection, 'LeaveTableViewers');
   }
   if (isTable) {
-    await invokeSafe(connection, 'JoinTableViewers');
+    joinFailed = !(await invokeSafe(connection, 'JoinTableViewers')) || joinFailed;
   }
 
   if (prevJoined && prevJoined !== nextJoined) {
     await invokeSafe(connection, 'LeaveCalendarViewers', prevJoined);
   }
   if (nextJoined) {
-    await invokeSafe(connection, 'JoinCalendarViewers', nextJoined);
+    joinFailed = !(await invokeSafe(connection, 'JoinCalendarViewers', nextJoined)) || joinFailed;
   }
 
   return {
     ...next,
-    lastJoinedCalendarEmployee: nextJoined
+    lastJoinedCalendarEmployee: nextJoined,
+    joinFailed
   };
 }
 

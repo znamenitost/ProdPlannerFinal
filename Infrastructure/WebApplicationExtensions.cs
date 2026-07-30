@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Net.Http.Headers;
@@ -73,6 +74,27 @@ public static class WebApplicationExtensions
         {
             // Keep under typical reverse-proxy limits on shared hosting.
             client.Timeout = TimeSpan.FromSeconds(55);
+        })
+        .ConfigurePrimaryHttpMessageHandler(sp =>
+        {
+            var handler = new HttpClientHandler();
+            var hf = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<HuggingFaceOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(hf.Proxy) &&
+                Uri.TryCreate(hf.Proxy.Trim(), UriKind.Absolute, out var proxyUri))
+            {
+                var address = new UriBuilder(proxyUri) { UserName = "", Password = "" }.Uri;
+                var proxy = new WebProxy(address);
+                if (!string.IsNullOrEmpty(proxyUri.UserInfo))
+                {
+                    var parts = proxyUri.UserInfo.Split(':', 2);
+                    proxy.Credentials = new NetworkCredential(
+                        Uri.UnescapeDataString(parts[0]),
+                        parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : "");
+                }
+                handler.Proxy = proxy;
+                handler.UseProxy = true;
+            }
+            return handler;
         });
 
         return services;

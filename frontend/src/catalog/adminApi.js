@@ -21,6 +21,11 @@ export async function adminFetchTree() {
   return parseJson(res);
 }
 
+export async function adminCheckBackgroundRemovalHealth() {
+  const res = await fetch('/api/catalog/admin/background-removal-health', opts());
+  return parseJson(res);
+}
+
 export async function adminFetchProduct(id) {
   const res = await fetch(`/api/catalog/admin/products/${id}`, opts());
   return parseJson(res);

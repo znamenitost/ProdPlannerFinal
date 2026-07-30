@@ -86,6 +86,20 @@ function shouldRefreshCalendar(event) {
   ].includes(event.type);
 }
 
+// Дефолтный withAutomaticReconnect() сдаётся через ~42 секунды — деплой
+// (app_offline на минуты) гарантированно убивал подписку до перезагрузки страницы.
+const RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000, 30000];
+const RECONNECT_SEQUENCE_WINDOW_MS = 10 * 60 * 1000;
+const START_RETRY_DELAYS_MS = [2000, 5000, 15000, 30000, 60000];
+const JOIN_RETRY_DELAYS_MS = [3000, 10000, 30000];
+const VIEW_WATCHDOG_INTERVAL_MS = 45000;
+
+function reconnectDelayInMs(retryContext) {
+  if (retryContext.elapsedMilliseconds > RECONNECT_SEQUENCE_WINDOW_MS) return null;
+  const idx = Math.min(retryContext.previousRetryCount, RECONNECT_DELAYS_MS.length - 1);
+  return RECONNECT_DELAYS_MS[idx];
+}
+
 /**
  * @param {object} handlers
  * @param {(event: { type: string, taskId?: number, affectedEmployees?: string[] }) => Promise<boolean>|boolean} [handlers.onTaskEvent]
@@ -107,6 +121,7 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
   const hiddenQueueRef = useRef([]);
   const connectionRef = useRef(null);
   const prevViewRef = useRef(null);
+  const joinRetryRef = useRef({ timer: null, attempt: 0 });
   const viewSubscriptionRef = useRef(viewSubscription);
   const onMaintenanceDetectedRef = useRef(onMaintenanceDetected);
   viewSubscriptionRef.current = viewSubscription;
@@ -127,12 +142,35 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
   }, []);
 
   const applyViewSubscription = useCallback(async () => {
+    const retry = joinRetryRef.current;
+    if (retry.timer) {
+      clearTimeout(retry.timer);
+      retry.timer = null;
+    }
+
     const conn = connectionRef.current;
     const vs = viewSubscriptionRef.current;
     if (!conn || conn.state !== signalR.HubConnectionState.Connected || !vs) return;
 
     const next = buildViewSubscriptionState(vs);
-    prevViewRef.current = await syncHubViewGroups(conn, prevViewRef.current, next);
+    const synced = await syncHubViewGroups(conn, prevViewRef.current, next);
+    prevViewRef.current = synced;
+
+    if (!synced.joinFailed) {
+      retry.attempt = 0;
+      return;
+    }
+
+    // Вступление в группу не подтверждено — повторяем с backoff, иначе
+    // вкладка молча остаётся без живых обновлений до перезагрузки.
+    if (retry.attempt < JOIN_RETRY_DELAYS_MS.length) {
+      const delay = JOIN_RETRY_DELAYS_MS[retry.attempt];
+      retry.attempt += 1;
+      retry.timer = setTimeout(() => {
+        retry.timer = null;
+        applyViewSubscription();
+      }, delay);
+    }
   }, []);
 
   useEffect(() => {
@@ -304,14 +342,18 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     if (!enabled || !user?.id || !user?.isAuthenticated) return undefined;
 
     let isMounted = true;
+    let intentionalStop = false;
+    let startRetryTimer = null;
+    let watchdogTimer = null;
     const abort = new AbortController();
     displayedServerIdsRef.current = new Set();
     hiddenQueueRef.current = [];
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl('/notificationHub', { withCredentials: true })
-      .withAutomaticReconnect()
+      .withAutomaticReconnect({ nextRetryDelayInMilliseconds: reconnectDelayInMs })
       .configureLogging(buildHubLogger(() => {
+        intentionalStop = true;
         handleMaintenanceDetected(connection);
       }))
       .build();
@@ -396,6 +438,9 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     };
 
     const handleForceDisconnect = () => {
+      // Сервер вытеснил это подключение (новое подключение того же пользователя).
+      // Не переподключаемся — иначе две вкладки будут вытеснять друг друга.
+      intentionalStop = true;
       connection.stop().catch((err) => console.error('SignalR forced stop error:', err));
     };
 
@@ -427,7 +472,19 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
     connection.on('LabelPrintStatus', handleLabelPrintStatus);
     connection.on('ForceDisconnect', handleForceDisconnect);
 
-    const startConnection = async () => {
+    const scheduleStartRetry = (attempt) => {
+      if (!isMounted || intentionalStop) return;
+      if (startRetryTimer) clearTimeout(startRetryTimer);
+      const delay = START_RETRY_DELAYS_MS[Math.min(attempt, START_RETRY_DELAYS_MS.length - 1)];
+      startRetryTimer = setTimeout(() => {
+        startRetryTimer = null;
+        if (!isMounted || intentionalStop) return;
+        if (connection.state !== signalR.HubConnectionState.Disconnected) return;
+        startConnection(attempt + 1);
+      }, delay);
+    };
+
+    const startConnection = async (attempt = 0) => {
       try {
         await connection.start();
         if (!isMounted) {
@@ -442,16 +499,20 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
         prevViewRef.current = null;
         await applyViewSubscription();
         await fetchPendingNotifications(abort.signal);
+        flushHiddenQueue();
       } catch (err) {
-        if (!isMounted) return;
+        if (!isMounted || intentionalStop) return;
         const message = err?.message ?? String(err);
         if (message.includes('stopped during negotiation')) return;
         if (isDeployMaintenanceMessage(message)) {
+          intentionalStop = true;
           await handleMaintenanceDetected(connection);
           return;
         }
         console.warn('SignalR start error:', shortenHubLogMessage(message));
         await fetchPendingNotifications(abort.signal);
+        // Одна неудачная попытка раньше оставляла приложение без SignalR на всю сессию.
+        scheduleStartRetry(attempt);
       }
     };
 
@@ -473,6 +534,26 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       handlersRef.current.onFullRefresh?.();
     });
 
+    // Авто-reconnect сдался (долгий деплой/сетевая outage) — раньше здесь всё
+    // молча умирало до перезагрузки страницы. Перезапускаем start с backoff.
+    connection.onclose((error) => {
+      if (!isMounted || intentionalStop) return;
+      if (error) {
+        console.warn('SignalR closed:', shortenHubLogMessage(error.message ?? String(error)));
+      }
+      connectionRef.current = null;
+      scheduleStartRetry(0);
+    });
+
+    // Watchdog: периодически подтверждает членство в группах вкладки —
+    // страховка от тихо потерянного JoinTableViewers/JoinCalendarViewers.
+    watchdogTimer = setInterval(() => {
+      if (!isMounted || intentionalStop) return;
+      if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+        applyViewSubscription();
+      }
+    }, VIEW_WATCHDOG_INTERVAL_MS);
+
     const onVisibilityChange = () => {
       if (isPageActive()) {
         flushHiddenQueue();
@@ -486,7 +567,21 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
 
     return () => {
       isMounted = false;
+      intentionalStop = true;
       clearTimeout(startTimer);
+      if (startRetryTimer) {
+        clearTimeout(startRetryTimer);
+        startRetryTimer = null;
+      }
+      if (watchdogTimer) {
+        clearInterval(watchdogTimer);
+        watchdogTimer = null;
+      }
+      const joinRetry = joinRetryRef.current;
+      if (joinRetry.timer) {
+        clearTimeout(joinRetry.timer);
+        joinRetry.timer = null;
+      }
       abort.abort();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', onVisibilityChange);

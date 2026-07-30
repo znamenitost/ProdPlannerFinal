@@ -8,6 +8,18 @@ public interface IBackgroundRemovalService
         string contentType,
         string? fileName,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Probes outbound connectivity to the background-removal Space (admin diagnostics).</summary>
+    Task<BackgroundRemovalDiagnostics> DiagnoseAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed record BackgroundRemovalResult(bool Success, byte[]? PngBytes, string? Error);
+
+public sealed record BackgroundRemovalDiagnostics(
+    string SpaceBaseUrl,
+    bool ProxyEnabled,
+    bool Reachable,
+    int? HttpStatus,
+    long ElapsedMs,
+    string? ErrorKind,
+    string? ErrorMessage);

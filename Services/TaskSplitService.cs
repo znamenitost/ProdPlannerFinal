@@ -708,13 +708,26 @@ namespace ProductionPlanner.Services
                 return;
             }
 
-            await _repo.TryTransitionStatusAsync(
+            var parentUpdated = await _repo.TryTransitionStatusAsync(
                 parent.Id,
                 newStatus,
                 now,
                 expectedStatuses: [parent.Status],
                 patch,
                 cancellationToken);
+
+            // Статус родителя изменился в БД — зрителям таблицы/календаря нужно событие,
+            // иначе они увидят новый статус только после полного обновления.
+            if (parentUpdated > 0)
+            {
+                var refreshed = await _repo.GetTaskByIdAsync(parentId, cancellationToken);
+                if (refreshed?.IsSplitTask == true)
+                {
+                    await _notificationService.NotifyStatusChangedAsync(
+                        refreshed,
+                        TaskStatusMapper.ToText(refreshed.Status));
+                }
+            }
         }
 
         public async Task<bool> AreAllSubtasksCompletedAsync(
@@ -779,6 +792,9 @@ namespace ProductionPlanner.Services
             next.UpdatedAt = _timeService.Now;
             await _repo.UpdateTaskAsync(next, cancellationToken);
             var stageNumber = ordered.FirstOrDefault(x => x.Child.Id == next.Id).SequenceOrder;
+            // Разблокировка этапа меняет его статус (Ожидание → Назначена) — это должны
+            // увидеть зрители таблицы и календаря, а не только исполнитель этапа.
+            await _notificationService.NotifyStatusChangedAsync(next, "Assigned");
             await _notificationService.NotifySequentialStageReadyAsync(next, stageNumber);
         }
 

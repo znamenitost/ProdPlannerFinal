@@ -11,11 +11,22 @@ namespace ProductionPlanner.Controllers;
 public class CatalogAdminController : ControllerBase
 {
     private readonly ICatalogAdminService _admin;
+    private readonly IBackgroundRemovalService _backgroundRemoval;
 
-    public CatalogAdminController(ICatalogAdminService admin)
+    public CatalogAdminController(ICatalogAdminService admin, IBackgroundRemovalService backgroundRemoval)
     {
         _admin = admin;
+        _backgroundRemoval = backgroundRemoval;
     }
+
+    /// <summary>
+    /// Probes outbound connectivity from the server to the background-removal Space.
+    /// Use when customers get "Сервер не достучался до Hugging Face".
+    /// </summary>
+    [HttpGet("background-removal-health")]
+    public async Task<ActionResult<BackgroundRemovalDiagnostics>> BackgroundRemovalHealth(
+        CancellationToken ct)
+        => Ok(await _backgroundRemoval.DiagnoseAsync(ct));
 
     [HttpGet("tree")]
     public async Task<ActionResult<CatalogAdminTreeDto>> Tree(CancellationToken ct)

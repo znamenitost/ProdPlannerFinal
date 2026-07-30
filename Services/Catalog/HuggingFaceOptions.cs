@@ -16,5 +16,11 @@ public sealed class HuggingFaceOptions
     /// <summary>Max upload size in bytes (default 5 MB).</summary>
     public int MaxUploadBytes { get; set; } = 5 * 1024 * 1024;
 
+    /// <summary>
+    /// Optional outbound proxy for calls to the Space (e.g. "http://user:pass@host:3128"
+    /// or "socks5://host:1080"). Needed when the hosting blocks direct egress to hf.space.
+    /// </summary>
+    public string Proxy { get; set; } = "";
+
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Token);
 }

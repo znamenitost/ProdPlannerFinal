@@ -102,6 +102,7 @@ jobs:
         env:
           POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
           HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
+          HUGGINGFACE_PROXY: ${{ secrets.HUGGINGFACE_PROXY }}
         run: |
           if [ -z "$POSTGRES_CONNECTION_STRING" ]; then
             echo "::error::Секрет POSTGRES_CONNECTION_STRING не задан в environment FTP_SERVER"
@@ -175,6 +176,11 @@ jobs:
               print("HuggingFace:Token записан из секрета HUGGINGFACE_TOKEN")
           elif not (cfg.get("HuggingFace") or {}).get("Token"):
               print("::warning::HuggingFace:Token пуст — добавьте секрет HUGGINGFACE_TOKEN или Token в appsettings.Production.json")
+
+          hf_proxy = (os.environ.get("HUGGINGFACE_PROXY") or "").strip()
+          if hf_proxy:
+              cfg.setdefault("HuggingFace", {})["Proxy"] = hf_proxy
+              print("HuggingFace:Proxy записан из секрета HUGGINGFACE_PROXY")
 
           with open(path, "w", encoding="utf-8") as f:
               json.dump(cfg, f, indent=2, ensure_ascii=False)

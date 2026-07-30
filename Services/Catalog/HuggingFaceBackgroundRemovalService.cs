@@ -60,44 +60,109 @@ public sealed class HuggingFaceBackgroundRemovalService : IBackgroundRemovalServ
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(50));
         var ct = timeoutCts.Token;
 
+        // One retry on transport errors: DPI/firewalls on shared hosting sometimes
+        // reset the first connection but let a fresh one through.
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            try
+            {
+                var uploadedPath = await UploadAsync(baseUrl, imageBytes, mime, safeName, ct);
+                if (string.IsNullOrWhiteSpace(uploadedPath))
+                    return new BackgroundRemovalResult(false, null, "Не удалось загрузить изображение в модель");
+
+                var eventId = await SubmitAsync(baseUrl, apiName, uploadedPath, mime, safeName, ct);
+                if (string.IsNullOrWhiteSpace(eventId))
+                    return new BackgroundRemovalResult(false, null, "Не удалось запустить обработку (проверьте HuggingFace:Token)");
+
+                var pngUrl = await WaitForPngUrlAsync(baseUrl, apiName, eventId, ct);
+                if (string.IsNullOrWhiteSpace(pngUrl))
+                    return new BackgroundRemovalResult(false, null, "Модель не вернула результат");
+
+                var pngBytes = await DownloadAsync(pngUrl, ct);
+                if (pngBytes is null || pngBytes.Length == 0)
+                    return new BackgroundRemovalResult(false, null, "Не удалось скачать результат");
+
+                return new BackgroundRemovalResult(true, pngBytes, null);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning("Hugging Face background removal timed out");
+                return new BackgroundRemovalResult(false, null, "Таймаут удаления фона. Попробуйте ещё раз через минуту.");
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (HttpRequestException ex)
+            {
+                if (attempt < 2 && !ct.IsCancellationRequested)
+                {
+                    _logger.LogWarning(ex, "Hugging Face HTTP failed (attempt {Attempt}), retrying once", attempt);
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(1.5), ct);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Budget exhausted or caller cancelled; next send surfaces the right exception.
+                    }
+                    continue;
+                }
+                _logger.LogWarning(ex, "Hugging Face HTTP failed");
+                return new BackgroundRemovalResult(false, null, "Сервер не достучался до Hugging Face (исходящий HTTPS)");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Hugging Face background removal failed");
+                return new BackgroundRemovalResult(false, null, "Сервис удаления фона временно недоступен");
+            }
+        }
+
+        return new BackgroundRemovalResult(false, null, "Сервис удаления фона временно недоступен");
+    }
+
+    public async Task<BackgroundRemovalDiagnostics> DiagnoseAsync(CancellationToken cancellationToken = default)
+    {
+        var baseUrl = (_options.SpaceBaseUrl ?? "").TrimEnd('/');
+        var proxyEnabled = !string.IsNullOrWhiteSpace(_options.Proxy);
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            return new BackgroundRemovalDiagnostics("", proxyEnabled, false, null, 0, "Config", "Space не настроен");
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(20));
+        var ct = timeoutCts.Token;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var uploadedPath = await UploadAsync(baseUrl, imageBytes, mime, safeName, ct);
-            if (string.IsNullOrWhiteSpace(uploadedPath))
-                return new BackgroundRemovalResult(false, null, "Не удалось загрузить изображение в модель");
-
-            var eventId = await SubmitAsync(baseUrl, apiName, uploadedPath, mime, safeName, ct);
-            if (string.IsNullOrWhiteSpace(eventId))
-                return new BackgroundRemovalResult(false, null, "Не удалось запустить обработку (проверьте HuggingFace:Token)");
-
-            var pngUrl = await WaitForPngUrlAsync(baseUrl, apiName, eventId, ct);
-            if (string.IsNullOrWhiteSpace(pngUrl))
-                return new BackgroundRemovalResult(false, null, "Модель не вернула результат");
-
-            var pngBytes = await DownloadAsync(pngUrl, ct);
-            if (pngBytes is null || pngBytes.Length == 0)
-                return new BackgroundRemovalResult(false, null, "Не удалось скачать результат");
-
-            return new BackgroundRemovalResult(true, pngBytes, null);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/gradio_api/info");
+            ApplyAuth(request);
+            using var response = await _http.SendAsync(request, ct);
+            sw.Stop();
+            return new BackgroundRemovalDiagnostics(
+                baseUrl, proxyEnabled, response.IsSuccessStatusCode, (int)response.StatusCode,
+                sw.ElapsedMilliseconds, null, null);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            _logger.LogWarning("Hugging Face background removal timed out");
-            return new BackgroundRemovalResult(false, null, "Таймаут удаления фона. Попробуйте ещё раз через минуту.");
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
+            sw.Stop();
+            return new BackgroundRemovalDiagnostics(
+                baseUrl, proxyEnabled, false, null, sw.ElapsedMilliseconds,
+                "Timeout", "Исходящее соединение зависло и сорвано по таймауту (20 с)");
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Hugging Face HTTP failed");
-            return new BackgroundRemovalResult(false, null, "Сервер не достучался до Hugging Face (исходящий HTTPS)");
+            sw.Stop();
+            return new BackgroundRemovalDiagnostics(
+                baseUrl, proxyEnabled, false, null, sw.ElapsedMilliseconds,
+                ex.InnerException?.GetType().Name ?? ex.GetType().Name, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Hugging Face background removal failed");
-            return new BackgroundRemovalResult(false, null, "Сервис удаления фона временно недоступен");
+            sw.Stop();
+            return new BackgroundRemovalDiagnostics(
+                baseUrl, proxyEnabled, false, null, sw.ElapsedMilliseconds,
+                ex.GetType().Name, ex.Message);
         }
     }
 
