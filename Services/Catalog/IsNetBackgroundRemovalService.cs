@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -131,7 +132,7 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
                 }
             }
 
-            var scale = 1f / Math.Max(max, 1e-6f) / 255f;
+            var scale = 1f / Math.Max(max, 1e-6f);
             for (var y = 0; y < size; y++)
             {
                 var row = accessor.GetRowSpan(y);
@@ -180,8 +181,11 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
             }
         });
 
+        // Force RGBA output: the default PNG encoder adaptively drops the
+        // alpha channel for near-binary masks (RGB or RGB+tRNS), which makes
+        // cutouts look like the background was never removed.
         using var ms = new MemoryStream();
-        image.SaveAsPng(ms);
+        image.SaveAsPng(ms, new PngEncoder { ColorType = PngColorType.RgbWithAlpha });
         return new BackgroundRemovalResult(true, ms.ToArray(), null);
     }
 
