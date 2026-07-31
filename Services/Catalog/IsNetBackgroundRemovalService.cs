@@ -111,7 +111,11 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
         var height = image.Height;
 
         var size = _options.InputSize;
-        using var resized = image.Clone(ctx => ctx.Resize(size, size, KnownResamplers.Lanczos3));
+        // rembg composites RGBA onto white before inference; feeding the raw
+        // RGB of transparent pixels (usually black) makes transparent logos
+        // black-on-black and segments to nothing.
+        using var flattened = image.Clone(ctx => ctx.BackgroundColor(Color.White));
+        using var resized = flattened.Clone(ctx => ctx.Resize(size, size, KnownResamplers.Lanczos3));
 
         var input = new DenseTensor<float>(new[] { 1, 3, size, size });
         resized.ProcessPixelRows(accessor =>
@@ -141,15 +145,18 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
         });
 
         _inferenceLock.Wait(cancellationToken);
-        Tensor<float> output;
+        float[] logits;
         try
         {
             var inputs = new List<NamedOnnxValue>
             {
                 NamedOnnxValue.CreateFromTensor(session.InputMetadata.Keys.First(), input)
             };
+            // Copy the tensor to managed memory inside the using scope: the
+            // DenseTensor wraps native OrtValue memory that is released when
+            // the results collection is disposed at the end of the try block.
             using var results = session.Run(inputs);
-            output = results[0].AsTensor<float>();
+            logits = results[0].AsTensor<float>().ToArray();
         }
         finally
         {
@@ -158,7 +165,7 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var mask = BuildMask(output, size, width, height);
+        var mask = BuildMask(logits, size, width, height);
 
         image.ProcessPixelRows(accessor =>
         {
@@ -179,9 +186,8 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
     }
 
     /// <summary>Min-max scale the raw 1024² logits, then Lanczos-resize back to the original size.</summary>
-    private static byte[] BuildMask(Tensor<float> output, int size, int width, int height)
+    private static byte[] BuildMask(float[] values, int size, int width, int height)
     {
-        var values = output.ToArray();
         var min = float.MaxValue;
         var max = float.MinValue;
         foreach (var v in values)
