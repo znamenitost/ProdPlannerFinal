@@ -14,3 +14,5 @@ frontend/dist/
 .DS_Store
 logs/
 models/*.onnx
+app_offline.htm
+App_Data/
