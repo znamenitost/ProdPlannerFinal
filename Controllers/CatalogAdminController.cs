@@ -20,8 +20,7 @@ public class CatalogAdminController : ControllerBase
     }
 
     /// <summary>
-    /// Probes outbound connectivity from the server to the background-removal Space.
-    /// Use when customers get "Сервер не достучался до Hugging Face".
+    /// Reports whether the local IS-Net background-removal model is loaded and ready.
     /// </summary>
     [HttpGet("background-removal-health")]
     public async Task<ActionResult<BackgroundRemovalDiagnostics>> BackgroundRemovalHealth(

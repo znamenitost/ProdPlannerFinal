@@ -126,8 +126,8 @@ builder.Services.AddAuthorization();
 builder.Services.Configure<MaxBotOptions>(builder.Configuration.GetSection(MaxBotOptions.SectionName));
 builder.Services.Configure<WebPushOptions>(builder.Configuration.GetSection(WebPushOptions.SectionName));
 builder.Services.Configure<PrintAgentOptions>(builder.Configuration.GetSection(PrintAgentOptions.SectionName));
-builder.Services.Configure<ProductionPlanner.Services.Catalog.HuggingFaceOptions>(
-    builder.Configuration.GetSection(ProductionPlanner.Services.Catalog.HuggingFaceOptions.SectionName));
+builder.Services.Configure<ProductionPlanner.Services.Catalog.BackgroundRemovalOptions>(
+    builder.Configuration.GetSection(ProductionPlanner.Services.Catalog.BackgroundRemovalOptions.SectionName));
 builder.Services.AddProductionPlannerServices();
 builder.Services.AddSingleton<NotificationConnectionRegistry>();
 builder.Services.AddSignalR(options =>

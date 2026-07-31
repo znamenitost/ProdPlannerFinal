@@ -55,6 +55,15 @@ jobs:
           export ConnectionStrings__DefaultConnection="$POSTGRES_CONNECTION_STRING"
           dotnet run --project ProductionPlanner.csproj -c Release --no-launch-profile -- apply-migrations
 
+      - name: Download IS-Net ONNX model
+        run: |
+          mkdir -p models
+          if [ ! -f models/isnet-general-use.onnx ]; then
+            curl -sSL -o models/isnet-general-use.onnx \
+              "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx"
+          fi
+          echo "fc16ebd8b0c10d971d3513d564d01e29  models/isnet-general-use.onnx" | md5sum -c -
+
       - name: Publish application
         run: |
           # Рабочий publish на 1gb: FDD win-x64 + ReadyToRun; IIS — dotnet + ProductionPlanner.dll (web.config).
@@ -101,8 +110,6 @@ jobs:
       - name: Configure PostgreSQL connection for production
         env:
           POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
-          HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
-          HUGGINGFACE_PROXY: ${{ secrets.HUGGINGFACE_PROXY }}
         run: |
           if [ -z "$POSTGRES_CONNECTION_STRING" ]; then
             echo "::error::Секрет POSTGRES_CONNECTION_STRING не задан в environment FTP_SERVER"
@@ -170,18 +177,6 @@ jobs:
               cfg = json.load(f)
           cfg.setdefault("ConnectionStrings", {})["DefaultConnection"] = conn
 
-          hf_token = (os.environ.get("HUGGINGFACE_TOKEN") or "").strip()
-          if hf_token:
-              cfg.setdefault("HuggingFace", {})["Token"] = hf_token
-              print("HuggingFace:Token записан из секрета HUGGINGFACE_TOKEN")
-          elif not (cfg.get("HuggingFace") or {}).get("Token"):
-              print("::warning::HuggingFace:Token пуст — добавьте секрет HUGGINGFACE_TOKEN или Token в appsettings.Production.json")
-
-          hf_proxy = (os.environ.get("HUGGINGFACE_PROXY") or "").strip()
-          if hf_proxy:
-              cfg.setdefault("HuggingFace", {})["Proxy"] = hf_proxy
-              print("HuggingFace:Proxy записан из секрета HUGGINGFACE_PROXY")
-
           with open(path, "w", encoding="utf-8") as f:
               json.dump(cfg, f, indent=2, ensure_ascii=False)
               f.write("\n")
@@ -195,6 +190,14 @@ jobs:
                   break
           print(f"Проверка: Host={host or '?'}")
           PY
+
+      - name: Verify IS-Net model bundled
+        run: |
+          if [ ! -f publish/models/isnet-general-use.onnx ]; then
+            echo "::error::publish/models/isnet-general-use.onnx отсутствует — скачайте модель в models/ и закоммитьте (см. README каталога)"
+            exit 1
+          fi
+          ls -lh publish/models/isnet-general-use.onnx
 
       - name: Validate FTP secrets
         env:

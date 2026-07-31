@@ -41,7 +41,7 @@ export default function CatalogAdminPage() {
   const [tabs, setTabs] = useState(['photo']);
   const [catName, setCatName] = useState('');
   const [saving, setSaving] = useState(false);
-  const [hfCheck, setHfCheck] = useState(null);
+  const [bgCheck, setBgCheck] = useState(null);
 
   const reload = async () => {
     setLoading(true);
@@ -131,18 +131,18 @@ export default function CatalogAdminPage() {
             <Button
               size="small"
               variant="text"
-              disabled={hfCheck?.loading}
+              disabled={bgCheck?.loading}
               onClick={async () => {
-                setHfCheck({ loading: true });
+                setBgCheck({ loading: true });
                 try {
                   const d = await adminCheckBackgroundRemovalHealth();
-                  setHfCheck({ loading: false, data: d });
+                  setBgCheck({ loading: false, data: d });
                 } catch (e) {
-                  setHfCheck({ loading: false, error: e.message });
+                  setBgCheck({ loading: false, error: e.message });
                 }
               }}
             >
-              {hfCheck?.loading ? 'Проверяю HF…' : 'Проверить HF'}
+              {bgCheck?.loading ? 'Проверяю IS-Net…' : 'Проверить IS-Net'}
             </Button>
             <Button size="small" variant="outlined" onClick={() => setCategoryOpen(true)}>
               + Категория
@@ -150,16 +150,14 @@ export default function CatalogAdminPage() {
           </Stack>
         </Stack>
 
-        {hfCheck && !hfCheck.loading && (
-          <Alert severity={hfCheck.error || !hfCheck.data?.reachable ? 'error' : 'success'}>
-            {hfCheck.error && `Проверка не выполнена: ${hfCheck.error}`}
-            {!hfCheck.error && hfCheck.data?.reachable &&
-              `Сервер достучался до Hugging Face: HTTP ${hfCheck.data.httpStatus} за ${hfCheck.data.elapsedMs} мс` +
-              (hfCheck.data.proxyEnabled ? ' (через прокси)' : '')}
-            {!hfCheck.error && hfCheck.data && !hfCheck.data.reachable &&
-              `Сервер НЕ достучался до Hugging Face (${hfCheck.data.spaceBaseUrl}): ` +
-              `${hfCheck.data.errorKind || 'ошибка'} — ${hfCheck.data.errorMessage || 'нет деталей'} ` +
-              `(${hfCheck.data.elapsedMs} мс${hfCheck.data.proxyEnabled ? ', через прокси' : ', прокси не настроен'})`}
+        {bgCheck && !bgCheck.loading && (
+          <Alert severity={bgCheck.error || !bgCheck.data?.reachable ? 'error' : 'success'}>
+            {bgCheck.error && `Проверка не выполнена: ${bgCheck.error}`}
+            {!bgCheck.error && bgCheck.data?.reachable &&
+              `Модель IS-Net загружена (${bgCheck.data.spaceBaseUrl})`}
+            {!bgCheck.error && bgCheck.data && !bgCheck.data.reachable &&
+              `Модель IS-Net недоступна (${bgCheck.data.spaceBaseUrl}): ` +
+              `${bgCheck.data.errorKind || 'ошибка'} — ${bgCheck.data.errorMessage || 'нет деталей'}`}
           </Alert>
         )}
 

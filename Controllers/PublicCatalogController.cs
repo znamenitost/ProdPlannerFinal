@@ -67,7 +67,7 @@ public class PublicCatalogController : ControllerBase
     }
 
     /// <summary>
-    /// Removes background from a customer logo via Hugging Face Gradio Space (BRIA RMBG).
+    /// Removes background from a customer logo with the local IS-Net ONNX model.
     /// Accepts a data URL (PNG/JPEG/WebP) and returns a PNG data URL with alpha.
     /// </summary>
     [HttpPost("remove-background")]
