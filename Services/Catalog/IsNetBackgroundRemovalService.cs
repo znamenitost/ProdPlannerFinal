@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Options;
 using Microsoft.ML.OnnxRuntime;
@@ -281,6 +282,18 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
             + $" | os: {Environment.OSVersion.VersionString}";
 
         var systemDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
+
+        // ORT >= 1.21 needs VC++ runtime >= 14.40; on older runtimes it dies
+        // during init with 0x8007045A even though the DLLs "load fine" here.
+        var crtVersions = new List<string>();
+        foreach (var name in new[] { "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "ucrtbase.dll" })
+        {
+            var p = Path.Combine(systemDir, name);
+            crtVersions.Add(File.Exists(p)
+                ? $"{name}={FileVersionInfo.GetVersionInfo(p).FileVersion}"
+                : $"{name}=missing");
+        }
+        var crt = "crt: " + string.Join(" ", crtVersions);
         var probes = new (string Label, string Path)[]
         {
             ("app/e_sqlite3.dll", Path.Combine(AppContext.BaseDirectory, "e_sqlite3.dll")),
@@ -309,7 +322,7 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
                 parts.Add($"{label}: FAIL {ex.Message}");
             }
         }
-        return cpu + " | probe: " + string.Join("; ", parts);
+        return cpu + " | " + crt + " | probe: " + string.Join("; ", parts);
     }
 
     private static string DescribeError(Exception ex)
