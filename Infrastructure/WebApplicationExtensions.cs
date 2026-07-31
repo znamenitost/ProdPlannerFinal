@@ -71,6 +71,7 @@ public static class WebApplicationExtensions
         services.AddScoped<IMaxMessengerService, MaxMessengerService>();
 
         services.AddSingleton<IBackgroundRemovalService, IsNetBackgroundRemovalService>();
+        services.AddSingleton<BackgroundRemovalJobStore>();
 
         return services;
     }

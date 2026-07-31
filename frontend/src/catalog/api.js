@@ -43,11 +43,16 @@ export async function checkoutCatalogOrder(payload) {
   return parseJson(res);
 }
 
-export async function removeCatalogLogoBackground(imageDataUrl, fileName) {
-  const res = await fetch('/api/public/catalog/remove-background', {
+export async function startCatalogLogoBackgroundRemoval(imageDataUrl, fileName) {
+  const res = await fetch('/api/public/catalog/remove-background/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageDataUrl, fileName: fileName || undefined })
   });
+  return parseJson(res);
+}
+
+export async function getCatalogLogoBackgroundRemovalStatus(jobId) {
+  const res = await fetch(`/api/public/catalog/remove-background/status/${jobId}`);
   return parseJson(res);
 }

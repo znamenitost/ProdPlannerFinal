@@ -15,4 +15,10 @@ public sealed class BackgroundRemovalOptions
 
     /// <summary>Skip background removal for images above this many total pixels (CPU safety valve on shared hosting).</summary>
     public long MaxPixels { get; set; } = 12_000_000;
+
+    /// <summary>
+    /// Typical inference wall time on the production host; used only to
+    /// interpolate the progress bar while the monolithic ORT call runs.
+    /// </summary>
+    public int InferenceExpectedMs { get; set; } = 16000;
 }

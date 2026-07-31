@@ -5,6 +5,7 @@ import {
   Button,
   ButtonGroup,
   CircularProgress,
+  LinearProgress,
   Stack,
   Typography
 } from '@mui/material';
@@ -27,7 +28,10 @@ import {
   PRODUCT_STAGE_SX,
   galleryContentSx
 } from './galleryFrame';
-import { removeCatalogLogoBackground } from '../api';
+import {
+  startCatalogLogoBackgroundRemoval,
+  getCatalogLogoBackgroundRemovalStatus
+} from '../api';
 
 /**
  * budl.svg / bud.svg = 45 × 95.1022 mm, budm.svg = 41.0993 × 66.1002 mm.
@@ -63,6 +67,7 @@ function isRasterDataUrl(dataUrl) {
 export default function MockupPanel({ zone, baseImageUrl, transform, onChange }) {
   const [logoUrl, setLogoUrl] = useState(transform?.logoDataUrl || '');
   const [removingBg, setRemovingBg] = useState(false);
+  const [bgProgress, setBgProgress] = useState(null);
   const [bgError, setBgError] = useState('');
 
   const zoneBox = useMemo(() => {
@@ -131,17 +136,33 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
     if (!canRemoveBg) return;
     setRemovingBg(true);
     setBgError('');
+    setBgProgress({ percent: 0, stage: 'Отправляю изображение…' });
     try {
-      const result = await removeCatalogLogoBackground(logoUrl);
-      const next = result?.imageDataUrl;
-      if (!next) throw new Error('Пустой ответ');
-      setLogoUrl(next);
-      patch({ logoDataUrl: next });
+      const { jobId } = await startCatalogLogoBackgroundRemoval(logoUrl);
+      if (!jobId) throw new Error('Сервер не вернул задачу');
+
+      const deadline = Date.now() + 3 * 60 * 1000;
+      for (;;) {
+        if (Date.now() > deadline) throw new Error('Превышено время ожидания (3 мин)');
+        await new Promise((r) => setTimeout(r, 600));
+        const s = await getCatalogLogoBackgroundRemovalStatus(jobId);
+        setBgProgress({ percent: s.percent ?? 0, stage: s.stage || '' });
+        if (s.done) {
+          if (s.error) throw new Error(s.error);
+          if (!s.imageDataUrl) throw new Error('Пустой ответ');
+          setLogoUrl(s.imageDataUrl);
+          patch({ logoDataUrl: s.imageDataUrl });
+          break;
+        }
+      }
     } catch (err) {
       const msg = err?.message || 'Не удалось удалить фон';
-      setBgError(msg.includes('502') ? 'Сервис удаления фона не ответил (таймаут или модель ещё грузится). Попробуйте ещё раз.' : msg);
+      setBgError(msg.includes('не найдена') || msg.includes('502')
+        ? 'Сервис удаления фона не ответил (таймаут или перезапуск сайта). Попробуйте ещё раз.'
+        : msg);
     } finally {
       setRemovingBg(false);
+      setBgProgress(null);
     }
   };
 
@@ -234,6 +255,19 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
           <Alert severity="warning" variant="outlined" sx={{ py: 0.25 }}>
             {bgError}
           </Alert>
+        )}
+
+        {removingBg && bgProgress && (
+          <Box>
+            <LinearProgress
+              variant="determinate"
+              value={Math.min(100, Math.max(0, bgProgress.percent))}
+              sx={{ borderRadius: 1, height: 6 }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+              {bgProgress.stage} · {Math.round(bgProgress.percent)}%
+            </Typography>
+          </Box>
         )}
 
         {logoUrl && !isRasterDataUrl(logoUrl) && (

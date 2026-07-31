@@ -13,15 +13,18 @@ public class PublicCatalogController : ControllerBase
     private readonly ICatalogService _catalog;
     private readonly ICatalogOrderService _orders;
     private readonly IBackgroundRemovalService _backgroundRemoval;
+    private readonly BackgroundRemovalJobStore _backgroundRemovalJobs;
 
     public PublicCatalogController(
         ICatalogService catalog,
         ICatalogOrderService orders,
-        IBackgroundRemovalService backgroundRemoval)
+        IBackgroundRemovalService backgroundRemoval,
+        BackgroundRemovalJobStore backgroundRemovalJobs)
     {
         _catalog = catalog;
         _orders = orders;
         _backgroundRemoval = backgroundRemoval;
+        _backgroundRemovalJobs = backgroundRemovalJobs;
     }
 
     [HttpGet("products")]
@@ -67,14 +70,14 @@ public class PublicCatalogController : ControllerBase
     }
 
     /// <summary>
-    /// Removes background from a customer logo with the local IS-Net ONNX model.
-    /// Accepts a data URL (PNG/JPEG/WebP) and returns a PNG data URL with alpha.
+    /// Starts background removal with the local IS-Net ONNX model as a job.
+    /// Returns a job id immediately; poll remove-background/status/{id} for
+    /// stage/percent updates until done (ORT gives no intra-run progress, so
+    /// percent is stage-based with time interpolation).
     /// </summary>
-    [HttpPost("remove-background")]
+    [HttpPost("remove-background/start")]
     [RequestSizeLimit(6 * 1024 * 1024)]
-    public async Task<ActionResult<CatalogRemoveBackgroundResponse>> RemoveBackground(
-        [FromBody] CatalogRemoveBackgroundRequest request,
-        CancellationToken cancellationToken)
+    public ActionResult RemoveBackgroundStart([FromBody] CatalogRemoveBackgroundRequest request)
     {
         if (request is null || string.IsNullOrWhiteSpace(request.ImageDataUrl))
             return BadRequest(new { error = "Нет изображения" });
@@ -82,17 +85,41 @@ public class PublicCatalogController : ControllerBase
         if (!TryParseDataUrl(request.ImageDataUrl, out var bytes, out var contentType))
             return BadRequest(new { error = "Некорректный формат изображения" });
 
-        var result = await _backgroundRemoval.RemoveBackgroundAsync(
-            bytes,
-            contentType,
-            request.FileName,
-            cancellationToken);
+        var jobId = _backgroundRemovalJobs.Create();
+        var fileName = request.FileName;
+        _ = Task.Run(async () =>
+        {
+            // No request cancellation on purpose: the client polls and may
+            // disconnect in between; the job must run to completion.
+            var result = await _backgroundRemoval.RemoveBackgroundAsync(
+                bytes,
+                contentType,
+                fileName,
+                (pct, stage) => _backgroundRemovalJobs.Report(jobId, pct, stage),
+                CancellationToken.None);
 
-        if (!result.Success || result.PngBytes is null)
-            return StatusCode(StatusCodes.Status502BadGateway, new { error = result.Error ?? "Не удалось удалить фон" });
+            if (result.Success && result.PngBytes is not null)
+            {
+                _backgroundRemovalJobs.Complete(
+                    jobId, $"data:image/png;base64,{Convert.ToBase64String(result.PngBytes)}");
+            }
+            else
+            {
+                _backgroundRemovalJobs.Fail(jobId, result.Error ?? "Не удалось удалить фон");
+            }
+        });
 
-        var dataUrl = $"data:image/png;base64,{Convert.ToBase64String(result.PngBytes)}";
-        return Ok(new CatalogRemoveBackgroundResponse(dataUrl));
+        return Accepted(new { jobId });
+    }
+
+    /// <summary>Polls a background-removal job: { percent, stage, done, error, imageDataUrl }.</summary>
+    [HttpGet("remove-background/status/{jobId:guid}")]
+    public ActionResult RemoveBackgroundStatus(Guid jobId)
+    {
+        var state = _backgroundRemovalJobs.Get(jobId);
+        if (state is null)
+            return NotFound(new { error = "Задача не найдена (возможно, сайт перезапускался) — попробуйте ещё раз" });
+        return Ok(state);
     }
 
     private static bool TryParseDataUrl(string dataUrl, out byte[] bytes, out string contentType)

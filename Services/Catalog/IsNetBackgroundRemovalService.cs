@@ -46,6 +46,7 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
         byte[] imageBytes,
         string contentType,
         string? fileName,
+        Action<double, string>? reportProgress,
         CancellationToken cancellationToken = default)
     {
         if (imageBytes.Length == 0)
@@ -65,7 +66,7 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
         try
         {
             return await Task.Run(
-                () => RunPipeline(session, imageBytes, cancellationToken),
+                () => RunPipeline(session, imageBytes, reportProgress, cancellationToken),
                 cancellationToken);
         }
         catch (OperationCanceledException)
@@ -102,8 +103,10 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
     private BackgroundRemovalResult RunPipeline(
         InferenceSession session,
         byte[] imageBytes,
+        Action<double, string>? progress,
         CancellationToken cancellationToken)
     {
+        progress?.Invoke(3, "Декодирую изображение");
         using var image = Image.Load<Rgba32>(imageBytes);
         if ((long)image.Width * image.Height > _options.MaxPixels)
             return new BackgroundRemovalResult(false, null, "Изображение слишком большое для локальной обработки");
@@ -111,6 +114,7 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
         var width = image.Width;
         var height = image.Height;
 
+        progress?.Invoke(10, "Готовлю вход для модели");
         var size = _options.InputSize;
         // rembg composites RGBA onto white before inference; feeding the raw
         // RGB of transparent pixels (usually black) makes transparent logos
@@ -145,6 +149,9 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
             }
         });
 
+        progress?.Invoke(20, "Модель обрабатывает изображение");
+        using var inferenceTicker = StartInferenceTicker(progress);
+
         _inferenceLock.Wait(cancellationToken);
         float[] logits;
         try
@@ -164,10 +171,13 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
             _inferenceLock.Release();
         }
 
+        inferenceTicker.Cancel();
         cancellationToken.ThrowIfCancellationRequested();
 
+        progress?.Invoke(88, "Строю маску");
         var mask = BuildMask(logits, size, width, height);
 
+        progress?.Invoke(93, "Применяю маску");
         image.ProcessPixelRows(accessor =>
         {
             for (var y = 0; y < height; y++)
@@ -181,12 +191,43 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
             }
         });
 
+        progress?.Invoke(97, "Кодирую PNG");
         // Force RGBA output: the default PNG encoder adaptively drops the
         // alpha channel for near-binary masks (RGB or RGB+tRNS), which makes
         // cutouts look like the background was never removed.
         using var ms = new MemoryStream();
         image.SaveAsPng(ms, new PngEncoder { ColorType = PngColorType.RgbWithAlpha });
+        progress?.Invoke(100, "Готово");
         return new BackgroundRemovalResult(true, ms.ToArray(), null);
+    }
+
+    /// <summary>
+    /// ORT gives no intra-run progress, so while the monolithic inference call
+    /// runs we interpolate 20%→86% along the expected wall time and hold there
+    /// if it overruns. Stops when the returned token source is disposed.
+    /// </summary>
+    private CancellationTokenSource StartInferenceTicker(Action<double, string>? progress)
+    {
+        var cts = new CancellationTokenSource();
+        if (progress is null)
+            return cts;
+
+        var expectedMs = Math.Max(_options.InferenceExpectedMs, 4000);
+        var sw = Stopwatch.StartNew();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!cts.IsCancellationRequested)
+                {
+                    await Task.Delay(700, cts.Token);
+                    var ratio = Math.Min(sw.Elapsed.TotalMilliseconds / expectedMs, 1.0);
+                    progress(20 + 66 * ratio, "Модель обрабатывает изображение");
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+        return cts;
     }
 
     /// <summary>Min-max scale the raw 1024² logits, then Lanczos-resize back to the original size.</summary>
