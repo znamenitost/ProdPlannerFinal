@@ -17,7 +17,13 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
     private readonly BackgroundRemovalOptions _options;
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<IsNetBackgroundRemovalService> _logger;
-    private readonly Lazy<InferenceSession?> _session;
+
+    // Session creation is retried on every call until it succeeds: a failure
+    // during deploy (file mid-upload, pool recycle) must not poison the
+    // singleton for the process lifetime.
+    private readonly object _sessionLock = new();
+    private InferenceSession? _session;
+    private string? _lastLoadError;
 
     // IS-Net runs on the shared hosting CPU pool — serialize inference so one
     // heavy request can't starve the whole site.
@@ -31,7 +37,6 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
         _options = options.Value;
         _env = env;
         _logger = logger;
-        _session = new Lazy<InferenceSession?>(CreateSession);
     }
 
     public async Task<BackgroundRemovalResult> RemoveBackgroundAsync(
@@ -50,9 +55,9 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
         if (mime is null)
             return new BackgroundRemovalResult(false, null, "Поддерживаются PNG, JPEG и WebP");
 
-        var session = _session.Value;
+        var session = TryGetSession();
         if (session is null)
-            return new BackgroundRemovalResult(false, null, "Модель IS-Net не найдена (models/isnet-general-use.onnx)");
+            return new BackgroundRemovalResult(false, null, _lastLoadError ?? "Модель IS-Net не найдена (models/isnet-general-use.onnx)");
 
         try
         {
@@ -83,12 +88,12 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
                 "Файл модели не найден — положите models/isnet-general-use.onnx"));
         }
 
-        var session = _session.Value;
+        var session = TryGetSession();
         sw.Stop();
         return session is not null
             ? Task.FromResult(new BackgroundRemovalDiagnostics(modelPath, false, true, null, sw.ElapsedMilliseconds, null, null))
             : Task.FromResult(new BackgroundRemovalDiagnostics(modelPath, false, false, null, sw.ElapsedMilliseconds,
-                "Load", "Не удалось инициализировать ONNX-сессию (см. логи)"));
+                "Load", _lastLoadError ?? "Не удалось инициализировать ONNX-сессию (см. логи)"));
     }
 
     private BackgroundRemovalResult RunPipeline(
@@ -216,11 +221,20 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
         return mask;
     }
 
+    private InferenceSession? TryGetSession()
+    {
+        lock (_sessionLock)
+        {
+            return _session ??= CreateSession();
+        }
+    }
+
     private InferenceSession? CreateSession()
     {
         var modelPath = ResolveModelPath();
         if (!File.Exists(modelPath))
         {
+            _lastLoadError = $"Файл модели не найден: {modelPath}";
             _logger.LogWarning("IS-Net model not found at {Path}", modelPath);
             return null;
         }
@@ -233,10 +247,14 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
                 GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
                 IntraOpNumThreads = Math.Max(1, Math.Min(Environment.ProcessorCount, 4)),
             };
-            return new InferenceSession(modelPath, opts);
+            var session = new InferenceSession(modelPath, opts);
+            _lastLoadError = null;
+            _logger.LogInformation("IS-Net ONNX session loaded from {Path}", modelPath);
+            return session;
         }
         catch (Exception ex)
         {
+            _lastLoadError = $"Не удалось загрузить ONNX-сессию: {ex.GetType().Name}: {ex.Message}";
             _logger.LogError(ex, "Failed to load IS-Net ONNX session from {Path}", modelPath);
             return null;
         }
@@ -266,8 +284,11 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
 
     public void Dispose()
     {
-        if (_session.IsValueCreated)
-            _session.Value?.Dispose();
+        lock (_sessionLock)
+        {
+            _session?.Dispose();
+            _session = null;
+        }
         _inferenceLock.Dispose();
     }
 }

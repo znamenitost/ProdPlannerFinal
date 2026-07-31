@@ -296,6 +296,27 @@ jobs:
             **/*.pdb
             app_offline.htm
 
+      # 170 МБ модели — самый хрупкий файл деплоя. Проверяем размер на сервере
+      # и при несовпадении заливаем напрямую через lftp (сайт ещё offline).
+      - name: Ensure IS-Net model on server
+        run: |
+          EXPECTED=178648008
+          FTP_HOST='${{ steps.ftp.outputs.server }}'
+          FTP_DIR='${{ steps.ftp.outputs.server_dir }}'
+          ftp_size() {
+            lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${FTP_HOST}; cd '${FTP_DIR}'; ls -l models/isnet-general-use.onnx; bye" 2>/dev/null | awk '{print $5}' | tail -1
+          }
+          remote_size=$(ftp_size)
+          echo "Remote model size: ${remote_size:-missing} (expected ${EXPECTED})"
+          if [ "$remote_size" != "$EXPECTED" ]; then
+            echo "Заливаю модель по FTP (170 МБ, несколько минут)…"
+            lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${FTP_HOST}; cd '${FTP_DIR}'; mkdir -p models; put -c -O models/ publish/models/isnet-general-use.onnx; bye"
+            remote_size=$(ftp_size)
+            echo "Remote model size after upload: ${remote_size:-missing}"
+            [ "$remote_size" = "$EXPECTED" ] || { echo "::error::models/isnet-general-use.onnx на сервере не совпадает по размеру"; exit 1; }
+          fi
+          echo "IS-Net model OK on server"
+
       - name: Start IIS (remove app_offline.htm)
         if: always()
         run: |

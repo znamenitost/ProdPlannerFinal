@@ -84,6 +84,20 @@ public static class WebApplicationExtensions
         if (!Directory.Exists(avatarsDir))
             Directory.CreateDirectory(avatarsDir);
 
+        // Eagerly load the IS-Net session so a broken model/native runtime
+        // surfaces in startup logs instead of the first customer request.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await app.Services.GetRequiredService<IBackgroundRemovalService>().DiagnoseAsync();
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "IS-Net warmup failed");
+            }
+        });
+
         app.UseForwardedHeaders(new ForwardedHeadersOptions
         {
             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
