@@ -254,10 +254,24 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
         }
         catch (Exception ex)
         {
-            _lastLoadError = $"Не удалось загрузить ONNX-сессию: {ex.GetType().Name}: {ex.Message}";
+            var nativeDll = Path.Combine(AppContext.BaseDirectory, "onnxruntime.dll");
+            var dllInfo = File.Exists(nativeDll)
+                ? $"onnxruntime.dll на месте ({new FileInfo(nativeDll).Length} байт)"
+                : $"onnxruntime.dll ОТСУТСТВУЕТ в {AppContext.BaseDirectory}";
+            _lastLoadError = $"Не удалось загрузить ONNX-сессию: {DescribeError(ex)}. {dllInfo}";
             _logger.LogError(ex, "Failed to load IS-Net ONNX session from {Path}", modelPath);
             return null;
         }
+    }
+
+    private static string DescribeError(Exception ex)
+    {
+        var parts = new List<string>();
+        for (var cur = ex; cur is not null; cur = cur.InnerException)
+        {
+            parts.Add($"{cur.GetType().Name}: {cur.Message}");
+        }
+        return string.Join(" → ", parts);
     }
 
     private string ResolveModelPath()
