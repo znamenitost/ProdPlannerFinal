@@ -88,7 +88,7 @@ def build_fob(svg_path):
     fob = bpy.context.view_layer.objects.active
     fob.name = "Fob"
     bpy.ops.object.transform_apply(location=True)
-    fob.rotation_euler.z = math.radians(-14)  # slight tilt like the hero photo
+    fob.rotation_euler.z = math.radians(-26)  # tilted like the hero photo
     bpy.ops.object.transform_apply(rotation=True)
     return fob
 
@@ -160,9 +160,9 @@ def mat_metal():
     m = bpy.data.materials.new("Metal")
     m.use_nodes = True
     bsdf = m.node_tree.nodes["Principled BSDF"]
-    bsdf.inputs["Base Color"].default_value = (0.72, 0.73, 0.75, 1)
+    bsdf.inputs["Base Color"].default_value = (0.88, 0.90, 0.94, 1)
     bsdf.inputs["Metallic"].default_value = 1.0
-    bsdf.inputs["Roughness"].default_value = 0.32
+    bsdf.inputs["Roughness"].default_value = 0.24
     return m
 
 
@@ -180,7 +180,11 @@ def mat_white(roughness, glossy=False):
 
 
 def mat_uv():
-    """Emission shader: R,G = Generated XY (print-zone UV), alpha 1."""
+    """Emission shader: R,G = print-zone UV (v up), alpha 1.
+
+    Generated X runs right-to-left on this mesh (verified against the WebGL
+    compositor), so emit 1-X to make R increase left-to-right like image UVs.
+    """
     m = bpy.data.materials.new("UVMap")
     m.use_nodes = True
     nt = m.node_tree
@@ -189,9 +193,13 @@ def mat_uv():
     em = nt.nodes.new("ShaderNodeEmission")
     tc = nt.nodes.new("ShaderNodeTexCoord")
     sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    inv = nt.nodes.new("ShaderNodeMath")
+    inv.operation = "SUBTRACT"
+    inv.inputs[0].default_value = 1.0
     comb = nt.nodes.new("ShaderNodeCombineXYZ")
     nt.links.new(tc.outputs["Generated"], sep.inputs[0])
-    nt.links.new(sep.outputs["X"], comb.inputs["X"])
+    nt.links.new(sep.outputs["X"], inv.inputs[1])
+    nt.links.new(inv.outputs[0], comb.inputs["X"])
     nt.links.new(sep.outputs["Y"], comb.inputs["Y"])
     nt.links.new(comb.outputs[0], em.inputs["Color"])
     nt.links.new(em.outputs[0], out.inputs["Surface"])
@@ -231,13 +239,16 @@ def setup_scene(fob, zone):
     area("Key", (-0.16, 0.10, 0.30), 130, 0.28, (1.0, 0.97, 0.93))
     area("Fill", (0.22, 0.02, 0.16), 80, 0.24, (0.93, 0.96, 1.0))
     area("Rim", (0.02, -0.24, 0.26), 150, 0.20, (1.0, 1.0, 1.0))
+    # Large softbox mirrored across the fob face from the camera: its specular
+    # reflection covers the face and makes the metal read as bright silver.
+    area("FaceSoftbox", (-0.02, 0.10, 0.11), 200, 0.40, (0.98, 0.99, 1.0))
 
-    # Camera: elevated view, chain recedes to upper-right like the hero photo
+    # Camera: lower, more frontal elevation so the print face stays readable
     cam_data = bpy.data.cameras.new("Cam")
     cam_data.lens = 58
     cam = bpy.data.objects.new("Cam", cam_data)
     bpy.context.collection.objects.link(cam)
-    cam.location = (mm(-18), mm(-108), mm(118))
+    cam.location = (mm(-14), mm(-112), mm(70))
     target = Vector((mm(6), mm(28), 0))
     cam.rotation_euler = (target - cam.location).to_track_quat("-Z", "Y").to_euler()
     bpy.context.scene.camera = cam
@@ -245,8 +256,8 @@ def setup_scene(fob, zone):
     world = bpy.data.worlds.new("World")
     world.use_nodes = True
     bg = world.node_tree.nodes["Background"]
-    bg.inputs["Color"].default_value = (0.85, 0.85, 0.88, 1)
-    bg.inputs["Strength"].default_value = 0.5
+    bg.inputs["Color"].default_value = (0.92, 0.92, 0.95, 1)
+    bg.inputs["Strength"].default_value = 0.7
     bpy.context.scene.world = world
     return ground
 
