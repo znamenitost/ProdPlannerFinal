@@ -30,7 +30,8 @@ import {
 } from './galleryFrame';
 import {
   startCatalogLogoBackgroundRemoval,
-  getCatalogLogoBackgroundRemovalStatus
+  getCatalogLogoBackgroundRemovalStatus,
+  vectorizeCatalogLogo
 } from '../api';
 
 /**
@@ -67,6 +68,7 @@ function isRasterDataUrl(dataUrl) {
 export default function MockupPanel({ zone, baseImageUrl, transform, onChange }) {
   const [logoUrl, setLogoUrl] = useState(transform?.logoDataUrl || '');
   const [removingBg, setRemovingBg] = useState(false);
+  const [vectorizing, setVectorizing] = useState(false);
   const [bgProgress, setBgProgress] = useState(null);
   const [bgError, setBgError] = useState('');
 
@@ -76,7 +78,8 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
   }, [zone?.maskUrl]);
 
   const productBaseUrl = baseImageUrl || zone?.baseImageUrl || zone?.maskUrl;
-  const canRemoveBg = Boolean(logoUrl) && isRasterDataUrl(logoUrl) && !removingBg;
+  const canRemoveBg = Boolean(logoUrl) && isRasterDataUrl(logoUrl) && !removingBg && !vectorizing;
+  const canVectorize = Boolean(logoUrl) && isRasterDataUrl(logoUrl) && !removingBg && !vectorizing;
 
   const previewStyle = useMemo(() => {
     const scale = transform?.scale ?? 1;
@@ -166,6 +169,30 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
     }
   };
 
+  const onDownloadSvg = async () => {
+    if (!canVectorize) return;
+    setVectorizing(true);
+    setBgError('');
+    try {
+      const svgBlob = await vectorizeCatalogLogo(logoUrl, 'logo.png');
+      const downloadUrl = URL.createObjectURL(svgBlob);
+      try {
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = 'logo.svg';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      }
+    } catch (err) {
+      setBgError(err?.message || 'Не удалось преобразовать логотип в SVG');
+    } finally {
+      setVectorizing(false);
+    }
+  };
+
   return (
     <Box>
       <Box sx={GALLERY_FRAME_SX}>
@@ -236,6 +263,19 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
               }
             >
               {removingBg ? 'Удаляю фон…' : 'Убрать фон'}
+            </Button>
+          )}
+          {logoUrl && isRasterDataUrl(logoUrl) && (
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={!canVectorize}
+              onClick={onDownloadSvg}
+              startIcon={
+                vectorizing ? <CircularProgress size={14} color="inherit" /> : <DownloadIcon />
+              }
+            >
+              {vectorizing ? 'Векторизую…' : 'Скачать лого в SVG'}
             </Button>
           )}
           {zone.templateUrl && (

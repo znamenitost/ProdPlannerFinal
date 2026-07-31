@@ -14,17 +14,20 @@ public class PublicCatalogController : ControllerBase
     private readonly ICatalogOrderService _orders;
     private readonly IBackgroundRemovalService _backgroundRemoval;
     private readonly BackgroundRemovalJobStore _backgroundRemovalJobs;
+    private readonly ILogoVectorizationService _logoVectorization;
 
     public PublicCatalogController(
         ICatalogService catalog,
         ICatalogOrderService orders,
         IBackgroundRemovalService backgroundRemoval,
-        BackgroundRemovalJobStore backgroundRemovalJobs)
+        BackgroundRemovalJobStore backgroundRemovalJobs,
+        ILogoVectorizationService logoVectorization)
     {
         _catalog = catalog;
         _orders = orders;
         _backgroundRemoval = backgroundRemoval;
         _backgroundRemovalJobs = backgroundRemovalJobs;
+        _logoVectorization = logoVectorization;
     }
 
     [HttpGet("products")]
@@ -120,6 +123,28 @@ public class PublicCatalogController : ControllerBase
         if (state is null)
             return NotFound(new { error = "Задача не найдена (возможно, сайт перезапускался) — попробуйте ещё раз" });
         return Ok(state);
+    }
+
+    /// <summary>Converts the current raster logo to a downloadable SVG using local VTracer.</summary>
+    [HttpPost("vectorize-logo")]
+    [RequestSizeLimit(6 * 1024 * 1024)]
+    public async Task<IActionResult> VectorizeLogo(
+        [FromBody] CatalogRemoveBackgroundRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.ImageDataUrl))
+            return BadRequest(new { error = "Нет изображения" });
+
+        if (!TryParseDataUrl(request.ImageDataUrl, out var bytes, out _))
+            return BadRequest(new { error = "Некорректный формат изображения" });
+
+        var result = await _logoVectorization.VectorizeAsync(bytes, cancellationToken);
+        if (!result.Success || result.SvgBytes is null)
+            return StatusCode(
+                StatusCodes.Status502BadGateway,
+                new { error = result.Error ?? "Не удалось преобразовать логотип в SVG" });
+
+        return File(result.SvgBytes, "image/svg+xml; charset=utf-8", "logo.svg");
     }
 
     private static bool TryParseDataUrl(string dataUrl, out byte[] bytes, out string contentType)

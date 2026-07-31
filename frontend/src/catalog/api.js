@@ -56,3 +56,24 @@ export async function getCatalogLogoBackgroundRemovalStatus(jobId) {
   const res = await fetch(`/api/public/catalog/remove-background/status/${jobId}`);
   return parseJson(res);
 }
+
+export async function vectorizeCatalogLogo(imageDataUrl, fileName) {
+  const res = await fetch('/api/public/catalog/vectorize-logo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageDataUrl, fileName: fileName || undefined })
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    let payload = null;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      // A proxy/IIS error page is not JSON; use the HTTP status below.
+    }
+    throw new Error(payload?.error || `Ошибка ${res.status}`);
+  }
+
+  return res.blob();
+}
