@@ -30,9 +30,9 @@ import {
 } from './galleryFrame';
 import {
   startCatalogLogoBackgroundRemoval,
-  getCatalogLogoBackgroundRemovalStatus,
-  vectorizeCatalogLogo
+  getCatalogLogoBackgroundRemovalStatus
 } from '../api';
+import KeychainMockupCanvas from './KeychainMockupCanvas';
 
 /**
  * budl.svg / bud.svg = 45 × 95.1022 mm, budm.svg = 41.0993 × 66.1002 mm.
@@ -44,6 +44,9 @@ const BUDAPEST_ZONE = {
   width: `${(41.0993 / 45) * 100}%`,
   height: `${(66.1002 / 95.1022) * 100}%`
 };
+
+// Blender-rendered passes live here; when set, the mockup uses the WebGL compositor.
+const RENDER_PASSES_URL = '/catalog/mockup';
 
 const maskLayerSx = (maskUrl) =>
   maskUrl
@@ -68,7 +71,6 @@ function isRasterDataUrl(dataUrl) {
 export default function MockupPanel({ zone, baseImageUrl, transform, onChange }) {
   const [logoUrl, setLogoUrl] = useState(transform?.logoDataUrl || '');
   const [removingBg, setRemovingBg] = useState(false);
-  const [vectorizing, setVectorizing] = useState(false);
   const [bgProgress, setBgProgress] = useState(null);
   const [bgError, setBgError] = useState('');
 
@@ -78,8 +80,7 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
   }, [zone?.maskUrl]);
 
   const productBaseUrl = baseImageUrl || zone?.baseImageUrl || zone?.maskUrl;
-  const canRemoveBg = Boolean(logoUrl) && isRasterDataUrl(logoUrl) && !removingBg && !vectorizing;
-  const canVectorize = Boolean(logoUrl) && isRasterDataUrl(logoUrl) && !removingBg && !vectorizing;
+  const canRemoveBg = Boolean(logoUrl) && isRasterDataUrl(logoUrl) && !removingBg;
 
   const previewStyle = useMemo(() => {
     const scale = transform?.scale ?? 1;
@@ -169,69 +170,57 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
     }
   };
 
-  const onDownloadSvg = async () => {
-    if (!canVectorize) return;
-    setVectorizing(true);
-    setBgError('');
-    try {
-      const svgBlob = await vectorizeCatalogLogo(logoUrl, 'logo.png');
-      const downloadUrl = URL.createObjectURL(svgBlob);
-      try {
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = 'logo.svg';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      } finally {
-        window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-      }
-    } catch (err) {
-      setBgError(err?.message || 'Не удалось преобразовать логотип в SVG');
-    } finally {
-      setVectorizing(false);
-    }
-  };
+  const useRenderPasses = Boolean(zone?.maskUrl?.includes('budapest-mask'));
 
   return (
     <Box>
       <Box sx={GALLERY_FRAME_SX}>
         <Box sx={galleryContentSx(true)}>
-          <Box sx={PRODUCT_STAGE_SX}>
-            <Box
-              component="img"
-              src={productBaseUrl}
-              alt=""
-              sx={PRODUCT_IMAGE_SX}
-            />
-            {!logoUrl && zone.maskUrl && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  ...zoneBox,
-                  pointerEvents: 'none',
-                  background: 'repeating-conic-gradient(#cfcfcf 0% 25%, #ffffff 0% 50%)',
-                  backgroundSize: '10px 10px',
-                  ...maskLayerSx(zone.maskUrl)
-                }}
+          {useRenderPasses ? (
+            <Box sx={{ position: 'absolute', inset: 0 }}>
+              <KeychainMockupCanvas
+                passesUrl={RENDER_PASSES_URL}
+                logoUrl={logoUrl || null}
+                transform={transform}
               />
-            )}
-            {logoUrl && (
+            </Box>
+          ) : (
+            <Box sx={PRODUCT_STAGE_SX}>
               <Box
-                sx={{
-                  position: 'absolute',
-                  ...zoneBox,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  pointerEvents: 'none',
-                  ...maskLayerSx(zone.maskUrl)
-                }}
-              >
-                <Box component="img" src={logoUrl} alt="" sx={previewStyle} />
-              </Box>
-            )}
-          </Box>
+                component="img"
+                src={productBaseUrl}
+                alt=""
+                sx={PRODUCT_IMAGE_SX}
+              />
+              {!logoUrl && zone.maskUrl && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    ...zoneBox,
+                    pointerEvents: 'none',
+                    background: 'repeating-conic-gradient(#cfcfcf 0% 25%, #ffffff 0% 50%)',
+                    backgroundSize: '10px 10px',
+                    ...maskLayerSx(zone.maskUrl)
+                  }}
+                />
+              )}
+              {logoUrl && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    ...zoneBox,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    pointerEvents: 'none',
+                    ...maskLayerSx(zone.maskUrl)
+                  }}
+                >
+                  <Box component="img" src={logoUrl} alt="" sx={previewStyle} />
+                </Box>
+              )}
+            </Box>
+          )}
         </Box>
       </Box>
 
@@ -263,19 +252,6 @@ export default function MockupPanel({ zone, baseImageUrl, transform, onChange })
               }
             >
               {removingBg ? 'Удаляю фон…' : 'Убрать фон'}
-            </Button>
-          )}
-          {logoUrl && isRasterDataUrl(logoUrl) && (
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={!canVectorize}
-              onClick={onDownloadSvg}
-              startIcon={
-                vectorizing ? <CircularProgress size={14} color="inherit" /> : <DownloadIcon />
-              }
-            >
-              {vectorizing ? 'Векторизую…' : 'Скачать лого в SVG'}
             </Button>
           )}
           {zone.templateUrl && (

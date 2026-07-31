@@ -94,21 +94,6 @@ jobs:
           # Рабочий publish на 1gb: FDD win-x64 + ReadyToRun; IIS — dotnet + ProductionPlanner.dll (web.config).
           dotnet publish ProductionPlanner.csproj -c Release --self-contained false -r win-x64 /p:PublishReadyToRun=true -o ./publish
 
-      - name: Bundle VTracer Windows binary
-        run: |
-          VTRACER_VERSION="1.0.0-alpha.1"
-          VTRACER_ZIP="vtracer-x86_64-pc-windows-msvc.zip"
-          curl -fsSL -o "/tmp/$VTRACER_ZIP" \
-            "https://github.com/visioncortex/vtracer/releases/download/$VTRACER_VERSION/$VTRACER_ZIP"
-          echo "a97b8b2ff80419d9fb59cef704a1f9beb6bd66f850761ef632e59bd506cffd79  /tmp/$VTRACER_ZIP" \
-            | sha256sum -c -
-          mkdir -p publish/tools/vtracer
-          unzip -j "/tmp/$VTRACER_ZIP" vtracer.exe -d publish/tools/vtracer
-          cp tools/vtracer/LICENSE.txt publish/tools/vtracer/LICENSE.txt
-          test -s publish/tools/vtracer/vtracer.exe
-          test -s publish/tools/vtracer/LICENSE.txt
-          ls -lh publish/tools/vtracer/vtracer.exe
-
       - name: Copy frontend to wwwroot
         run: |
           mkdir -p publish/wwwroot
@@ -244,13 +229,6 @@ jobs:
         with:
           name: vcredist-x64
           path: publish
-
-      - name: Bundle app-local VC++ CRT next to vtracer.exe
-        run: |
-          for dll in publish/msvcp140*.dll publish/vcruntime140*.dll publish/concrt140.dll; do
-            [ -f "$dll" ] && cp "$dll" publish/tools/vtracer/
-          done
-          test -s publish/tools/vtracer/vcruntime140.dll
 
       - name: Verify CRT bundled
         run: ls -lh publish/msvcp140.dll publish/vcruntime140.dll publish/onnxruntime.dll

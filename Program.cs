@@ -128,8 +128,6 @@ builder.Services.Configure<WebPushOptions>(builder.Configuration.GetSection(WebP
 builder.Services.Configure<PrintAgentOptions>(builder.Configuration.GetSection(PrintAgentOptions.SectionName));
 builder.Services.Configure<ProductionPlanner.Services.Catalog.BackgroundRemovalOptions>(
     builder.Configuration.GetSection(ProductionPlanner.Services.Catalog.BackgroundRemovalOptions.SectionName));
-builder.Services.Configure<ProductionPlanner.Services.Catalog.LogoVectorizationOptions>(
-    builder.Configuration.GetSection(ProductionPlanner.Services.Catalog.LogoVectorizationOptions.SectionName));
 builder.Services.AddProductionPlannerServices();
 builder.Services.AddSingleton<NotificationConnectionRegistry>();
 builder.Services.AddSignalR(options =>

@@ -72,7 +72,6 @@ public static class WebApplicationExtensions
 
         services.AddSingleton<IBackgroundRemovalService, IsNetBackgroundRemovalService>();
         services.AddSingleton<BackgroundRemovalJobStore>();
-        services.AddSingleton<ILogoVectorizationService, VTracerLogoVectorizationService>();
 
         return services;
     }
