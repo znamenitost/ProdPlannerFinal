@@ -11,7 +11,32 @@ on:
         default: false
 
 jobs:
+  # onnxruntime.dll требует свежий VC++ runtime (14.40+), а на хостинге
+  # в System32 лежит старый. Кладём официальный app-local redist
+  # (Microsoft.VC143.CRT) рядом с бинарями — Windows ищет DLL в папке
+  # приложения раньше System32.
+  vcredist:
+    runs-on: windows-latest
+    steps:
+      - name: Extract app-local VC++ CRT from VS redist
+        shell: pwsh
+        run: |
+          $msvc = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\*\VC\Redist\MSVC" -Directory |
+            Sort-Object Name -Descending | Select-Object -First 1
+          $src = Join-Path $msvc.FullName "x64\Microsoft.VC143.CRT"
+          Get-ChildItem $src | Format-Table Name, Length
+          New-Item -ItemType Directory vcredist | Out-Null
+          Copy-Item (Join-Path $src "*.dll") vcredist\
+      - name: Upload CRT artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcredist-x64
+          path: vcredist/*.dll
+          if-no-files-found: error
+          retention-days: 1
+
   deploy:
+    needs: vcredist
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -198,6 +223,15 @@ jobs:
             exit 1
           fi
           ls -lh publish/models/isnet-general-use.onnx
+
+      - name: Bundle app-local VC++ CRT next to onnxruntime.dll
+        uses: actions/download-artifact@v4
+        with:
+          name: vcredist-x64
+          path: publish
+
+      - name: Verify CRT bundled
+        run: ls -lh publish/msvcp140.dll publish/vcruntime140.dll publish/onnxruntime.dll
 
       - name: Validate FTP secrets
         env:
