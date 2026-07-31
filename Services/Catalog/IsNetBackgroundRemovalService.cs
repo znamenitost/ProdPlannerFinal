@@ -1,3 +1,6 @@
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Options;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -258,10 +261,50 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
             var dllInfo = File.Exists(nativeDll)
                 ? $"onnxruntime.dll на месте ({new FileInfo(nativeDll).Length} байт)"
                 : $"onnxruntime.dll ОТСУТСТВУЕТ в {AppContext.BaseDirectory}";
-            _lastLoadError = $"Не удалось загрузить ONNX-сессию: {DescribeError(ex)}. {dllInfo}";
+            _lastLoadError = $"Не удалось загрузить ONNX-сессию: {DescribeError(ex)}. {dllInfo}. {ProbeNativeLibraries()}";
             _logger.LogError(ex, "Failed to load IS-Net ONNX session from {Path}", modelPath);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Loads a few native DLLs directly to pinpoint why ORT fails on the host:
+    /// control sample from the app dir (no VC deps), ORT itself, and the VC++ runtime.
+    /// </summary>
+    private static string ProbeNativeLibraries()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return "";
+
+        var systemDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        var probes = new (string Label, string Path)[]
+        {
+            ("app/e_sqlite3.dll", Path.Combine(AppContext.BaseDirectory, "e_sqlite3.dll")),
+            ("app/onnxruntime.dll", Path.Combine(AppContext.BaseDirectory, "onnxruntime.dll")),
+            ("sys32/msvcp140.dll", Path.Combine(systemDir, "msvcp140.dll")),
+            ("sys32/vcruntime140_1.dll", Path.Combine(systemDir, "vcruntime140_1.dll")),
+        };
+
+        var parts = new List<string>();
+        foreach (var (label, path) in probes)
+        {
+            if (!File.Exists(path))
+            {
+                parts.Add($"{label}: файла нет");
+                continue;
+            }
+
+            try
+            {
+                NativeLibrary.Load(path);
+                parts.Add($"{label}: OK");
+            }
+            catch (Exception ex)
+            {
+                parts.Add($"{label}: FAIL {ex.Message}");
+            }
+        }
+        return "probe: " + string.Join("; ", parts);
     }
 
     private static string DescribeError(Exception ex)
