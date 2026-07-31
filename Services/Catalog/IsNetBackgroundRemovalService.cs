@@ -274,6 +274,12 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return "";
 
+        var cpu = $"cpu: sse42={(System.Runtime.Intrinsics.X86.Sse42.IsSupported ? 1 : 0)}"
+            + $" avx={(System.Runtime.Intrinsics.X86.Avx.IsSupported ? 1 : 0)}"
+            + $" avx2={(System.Runtime.Intrinsics.X86.Avx2.IsSupported ? 1 : 0)}"
+            + $" avx512f={(System.Runtime.Intrinsics.X86.Avx512F.IsSupported ? 1 : 0)}"
+            + $" | os: {Environment.OSVersion.VersionString}";
+
         var systemDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
         var probes = new (string Label, string Path)[]
         {
@@ -281,6 +287,7 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
             ("app/onnxruntime.dll", Path.Combine(AppContext.BaseDirectory, "onnxruntime.dll")),
             ("sys32/msvcp140.dll", Path.Combine(systemDir, "msvcp140.dll")),
             ("sys32/vcruntime140_1.dll", Path.Combine(systemDir, "vcruntime140_1.dll")),
+            ("sys32/ucrtbase.dll", Path.Combine(systemDir, "ucrtbase.dll")),
         };
 
         var parts = new List<string>();
@@ -302,7 +309,7 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
                 parts.Add($"{label}: FAIL {ex.Message}");
             }
         }
-        return "probe: " + string.Join("; ", parts);
+        return cpu + " | probe: " + string.Join("; ", parts);
     }
 
     private static string DescribeError(Exception ex)
