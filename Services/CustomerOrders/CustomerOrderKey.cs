@@ -150,11 +150,13 @@ public static class CustomerOrderKey
             .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToList();
 
-        if (parts.Count > 0
-            && parts[0].Equals(DefaultShareName, StringComparison.OrdinalIgnoreCase))
-        {
-            parts.RemoveAt(0);
-        }
+        // Якорь «Клиенты» не обязан быть первым сегментом: в БД встречаются
+        // абсолютные пути (C:\Users\…\Yandex.Disk\Клиенты\А\Заказчик\Проект).
+        // Берём последнее вхождение — оно ближе всего к буквенной папке указателя.
+        var anchorIndex = parts.FindLastIndex(
+            p => p.Equals(DefaultShareName, StringComparison.OrdinalIgnoreCase));
+        if (anchorIndex >= 0)
+            parts.RemoveRange(0, anchorIndex + 1);
 
         return parts;
     }

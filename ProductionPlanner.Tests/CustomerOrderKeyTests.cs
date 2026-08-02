@@ -31,6 +31,29 @@ public class CustomerOrderKeyTests
         Assert.Null(CustomerOrderKey.TryGetLetterIndex(null));
     }
 
+    // Якорь «Клиенты» может быть в середине абсолютного пути — буква и заказчик
+    // всё равно берутся от него, а не от последней папки проекта.
+    [Theory]
+    [InlineData(
+        "C:\\Users\\пк\\Yandex.Disk\\Клиенты\\А\\Арт фешн групп\\600 шт",
+        "Арт фешн групп",
+        "арт фешн групп",
+        "А")]
+    [InlineData(
+        "C:/Users/пк/Yandex.Disk/Клиенты/Б/Борис/Заказ 12",
+        "Борис",
+        "борис",
+        "Б")]
+    public void AbsolutePath_UsesShareAnchor(string path, string display, string key, string letterIndex)
+    {
+        Assert.Equal(display, CustomerOrderKey.TryGetDisplayName(path));
+        Assert.Equal(key, CustomerOrderKey.TryGetNormalizedKey(path));
+        Assert.Equal(letterIndex, CustomerOrderKey.TryGetLetterIndex(path));
+        Assert.Equal(letterIndex[0], CustomerOrderKey.ResolvePickupLetter(path, display));
+        // Поведение относительных путей не меняется.
+        Assert.True(CustomerOrderKey.Matches("Клиенты/Фрэшмемори", "фрэшмемори"));
+    }
+
     [Fact]
     public void LegacyMatches_UsesLastFolder()
     {
@@ -58,6 +81,11 @@ public class CustomerOrderKeyTests
         var code = PickupCodes.Allocate('И', used);
         Assert.StartsWith("И", code);
         Assert.Contains(code, used);
+
+        Assert.True(PickupCodes.StartsWithLetter("А07", 'А'));
+        Assert.True(PickupCodes.StartsWithLetter("а07", 'А'));
+        Assert.False(PickupCodes.StartsWithLetter("Ш07", 'А'));
+        Assert.False(PickupCodes.StartsWithLetter(null, 'А'));
     }
 
     [Fact]

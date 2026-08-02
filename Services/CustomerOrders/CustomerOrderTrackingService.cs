@@ -260,24 +260,7 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
             .Where(t => taskIds.Contains(t.Id) && !t.HiddenFromTaskTable && t.ParentRowNumber == null)
             .ToListAsync(cancellationToken);
 
-        var missing = tasks.Where(t => string.IsNullOrWhiteSpace(t.PickupCode)).ToList();
-        if (missing.Count > 0)
-        {
-            var usedCodes = await LoadUsedPickupCodesAsync(cancellationToken);
-            foreach (var task in tasks.Where(t => !string.IsNullOrWhiteSpace(t.PickupCode)))
-                usedCodes.Add(task.PickupCode!);
-
-            foreach (var task in missing)
-            {
-                var displayName = CustomerOrderKey.TryGetDisplayName(task.FolderPath) ?? "";
-                var letter = CustomerOrderKey.ResolvePickupLetter(task.FolderPath, displayName);
-                task.PickupCode = PickupCodes.Allocate(letter, usedCodes);
-                // UpdatedAt не трогаем: назначение номера — служебная операция,
-                // она не должна ломать конкурентное редактирование строки.
-            }
-
-            await _db.SaveChangesAsync(cancellationToken);
-        }
+        await AssignPickupCodesAsync(tasks, customerDisplayName: null, cancellationToken);
 
         foreach (var task in tasks)
         {
@@ -286,6 +269,52 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Дожимает номера выдачи: выдаёт отсутствующие и перевыдаёт коды, чья буква
+    /// расходится с алфавитным указателем пути (наследие старой семантики «последняя папка»).
+    /// Освобождённые старые коды возвращаются в пул.
+    /// </summary>
+    private async Task AssignPickupCodesAsync(
+        IReadOnlyCollection<ProductionTask> tasks,
+        string? customerDisplayName,
+        CancellationToken cancellationToken)
+    {
+        var toAssign = new List<(ProductionTask Task, char Letter)>();
+        var freedCodes = new List<string>();
+        foreach (var task in tasks)
+        {
+            var displayName = customerDisplayName
+                ?? CustomerOrderKey.TryGetDisplayName(task.FolderPath)
+                ?? "";
+            var letter = CustomerOrderKey.ResolvePickupLetter(task.FolderPath, displayName);
+            if (string.IsNullOrWhiteSpace(task.PickupCode))
+            {
+                toAssign.Add((task, letter));
+            }
+            else if (!PickupCodes.StartsWithLetter(task.PickupCode, letter))
+            {
+                freedCodes.Add(PickupCodes.Normalize(task.PickupCode));
+                toAssign.Add((task, letter));
+            }
+        }
+
+        if (toAssign.Count == 0)
+            return;
+
+        var usedCodes = await LoadUsedPickupCodesAsync(cancellationToken);
+        foreach (var freed in freedCodes)
+            usedCodes.Remove(freed);
+
+        foreach (var (task, letter) in toAssign)
+        {
+            task.PickupCode = PickupCodes.Allocate(letter, usedCodes);
+            // UpdatedAt не трогаем: назначение номера — служебная операция,
+            // она не должна ломать конкурентное редактирование строки.
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<List<CustomerOrderPublicItemDto>> LoadCustomerOrdersAsync(
@@ -473,24 +502,7 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         if (parents.Count == 0)
             return;
 
-        var missing = parents.Where(t => string.IsNullOrWhiteSpace(t.PickupCode)).ToList();
-        if (missing.Count == 0)
-            return;
-
-        var usedCodes = await LoadUsedPickupCodesAsync(cancellationToken);
-        foreach (var task in parents.Where(t => !string.IsNullOrWhiteSpace(t.PickupCode)))
-            usedCodes.Add(task.PickupCode!);
-
-        var changed = false;
-        foreach (var task in missing)
-        {
-            var letter = CustomerOrderKey.ResolvePickupLetter(task.FolderPath, customerDisplayName);
-            task.PickupCode = PickupCodes.Allocate(letter, usedCodes);
-            changed = true;
-        }
-
-        if (changed)
-            await _db.SaveChangesAsync(cancellationToken);
+        await AssignPickupCodesAsync(parents, customerDisplayName, cancellationToken);
     }
 
     private async Task<HashSet<string>> LoadUsedPickupCodesAsync(CancellationToken cancellationToken)

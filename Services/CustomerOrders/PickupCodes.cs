@@ -16,6 +16,10 @@ public static class PickupCodes
         return raw.Length == 0 ? "" : raw.ToUpper(CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Код обязан начинаться с буквы алфавитного указателя пути.</summary>
+    public static bool StartsWithLetter(string? code, char letter) =>
+        !string.IsNullOrWhiteSpace(code) && Normalize(code)[0] == letter;
+
     /// <summary>Случайный свободный код на букву среди активных задач; used пополняется выданным кодом.</summary>
     public static string Allocate(char letter, HashSet<string> used)
     {

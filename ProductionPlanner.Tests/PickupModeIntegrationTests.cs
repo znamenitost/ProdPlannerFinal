@@ -111,6 +111,45 @@ public class PickupModeIntegrationTests : IDisposable
         }
     }
 
+    // Код, выданный по старой семантике (буква последней папки), перевыдаётся
+    // с буквы алфавитного указателя; корректные коды не трогаем.
+    [Fact]
+    public async Task EnsurePickupCodes_ReissuesCodeWhenLetterMismatchesPath()
+    {
+        int staleId;
+        await using (var db = CreateDb())
+        {
+            var stale = MakeTask("C:\\Users\\пк\\Yandex.Disk\\Клиенты\\А\\Арт фешн групп\\600 шт");
+            stale.PickupCode = "Ш07";
+            var fresh = MakeTask("Клиенты/Б/Борис");
+            fresh.PickupCode = "Б42";
+            db.ProductionTasks.AddRange(stale, fresh);
+            await db.SaveChangesAsync();
+            staleId = stale.Id;
+        }
+
+        await using (var db = CreateDb())
+        {
+            var service = new CustomerOrderTrackingService(db, new NullTaskNotificationService());
+            var codes = await service.EnsurePickupCodesForTasksAsync([staleId]);
+
+            Assert.StartsWith("А", codes[staleId]);
+            Assert.NotEqual("Ш07", codes[staleId]);
+
+            var fresh = await db.ProductionTasks.SingleAsync(t => t.FolderPath == "Клиенты/Б/Борис");
+            Assert.Equal("Б42", fresh.PickupCode);
+        }
+
+        // Повторный прогон ничего не меняет — новый код соответствует пути.
+        await using (var db = CreateDb())
+        {
+            var service = new CustomerOrderTrackingService(db, new NullTaskNotificationService());
+            var again = await service.EnsurePickupCodesForTasksAsync([staleId]);
+            var persisted = await db.ProductionTasks.FindAsync(staleId);
+            Assert.Equal(persisted!.PickupCode, again[staleId]);
+        }
+    }
+
     [Fact]
     public async Task PickupPrefixSearch_FiltersAndSorts()
     {

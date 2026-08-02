@@ -211,8 +211,12 @@ public sealed class LabelPrintService : ILabelPrintService
         string customerDisplayName,
         CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(task.PickupCode))
+        var letter = CustomerOrderKey.ResolvePickupLetter(task.FolderPath, customerDisplayName);
+        if (!string.IsNullOrWhiteSpace(task.PickupCode)
+            && PickupCodes.StartsWithLetter(task.PickupCode, letter))
+        {
             return task.PickupCode.Trim();
+        }
 
         var used = await _db.ProductionTasks
             .AsNoTracking()
@@ -221,7 +225,9 @@ public sealed class LabelPrintService : ILabelPrintService
             .ToListAsync(cancellationToken);
 
         var usedSet = new HashSet<string>(used, StringComparer.OrdinalIgnoreCase);
-        var letter = CustomerOrderKey.ResolvePickupLetter(task.FolderPath, customerDisplayName);
+        // Буква устаревшего кода не совпала с указателем пути — код возвращаем в пул.
+        if (!string.IsNullOrWhiteSpace(task.PickupCode))
+            usedSet.Remove(PickupCodes.Normalize(task.PickupCode));
         var code = PickupCodes.Allocate(letter, usedSet);
         task.PickupCode = code;
         await _db.SaveChangesAsync(cancellationToken);
