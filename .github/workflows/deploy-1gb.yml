@@ -28,7 +28,7 @@ jobs:
           New-Item -ItemType Directory vcredist | Out-Null
           Copy-Item (Join-Path $src.FullName "*.dll") vcredist\
       - name: Upload CRT artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vcredist-x64
           path: vcredist/*.dll
@@ -225,7 +225,7 @@ jobs:
           ls -lh publish/models/isnet-general-use.onnx
 
       - name: Bundle app-local VC++ CRT next to onnxruntime.dll
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: vcredist-x64
           path: publish

@@ -255,7 +255,7 @@ public sealed class LabelPrintService : ILabelPrintService
             TaskId = job.TaskId,
             OrderTitle = job.OrderTitle,
             PrimaryComment = job.PrimaryComment,
-            PickupCode = job.PickupCode,
+            PickupCode = job.PickupCode ?? "",
             OrderPath = orderPath,
             Status = job.Status.ToString(),
             CreatedAt = job.CreatedAt
