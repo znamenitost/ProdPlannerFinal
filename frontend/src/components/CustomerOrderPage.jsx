@@ -11,7 +11,6 @@ import {
   Typography
 } from '@mui/material';
 import ParallaxPage from './ParallaxPage';
-import PickupOrderQr, { buildOrderPageUrl } from './PickupOrderQr';
 import useAuth from '../hooks/useAuth';
 import { issueAllReadyPickupOrders, issuePickupOrder } from '../services/api';
 import './LoginForm.css';
@@ -249,7 +248,6 @@ export default function CustomerOrderPage({ token }) {
                         focusCode.localeCompare(code, 'ru', { sensitivity: 'accent' }) === 0;
                       const canIssue = showIssueControls && order.taskId;
                       const busy = issuingTaskId === order.taskId;
-                      const qrUrl = buildOrderPageUrl(token, code);
 
                       return (
                         <Box
@@ -290,17 +288,6 @@ export default function CustomerOrderPage({ token }) {
                               variant={order.statusKind === 'queued' ? 'outlined' : 'filled'}
                             />
                           </Box>
-                          {code && (
-                            <Box
-                              sx={{
-                                display: 'flex',
-                                justifyContent: 'center',
-                                mb: canIssue ? 1.5 : 0
-                              }}
-                            >
-                              <PickupOrderQr value={qrUrl} size={168} />
-                            </Box>
-                          )}
                           {canIssue && (
                             <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                               <Button

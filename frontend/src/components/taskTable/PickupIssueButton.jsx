@@ -14,7 +14,7 @@ export default function PickupIssueButton({ task, issuing = false, onIssue }) {
         icon={<CheckCircle sx={{ fontSize: 16 }} />}
         label="Выдано"
         size="small"
-        color="success"
+        color="primary"
         variant="filled"
         sx={{ fontSize: '0.7rem', height: 24, minWidth: 88, fontWeight: 600 }}
       />
