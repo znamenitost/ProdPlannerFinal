@@ -83,7 +83,6 @@ export function startCdrAutoSearchAfterSave({
   taskId,
   folderPath,
   fileName,
-  autoSearchMinutes,
   showWarning
 }) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return;

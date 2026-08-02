@@ -22,6 +22,7 @@ import TaskDeadlineCell from './taskTable/TaskDeadlineCell';
 import TaskHoursCell from './taskTable/TaskHoursCell';
 import TaskTypeCell from './taskTable/TaskTypeCell';
 import TaskStatusCell from './taskTable/TaskStatusCell';
+import PickupIssueButton from './taskTable/PickupIssueButton';
 import ThroughApprovalChip from './taskTable/ThroughApprovalChip';
 import TaskPriorityChip from './taskTable/TaskPriorityChip';
 import IssuedWithoutReadyChip from './taskTable/IssuedWithoutReadyChip';
@@ -101,7 +102,11 @@ function ParentTaskRow({
   onMaxSubscribeToggle,
   forceCommentTooltipTaskId = null,
   onForceCommentTooltipClose,
-  actionsColumnSx = COL_ACTIONS
+  actionsColumnSx = COL_ACTIONS,
+  pickupMode = false,
+  onIssueOrder,
+  issuingPickup = false,
+  pickupHighlighted = false
 }) {
   const maxSubscribedSet = useMemo(
     () => new Set((maxSubscribedTaskIds || []).map(Number)),
@@ -154,8 +159,14 @@ function ParentTaskRow({
   const shortFolderPath = getLastPathSegment(task.folderPath);
   const taskColumnLabel = task.isFuss
     ? getFussTaskTitle(task)
-    : (shortFolderPath || task.folderPath || '—');
-  const taskColumnFullText = task.isFuss ? taskColumnLabel : (task.folderPath || '');
+    : pickupMode
+      ? (task.customerName || shortFolderPath || task.folderPath || '—')
+      : (shortFolderPath || task.folderPath || '—');
+  const taskColumnFullText = task.isFuss
+    ? taskColumnLabel
+    : pickupMode && task.customerName
+      ? `${task.customerName} (${task.folderPath || ''})`
+      : (task.folderPath || '');
   const cdrPreviewRowHandlers = getCdrPreviewRowHandlers({
     task,
     previewTask: cdrPreviewSourceTask,
@@ -183,6 +194,16 @@ function ParentTaskRow({
       borderLeft: 'none',
       '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) }
     };
+
+    if (pickupHighlighted) {
+      style = {
+        ...style,
+        outline: '2px solid',
+        outlineColor: 'success.main',
+        outlineOffset: -2,
+        bgcolor: alpha(theme.palette.success.main, 0.08)
+      };
+    }
 
     // Group band first; mine / overdue highlights may override bgcolor.
     if (showSharedGroupStripe) {
@@ -229,11 +250,12 @@ function ParentTaskRow({
         sx={(theme) => getRowStyle(theme)}
         {...cdrPreviewRowHandlers}
       >
-        {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла */}
+        {/* Первая ячейка: управление раскрытием + индикатор сплит-задачи + кнопка открытия файла.
+            В режиме выдачи производственная навигация по строке не нужна. */}
         <TableCell sx={COL_ICON}>
           <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', width: '100%' }}>
             <Box sx={ICON_SLOT_EXPAND}>
-              {hasChildren ? (
+              {!pickupMode && hasChildren ? (
                 <IconButton
                   size="small"
                   variant="soft"
@@ -256,25 +278,27 @@ function ParentTaskRow({
             </Box>
 
             <Box sx={ICON_SLOT_FILE}>
-              <LazyTooltip
-                title={`Открыть файл: ${fullFilePath}. ПКМ — открыть папку в проводнике`}
-                arrow
-              >
-                <IconButton
-                  size="small"
-                  color="primary"
-                  onClick={() => onOpenFile(task)}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onOpenFolder?.(task);
-                  }}
-                  aria-label={`Открыть файл: ${fullFilePath}. Правая кнопка — открыть папку`}
-                  sx={{ p: 0.5 }}
+              {!pickupMode && (
+                <LazyTooltip
+                  title={`Открыть файл: ${fullFilePath}. ПКМ — открыть папку в проводнике`}
+                  arrow
                 >
-                  <FolderOpen fontSize="small" />
-                </IconButton>
-              </LazyTooltip>
+                  <IconButton
+                    size="small"
+                    color="primary"
+                    onClick={() => onOpenFile(task)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onOpenFolder?.(task);
+                    }}
+                    aria-label={`Открыть файл: ${fullFilePath}. Правая кнопка — открыть папку`}
+                    sx={{ p: 0.5 }}
+                  >
+                    <FolderOpen fontSize="small" />
+                  </IconButton>
+                </LazyTooltip>
+              )}
             </Box>
           </Box>
         </TableCell>
@@ -332,7 +356,22 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell sx={typeColumnSx(columnVisibility, showHoursTypeColumns)}>
-          <TaskTypeCell type={task.type} />
+          {pickupMode ? (
+            <Chip
+              label={task.pickupCode || '—'}
+              size="small"
+              color={task.pickupCode ? 'primary' : 'default'}
+              variant={task.pickupCode ? 'filled' : 'outlined'}
+              sx={{
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                whiteSpace: 'nowrap'
+              }}
+            />
+          ) : (
+            <TaskTypeCell type={task.type} />
+          )}
         </TableCell>
 
         <TableCell sx={columnCellSx('employee', columnVisibility, showHoursTypeColumns, COL_EMPLOYEE)}>
@@ -340,27 +379,35 @@ function ParentTaskRow({
         </TableCell>
 
         <TableCell sx={columnCellSx('status', columnVisibility, showHoursTypeColumns, COL_STATUS)}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
-            <TaskStatusCell
-              statusText={task.statusText}
-              label={hasChildren ? displayStatus : undefined}
+          {pickupMode ? (
+            <PickupIssueButton
               task={task}
+              issuing={issuingPickup}
+              onIssue={onIssueOrder}
             />
-            <ThroughApprovalChip task={task} childrenTasks={childrenTasks} />
-            <FussTaskChip task={task} />
-            <TaskPriorityChip
-              task={task}
-              childrenTasks={childrenTasks}
-              viewerEmployeeName={priorityMarkViewer}
-            />
-            <IssuedWithoutReadyChip task={task} />
-            {canEdit && <MaxSubscribeChip subscribed={maxSubscribedSet.has(task.id)} />}
-          </Box>
+          ) : (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'nowrap' }}>
+              <TaskStatusCell
+                statusText={task.statusText}
+                label={hasChildren ? displayStatus : undefined}
+                task={task}
+              />
+              <ThroughApprovalChip task={task} childrenTasks={childrenTasks} />
+              <FussTaskChip task={task} />
+              <TaskPriorityChip
+                task={task}
+                childrenTasks={childrenTasks}
+                viewerEmployeeName={priorityMarkViewer}
+              />
+              <IssuedWithoutReadyChip task={task} />
+              {canEdit && <MaxSubscribeChip subscribed={maxSubscribedSet.has(task.id)} />}
+            </Box>
+          )}
         </TableCell>
 
         <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, actionsColumnSx)}>
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' }}>
-            {canEdit && canDelete && (
+            {!pickupMode && canEdit && canDelete && (
               <TaskAdminActionStacks
                 task={task}
                 pending={pendingLifecycleTaskId === task.id}
@@ -382,7 +429,7 @@ function ParentTaskRow({
                 onMaxSubscribeToggle={onMaxSubscribeToggle}
               />
             )}
-            {showActionButtons && (
+            {!pickupMode && showActionButtons && (
               <EmployeeStatusButtons
                 task={task}
                 pending={pendingLifecycleTaskId === task.id}
@@ -399,15 +446,17 @@ function ParentTaskRow({
         </TableCell>
       </TableRow>
 
-      <TaskPlannedProgressFooter
-        task={task}
-        colSpan={tableColSpan}
-        enabled={showPlannedProgress}
-        color={hasChildren ? 'primary' : 'success'}
-        actionsColumnSx={actionsColumnSx}
-      />
+      {!pickupMode && (
+        <TaskPlannedProgressFooter
+          task={task}
+          colSpan={tableColSpan}
+          enabled={showPlannedProgress}
+          color={hasChildren ? 'primary' : 'success'}
+          actionsColumnSx={actionsColumnSx}
+        />
+      )}
 
-      {hasChildren && isExpanded && (childrenTasks || []).map((child, index) => (
+      {!pickupMode && hasChildren && isExpanded && (childrenTasks || []).map((child, index) => (
         <ChildTaskRow
           key={child.id}
           task={child}

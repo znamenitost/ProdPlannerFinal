@@ -1,4 +1,5 @@
 using ProductionPlanner.Models;
+using ProductionPlanner.Services.CustomerOrders;
 using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Models.Dtos;
@@ -16,6 +17,15 @@ public class TaskTableRowDto
 
     /// <summary>Выдан без статуса «Готово» — показать маркер «?».</summary>
     public bool IssuedWithoutReady { get; set; }
+
+    /// <summary>Номер выдачи («И42») — буква алфавитного указателя + цифры.</summary>
+    public string PickupCode { get; set; } = "";
+
+    /// <summary>Момент выдачи заказа клиенту; null — ещё не выдан.</summary>
+    public DateTime? PickedUpAt { get; set; }
+
+    /// <summary>Заказчик по CustomerOrderKey (папка сразу после буквенного указателя).</summary>
+    public string CustomerName { get; set; } = "";
 
     /// <summary>Номинальная задача «Суета» (без дедлайна и выделенных часов).</summary>
     public bool IsFuss { get; set; }
@@ -110,6 +120,9 @@ public class TaskTableRowDto
                 priorityMarkViewerEmployeeName,
                 restrictPriorityMarkToViewer),
             IssuedWithoutReady = parent.IssuedWithoutReady,
+            PickupCode = parent.PickupCode ?? "",
+            PickedUpAt = parent.PickedUpAt,
+            CustomerName = CustomerOrderKey.TryGetDisplayName(parent.FolderPath) ?? "",
             IsFuss = parent.IsFuss,
             Deadline = parent.Deadline,
             EstimateHours = parent.EstimateHours,

@@ -2,6 +2,7 @@ using ProductionPlanner.Data;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Models.Dtos;
+using ProductionPlanner.Services.CustomerOrders;
 using ProductionPlanner.Services.TaskCdrPreview;
 
 namespace ProductionPlanner.Services.TaskTable;
@@ -17,6 +18,7 @@ public class TaskTableService : ITaskTableService
     private readonly IEmployeeStatsService _statsService;
     private readonly ITaskCdrPreviewService _cdrPreviewService;
     private readonly ITaskCommentService _taskComments;
+    private readonly ICustomerOrderTrackingService _customerOrders;
 
     public TaskTableService(
         IProductionTaskRepository repo,
@@ -27,7 +29,8 @@ public class TaskTableService : ITaskTableService
         IWorkHoursCalculator workHours,
         IEmployeeStatsService statsService,
         ITaskCdrPreviewService cdrPreviewService,
-        ITaskCommentService taskComments)
+        ITaskCommentService taskComments,
+        ICustomerOrderTrackingService customerOrders)
     {
         _repo = repo;
         _lifecycle = lifecycle;
@@ -38,6 +41,7 @@ public class TaskTableService : ITaskTableService
         _statsService = statsService;
         _cdrPreviewService = cdrPreviewService;
         _taskComments = taskComments;
+        _customerOrders = customerOrders;
     }
 
     /// <summary>
@@ -69,23 +73,38 @@ public class TaskTableService : ITaskTableService
         bool viewerIsAdmin = true,
         string? viewerUserId = null,
         bool showFuss = false,
+        bool pickupMode = false,
         CancellationToken cancellationToken = default)
     {
         var normalizedTargetEmployeeName = (targetEmployeeName ?? string.Empty).Trim();
         if (!viewerIsAdmin && normalizedTargetEmployeeName.Length > 0)
             await EnsureFussTaskAsync(normalizedTargetEmployeeName, cancellationToken);
 
+        // Режим выдачи — только для админа: именно он работает с номерами выдачи.
+        var effectivePickupMode = pickupMode && viewerIsAdmin;
+
         // Админ: суета только при showFuss. Сотрудник: всегда своя суета.
-        var includeFuss = viewerIsAdmin ? showFuss : true;
+        var includeFuss = viewerIsAdmin ? showFuss && !effectivePickupMode : true;
         var fussViewer = viewerIsAdmin ? null : normalizedTargetEmployeeName;
+
+        // В режиме выдачи строка поиска — префикс номера выдачи, а не путь/файл.
+        var effectiveSearch = search;
+        string? pickupCodePrefix = null;
+        if (effectivePickupMode && !string.IsNullOrWhiteSpace(search))
+        {
+            pickupCodePrefix = PickupCodes.Normalize(search);
+            effectiveSearch = null;
+        }
 
         var pageResult = await _repo.GetRootTasksPaginatedAsync(
             page,
             pageSize,
             excludeCompleted,
-            search,
+            effectiveSearch,
             includeFuss,
             fussViewer,
+            pickupCodePrefix,
+            effectivePickupMode,
             cancellationToken);
 
         if (pageResult.Items.Count == 0)
@@ -141,6 +160,20 @@ public class TaskTableService : ITaskTableService
         }).ToList();
 
         await ApplyCommentBadgeCountsAsync(rows, viewerUserId, cancellationToken);
+
+        if (effectivePickupMode && rows.Count > 0)
+        {
+            // Страница загружена AsNoTracking — назначенные только что номера
+            // в сущностях устарели, поэтому коды накладываем на DTO напрямую.
+            var codes = await _customerOrders.EnsurePickupCodesForTasksAsync(
+                rows.Select(r => r.Id).ToList(),
+                cancellationToken);
+            foreach (var row in rows)
+            {
+                if (codes.TryGetValue(row.Id, out var code))
+                    row.PickupCode = code;
+            }
+        }
 
         return new PaginatedResult<TaskTableRowDto>
         {

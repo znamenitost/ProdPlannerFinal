@@ -73,6 +73,8 @@ namespace ProductionPlanner.Data
             string? search = null,
             bool includeFuss = false,
             string? fussViewerEmployeeName = null,
+            string? pickupCodePrefix = null,
+            bool pickupSort = false,
             CancellationToken cancellationToken = default);
         Task<ProductionTask?> GetFussTaskByEmployeeAsync(
             string employeeName,

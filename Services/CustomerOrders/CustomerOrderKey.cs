@@ -3,7 +3,10 @@ using ProductionPlanner.Services;
 
 namespace ProductionPlanner.Services.CustomerOrders;
 
-/// <summary>Ключ заказчика = последняя папка в пути после шары «Клиенты».</summary>
+/// <summary>
+/// Ключ заказчика = папка сразу после буквенного указателя:
+/// «Клиенты/И/Игорь/Проект» → «Игорь». Вложенные папки проекта заказчика не меняют.
+/// </summary>
 public static class CustomerOrderKey
 {
     public const string DefaultShareName = "Клиенты";
@@ -13,6 +16,12 @@ public static class CustomerOrderKey
         var segments = SplitSegments(folderPath);
         if (segments.Count == 0)
             return null;
+
+        if (segments.Count >= 2 && IsClientLetterSegment(segments[0]))
+        {
+            var customer = segments[1];
+            return string.IsNullOrWhiteSpace(customer) ? null : customer;
+        }
 
         var last = segments[^1];
         return string.IsNullOrWhiteSpace(last) ? null : last;
@@ -24,8 +33,40 @@ public static class CustomerOrderKey
         return display == null ? null : Normalize(display);
     }
 
+    /// <summary>Буквенный указатель («И» в «Клиенты/И/Игорь») или null, если его нет.</summary>
+    public static string? TryGetLetterIndex(string? folderPath)
+    {
+        var segments = SplitSegments(folderPath);
+        return segments.Count > 0 && IsClientLetterSegment(segments[0])
+            ? segments[0].ToUpper(CultureInfo.InvariantCulture)
+            : null;
+    }
+
     public static bool Matches(string? folderPath, string customerKey) =>
         string.Equals(TryGetNormalizedKey(folderPath), customerKey, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Совпадение по правилу «последняя папка пути» — нужно, пока в БД есть записи
+    /// CustomerOrderTracking, заведённые по старой семантике ключа.
+    /// </summary>
+    public static bool LegacyMatches(string? folderPath, string customerKey)
+    {
+        var segments = SplitSegments(folderPath);
+        if (segments.Count == 0)
+            return false;
+
+        return string.Equals(Normalize(segments[^1]), customerKey, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ключ по старому правилу (последняя папка) — для ленивой переключёвки старых записей.</summary>
+    public static string? TryGetLegacyKey(string? folderPath)
+    {
+        var segments = SplitSegments(folderPath);
+        if (segments.Count == 0)
+            return null;
+
+        return Normalize(segments[^1]);
+    }
 
     public static string Normalize(string displayName) =>
         displayName.Trim().ToLowerInvariant();

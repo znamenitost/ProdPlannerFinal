@@ -6,7 +6,8 @@ import { columnCellSx } from '../utils/taskTableColumns';
 export default function TaskTableHead({
   columnVisibility,
   showHoursTypeColumns,
-  actionsColumnSx = COL_ACTIONS
+  actionsColumnSx = COL_ACTIONS,
+  pickupMode = false
 }) {
   const headCell = (columnId, label, sx = {}) => (
     <TableCell
@@ -25,14 +26,14 @@ export default function TaskTableHead({
     <TableHead>
       <TableRow sx={{ bgcolor: (theme) => alpha(theme.palette.primary.main, 0.04) }}>
         {headCell('icons', '', { width: '3%' })}
-        {headCell('task', 'Задача', { width: '15%' })}
+        {headCell('task', pickupMode ? 'Заказчик' : 'Задача', { width: '15%' })}
         {headCell('file', 'Файл', { width: '10%' })}
         {headCell('comment', 'Комментарий', { width: '12%' })}
         {headCell('deadline', 'Дедлайн', { width: '8%' })}
         {headCell('hours', 'Часы', { width: '6%' })}
-        {headCell('type', 'Тип', { width: '8%' })}
+        {headCell('type', pickupMode ? '№ выдачи' : 'Тип', { width: '8%' })}
         {headCell('employee', 'Сотрудник', { width: '8%' })}
-        {headCell('status', 'Статус', { width: '8%' })}
+        {headCell('status', pickupMode ? 'Выдача' : 'Статус', { width: '8%' })}
         <TableCell
           sx={{
             ...columnCellSx('actions', columnVisibility, showHoursTypeColumns, {

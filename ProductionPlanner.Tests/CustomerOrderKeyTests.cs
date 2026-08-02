@@ -11,6 +11,10 @@ public class CustomerOrderKeyTests
     [InlineData("Клиенты/А/Арета", "Арета", "арета")]
     [InlineData("Д/Дистри", "Дистри", "дистри")]
     [InlineData("Фрэшмемори", "Фрэшмемори", "фрэшмемори")]
+    // Заказчик — папка сразу после буквенного указателя, вложенные папки не влияют.
+    [InlineData("Клиенты/И/Игорь/Визитки", "Игорь", "игорь")]
+    [InlineData("И/Игорь/Проект24/Черновики", "Игорь", "игорь")]
+    [InlineData("Клиенты\\И\\Игорь\\Визитки", "Игорь", "игорь")]
     public void TryGetDisplayName_And_Key(string path, string display, string key)
     {
         Assert.Equal(display, CustomerOrderKey.TryGetDisplayName(path));
@@ -19,10 +23,41 @@ public class CustomerOrderKeyTests
     }
 
     [Fact]
+    public void TryGetLetterIndex_ReturnsAlphabetFolder()
+    {
+        Assert.Equal("И", CustomerOrderKey.TryGetLetterIndex("Клиенты/И/Игорь"));
+        Assert.Equal("А", CustomerOrderKey.TryGetLetterIndex("а/Арета"));
+        Assert.Null(CustomerOrderKey.TryGetLetterIndex("Фрэшмемори"));
+        Assert.Null(CustomerOrderKey.TryGetLetterIndex(null));
+    }
+
+    [Fact]
+    public void LegacyMatches_UsesLastFolder()
+    {
+        Assert.True(CustomerOrderKey.LegacyMatches("Клиенты/И/Игорь/Визитки", "визитки"));
+        Assert.False(CustomerOrderKey.LegacyMatches("Клиенты/И/Игорь/Визитки", "игорь"));
+        Assert.Equal("визитки", CustomerOrderKey.TryGetLegacyKey("Клиенты/И/Игорь/Визитки"));
+        Assert.Equal("игорь", CustomerOrderKey.TryGetLegacyKey("Клиенты/И/Игорь"));
+    }
+
+    [Fact]
     public void ResolvePickupLetter_UsesAlphabetFolder()
     {
         Assert.Equal('А', CustomerOrderKey.ResolvePickupLetter("А/Арета", "Арета"));
         Assert.Equal('Д', CustomerOrderKey.ResolvePickupLetter("Клиенты/Д/Дистри", "Дистри"));
+        Assert.Equal('И', CustomerOrderKey.ResolvePickupLetter("Клиенты/И/Игорь/Визитки", "Игорь"));
+    }
+
+    [Fact]
+    public void PickupCodes_Normalize_And_Allocate()
+    {
+        Assert.Equal("И11", PickupCodes.Normalize(" и11 "));
+        Assert.Equal("", PickupCodes.Normalize(null));
+
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "И00", "И01" };
+        var code = PickupCodes.Allocate('И', used);
+        Assert.StartsWith("И", code);
+        Assert.Contains(code, used);
     }
 
     [Fact]

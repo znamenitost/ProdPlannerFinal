@@ -34,7 +34,9 @@ import useTaskTablePlannedProgressPreference from '../hooks/taskTable/useTaskTab
 import useTaskTablePlannedProgressPolling from '../hooks/taskTable/useTaskTablePlannedProgressPolling';
 import useTaskTableSortSettings from '../hooks/taskTable/useTaskTableSortSettings';
 import useUserPreference from '../hooks/useUserPreference';
-import useCdrPreviewAutoSearchSettings from '../hooks/useCdrPreviewAutoSearchSettings';
+import { useUiFeedback } from '../context/UiFeedbackContext';
+import { issuePickupOrder } from '../services/api';
+import { comparePickupRows, normalizePickupQuery } from '../utils/pickupMode';
 
 const ROW_GROUP_BASE_HEIGHT = 44;
 const ROW_PROGRESS_HEIGHT = 6;
@@ -123,7 +125,8 @@ export default function TaskTable({
   onFocusCommentTooltipConsumed,
   onOpenFileOpenSettings,
   onOpenTaskTypeStats,
-  taskTypeStatsOpen = false
+  taskTypeStatsOpen = false,
+  mode = 'production'
 }) {
   const isAdmin = userRole === 'Admin';
   const tableContainerRef = useRef(null);
@@ -143,18 +146,23 @@ export default function TaskTable({
     showFuss,
     setShowFuss
   } = useTaskTableSortSettings(currentUser);
-  const [searchQuery, setSearchQuery] = useUserPreference(currentUser, 'taskTable.searchQuery', '');
+  const { showError, showSuccess } = useUiFeedback();
+  const pickupMode = isAdmin && mode === 'pickup';
+  const [productionSearchQuery, setProductionSearchQuery] = useUserPreference(currentUser, 'taskTable.searchQuery', '');
+  const [pickupSearchQuery, setPickupSearchQuery] = useUserPreference(currentUser, 'taskTable.pickupSearchQuery', '');
+  const searchQuery = pickupMode ? pickupSearchQuery : productionSearchQuery;
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
-  const autoSearchSettings = useCdrPreviewAutoSearchSettings(isAdmin ? currentUser : null);
-  const excludeCompletedFromApi = hideCompletedSort && !debouncedSearchQuery.trim();
+  const prevPickupModeRef = useRef(pickupMode);
+  const [issuingPickupTaskId, setIssuingPickupTaskId] = useState(null);
+  const excludeCompletedFromApi = !pickupMode && hideCompletedSort && !debouncedSearchQuery.trim();
   const table = useTaskTableController({
     onCalendarRefresh,
     onRegisterHubHandler,
     selectedEmployeeForHighlight,
     excludeCompleted: excludeCompletedFromApi,
     searchQuery: debouncedSearchQuery,
-    showFuss: isAdmin ? showFuss : false,
-    getAutoSearchMinutes: autoSearchSettings.getAutoSearchMinutes
+    showFuss: isAdmin && !pickupMode ? showFuss : false,
+    pickupMode
   });
   const sortOptions = useMemo(
     () => ({ deadlineSort, completedBottomSort }),
@@ -162,9 +170,49 @@ export default function TaskTable({
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 300);
+    const modeChanged = prevPickupModeRef.current !== pickupMode;
+    prevPickupModeRef.current = pickupMode;
+    const timer = window.setTimeout(
+      () => setDebouncedSearchQuery(searchQuery),
+      modeChanged ? 0 : 300
+    );
     return () => window.clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, pickupMode]);
+
+  const handleSearchQueryChange = useCallback(
+    (value) => {
+      if (pickupMode) {
+        setPickupSearchQuery(normalizePickupQuery(value));
+      } else {
+        setProductionSearchQuery(value);
+      }
+    },
+    [pickupMode, setPickupSearchQuery, setProductionSearchQuery]
+  );
+
+  const handleIssueOrder = useCallback(
+    async (task) => {
+      if (!task?.id || issuingPickupTaskId) return;
+      setIssuingPickupTaskId(task.id);
+      try {
+        await issuePickupOrder(task.id);
+        const fresh = await table.api.fetchTableRow(task.id);
+        if (fresh) table.patchRow(task.id, fresh);
+        showSuccess(`Заказ ${task.pickupCode || ''} выдан`);
+      } catch (err) {
+        showError(err?.message || 'Не удалось выдать заказ');
+      } finally {
+        setIssuingPickupTaskId(null);
+      }
+    },
+    [issuingPickupTaskId, table.api, table.patchRow, showError, showSuccess]
+  );
+
+  useEffect(() => {
+    if (!pickupMode) return;
+    table.setEditingId(null);
+    table.setNewRow(null);
+  }, [pickupMode, table.setEditingId, table.setNewRow]);
 
   const compareVisibleRows = useCallback(
     (a, b) => compareTaskRows(a, b, sortOptions),
@@ -183,12 +231,29 @@ export default function TaskTable({
   );
 
   const visibleRows = useMemo(() => {
+    if (pickupMode) {
+      // Сервер уже отфильтровал по префиксу номера и отсортировал по пути;
+      // клиентская сортировка уточняет порядок: буква → заказчик → номер.
+      return [...table.rows].sort(comparePickupRows);
+    }
     const rows = searchResult.isActive
       ? searchResult.rows
       : sortRowsWithStableOrder(table.rows, sortOptions);
     if (searchResult.isActive) return rows;
     return filterCompletedRows(rows, hideCompletedSort);
-  }, [searchResult, table.rows, sortOptions, hideCompletedSort]);
+  }, [pickupMode, searchResult, table.rows, sortOptions, hideCompletedSort]);
+
+  const isPickupSearchActive = pickupMode && Boolean(debouncedSearchQuery.trim());
+  const singlePickupMatchId = isPickupSearchActive && visibleRows.length === 1
+    ? visibleRows[0].id
+    : null;
+
+  const handlePickupSearchEnter = useCallback(() => {
+    if (!singlePickupMatchId) return;
+    document
+      .querySelector(`[data-pickup-issue-button="${singlePickupMatchId}"]`)
+      ?.focus();
+  }, [singlePickupMatchId]);
 
   useTaskTablePlannedProgressPolling({
     enabled: showPlannedProgress,
@@ -203,6 +268,7 @@ export default function TaskTable({
   });
 
   useEffect(() => {
+    if (pickupMode) return undefined;
     const query = debouncedSearchQuery.trim();
     if (!query) return undefined;
 
@@ -215,9 +281,10 @@ export default function TaskTable({
     }, 250);
 
     return () => window.clearTimeout(timer);
-  }, [debouncedSearchQuery, table.rows, table.loadChildrenForParent]);
+  }, [pickupMode, debouncedSearchQuery, table.rows, table.loadChildrenForParent]);
 
   useEffect(() => {
+    if (pickupMode) return undefined;
     if (!hideCompletedInSharedSort) return undefined;
     if (visibleRows.length === 0) return undefined;
 
@@ -230,7 +297,7 @@ export default function TaskTable({
     }, 150);
 
     return () => window.clearTimeout(timer);
-  }, [hideCompletedInSharedSort, visibleRows, table.loadChildrenForParent]);
+  }, [pickupMode, hideCompletedInSharedSort, visibleRows, table.loadChildrenForParent]);
 
   const handleForceCommentTooltipClose = useCallback(() => {
     onFocusCommentTooltipConsumed?.();
@@ -489,7 +556,7 @@ export default function TaskTable({
     const displayChildren = shouldPromoteSingleChild ? [] : children;
     const isExpanded = table.expandedRows.has(parent.id)
       || (searchResult.autoExpandIds.has(parent.id) && !shouldPromoteSingleChild);
-    return table.editingId === displayTask.id ? (
+    return !pickupMode && table.editingId === displayTask.id ? (
       <EditTaskRow
         key={`edit-${displayTask.id}`}
         task={displayTask}
@@ -542,6 +609,10 @@ export default function TaskTable({
         forceCommentTooltipTaskId={focusCommentTooltipTaskId}
         onForceCommentTooltipClose={handleForceCommentTooltipClose}
         actionsColumnSx={actionsColumnSx}
+        pickupMode={pickupMode}
+        onIssueOrder={handleIssueOrder}
+        issuingPickup={issuingPickupTaskId === displayTask.id}
+        pickupHighlighted={singlePickupMatchId === displayTask.id}
       />
     );
   };
@@ -576,14 +647,14 @@ export default function TaskTable({
         showFuss={showFuss}
         onShowFussChange={isAdmin ? setShowFuss : undefined}
         searchQuery={searchQuery}
-        onSearchQueryChange={setSearchQuery}
+        onSearchQueryChange={handleSearchQueryChange}
         showPlannedProgress={plannedProgressPref.showPlannedProgress}
         onToggleShowPlannedProgress={plannedProgressPref.toggleShowPlannedProgress}
-        autoSearchMinutes={autoSearchSettings.minutes}
-        onAutoSearchMinutesChange={autoSearchSettings.setMinutes}
         onOpenFileOpenSettings={onOpenFileOpenSettings}
         onOpenTaskTypeStats={onOpenTaskTypeStats}
         taskTypeStatsOpen={taskTypeStatsOpen}
+        pickupMode={pickupMode}
+        onSearchEnter={handlePickupSearchEnter}
       />
 
       <TableContainer ref={tableContainerRef}>
@@ -601,9 +672,10 @@ export default function TaskTable({
             columnVisibility={columnSettings.visibility}
             showHoursTypeColumns={table.showHoursTypeColumns}
             actionsColumnSx={actionsColumnSx}
+            pickupMode={pickupMode}
           />
           <TableBody>
-            {table.newRow && isAdmin && (
+            {table.newRow && isAdmin && !pickupMode && (
               <NewTaskRow
                 newRow={table.newRow}
                 onSave={table.handleSaveNewRow}
@@ -622,11 +694,20 @@ export default function TaskTable({
             ) : (
               visibleRows.map(renderTaskRow)
             )}
-            {searchResult.isActive && visibleRows.length === 0 && (
+            {searchResult.isActive && !pickupMode && visibleRows.length === 0 && (
               <TableRow>
                 <TableCell colSpan={tableColSpan} align="center" sx={{ py: 4 }}>
                   <Typography variant="body2" color="text.secondary">
                     Ничего не найдено по запросу «{searchQuery.trim()}»
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
+            {isPickupSearchActive && visibleRows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={tableColSpan} align="center" sx={{ py: 4 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Заказ с номером «{debouncedSearchQuery.trim()}» не найден
                   </Typography>
                 </TableCell>
               </TableRow>

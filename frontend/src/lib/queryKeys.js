@@ -14,7 +14,7 @@ export const queryKeys = {
   completedAll: (employee) => ['app', 'completedTasks', employee],
   dailyReport: (employee, dateKey = 'today') => ['app', 'dailyReport', employee, dateKey],
   dailyReportAll: (employee) => ['app', 'dailyReport', employee],
-  taskTable: (page, pageSize, employeeFilter, excludeCompleted = false, search = '', showFuss = false) => [
+  taskTable: (page, pageSize, employeeFilter, excludeCompleted = false, search = '', showFuss = false, pickupMode = false) => [
     'app',
     'taskTable',
     page,
@@ -22,7 +22,8 @@ export const queryKeys = {
     employeeFilter || '',
     excludeCompleted,
     search || '',
-    showFuss
+    showFuss,
+    pickupMode
   ],
   taskTableAll: () => ['app', 'taskTable'],
   deadlineRisks: (employee) => ['app', 'deadlineRisks', employee],

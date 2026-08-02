@@ -54,6 +54,9 @@ export default function useTaskTableApi() {
     if (options.showFuss) {
       url += '&showFuss=true';
     }
+    if (options.pickupMode) {
+      url += '&pickupMode=true';
+    }
     const search = String(options.search ?? '').trim();
     if (search) {
       url += `&search=${encodeURIComponent(search)}`;

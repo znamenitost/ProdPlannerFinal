@@ -22,7 +22,7 @@ export default function useTaskTableController({
   excludeCompleted = false,
   searchQuery = '',
   showFuss = false,
-  getAutoSearchMinutes = () => 0
+  pickupMode = false
 }) {
   const { showError, showWarning, showSuccess, confirm, promptInput } = useUiFeedback();
   const api = useTaskTableApi();
@@ -94,7 +94,8 @@ export default function useTaskTableController({
     onCalendarRefresh,
     excludeCompleted,
     searchQuery,
-    showFuss
+    showFuss,
+    pickupMode
   });
 
   const childrenState = useTaskTableChildren(api);
@@ -119,8 +120,7 @@ export default function useTaskTableController({
     showSuccess,
     confirm,
     promptInput,
-    applyPlanningWarnings,
-    getAutoSearchMinutes
+    applyPlanningWarnings
   });
 
   const refresh = useCallback(async () => {

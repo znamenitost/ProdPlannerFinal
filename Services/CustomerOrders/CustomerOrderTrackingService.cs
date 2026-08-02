@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using ProductionPlanner.Data;
@@ -15,15 +14,24 @@ public interface ICustomerOrderTrackingService
     Task<PickupCustomerLookupDto?> FindByPickupCodeAsync(string pickupCode, CancellationToken cancellationToken = default);
     Task MarkPickedUpAsync(int taskId, CancellationToken cancellationToken = default);
     Task<PickupIssueResultDto> MarkAllReadyPickedUpAsync(int taskId, CancellationToken cancellationToken = default);
+
+    /// <summary>Гарантирует номера выдачи для набора корневых задач; возвращает taskId → код.</summary>
+    Task<IReadOnlyDictionary<int, string>> EnsurePickupCodesForTasksAsync(
+        IReadOnlyCollection<int> taskIds,
+        CancellationToken cancellationToken = default);
 }
 
 public class CustomerOrderTrackingService : ICustomerOrderTrackingService
 {
     private readonly ApplicationDbContext _db;
+    private readonly ITaskNotificationService _notifications;
 
-    public CustomerOrderTrackingService(ApplicationDbContext db)
+    public CustomerOrderTrackingService(
+        ApplicationDbContext db,
+        ITaskNotificationService notifications)
     {
         _db = db;
+        _notifications = notifications;
     }
 
     public async Task<CustomerOrderLinkDto> CreateOrGetLinkAsync(
@@ -43,6 +51,24 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         var customerKey = CustomerOrderKey.Normalize(displayName);
         var tracking = await _db.CustomerOrderTrackings
             .FirstOrDefaultAsync(t => t.CustomerKey == customerKey, cancellationToken);
+
+        if (tracking == null)
+        {
+            // Ленивая переключёвка записей, заведённых по старому правилу «последняя папка»:
+            // сохраняем публичный токен, но переводим ключ на новую семантику.
+            var legacyKey = CustomerOrderKey.TryGetLegacyKey(task.FolderPath);
+            if (!string.IsNullOrEmpty(legacyKey) && legacyKey != customerKey)
+            {
+                tracking = await _db.CustomerOrderTrackings
+                    .FirstOrDefaultAsync(t => t.CustomerKey == legacyKey, cancellationToken);
+                if (tracking != null)
+                {
+                    tracking.CustomerKey = customerKey;
+                    tracking.CustomerDisplayName = displayName;
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+            }
+        }
 
         if (tracking == null)
         {
@@ -106,11 +132,11 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         string pickupCode,
         CancellationToken cancellationToken = default)
     {
-        var code = NormalizePickupCode(pickupCode);
+        var code = PickupCodes.Normalize(pickupCode);
         if (string.IsNullOrEmpty(code))
             return null;
 
-        // Коды выдаёт только AllocatePickupCode — всегда верхний регистр без пробелов,
+        // Коды выдаёт только PickupCodes.Allocate — всегда верхний регистр без пробелов,
         // поэтому точное сравнение в SQL эквивалентно прежнему OrdinalIgnoreCase
         // и использует индекс по PickupCode вместо полной выгрузки задач.
         var task = await _db.ProductionTasks
@@ -167,6 +193,7 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
             task.IssuedWithoutReady = true;
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _notifications.NotifyTaskUpdatedAsync(task);
     }
 
     public async Task<PickupIssueResultDto> MarkAllReadyPickedUpAsync(
@@ -211,11 +238,54 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        foreach (var task in parents)
+            await _notifications.NotifyTaskUpdatedAsync(task);
+
         return new PickupIssueResultDto
         {
             IssuedCount = issuedCount,
             PickupCodes = codes
         };
+    }
+
+    public async Task<IReadOnlyDictionary<int, string>> EnsurePickupCodesForTasksAsync(
+        IReadOnlyCollection<int> taskIds,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new Dictionary<int, string>();
+        if (taskIds.Count == 0)
+            return result;
+
+        var tasks = await _db.ProductionTasks
+            .Where(t => taskIds.Contains(t.Id) && !t.HiddenFromTaskTable && t.ParentRowNumber == null)
+            .ToListAsync(cancellationToken);
+
+        var missing = tasks.Where(t => string.IsNullOrWhiteSpace(t.PickupCode)).ToList();
+        if (missing.Count > 0)
+        {
+            var usedCodes = await LoadUsedPickupCodesAsync(cancellationToken);
+            foreach (var task in tasks.Where(t => !string.IsNullOrWhiteSpace(t.PickupCode)))
+                usedCodes.Add(task.PickupCode!);
+
+            foreach (var task in missing)
+            {
+                var displayName = CustomerOrderKey.TryGetDisplayName(task.FolderPath) ?? "";
+                var letter = CustomerOrderKey.ResolvePickupLetter(task.FolderPath, displayName);
+                task.PickupCode = PickupCodes.Allocate(letter, usedCodes);
+                // UpdatedAt не трогаем: назначение номера — служебная операция,
+                // она не должна ломать конкурентное редактирование строки.
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        foreach (var task in tasks)
+        {
+            if (!string.IsNullOrWhiteSpace(task.PickupCode))
+                result[task.Id] = task.PickupCode!;
+        }
+
+        return result;
     }
 
     private async Task<List<CustomerOrderPublicItemDto>> LoadCustomerOrdersAsync(
@@ -309,8 +379,11 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
             .Distinct()
             .ToListAsync(cancellationToken);
 
+        // LegacyMatches — для записей CustomerOrderTracking, заведённых до смены
+        // семантики ключа на «папка после буквенного указателя».
         var matchedPaths = candidatePaths
-            .Where(p => CustomerOrderKey.Matches(p, customerKey))
+            .Where(p => CustomerOrderKey.Matches(p, customerKey)
+                || CustomerOrderKey.LegacyMatches(p, customerKey))
             .ToList();
         if (matchedPaths.Count == 0)
             return [];
@@ -412,8 +485,7 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
         foreach (var task in missing)
         {
             var letter = CustomerOrderKey.ResolvePickupLetter(task.FolderPath, customerDisplayName);
-            task.PickupCode = AllocatePickupCode(letter, usedCodes);
-            usedCodes.Add(task.PickupCode);
+            task.PickupCode = PickupCodes.Allocate(letter, usedCodes);
             changed = true;
         }
 
@@ -430,39 +502,6 @@ public class CustomerOrderTrackingService : ICustomerOrderTrackingService
             .ToListAsync(cancellationToken);
 
         return new HashSet<string>(codes, StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static string AllocatePickupCode(char letter, HashSet<string> used)
-    {
-        for (var attempt = 0; attempt < 200; attempt++)
-        {
-            var digits = RandomNumberGenerator.GetInt32(0, 100);
-            var code = $"{letter}{digits:D2}";
-            if (used.Add(code))
-                return code;
-        }
-
-        // Fallback if 00–99 exhausted for this letter among active tasks
-        for (var digits = 0; digits < 100; digits++)
-        {
-            var code = $"{letter}{digits:D2}";
-            if (!used.Contains(code))
-            {
-                used.Add(code);
-                return code;
-            }
-        }
-
-        return $"{letter}{RandomNumberGenerator.GetInt32(0, 100):D2}";
-    }
-
-    private static string NormalizePickupCode(string? pickupCode)
-    {
-        var raw = (pickupCode ?? "").Trim();
-        if (string.IsNullOrEmpty(raw))
-            return "";
-
-        return raw.ToUpper(CultureInfo.InvariantCulture);
     }
 
     private static string GenerateToken()

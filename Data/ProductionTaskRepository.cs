@@ -536,6 +536,8 @@ namespace ProductionPlanner.Data
             string? search = null,
             bool includeFuss = false,
             string? fussViewerEmployeeName = null,
+            string? pickupCodePrefix = null,
+            bool pickupSort = false,
             CancellationToken cancellationToken = default)
         {
             var query = _context.ProductionTasks
@@ -587,10 +589,28 @@ namespace ProductionPlanner.Data
 
             query = query.ApplyToRootTasks(_context, search);
 
-            query = query
-                .OrderBy(t => t.Status == JobStatus.Completed && !t.IsFuss)
-                .ThenByDescending(t => t.DisplayOrder)
-                .ThenByDescending(t => t.Id);
+            if (!string.IsNullOrEmpty(pickupCodePrefix))
+            {
+                query = query.Where(t =>
+                    t.PickupCode != null
+                    && t.PickupCode.StartsWith(pickupCodePrefix));
+            }
+
+            if (pickupSort)
+            {
+                // Режим выдачи: «Клиенты/И/Игорь/…» сортируется как буква → заказчик.
+                query = query
+                    .OrderBy(t => t.FolderPath)
+                    .ThenBy(t => t.PickupCode)
+                    .ThenBy(t => t.Id);
+            }
+            else
+            {
+                query = query
+                    .OrderBy(t => t.Status == JobStatus.Completed && !t.IsFuss)
+                    .ThenByDescending(t => t.DisplayOrder)
+                    .ThenByDescending(t => t.Id);
+            }
 
             var totalCount = await query.CountAsync(cancellationToken);
             var items = await query

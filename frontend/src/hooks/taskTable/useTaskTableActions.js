@@ -21,13 +21,12 @@ import {
 import { startCdrAutoSearchAfterSave } from '../../utils/cdrAutoSearch';
 import { promptFussStartComment } from '../../utils/fussStart';
 
-function kickOffCdrAutoSearch({ taskId, folderPath, fileName, autoSearchMinutes, showWarning }) {
+function kickOffCdrAutoSearch({ taskId, folderPath, fileName, showWarning }) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return;
   startCdrAutoSearchAfterSave({
     taskId,
     folderPath,
     fileName,
-    autoSearchMinutes,
     showWarning
   });
 }
@@ -52,8 +51,7 @@ export default function useTaskTableActions({
   showSuccess,
   confirm,
   promptInput,
-  applyPlanningWarnings,
-  getAutoSearchMinutes = () => 0
+  applyPlanningWarnings
 }) {
   const [pendingLifecycleTaskId, setPendingLifecycleTaskId] = useState(null);
   const pendingLifecycleTaskIdRef = useRef(null);
@@ -250,7 +248,6 @@ export default function useTaskTableActions({
           taskId: created.id,
           folderPath: created.folderPath || payload.folderPath,
           fileName: created.fileName || payload.fileName,
-          autoSearchMinutes: getAutoSearchMinutes(),
           showWarning
         });
       }
@@ -275,8 +272,7 @@ export default function useTaskTableActions({
     showError,
     showWarning,
     applyPlanningWarnings,
-    patchRow,
-    getAutoSearchMinutes
+    patchRow
   ]);
 
   const handleUpdateRow = useCallback(async (row) => {
@@ -307,7 +303,6 @@ export default function useTaskTableActions({
           taskId: row.id,
           folderPath: row.folderPath,
           fileName: row.fileName,
-          autoSearchMinutes: getAutoSearchMinutes(),
           showWarning
         });
         setEditingId(null);
@@ -322,7 +317,7 @@ export default function useTaskTableActions({
     } finally {
       savingRowIdRef.current = null;
     }
-  }, [api, syncRowFromServer, setEditingId, showError, showWarning, applyPlanningWarnings, patchRow, removeRow, refresh, onCalendarRefresh, getAutoSearchMinutes]);
+  }, [api, syncRowFromServer, setEditingId, showError, showWarning, applyPlanningWarnings, patchRow, removeRow, refresh, onCalendarRefresh]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
     if (pendingLifecycleTaskIdRef.current != null) return;

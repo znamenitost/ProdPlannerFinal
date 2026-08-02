@@ -8,19 +8,21 @@ export default function useTaskTableQuery(
   employeeFilter,
   excludeCompleted,
   search,
-  showFuss = false
+  showFuss = false,
+  pickupMode = false
 ) {
   const filter = employeeFilter || '';
   const searchQuery = String(search ?? '').trim();
 
   return useQuery({
-    queryKey: queryKeys.taskTable(page, rowsPerPage, filter, excludeCompleted, searchQuery, showFuss),
+    queryKey: queryKeys.taskTable(page, rowsPerPage, filter, excludeCompleted, searchQuery, showFuss, pickupMode),
     queryFn: ({ signal }) =>
       api.loadRows(page + 1, rowsPerPage, filter, {
         signal,
         excludeCompleted,
         search: searchQuery,
-        showFuss
+        showFuss,
+        pickupMode
       }),
     placeholderData: keepPreviousData,
     refetchInterval: false,

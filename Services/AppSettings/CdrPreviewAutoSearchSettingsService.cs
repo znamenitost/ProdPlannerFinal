@@ -15,6 +15,9 @@ public class CdrPreviewAutoSearchSettingsService : ICdrPreviewAutoSearchSettings
 {
     public const string SettingsKey = "cdr-preview-autosearch";
 
+    /// <summary>Дефолтная задержка второй попытки превью CDR, минут.</summary>
+    public const int DefaultMinutes = 1;
+
     private readonly IAppSettingsService _appSettings;
 
     public CdrPreviewAutoSearchSettingsService(IAppSettingsService appSettings)
@@ -36,7 +39,8 @@ public class CdrPreviewAutoSearchSettingsService : ICdrPreviewAutoSearchSettings
     public async Task<int> GetMinutesAsync(CancellationToken cancellationToken = default)
     {
         var settings = await GetAsync(cancellationToken);
-        return settings.Minutes;
+        // UI настройки убран: незаданное/нулевое значение означает дефолтную 1 минуту.
+        return settings.Minutes > 0 ? settings.Minutes : DefaultMinutes;
     }
 
     internal static CdrPreviewAutoSearchSettingsDto Normalize(CdrPreviewAutoSearchSettingsDto settings)

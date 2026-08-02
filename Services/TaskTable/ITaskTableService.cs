@@ -14,6 +14,7 @@ public interface ITaskTableService
         bool viewerIsAdmin = true,
         string? viewerUserId = null,
         bool showFuss = false,
+        bool pickupMode = false,
         CancellationToken cancellationToken = default);
     Task<TaskTableRowDto?> GetRowDtoAsync(
         int id,

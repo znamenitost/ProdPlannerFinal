@@ -54,6 +54,12 @@ export function areParentRowPropsEqual(prev, next) {
   if (prev.task.statusText !== next.task.statusText) return false;
   if (prev.task.isPriorityMarked !== next.task.isPriorityMarked) return false;
   if (prev.task.issuedWithoutReady !== next.task.issuedWithoutReady) return false;
+  if (prev.task.pickupCode !== next.task.pickupCode) return false;
+  if (prev.task.pickedUpAt !== next.task.pickedUpAt) return false;
+  if (prev.task.customerName !== next.task.customerName) return false;
+  if (prev.pickupMode !== next.pickupMode) return false;
+  if (prev.issuingPickup !== next.issuingPickup) return false;
+  if (prev.pickupHighlighted !== next.pickupHighlighted) return false;
   if (prev.task.fileName !== next.task.fileName) return false;
   if (prev.task.folderPath !== next.task.folderPath) return false;
   if (prev.task.comment !== next.task.comment) return false;
@@ -111,6 +117,7 @@ export function areParentRowPropsEqual(prev, next) {
     prev.onPrintOrderLabel === next.onPrintOrderLabel &&
     prev.onOpenComment === next.onOpenComment &&
     prev.onOpenIntervals === next.onOpenIntervals &&
+    prev.onIssueOrder === next.onIssueOrder &&
     prev.forceCommentTooltipTaskId === next.forceCommentTooltipTaskId &&
     prev.onForceCommentTooltipClose === next.onForceCommentTooltipClose &&
     prev.currentUser === next.currentUser

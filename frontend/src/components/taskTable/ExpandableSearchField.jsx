@@ -5,22 +5,27 @@ import { Clear, Search } from '@mui/icons-material';
 export default function ExpandableSearchField({
   value,
   onChange,
-  placeholder = 'Задача или файл'
+  placeholder = 'Задача или файл',
+  tooltip = 'Поиск по задаче и файлу',
+  onEnterKey,
+  forceOpen = false,
+  width
 }) {
   const [open, setOpen] = useState(Boolean(value));
   const inputRef = useRef(null);
+  const isOpen = forceOpen || open;
 
   useEffect(() => {
     if (value) setOpen(true);
   }, [value]);
 
   useEffect(() => {
-    if (open) {
+    if (isOpen) {
       const timer = window.setTimeout(() => inputRef.current?.focus(), 120);
       return () => window.clearTimeout(timer);
     }
     return undefined;
-  }, [open]);
+  }, [isOpen]);
 
   const handleToggle = () => {
     if (open && !value) {
@@ -31,7 +36,7 @@ export default function ExpandableSearchField({
   };
 
   const handleBlur = () => {
-    if (!value) setOpen(false);
+    if (!forceOpen && !value) setOpen(false);
   };
 
   const handleClear = () => {
@@ -39,12 +44,24 @@ export default function ExpandableSearchField({
     inputRef.current?.focus();
   };
 
+  const handleKeyDown = (event) => {
+    if (event.key === 'Escape' && value) {
+      event.stopPropagation();
+      handleClear();
+      return;
+    }
+    if (event.key === 'Enter' && onEnterKey) {
+      event.preventDefault();
+      onEnterKey();
+    }
+  };
+
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
       <Box
         sx={(theme) => ({
-          width: open ? { xs: 128, sm: 180, md: 220 } : 0,
-          opacity: open ? 1 : 0,
+          width: isOpen ? (width ?? { xs: 128, sm: 180, md: 220 }) : 0,
+          opacity: isOpen ? 1 : 0,
           overflow: 'hidden',
           transition: theme.transitions.create(['width', 'opacity'], {
             duration: theme.transitions.duration.short
@@ -58,8 +75,9 @@ export default function ExpandableSearchField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          aria-label="Поиск по задаче и файлу"
+          aria-label={tooltip}
           slotProps={{
             input: {
               startAdornment: (
@@ -78,22 +96,24 @@ export default function ExpandableSearchField({
           }}
         />
       </Box>
-      <Tooltip title="Поиск по задаче и файлу">
-        <IconButton
-          variant="soft"
-          color={open || value ? 'primary' : 'default'}
-          onClick={handleToggle}
-          aria-label="Поиск по задаче и файлу"
-          aria-expanded={open}
-          sx={
-            open || value
-              ? { border: '1px solid', borderColor: 'primary.main' }
-              : undefined
-          }
-        >
-          <Search />
-        </IconButton>
-      </Tooltip>
+      {!forceOpen && (
+        <Tooltip title={tooltip}>
+          <IconButton
+            variant="soft"
+            color={isOpen || value ? 'primary' : 'default'}
+            onClick={handleToggle}
+            aria-label={tooltip}
+            aria-expanded={isOpen}
+            sx={
+              isOpen || value
+                ? { border: '1px solid', borderColor: 'primary.main' }
+                : undefined
+            }
+          >
+            <Search />
+          </IconButton>
+        </Tooltip>
+      )}
     </Box>
   );
 }

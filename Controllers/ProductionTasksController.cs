@@ -73,6 +73,7 @@ public class ProductionTasksController : ControllerBase
         [FromQuery] bool excludeCompleted = false,
         [FromQuery] string? search = null,
         [FromQuery] bool showFuss = false,
+        [FromQuery] bool pickupMode = false,
         CancellationToken cancellationToken = default)
     {
         try
@@ -94,6 +95,7 @@ public class ProductionTasksController : ControllerBase
                 isAdmin,
                 currentUser.Id,
                 showFuss,
+                pickupMode,
                 cancellationToken);
             return Ok(result);
         }

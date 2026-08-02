@@ -8,7 +8,6 @@ import {
   ListItemText,
   Menu,
   MenuItem,
-  TextField,
   Tooltip,
   Typography
 } from '@mui/material';
@@ -41,11 +40,11 @@ export default function TaskTableToolbar({
   onSearchQueryChange,
   showPlannedProgress,
   onToggleShowPlannedProgress,
-  autoSearchMinutes,
-  onAutoSearchMinutesChange,
   onOpenFileOpenSettings,
   onOpenTaskTypeStats,
-  taskTypeStatsOpen = false
+  taskTypeStatsOpen = false,
+  pickupMode = false,
+  onSearchEnter
 }) {
   const [sortAnchorEl, setSortAnchorEl] = useState(null);
   const sortMenuOpen = Boolean(sortAnchorEl);
@@ -90,28 +89,17 @@ export default function TaskTableToolbar({
             </IconButton>
           </Tooltip>
         )}
-        {isAdmin && (
-          <Tooltip title="SAVE: минуты до второй попытки превью CDR (0 — выкл.)">
-            <TextField
-              label="SAVE"
-              placeholder="мин"
-              type="number"
-              size="small"
-              value={autoSearchMinutes || ''}
-              onChange={(e) => onAutoSearchMinutesChange(e.target.value)}
-              slotProps={{ htmlInput: { min: 0, max: 1440, step: 1, 'aria-label': 'SAVE, минуты' } }}
-              sx={{
-                width: 78,
-                '& .MuiInputBase-root': { fontSize: '0.8125rem' },
-                '& .MuiInputBase-input': { py: 0.75, px: 0.75, textAlign: 'center' },
-                '& .MuiInputLabel-root': { fontSize: '0.8125rem' }
-              }}
-            />
-          </Tooltip>
-        )}
       </Box>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        <ExpandableSearchField value={searchQuery} onChange={onSearchQueryChange} />
+        {!pickupMode && (
+          <ExpandableSearchField
+            value={searchQuery}
+            onChange={onSearchQueryChange}
+            placeholder="Задача или файл"
+            tooltip="Поиск по задаче и файлу"
+          />
+        )}
+        {!pickupMode && (
         <Tooltip title={highlightMyTasks ? 'Выключить подсветку моих задач' : 'Включить подсветку моих задач'}>
           <IconButton
             variant="soft"
@@ -123,7 +111,8 @@ export default function TaskTableToolbar({
             <Lightbulb />
           </IconButton>
         </Tooltip>
-        {isAdmin && (
+        )}
+        {isAdmin && !pickupMode && (
           <Tooltip title={showPlannedProgress ? 'Скрыть прогресс по времени' : 'Показать прогресс по времени'}>
             <IconButton
               variant="soft"
@@ -137,6 +126,7 @@ export default function TaskTableToolbar({
             </IconButton>
           </Tooltip>
         )}
+        {!pickupMode && (
         <Tooltip title="Сортировка">
           <IconButton
             variant="soft"
@@ -153,6 +143,7 @@ export default function TaskTableToolbar({
             <Sort />
           </IconButton>
         </Tooltip>
+        )}
         <Menu
           anchorEl={sortAnchorEl}
           open={sortMenuOpen}
@@ -213,17 +204,30 @@ export default function TaskTableToolbar({
             </MenuItem>
           )}
         </Menu>
-        <TaskTableColumnSettings
-          visibility={columnVisibility}
-          onColumnVisibleChange={onColumnVisibleChange}
-          onReset={onColumnVisibilityReset}
-          textLimit={textLimit}
-          onTextLimitChange={onTextLimitChange}
-        />
-        {isAdmin && (
+        {!pickupMode && (
+          <TaskTableColumnSettings
+            visibility={columnVisibility}
+            onColumnVisibleChange={onColumnVisibleChange}
+            onReset={onColumnVisibilityReset}
+            textLimit={textLimit}
+            onTextLimitChange={onTextLimitChange}
+          />
+        )}
+        {isAdmin && !pickupMode && (
           <Button variant="contained" color="success" startIcon={<Add />} onClick={onAddNew}>
             Новая задача
           </Button>
+        )}
+        {pickupMode && (
+          <ExpandableSearchField
+            value={searchQuery}
+            onChange={onSearchQueryChange}
+            placeholder="Номер выдачи: И11"
+            tooltip="Фильтр по номеру выдачи"
+            onEnterKey={onSearchEnter}
+            forceOpen
+            width={{ xs: 180, sm: 220, md: 260 }}
+          />
         )}
       </Box>
     </Box>

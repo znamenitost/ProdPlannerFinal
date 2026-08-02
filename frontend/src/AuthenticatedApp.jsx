@@ -46,7 +46,6 @@ import LunchBreakOverlay from './components/LunchBreakOverlay';
 import DeployMaintenanceOverlay from './components/DeployMaintenanceOverlay';
 import PushNotificationSnackbars from './components/PushNotificationSnackbars';
 import MaxLinkDialog from './components/MaxLinkDialog';
-import IssueOrderDialog from './components/IssueOrderDialog';
 import FileOpenSettingsDialog from './components/FileOpenSettingsDialog';
 import ChatHeaderButton from './components/chat/ChatHeaderButton';
 import { LoadingState } from './components/LoadingState';
@@ -106,8 +105,9 @@ function AuthenticatedAppContent() {
   }, []);
 
   useEffect(() => {
-    if (activeTab > 1) setActiveTab(0);
-  }, [activeTab, setActiveTab]);
+    const maxTab = user?.role === 'Admin' ? 2 : 1;
+    if (activeTab > maxTab) setActiveTab(0);
+  }, [activeTab, setActiveTab, user?.role]);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [lunchPending, setLunchPending] = useState(false);
   const [currentLunch, setCurrentLunch] = useState(null);
@@ -116,7 +116,6 @@ function AuthenticatedAppContent() {
   const [avatarKey, setAvatarKey] = useState(Date.now());
   const [maxLinkDialogOpen, setMaxLinkDialogOpen] = useState(false);
   const [maxLinkToken, setMaxLinkToken] = useState(null);
-  const [issueOrderDialogOpen, setIssueOrderDialogOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatFocusConversationId, setChatFocusConversationId] = useState(null);
   const [chatActiveConversationId, setChatActiveConversationId] = useState(null);
@@ -160,17 +159,18 @@ function AuthenticatedAppContent() {
   }, []);
 
   const handleHubTaskEventForTab = useCallback((event) => {
-    if (activeTab !== 1) return false;
+    if (activeTab !== 1 && activeTab !== 2) return false;
     return handleHubTaskEvent(event);
   }, [activeTab, handleHubTaskEvent]);
 
   const handleHubTableFallbackRefresh = useCallback(() => {
-    if (activeTab === 1) refreshTable();
+    if (activeTab === 1 || activeTab === 2) refreshTable();
   }, [activeTab, refreshTable]);
 
   const prevActiveTabRef = useRef(activeTab);
   useEffect(() => {
-    if (activeTab === 1 && prevActiveTabRef.current !== 1) {
+    const isTableTab = activeTab === 1 || activeTab === 2;
+    if (isTableTab && prevActiveTabRef.current !== activeTab) {
       refreshTable();
     }
     prevActiveTabRef.current = activeTab;
@@ -274,7 +274,7 @@ function AuthenticatedAppContent() {
     const timer = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       if (hubConnection?.state === 'Connected') return;
-      if (activeTabRef.current === 1) dataRefreshRef.current.refreshTable();
+      if (activeTabRef.current === 1 || activeTabRef.current === 2) dataRefreshRef.current.refreshTable();
       else dataRefreshRef.current.refreshCalendar();
     }, 45000);
     return () => clearInterval(timer);
@@ -612,28 +612,6 @@ function AuthenticatedAppContent() {
                   />
                 )}
                 {isAdmin && <Divider orientation="vertical" flexItem sx={{ height: 30 }} />}
-                {isAdmin && (
-                  <Tooltip title="Выдать заказ">
-                    <IconButton
-                      onClick={() => setIssueOrderDialogOpen(true)}
-                      aria-label="Выдать заказ"
-                      sx={{ p: 0.75 }}
-                    >
-                      <Avatar
-                        variant="rounded"
-                        sx={{
-                          width: 40,
-                          height: 40,
-                          bgcolor: (t) => alpha(t.palette.success.main, 0.12),
-                          color: 'success.dark',
-                          borderRadius: 2.5
-                        }}
-                      >
-                        <AssignmentTurnedIn fontSize="small" />
-                      </Avatar>
-                    </IconButton>
-                  </Tooltip>
-                )}
                 <ChatHeaderButton
                   unreadCount={unreadCount}
                   onClick={handleOpenChat}
@@ -671,6 +649,7 @@ function AuthenticatedAppContent() {
             <Tabs value={activeTab} onChange={handleTabChange} centered variant="fullWidth">
               <Tab icon={<CalendarMonth />} iconPosition="start" label="Календарь" />
               <Tab icon={<TableChart />} iconPosition="start" label="Таблица задач" />
+              {isAdmin && <Tab icon={<AssignmentTurnedIn />} iconPosition="start" label="Выдача" />}
             </Tabs>
           </Paper>
 
@@ -707,6 +686,23 @@ function AuthenticatedAppContent() {
                   onOpenFileOpenSettings={isAdmin ? handleOpenFileOpenSettings : undefined}
                   onOpenTaskTypeStats={isAdmin ? openTaskTypeStats : undefined}
                   taskTypeStatsOpen={taskTypeStatsOpen}
+                />
+              </Suspense>
+            )}
+            {activeTab === 2 && isAdmin && (
+              <Suspense fallback={<LoadingState />}>
+                <TaskTable
+                  mode="pickup"
+                  onCalendarRefresh={refreshCalendar}
+                  onRegisterHubHandler={registerTableHubHandler}
+                  userRole={user?.role}
+                  currentUser={user}
+                  selectedEmployeeForHighlight={employee}
+                  maxSubscribedTaskIds={maxMessenger.subscribedTaskIds}
+                  maxCanSubscribe={maxMessenger.canSubscribe}
+                  onMaxSubscribeToggle={handleMaxSubscribeToggle}
+                  focusCommentTooltipTaskId={focusCommentTooltipTaskId}
+                  onFocusCommentTooltipConsumed={handleFocusCommentTooltipConsumed}
                 />
               </Suspense>
             )}
@@ -825,28 +821,6 @@ function AuthenticatedAppContent() {
           lunchPending={lunchPending}
         />
       )}
-
-      <IssueOrderDialog
-        open={issueOrderDialogOpen}
-        onClose={() => setIssueOrderDialogOpen(false)}
-        onIssued={(payload) => {
-          const order = payload?.order ?? payload;
-          const mode = payload?.mode;
-          const result = payload?.result;
-          if (mode === 'all') {
-            const count = Number(result?.issuedCount) || 0;
-            showSuccess(
-              count > 0
-                ? `Выдано заказов: ${count}`
-                : 'Все готовые заказы выданы'
-            );
-          } else {
-            const code = String(order?.pickupCode || '').trim();
-            showSuccess(code ? `Заказ «${code}» выдан` : 'Заказ выдан');
-          }
-          refreshTable();
-        }}
-      />
 
       <MaxLinkDialog
         open={maxLinkDialogOpen}

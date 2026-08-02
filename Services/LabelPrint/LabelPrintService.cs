@@ -222,30 +222,10 @@ public sealed class LabelPrintService : ILabelPrintService
 
         var usedSet = new HashSet<string>(used, StringComparer.OrdinalIgnoreCase);
         var letter = CustomerOrderKey.ResolvePickupLetter(task.FolderPath, customerDisplayName);
-        var code = AllocatePickupCode(letter, usedSet);
+        var code = PickupCodes.Allocate(letter, usedSet);
         task.PickupCode = code;
         await _db.SaveChangesAsync(cancellationToken);
         return code;
-    }
-
-    private static string AllocatePickupCode(char letter, HashSet<string> used)
-    {
-        for (var attempt = 0; attempt < 200; attempt++)
-        {
-            var digits = Random.Shared.Next(0, 100);
-            var code = $"{letter}{digits:D2}";
-            if (used.Add(code))
-                return code;
-        }
-
-        for (var digits = 0; digits < 100; digits++)
-        {
-            var code = $"{letter}{digits:D2}";
-            if (used.Add(code))
-                return code;
-        }
-
-        return $"{letter}XX";
     }
 
     private async Task<PrintJobDto> ToDtoAsync(PrintJob job, CancellationToken cancellationToken)
