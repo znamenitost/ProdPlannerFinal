@@ -1,0 +1,55 @@
+name: Recover 1gb site
+
+on:
+  workflow_dispatch:
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    environment:
+      name: FTP_SERVER
+    steps:
+      - name: Install lftp
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: Prepare FTP target
+        id: ftp
+        run: |
+          server="${{ secrets.FTP_SERVER }}"
+          server="${server#ftp://}"
+          server="${server#ftps://}"
+          server="${server%%/*}"
+          dir="${{ secrets.FTP_SERVER_DIR }}"
+          if [ -z "$dir" ]; then dir="/http/"; fi
+          case "$dir" in */) ;; *) dir="${dir}/" ;; esac
+          echo "server=$server" >> "$GITHUB_OUTPUT"
+          echo "server_dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - name: Remove app_offline and show deploy-version
+        env:
+          FTP_USER: ${{ secrets.FTP_USERNAME }}
+          FTP_PASS: ${{ secrets.FTP_PASSWORD }}
+          FTP_HOST: ${{ steps.ftp.outputs.server }}
+          FTP_DIR: ${{ steps.ftp.outputs.server_dir }}
+        run: |
+          lftp_cmd() {
+            lftp -e "set ftp:passive-mode on; set ssl:verify-certificate no; open -u '${FTP_USER}','${FTP_PASS}' ${FTP_HOST}; cd '${FTP_DIR}'; $1; bye"
+          }
+
+          echo "=== ls (top) ==="
+          lftp_cmd "cls -l" | head -40
+
+          for name in app_offline.htm App_Offline.htm APP_OFFLINE.HTM; do
+            if lftp_cmd "cls -1 ${name}" 2>/dev/null | grep -qi 'app_offline'; then
+              echo "Found ${name} — removing/renaming…"
+              lftp_cmd "rm -f ${name}" || true
+              sleep 2
+              lftp_cmd "mv -f ${name} _app_offline_removed.htm" || true
+            fi
+          done
+
+          echo "=== deploy-version.txt ==="
+          lftp_cmd "cat deploy-version.txt" || lftp_cmd "cat wwwroot/deploy-version.txt" || true
+
+          echo "=== offline still present? ==="
+          lftp_cmd "cls -1 app_offline.htm" || echo "(no app_offline.htm)"
