@@ -473,18 +473,38 @@ public sealed class TaskCommentService : ITaskCommentService
         if (task.IsSplitTask && task.ParentRowNumber == null)
         {
             var childNames = await _repo.GetChildTasksAsync(task.Id, cancellationToken);
-            return childNames.Any(c =>
-                string.Equals(c.EmployeeName, currentUser.FullName, StringComparison.Ordinal));
+            if (childNames.Any(c =>
+                    string.Equals(c.EmployeeName, currentUser.FullName, StringComparison.Ordinal)))
+                return true;
         }
 
         if (task.ParentRowNumber is int parentId)
         {
             var siblings = await _repo.GetChildTasksAsync(parentId, cancellationToken);
-            return siblings.Any(c =>
-                string.Equals(c.EmployeeName, currentUser.FullName, StringComparison.Ordinal));
+            if (siblings.Any(c =>
+                    string.Equals(c.EmployeeName, currentUser.FullName, StringComparison.Ordinal)))
+                return true;
         }
 
-        return false;
+        // Участник треда (автор / адресат) должен видеть комментарии даже если задача
+        // назначена другому сотруднику — иначе бейдж +N открывается в 404.
+        return await IsCommentThreadParticipantAsync(task.Id, currentUser.Id, cancellationToken);
+    }
+
+    private async Task<bool> IsCommentThreadParticipantAsync(
+        int taskId,
+        string userId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return false;
+
+        return await _context.TaskComments
+            .AsNoTracking()
+            .AnyAsync(
+                c => c.ProductionTaskId == taskId
+                    && (c.AuthorUserId == userId || c.RecipientUserId == userId),
+                cancellationToken);
     }
 
     /// <summary>

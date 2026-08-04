@@ -43,6 +43,8 @@ const ROW_PROGRESS_HEIGHT = 6;
 const EDIT_ROW_HEIGHT = 72;
 const VIRTUAL_OVERSCAN = 15;
 const TEXT_LIMIT_MEASURE_DEBOUNCE_MS = 200;
+/** Игнор субпиксельного шума при пересчёте offset таблицы в документе. */
+const SCROLL_MARGIN_EPSILON_PX = 1;
 
 function isCompletedRow(row) {
   if (row?.isFuss) return false;
@@ -130,6 +132,8 @@ export default function TaskTable({
 }) {
   const isAdmin = userRole === 'Admin';
   const tableContainerRef = useRef(null);
+  /** Контент над таблицей (баннер/тулбар) — только он двигает scrollMargin. */
+  const aboveTableRef = useRef(null);
   const [scrollMargin, setScrollMargin] = useState(0);
   const columnSettings = useTaskTableColumnVisibility(currentUser);
   const plannedProgressPref = useTaskTablePlannedProgressPreference(currentUser);
@@ -442,23 +446,27 @@ export default function TaskTable({
   const measureScrollMargin = useCallback(() => {
     const el = tableContainerRef.current;
     if (!el) return;
-    setScrollMargin(el.getBoundingClientRect().top + window.scrollY);
+    // Округление гасит субпиксельный drift getBoundingClientRect после скролла.
+    const next = Math.round(el.getBoundingClientRect().top + window.scrollY);
+    setScrollMargin((prev) =>
+      Math.abs(prev - next) < SCROLL_MARGIN_EPSILON_PX ? prev : next
+    );
   }, []);
 
   useLayoutEffect(() => {
     measureScrollMargin();
-    const el = tableContainerRef.current;
-    if (!el) return undefined;
-
-    const resizeObserver = new ResizeObserver(measureScrollMargin);
-    resizeObserver.observe(el);
+    // Нельзя observe'ить саму таблицу: виртуализация меняет её высоту на каждом
+    // кадре скролла → RO → setScrollMargin → микропрыжок после остановки.
+    const above = aboveTableRef.current;
+    const resizeObserver = above ? new ResizeObserver(measureScrollMargin) : null;
+    resizeObserver?.observe(above);
     window.addEventListener('resize', measureScrollMargin);
 
     return () => {
-      resizeObserver.disconnect();
+      resizeObserver?.disconnect();
       window.removeEventListener('resize', measureScrollMargin);
     };
-  }, [measureScrollMargin, table.rows.length, table.page, sortOptions]);
+  }, [measureScrollMargin, table.rows.length, table.page, sortOptions, table.newRow]);
 
   const rowVirtualizer = useWindowVirtualizer({
     count: visibleRows.length,
@@ -513,12 +521,17 @@ export default function TaskTable({
   ]);
 
   const virtualRows = rowVirtualizer.getVirtualItems();
-  const topPadding = virtualRows.length > 0 ? virtualRows[0].start - scrollMargin : 0;
+  const topPadding =
+    virtualRows.length > 0
+      ? Math.max(0, Math.round(virtualRows[0].start - scrollMargin))
+      : 0;
   const bottomPadding =
     virtualRows.length > 0
       ? Math.max(
           0,
-          rowVirtualizer.getTotalSize() - (virtualRows[virtualRows.length - 1].end - scrollMargin)
+          Math.round(
+            rowVirtualizer.getTotalSize() - (virtualRows[virtualRows.length - 1].end - scrollMargin)
+          )
         )
       : 0;
 
@@ -620,44 +633,49 @@ export default function TaskTable({
   return (
     <TextLimitProvider value={columnSettings.textLimit}>
     <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 2.5 }}>
-      {isAdmin && (
-        <PlanningWarningsBanner
-          warnings={table.planningWarnings}
-          onDismiss={table.dismissPlanningWarning}
+      <Box ref={aboveTableRef}>
+        {isAdmin && (
+          <PlanningWarningsBanner
+            warnings={table.planningWarnings}
+            onDismiss={table.dismissPlanningWarning}
+          />
+        )}
+        <TaskTableToolbar
+          isAdmin={isAdmin}
+          onAddNew={table.handleAddNewRow}
+          highlightMyTasks={table.highlightMyTasks}
+          onToggleHighlight={table.toggleHighlight}
+          columnVisibility={columnSettings.visibility}
+          onColumnVisibleChange={columnSettings.setColumnVisible}
+          onColumnVisibilityReset={columnSettings.resetColumns}
+          textLimit={columnSettings.textLimit}
+          onTextLimitChange={columnSettings.setTextLimit}
+          deadlineSort={deadlineSort}
+          onDeadlineSortChange={setDeadlineSort}
+          completedBottomSort={completedBottomSort}
+          onCompletedBottomSortChange={setCompletedBottomSort}
+          hideCompletedSort={hideCompletedSort}
+          onHideCompletedSortChange={setHideCompletedSort}
+          hideCompletedInSharedSort={hideCompletedInSharedSort}
+          onHideCompletedInSharedSortChange={setHideCompletedInSharedSort}
+          showFuss={showFuss}
+          onShowFussChange={isAdmin ? setShowFuss : undefined}
+          searchQuery={searchQuery}
+          onSearchQueryChange={handleSearchQueryChange}
+          showPlannedProgress={plannedProgressPref.showPlannedProgress}
+          onToggleShowPlannedProgress={plannedProgressPref.toggleShowPlannedProgress}
+          onOpenFileOpenSettings={onOpenFileOpenSettings}
+          onOpenTaskTypeStats={onOpenTaskTypeStats}
+          taskTypeStatsOpen={taskTypeStatsOpen}
+          pickupMode={pickupMode}
+          onSearchEnter={handlePickupSearchEnter}
         />
-      )}
-      <TaskTableToolbar
-        isAdmin={isAdmin}
-        onAddNew={table.handleAddNewRow}
-        highlightMyTasks={table.highlightMyTasks}
-        onToggleHighlight={table.toggleHighlight}
-        columnVisibility={columnSettings.visibility}
-        onColumnVisibleChange={columnSettings.setColumnVisible}
-        onColumnVisibilityReset={columnSettings.resetColumns}
-        textLimit={columnSettings.textLimit}
-        onTextLimitChange={columnSettings.setTextLimit}
-        deadlineSort={deadlineSort}
-        onDeadlineSortChange={setDeadlineSort}
-        completedBottomSort={completedBottomSort}
-        onCompletedBottomSortChange={setCompletedBottomSort}
-        hideCompletedSort={hideCompletedSort}
-        onHideCompletedSortChange={setHideCompletedSort}
-        hideCompletedInSharedSort={hideCompletedInSharedSort}
-        onHideCompletedInSharedSortChange={setHideCompletedInSharedSort}
-        showFuss={showFuss}
-        onShowFussChange={isAdmin ? setShowFuss : undefined}
-        searchQuery={searchQuery}
-        onSearchQueryChange={handleSearchQueryChange}
-        showPlannedProgress={plannedProgressPref.showPlannedProgress}
-        onToggleShowPlannedProgress={plannedProgressPref.toggleShowPlannedProgress}
-        onOpenFileOpenSettings={onOpenFileOpenSettings}
-        onOpenTaskTypeStats={onOpenTaskTypeStats}
-        taskTypeStatsOpen={taskTypeStatsOpen}
-        pickupMode={pickupMode}
-        onSearchEnter={handlePickupSearchEnter}
-      />
+      </Box>
 
-      <TableContainer ref={tableContainerRef}>
+      <TableContainer
+        ref={tableContainerRef}
+        sx={{ overflowAnchor: 'none' }}
+      >
         <Table
           stickyHeader
           size="small"

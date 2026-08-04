@@ -259,11 +259,11 @@ export default function CommentDialog({ open, task, pending = false, onChanged, 
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
             <CircularProgress size={28} />
           </Box>
-        ) : comments.length === 0 ? (
+        ) : comments.length === 0 && !error ? (
           <Typography variant="body2" color="text.secondary" sx={{ py: 1.5 }}>
             Пока нет записей. Добавьте первую заметку.
           </Typography>
-        ) : (
+        ) : comments.length > 0 ? (
           <Box sx={{ maxHeight: 320, overflowY: 'auto', mb: 1.5 }}>
             {comments.map((c, index) => (
               <CommentItem
@@ -276,7 +276,7 @@ export default function CommentDialog({ open, task, pending = false, onChanged, 
               />
             ))}
           </Box>
-        )}
+        ) : null}
 
         {replyTo && (
           <Box
