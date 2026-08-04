@@ -503,11 +503,12 @@ export async function createCustomerOrderLink(taskId) {
 }
 
 /** Поставить этикетку заказа в очередь PrintAgent. */
-export async function printCustomerOrderLabel(taskId) {
+export async function printCustomerOrderLabel(taskId, quantity = 1) {
   const res = await fetch(`${API_BASE}/customer-orders/print/${taskId}`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantity: Number(quantity) || 1 })
   });
   await throwIfNotOk(res, 'Не удалось отправить этикетку на печать');
   return res.json();

@@ -18,6 +18,8 @@ public class PrintJob
     /// <summary>Имя файла задачи без расширения (для строки под заголовком).</summary>
     public string PrimaryComment { get; set; } = "";
     public string PickupCode { get; set; } = "";
+    /// <summary>Сколько копий этикетки напечатать (минимум 1).</summary>
+    public int Copies { get; set; } = 1;
     public PrintJobStatus Status { get; set; } = PrintJobStatus.Pending;
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

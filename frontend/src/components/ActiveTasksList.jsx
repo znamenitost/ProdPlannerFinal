@@ -45,6 +45,7 @@ import {
   isSequenceBlocked
 } from '../constants/taskStatuses';
 import { promptFussStartComment } from '../utils/fussStart';
+import { offerPrintLabelsAfterReady } from '../utils/printLabelPrompt';
 
 function getDeadlineSortValue(task) {
   if (!task?.deadline) return Number.POSITIVE_INFINITY;
@@ -64,7 +65,7 @@ export default function ActiveTasksList({
   sectionSx,
   employee = ''
 }) {
-  const { showError, showWarning, confirm, promptInput } = useUiFeedback();
+  const { showError, showWarning, showSuccess, confirm, promptInput } = useUiFeedback();
   const { user } = useAuth();
   const { data: tasks = [] } = useActiveTasksQuery(employee, Boolean(employee));
   const [pendingTaskId, setPendingTaskId] = useState(null);
@@ -130,7 +131,7 @@ export default function ActiveTasksList({
     };
 
     try {
-      await runWorkflowWithSequenceGuard({
+      const ok = await runWorkflowWithSequenceGuard({
         task,
         statusText: getTaskStatusLine(task),
         confirm,
@@ -139,6 +140,9 @@ export default function ActiveTasksList({
         },
         runAction: runApi
       });
+      if (ok !== false && action === 'complete') {
+        await offerPrintLabelsAfterReady(promptInput, task, { showSuccess, showError });
+      }
     } catch (err) {
       console.error('Ошибка действия:', err);
       if (err?.code === 'concurrency_conflict') {
@@ -148,7 +152,7 @@ export default function ActiveTasksList({
     } finally {
       setPendingTask(null);
     }
-  }, [confirm, employee, onUpdate, promptInput, setPendingTask, showError]);
+  }, [confirm, employee, onUpdate, promptInput, setPendingTask, showError, showSuccess]);
 
   const openFile = useCallback((filePath) => {
     if (!filePath) {

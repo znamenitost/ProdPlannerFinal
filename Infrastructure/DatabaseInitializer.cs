@@ -560,6 +560,7 @@ public static class DatabaseInitializer
                 OrderTitle TEXT NOT NULL,
                 PrimaryComment TEXT NOT NULL DEFAULT '',
                 PickupCode TEXT NOT NULL,
+                Copies INTEGER NOT NULL DEFAULT 1,
                 Status INTEGER NOT NULL,
                 CreatedAt TEXT NOT NULL,
                 UpdatedAt TEXT NULL,
@@ -586,6 +587,13 @@ public static class DatabaseInitializer
         {
             using var alter = connection.CreateCommand();
             alter.CommandText = "ALTER TABLE PrintJobs ADD COLUMN PrimaryComment TEXT NOT NULL DEFAULT ''";
+            await alter.ExecuteNonQueryAsync();
+        }
+
+        if (!columns.Contains("Copies"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE PrintJobs ADD COLUMN Copies INTEGER NOT NULL DEFAULT 1";
             await alter.ExecuteNonQueryAsync();
         }
 

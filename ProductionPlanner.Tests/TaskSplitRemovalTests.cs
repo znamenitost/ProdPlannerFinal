@@ -282,10 +282,11 @@ public class TaskSplitRemovalTests
 
     private sealed class NoOpLabelPrintService : ILabelPrintService
     {
-        public Task TryEnqueueForCompletedTaskAsync(int taskId, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-        public Task<PrintJobDto> EnqueueManualAsync(int taskId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new PrintJobDto { TaskId = taskId });
+        public Task<PrintJobDto> EnqueueManualAsync(
+            int taskId,
+            int quantity = 1,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PrintJobDto { TaskId = taskId, Copies = quantity });
         public Task<IReadOnlyList<PrintJobDto>> GetPendingJobsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PrintJobDto>>([]);
         public Task<PrintJobDto?> ClaimJobAsync(int jobId, string? agentName, CancellationToken cancellationToken = default) =>

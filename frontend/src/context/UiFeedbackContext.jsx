@@ -61,7 +61,9 @@ export function UiFeedbackProvider({ children }) {
     return new Promise((resolve) => {
       confirmOpenRef.current = true;
       confirmResolverRef.current = resolve;
-      setConfirmInputValue('');
+      setConfirmInputValue(
+        options.defaultValue != null ? String(options.defaultValue) : ''
+      );
       setConfirmState({
         open: true,
         title: options.title ?? 'Подтверждение',
@@ -81,6 +83,8 @@ export function UiFeedbackProvider({ children }) {
         label: options.inputLabel ?? 'Значение',
         type: options.inputType ?? 'text',
         required: options.inputRequired ?? false,
+        min: options.inputMin,
+        max: options.inputMax,
       },
     });
   }, [confirm]);
@@ -152,6 +156,11 @@ export function UiFeedbackProvider({ children }) {
                 value={confirmInputValue}
                 required={confirmState.input.required}
                 error={confirmState.input.required && !confirmInputValue.trim()}
+                inputProps={{
+                  min: confirmState.input.min,
+                  max: confirmState.input.max,
+                  step: confirmState.input.type === 'number' ? 1 : undefined,
+                }}
                 onChange={(event) => setConfirmInputValue(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') resolveConfirm(true);

@@ -18,6 +18,7 @@ internal sealed class PrintJobDto
     public string PrimaryComment { get; set; } = "";
     public string PickupCode { get; set; } = "";
     public string OrderPath { get; set; } = "";
+    public int Copies { get; set; } = 1;
     public string Status { get; set; } = "";
 }
 
@@ -132,15 +133,18 @@ internal sealed class PrintAgentClient : IDisposable
 
             try
             {
-                var orderUrl = BuildOrderUrl(job.OrderPath);
+                var copies = job.Copies > 0 ? job.Copies : 1;
+                if (copies > 50) copies = 50;
                 LabelPrinter.Print(
                     _config.PrinterName,
                     job.OrderTitle,
-                    job.PrimaryComment,
                     job.PickupCode,
-                    orderUrl);
+                    copies);
                 await PostAsync($"jobs/{job.Id}/printed", _runToken);
-                StatusChanged?.Invoke($"Напечатано: {job.PickupCode}");
+                StatusChanged?.Invoke(
+                    copies > 1
+                        ? $"Напечатано: {job.PickupCode} ×{copies}"
+                        : $"Напечатано: {job.PickupCode}");
             }
             catch (Exception ex)
             {
@@ -156,23 +160,6 @@ internal sealed class PrintAgentClient : IDisposable
         {
             _printLock.Release();
         }
-    }
-
-    private string? BuildOrderUrl(string? orderPath)
-    {
-        var path = (orderPath ?? "").Trim();
-        if (string.IsNullOrEmpty(path))
-            return null;
-        if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            return path;
-
-        var baseUrl = (_config.ServerUrl ?? "").TrimEnd('/');
-        if (string.IsNullOrEmpty(baseUrl))
-            return path;
-        if (!path.StartsWith("/"))
-            path = "/" + path;
-        return baseUrl + path;
     }
 
     private async Task<bool> PostAsync(string relative, CancellationToken cancellationToken)

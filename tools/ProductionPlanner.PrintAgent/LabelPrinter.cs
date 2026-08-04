@@ -3,32 +3,30 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Printing;
 using System.Drawing.Text;
-using QRCoder;
 
 namespace ProductionPlanner.PrintAgent;
 
 /// <summary>
-/// Термоэтикетка 75×120 мм (X×Y):
-/// слева 30×120 — «Задача», текст вдоль оси Y (поворот 90°);
-/// справа две ячейки 40×60 — QR и номер заказа.
+/// Термоэтикетка 75×120 мм (X×Y), бумага выходит вдоль длинной стороны:
+/// слева 30×120 — название компании вдоль оси 120 мм;
+/// справа 30×120 — номер заказа вдоль оси 120 мм (параллельно названию).
 /// </summary>
 internal static class LabelPrinter
 {
     private const float LabelWidthMm = 75f;
     private const float LabelHeightMm = 120f;
-    private const float LeftColMm = 30f;
-    private const float RightColMm = 40f;
-    private const float RightCellMm = 60f;
+    private const float ColWidthMm = 30f;
 
     public static void Print(
         string printerName,
         string customerName,
-        string fileName,
         string pickupCode,
-        string? orderUrl = null)
+        int copies = 1)
     {
         if (string.IsNullOrWhiteSpace(printerName))
             throw new InvalidOperationException("Не выбран принтер");
+
+        var copyCount = copies < 1 ? 1 : (copies > 50 ? 50 : copies);
 
         using var doc = new PrintDocument();
         doc.PrinterSettings.PrinterName = printerName;
@@ -54,10 +52,8 @@ internal static class LabelPrinter
 
             var pageW = Mm(LabelWidthMm);
             var pageH = Mm(LabelHeightMm);
-            var leftCol = Mm(LeftColMm);
-            var rightCol = Mm(RightColMm);
-            var rightCell = Mm(RightCellMm);
-            var contentW = leftCol + rightCol;
+            var colW = Mm(ColWidthMm);
+            var contentW = colW * 2f;
             var originX = (pageW - contentW) / 2f;
             var originY = 0f;
 
@@ -75,11 +71,9 @@ internal static class LabelPrinter
                 }
             }
 
-            var taskTitle = (customerName ?? "").Trim();
-            if (string.IsNullOrEmpty(taskTitle))
-                taskTitle = (fileName ?? "").Trim();
-            if (string.IsNullOrEmpty(taskTitle))
-                taskTitle = "ЗАКАЗ";
+            var company = (customerName ?? "").Trim();
+            if (string.IsNullOrEmpty(company))
+                company = "ЗАКАЗЧИК";
 
             var code = (pickupCode ?? "").Trim();
             if (string.IsNullOrEmpty(code))
@@ -87,23 +81,24 @@ internal static class LabelPrinter
 
             var left = originX;
             var top = originY;
-            var rightColLeft = left + leftCol;
+            var rightColLeft = left + colW;
 
             using var outerPen = new Pen(Color.Black, 2f);
             using var innerPen = new Pen(Color.Black, 1.5f);
 
             g.DrawRectangle(outerPen, left, top, contentW, pageH);
             g.DrawLine(innerPen, rightColLeft, top, rightColLeft, top + pageH);
-            g.DrawLine(innerPen, rightColLeft, top + rightCell, left + contentW, top + rightCell);
 
-            DrawRotatedTaskTitle(g, taskTitle, left, top, leftCol, pageH);
-            DrawQrCell(g, orderUrl, rightColLeft, top, rightCol, rightCell);
-            DrawOrderNumberCell(g, code, rightColLeft, top + rightCell, rightCol, rightCell);
+            // Длинное название — до 2 строк; номер заказа — одна строка.
+            DrawAlongLongAxis(g, company, left, top, colW, pageH, maxLines: 2);
+            DrawAlongLongAxis(g, code, rightColLeft, top, colW, pageH, maxLines: 1);
 
             e.HasMorePages = false;
         };
 
-        doc.Print();
+        // Цикл: драйверы термопринтеров часто игнорируют PrinterSettings.Copies.
+        for (var i = 0; i < copyCount; i++)
+            doc.Print();
     }
 
     private static void ApplyLabelPaper(PrintDocument doc)
@@ -142,15 +137,19 @@ internal static class LabelPrinter
         }
     }
 
-    private static void DrawRotatedTaskTitle(
+    /// <summary>
+    /// Текст вдоль оси Y (120 мм), повёрнутый на 90°.
+    /// При maxLines=2 длинное название делится на две строки.
+    /// </summary>
+    private static void DrawAlongLongAxis(
         Graphics g,
         string text,
         float x,
         float y,
         float width,
-        float height)
+        float height,
+        int maxLines)
     {
-        // Текст вдоль Y: после поворота +90° читается сверху вниз по длинной стороне.
         var state = g.Save();
         try
         {
@@ -158,16 +157,40 @@ internal static class LabelPrinter
             g.RotateTransform(90f);
 
             var pad = Mm(2f);
+            // После поворота: длина строки = 120 мм, высота блока = ширина колонки 30 мм.
             var rect = new RectangleF(pad, pad, height - pad * 2f, width - pad * 2f);
-            var fontSize = FitFontSize(g, text, rect.Width, rect.Height, 28f, 9f);
-            using var font = new Font("Arial", fontSize, FontStyle.Bold);
-            using var format = new StringFormat
+            var display = text.ToUpperInvariant();
+
+            string drawText;
+            float fontSize;
+            if (maxLines >= 2 && !FitsSingleLine(g, display, rect.Width, rect.Height, minPt: 10f))
             {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center,
-                Trimming = StringTrimming.EllipsisCharacter
-            };
-            g.DrawString(text.ToUpperInvariant(), font, Brushes.Black, rect, format);
+                var (line1, line2) = SplitIntoTwoLines(display);
+                drawText = line1 + "\n" + line2;
+                fontSize = FitTwoLineFontSize(g, line1, line2, rect.Width, rect.Height, 28f, 8f);
+            }
+            else
+            {
+                drawText = display;
+                fontSize = FitFontSize(g, display, rect.Width, rect.Height, 32f, 9f);
+            }
+
+            using var font = new Font("Arial", fontSize, FontStyle.Bold);
+            if (drawText.IndexOf('\n') >= 0)
+            {
+                DrawTwoCenteredLines(g, drawText, font, rect);
+            }
+            else
+            {
+                using var format = new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center,
+                    Trimming = StringTrimming.EllipsisCharacter,
+                    FormatFlags = StringFormatFlags.NoWrap
+                };
+                g.DrawString(drawText, font, Brushes.Black, rect, format);
+            }
         }
         finally
         {
@@ -175,86 +198,87 @@ internal static class LabelPrinter
         }
     }
 
-    private static void DrawQrCell(
+    private static void DrawTwoCenteredLines(
         Graphics g,
-        string? orderUrl,
-        float x,
-        float y,
-        float width,
-        float height)
+        string drawText,
+        Font font,
+        RectangleF rect)
     {
-        var pad = Mm(2.5f);
-        var maxSide = Math.Min(width, height) - pad * 2f;
-        if (maxSide < Mm(8f))
-            return;
+        var parts = drawText.Split(new[] { '\n' }, 2);
+        var line1 = parts[0];
+        var line2 = parts.Length > 1 ? parts[1] : "";
 
-        var sizePx = Math.Max(128, (int)Math.Round(maxSide));
-        using var qrImage = TryCreateQrImage(orderUrl, sizePx);
-        if (qrImage == null)
+        var h1 = g.MeasureString(line1, font).Height;
+        var h2 = string.IsNullOrEmpty(line2) ? 0f : g.MeasureString(line2, font).Height;
+        var totalH = h1 + h2;
+        var top = rect.Y + (rect.Height - totalH) / 2f;
+
+        using var format = new StringFormat
         {
-            using var hintFont = new Font("Arial", 8f, FontStyle.Regular);
-            g.DrawString(
-                "нет QR",
-                hintFont,
-                Brushes.Gray,
-                new RectangleF(x, y, width, height),
-                new StringFormat
-                {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Center
-                });
-            return;
-        }
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center,
+            Trimming = StringTrimming.EllipsisCharacter,
+            FormatFlags = StringFormatFlags.NoWrap
+        };
 
-        var qrX = x + (width - maxSide) / 2f;
-        var qrY = y + (height - maxSide) / 2f;
-        g.DrawImage(qrImage, qrX, qrY, maxSide, maxSide);
+        g.DrawString(line1, font, Brushes.Black, new RectangleF(rect.X, top, rect.Width, h1), format);
+        if (!string.IsNullOrEmpty(line2))
+        {
+            g.DrawString(
+                line2,
+                font,
+                Brushes.Black,
+                new RectangleF(rect.X, top + h1, rect.Width, h2),
+                format);
+        }
     }
 
-    private static void DrawOrderNumberCell(
+    private static bool FitsSingleLine(
         Graphics g,
-        string code,
-        float x,
-        float y,
-        float width,
-        float height)
+        string text,
+        float maxWidth,
+        float maxHeight,
+        float minPt)
     {
-        var pad = Mm(2f);
-        var hintH = Mm(8f);
-        var hintRect = new RectangleF(x + pad, y + Mm(3f), width - pad * 2f, hintH);
-        using (var hintFont = new Font("Arial", 7f, FontStyle.Regular))
+        using var font = new Font("Arial", minPt, FontStyle.Bold);
+        var measured = g.MeasureString(text, font);
+        return measured.Width <= maxWidth && measured.Height <= maxHeight;
+    }
+
+    /// <summary>
+    /// Делит название примерно пополам: по пробелу/дефису у середины, иначе по символам.
+    /// </summary>
+    private static (string Line1, string Line2) SplitIntoTwoLines(string text)
+    {
+        var t = (text ?? "").Trim();
+        if (t.Length <= 1)
+            return (t, "");
+
+        var mid = t.Length / 2;
+        var best = -1;
+        var bestDist = int.MaxValue;
+        for (var i = 1; i < t.Length; i++)
         {
-            g.DrawString(
-                "заказ",
-                hintFont,
-                Brushes.Gray,
-                hintRect,
-                new StringFormat
-                {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Center
-                });
+            var ch = t[i - 1];
+            if (ch != ' ' && ch != '-' && ch != '–' && ch != '—')
+                continue;
+            var dist = Math.Abs(i - mid);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                best = i;
+            }
         }
 
-        var codeRect = new RectangleF(
-            x + pad,
-            y + hintH + Mm(2f),
-            width - pad * 2f,
-            height - hintH - Mm(6f));
-        var fontSize = FitFontSize(g, code, codeRect.Width, codeRect.Height, 36f, 12f);
-        using var codeFont = new Font("Arial", fontSize, FontStyle.Bold);
-        g.DrawString(
-            code,
-            codeFont,
-            Brushes.Black,
-            codeRect,
-            new StringFormat
-            {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center,
-                Trimming = StringTrimming.EllipsisCharacter,
-                FormatFlags = StringFormatFlags.NoWrap
-            });
+        if (best > 0)
+        {
+            var left = t.Substring(0, best).TrimEnd(' ', '-', '–', '—');
+            var right = t.Substring(best).TrimStart(' ', '-', '–', '—');
+            if (left.Length > 0 && right.Length > 0)
+                return (left, right);
+        }
+
+        return (t.Substring(0, mid).Trim(), t.Substring(mid).Trim());
     }
 
     private static float FitFontSize(
@@ -276,33 +300,27 @@ internal static class LabelPrinter
         return minPt;
     }
 
-    private static Bitmap? TryCreateQrImage(string? orderUrl, int sizePx)
+    private static float FitTwoLineFontSize(
+        Graphics g,
+        string line1,
+        string line2,
+        float maxWidth,
+        float maxHeight,
+        float maxPt,
+        float minPt)
     {
-        var url = (orderUrl ?? "").Trim();
-        if (string.IsNullOrEmpty(url) || sizePx < 16)
-            return null;
-
-        try
+        for (var size = maxPt; size >= minPt; size -= 1f)
         {
-            using var generator = new QRCodeGenerator();
-            using var data = generator.CreateQrCode(url, QRCodeGenerator.ECCLevel.M);
-            var qr = new QRCode(data);
-            using var raw = qr.GetGraphic(4, Color.Black, Color.White, drawQuietZones: true);
-            var bmp = new Bitmap(sizePx, sizePx);
-            using (var g = Graphics.FromImage(bmp))
-            {
-                g.Clear(Color.White);
-                g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                g.PixelOffsetMode = PixelOffsetMode.Half;
-                g.DrawImage(raw, 0, 0, sizePx, sizePx);
-            }
+            using var font = new Font("Arial", size, FontStyle.Bold);
+            var m1 = g.MeasureString(line1, font);
+            var m2 = g.MeasureString(line2, font);
+            var totalW = Math.Max(m1.Width, m2.Width);
+            var totalH = m1.Height + m2.Height;
+            if (totalW <= maxWidth && totalH <= maxHeight)
+                return size;
+        }
 
-            return bmp;
-        }
-        catch
-        {
-            return null;
-        }
+        return minPt;
     }
 
     private static float Mm(float mm) => mm / 25.4f * 100f;

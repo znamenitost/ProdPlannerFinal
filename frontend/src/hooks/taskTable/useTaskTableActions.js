@@ -2,8 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { combineDateTime, DEFAULT_TIME } from '../../utils/dateTimeHelpers';
 import {
   buildTaskUpdatePayload,
-  createCustomerOrderLink,
-  printCustomerOrderLabel
+  createCustomerOrderLink
 } from '../../services/api';
 import { runWorkflowWithSequenceGuard } from '../../utils/supplyStatusWorkflow';
 import {
@@ -20,6 +19,12 @@ import {
 } from '../../utils/devCdrPreviewConfig';
 import { startCdrAutoSearchAfterSave } from '../../utils/cdrAutoSearch';
 import { promptFussStartComment } from '../../utils/fussStart';
+import {
+  canPrintOrderLabel,
+  offerPrintLabelsAfterReady,
+  printOrderLabelWithQuantityPrompt
+} from '../../utils/printLabelPrompt';
+import { STATUS_COMPLETED } from '../../constants/taskStatuses';
 
 function kickOffCdrAutoSearch({ taskId, folderPath, fileName, showWarning }) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return;
@@ -320,11 +325,11 @@ export default function useTaskTableActions({
   }, [api, syncRowFromServer, setEditingId, showError, showWarning, applyPlanningWarnings, patchRow, removeRow, refresh, onCalendarRefresh]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
-    if (pendingLifecycleTaskIdRef.current != null) return;
+    if (pendingLifecycleTaskIdRef.current != null) return false;
 
     setPendingLifecycleTask(row.id);
     try {
-      await runWorkflowWithSequenceGuard({
+      const ok = await runWorkflowWithSequenceGuard({
         task: row,
         statusText: row.statusText,
         confirm,
@@ -345,12 +350,14 @@ export default function useTaskTableActions({
           await applyLifecycleResult(row, result);
         }
       });
+      return ok !== false;
     } catch (err) {
       console.error(err);
       if (err?.code === 'concurrency_conflict') {
         await syncRowFromServer(row);
       }
       showError(err.message || 'Не удалось выполнить действие с задачей');
+      return false;
     } finally {
       setPendingLifecycleTask(null);
     }
@@ -387,8 +394,13 @@ export default function useTaskTableActions({
     [api.resumeTask, runLifecycleAction]
   );
   const handleCompleteTask = useCallback(
-    (row) => runLifecycleAction(api.completeTask, row),
-    [api.completeTask, runLifecycleAction]
+    async (row) => {
+      const ok = await runLifecycleAction(api.completeTask, row);
+      if (ok) {
+        await offerPrintLabelsAfterReady(promptInput, row, { showSuccess, showError });
+      }
+    },
+    [api.completeTask, runLifecycleAction, promptInput, showSuccess, showError]
   );
 
   const handleSetStatus = useCallback(async (row, statusText, extra) => {
@@ -403,6 +415,9 @@ export default function useTaskTableActions({
         extra
       ));
       await syncRowFromServer(row);
+      if (statusText === STATUS_COMPLETED && canPrintOrderLabel(row)) {
+        await offerPrintLabelsAfterReady(promptInput, row, { showSuccess, showError });
+      }
     } catch (err) {
       console.error(err);
       if (err?.code === 'concurrency_conflict') {
@@ -412,7 +427,15 @@ export default function useTaskTableActions({
     } finally {
       setPendingLifecycleTask(null);
     }
-  }, [api, syncRowFromServer, showError, setPendingLifecycleTask, selectedEmployeeForHighlight]);
+  }, [
+    api,
+    syncRowFromServer,
+    showError,
+    showSuccess,
+    setPendingLifecycleTask,
+    selectedEmployeeForHighlight,
+    promptInput
+  ]);
 
   const handleTogglePriority = useCallback(async (row, marked) => {
     if (pendingPriorityTaskIdRef.current === row.id) return;
@@ -509,16 +532,8 @@ export default function useTaskTableActions({
   }, [showError, showSuccess]);
 
   const handlePrintOrderLabel = useCallback(async (task) => {
-    const taskId = typeof task === 'object' ? task?.id : task;
-    if (!taskId) return;
-    try {
-      const job = await printCustomerOrderLabel(taskId);
-      const code = job?.pickupCode ? ` (${job.pickupCode})` : '';
-      showSuccess?.(`Этикетка отправлена на печать${code}`);
-    } catch (err) {
-      showError(err.message || 'Не удалось отправить этикетку на печать');
-    }
-  }, [showError, showSuccess]);
+    await printOrderLabelWithQuantityPrompt(promptInput, task, { showSuccess, showError });
+  }, [promptInput, showSuccess, showError]);
 
   return {
     pendingLifecycleTaskId,

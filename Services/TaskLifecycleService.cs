@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using ProductionPlanner.Data;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
-using ProductionPlanner.Services.LabelPrint;
 using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Services;
@@ -15,7 +14,6 @@ public class TaskLifecycleService : ITaskLifecycleService
     private readonly ITaskSplitService _splitService;
     private readonly IAppTimeService _timeService;
     private readonly ITaskNotificationService _notificationService;
-    private readonly ILabelPrintService _labelPrint;
     private readonly ILogger<TaskLifecycleService> _logger;
 
     private static readonly JobStatus[] WorkingStatuses =
@@ -28,7 +26,6 @@ public class TaskLifecycleService : ITaskLifecycleService
         ITaskSplitService splitService,
         IAppTimeService timeService,
         ITaskNotificationService notificationService,
-        ILabelPrintService labelPrint,
         ILogger<TaskLifecycleService> logger)
     {
         _repo = repo;
@@ -37,7 +34,6 @@ public class TaskLifecycleService : ITaskLifecycleService
         _splitService = splitService;
         _timeService = timeService;
         _notificationService = notificationService;
-        _labelPrint = labelPrint;
         _logger = logger;
     }
 
@@ -369,7 +365,6 @@ public class TaskLifecycleService : ITaskLifecycleService
 
             await TryCompleteParentAfterChildrenAsync(taskId, now, cancellationToken);
             await TryAdvanceSequentialStageAsync(taskId, cancellationToken);
-            await TryEnqueueLabelPrintAsync(taskId, cancellationToken);
             return;
         }
 
@@ -434,7 +429,6 @@ public class TaskLifecycleService : ITaskLifecycleService
 
         await TryCompleteParentAfterChildrenAsync(taskId, now, cancellationToken);
         await TryAdvanceSequentialStageAsync(taskId, cancellationToken);
-        await TryEnqueueLabelPrintAsync(taskId, cancellationToken);
     }
 
     private async Task CompleteTestPhaseAsync(
@@ -543,19 +537,6 @@ public class TaskLifecycleService : ITaskLifecycleService
         {
             _logger.LogInformation("Parent task {ParentId} marked completed after all children done", parentId);
             await NotifySplitParentStatusChangedAsync(parentId, cancellationToken);
-            await TryEnqueueLabelPrintAsync(parentId, cancellationToken);
-        }
-    }
-
-    private async Task TryEnqueueLabelPrintAsync(int taskId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _labelPrint.TryEnqueueForCompletedTaskAsync(taskId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Не удалось поставить этикетку в очередь для задачи {TaskId}", taskId);
         }
     }
 

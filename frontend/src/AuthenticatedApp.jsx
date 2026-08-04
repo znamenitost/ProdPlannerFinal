@@ -203,15 +203,27 @@ function AuthenticatedAppContent() {
     const label = code ? `«${code}»` : (title ? `«${title}»` : '');
 
     if (status === 'Printing') {
-      showSuccess(label ? `Идёт печать этикетки ${label}` : 'Идёт печать этикетки');
+      const copies = Number(payload?.copies ?? payload?.Copies ?? 1);
+      const copiesLabel = copies > 1 ? ` ×${copies}` : '';
+      showSuccess(
+        label
+          ? `Идёт печать наклейки ${label}${copiesLabel}`
+          : 'Идёт печать наклейки'
+      );
       return;
     }
     if (status === 'Printed') {
-      showSuccess(label ? `Этикетка ${label} напечатана` : 'Этикетка напечатана');
+      const copies = Number(payload?.copies ?? payload?.Copies ?? 1);
+      const copiesLabel = copies > 1 ? ` ×${copies}` : '';
+      showSuccess(
+        label
+          ? `Наклейка ${label} напечатана${copiesLabel}`
+          : 'Наклейка напечатана'
+      );
       return;
     }
     if (status === 'Failed') {
-      showError(err || (label ? `Не удалось напечатать этикетку ${label}` : 'Не удалось напечатать этикетку'));
+      showError(err || (label ? `Не удалось напечатать наклейку ${label}` : 'Не удалось напечатать наклейку'));
     }
   }, [showSuccess, showError]);
 

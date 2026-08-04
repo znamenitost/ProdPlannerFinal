@@ -44,11 +44,13 @@ public class CustomerOrderTrackingController : ControllerBase
     [HttpPost("print/{taskId:int}")]
     public async Task<ActionResult<PrintJobDto>> PrintLabel(
         int taskId,
+        [FromBody] PrintLabelRequestDto? body,
         CancellationToken cancellationToken)
     {
         try
         {
-            var dto = await _labelPrint.EnqueueManualAsync(taskId, cancellationToken);
+            var quantity = body?.Quantity ?? 1;
+            var dto = await _labelPrint.EnqueueManualAsync(taskId, quantity, cancellationToken);
             return Ok(dto);
         }
         catch (InvalidOperationException ex)

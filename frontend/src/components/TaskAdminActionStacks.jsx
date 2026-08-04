@@ -335,7 +335,7 @@ export default function TaskAdminActionStacks({
         <ListItemIcon>
           <PrintIcon fontSize="small" />
         </ListItemIcon>
-        <ListItemText>Распечатать заказ</ListItemText>
+        <ListItemText>Распечатать наклейку</ListItemText>
       </MenuItem>
     );
   }

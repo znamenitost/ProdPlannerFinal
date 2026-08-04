@@ -4,11 +4,11 @@ namespace ProductionPlanner.Services.LabelPrint;
 
 public interface ILabelPrintService
 {
-    /// <summary>Ставит этикетку в очередь, если задача — финально готовый заказ (не этап split).</summary>
-    Task TryEnqueueForCompletedTaskAsync(int taskId, CancellationToken cancellationToken = default);
-
-    /// <summary>Ручная печать из меню задачи (повтор разрешён).</summary>
-    Task<PrintJobDto> EnqueueManualAsync(int taskId, CancellationToken cancellationToken = default);
+    /// <summary>Ручная печать из меню / после «Готово» (quantity копий в одном задании).</summary>
+    Task<PrintJobDto> EnqueueManualAsync(
+        int taskId,
+        int quantity = 1,
+        CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PrintJobDto>> GetPendingJobsAsync(CancellationToken cancellationToken = default);
 
@@ -18,5 +18,9 @@ public interface ILabelPrintService
 
     Task<bool> MarkPrintedAsync(int jobId, string? agentName, CancellationToken cancellationToken = default);
 
-    Task<bool> MarkFailedAsync(int jobId, string? agentName, string? errorMessage, CancellationToken cancellationToken = default);
+    Task<bool> MarkFailedAsync(
+        int jobId,
+        string? agentName,
+        string? errorMessage,
+        CancellationToken cancellationToken = default);
 }

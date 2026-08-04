@@ -11,6 +11,9 @@ namespace ProductionPlanner.Services.LabelPrint;
 
 public sealed class LabelPrintService : ILabelPrintService
 {
+    public const int MinCopies = 1;
+    public const int MaxCopies = 50;
+
     private readonly ApplicationDbContext _db;
     private readonly ICustomerOrderTrackingService _customerOrders;
     private readonly IHubContext<PrintHub> _printHub;
@@ -34,42 +37,10 @@ public sealed class LabelPrintService : ILabelPrintService
         _logger = logger;
     }
 
-    public async Task TryEnqueueForCompletedTaskAsync(int taskId, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(_options.Value.AccessToken))
-        {
-            _logger.LogDebug("PrintAgent:AccessToken пуст — печать этикеток отключена");
-            return;
-        }
-
-        var task = await _db.ProductionTasks
-            .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
-        if (task == null || task.Status != JobStatus.Completed)
-            return;
-
-        // Этикетка на весь заказ: дочерние этапы не печатаем.
-        if (task.ParentRowNumber.HasValue && task.IsSplitTask)
-            return;
-
-        var alreadyQueued = await _db.PrintJobs
-            .AsNoTracking()
-            .AnyAsync(j =>
-                j.TaskId == task.Id
-                && j.Status != PrintJobStatus.Failed, cancellationToken);
-        if (alreadyQueued)
-            return;
-
-        try
-        {
-            await EnqueueCoreAsync(task, cancellationToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogDebug(ex, "Пропуск автопечати для задачи {TaskId}", taskId);
-        }
-    }
-
-    public async Task<PrintJobDto> EnqueueManualAsync(int taskId, CancellationToken cancellationToken = default)
+    public async Task<PrintJobDto> EnqueueManualAsync(
+        int taskId,
+        int quantity = 1,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(_options.Value.AccessToken))
             throw new InvalidOperationException("Печать этикеток не настроена на сервере");
@@ -78,11 +49,16 @@ public sealed class LabelPrintService : ILabelPrintService
             .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken)
             ?? throw new InvalidOperationException("Задача не найдена");
 
-        return await EnqueueCoreAsync(task, cancellationToken);
+        return await EnqueueCoreAsync(task, quantity, cancellationToken);
     }
 
-    private async Task<PrintJobDto> EnqueueCoreAsync(ProductionTask task, CancellationToken cancellationToken)
+    private async Task<PrintJobDto> EnqueueCoreAsync(
+        ProductionTask task,
+        int quantity,
+        CancellationToken cancellationToken)
     {
+        var copies = Math.Clamp(quantity, MinCopies, MaxCopies);
+
         var customerName = CustomerOrderKey.TryGetDisplayName(task.FolderPath);
         if (string.IsNullOrWhiteSpace(customerName))
             throw new InvalidOperationException(
@@ -100,6 +76,7 @@ public sealed class LabelPrintService : ILabelPrintService
             OrderTitle = customerName.Trim(),
             PrimaryComment = Truncate(fileLabel, 500) ?? "",
             PickupCode = pickupCode,
+            Copies = copies,
             Status = PrintJobStatus.Pending,
             CreatedAt = DateTime.UtcNow
         };
@@ -113,8 +90,8 @@ public sealed class LabelPrintService : ILabelPrintService
             cancellationToken);
 
         _logger.LogInformation(
-            "Этикетка поставлена в очередь: job {JobId}, task {TaskId}, code {Code}",
-            job.Id, job.TaskId, job.PickupCode);
+            "Этикетка поставлена в очередь: job {JobId}, task {TaskId}, code {Code}, copies {Copies}",
+            job.Id, job.TaskId, job.PickupCode, job.Copies);
 
         return dto;
     }
@@ -198,6 +175,7 @@ public sealed class LabelPrintService : ILabelPrintService
                     OrderTitle = job.OrderTitle,
                     PrimaryComment = job.PrimaryComment,
                     PickupCode = job.PickupCode,
+                    Copies = Math.Max(1, job.Copies),
                     ErrorMessage = job.ErrorMessage
                 },
                 cancellationToken);
@@ -257,6 +235,7 @@ public sealed class LabelPrintService : ILabelPrintService
             PrimaryComment = job.PrimaryComment,
             PickupCode = job.PickupCode ?? "",
             OrderPath = orderPath,
+            Copies = Math.Max(1, job.Copies),
             Status = job.Status.ToString(),
             CreatedAt = job.CreatedAt
         };

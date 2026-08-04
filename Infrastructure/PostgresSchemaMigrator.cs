@@ -669,6 +669,9 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE "PrintJobs"
                     ADD COLUMN IF NOT EXISTS "PrimaryComment" character varying(500) NOT NULL DEFAULT '';
 
+                ALTER TABLE "PrintJobs"
+                    ADD COLUMN IF NOT EXISTS "Copies" integer NOT NULL DEFAULT 1;
+
                 CREATE INDEX IF NOT EXISTS "IX_PrintJobs_Status_CreatedAt"
                     ON "PrintJobs" ("Status", "CreatedAt");
 
@@ -686,6 +689,19 @@ public static class PostgresSchemaMigrator
                 AND NOT EXISTS (
                     SELECT 1 FROM "__EFMigrationsHistory"
                     WHERE "MigrationId" = '20260720230000_AddPrintJobs'
+                );
+                """, cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                SELECT '20260804123000_AddPrintJobCopies', '10.0.7'
+                WHERE EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '__EFMigrationsHistory'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM "__EFMigrationsHistory"
+                    WHERE "MigrationId" = '20260804123000_AddPrintJobCopies'
                 );
                 """, cancellationToken);
 
