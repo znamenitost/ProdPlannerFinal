@@ -9,6 +9,10 @@ on:
         description: 'Аварийный полный FTP sync (сброс state + очистка wwwroot/assets). По умолчанию — инкремент.'
         type: boolean
         default: false
+      recover_only:
+        description: 'Только снять app_offline.htm и показать deploy-version (без сборки).'
+        type: boolean
+        default: false
 
 jobs:
   # onnxruntime.dll требует свежий VC++ runtime (14.40+), а на хостинге
@@ -16,6 +20,7 @@ jobs:
   # (Microsoft.VC143.CRT) рядом с бинарями — Windows ищет DLL в папке
   # приложения раньше System32.
   vcredist:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.recover_only) }}
     runs-on: windows-latest
     steps:
       - name: Extract app-local VC++ CRT from VS redist
@@ -35,7 +40,69 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  recover:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.recover_only }}
+    runs-on: ubuntu-latest
+    environment:
+      name: FTP_SERVER
+    steps:
+      - name: Install lftp
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: Prepare FTP target
+        id: ftp
+        run: |
+          server="${{ secrets.FTP_SERVER }}"
+          server="${server#ftp://}"
+          server="${server#ftps://}"
+          server="${server%%/*}"
+          dir="${{ secrets.FTP_SERVER_DIR }}"
+          if [ -z "$dir" ]; then dir="/http/"; fi
+          case "$dir" in */) ;; *) dir="${dir}/" ;; esac
+          echo "server=$server" >> "$GITHUB_OUTPUT"
+          echo "server_dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - name: Remove app_offline and show deploy-version
+        env:
+          FTP_USER: ${{ secrets.FTP_USERNAME }}
+          FTP_PASS: ${{ secrets.FTP_PASSWORD }}
+          FTP_HOST: ${{ steps.ftp.outputs.server }}
+          FTP_DIR: ${{ steps.ftp.outputs.server_dir }}
+        run: |
+          lftp_cmd() {
+            lftp -e "set ftp:passive-mode on; set ssl:verify-certificate no; open -u '${FTP_USER}','${FTP_PASS}' ${FTP_HOST}; cd '${FTP_DIR}'; $1; bye"
+          }
+
+          echo "=== ls (top) ==="
+          lftp_cmd "cls -l" | head -40
+
+          for name in app_offline.htm App_Offline.htm; do
+            if lftp_cmd "cls -1 ${name}" 2>/dev/null | grep -qi 'app_offline'; then
+              echo "Found ${name} — removing/renaming…"
+              lftp_cmd "rm -f ${name}" || true
+              sleep 2
+              lftp_cmd "mv -f ${name} _app_offline_removed.htm" || true
+            fi
+          done
+
+          echo "=== deploy-version.txt ==="
+          lftp_cmd "cat deploy-version.txt" || true
+          echo
+          lftp_cmd "cat wwwroot/deploy-version.txt" || true
+
+          echo "=== probe via FTP host IP ==="
+          ip=$(getent ahostsv4 "$FTP_HOST" | awk '{print $1; exit}')
+          echo "FTP_HOST=$FTP_HOST ip=${ip:-unknown}"
+          if [ -n "${ip:-}" ]; then
+            code=$(curl -sS -o /tmp/di.json -w "%{http_code}" --max-time 20 \
+              -H "Host: team-mainb6d.1gb.ru" "http://${ip}/api/deploy-info" || echo 000)
+            echo "deploy-info via ${ip}: HTTP ${code}"
+            head -c 400 /tmp/di.json || true
+            echo
+          fi
+
   deploy:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.recover_only) }}
     needs: vcredist
     runs-on: ubuntu-latest
     env:
