@@ -64,12 +64,12 @@ export default function EmployeeStatusButtons({
   const isPaused = status === STATUS_PAUSED;
   const isInfo = isInfoStatus(status);
   const isWaiting = status === STATUS_WAITING || task?.sequenceStartBlocked;
-  const canStart = (!isDone || isFuss) && !isStarted && !isPaused;
-  const canPause = isStarted;
-  const canResume = isPaused;
+  // Пункты жизненного цикла только если переданы обработчики (чужие задачи — печать без Старт/Готово).
+  const canStart = Boolean(onStart) && (!isDone || isFuss) && !isStarted && !isPaused;
+  const canPause = Boolean(onPause) && isStarted;
+  const canResume = Boolean(onResume) && isPaused;
   // «Готово» становится доступным только после нажатия «Начал» (либо в паузе после старта).
-  // Это совпадает со спецификацией: до старта работа не считается, и завершать нечего.
-  const canComplete = !isDone && (isStarted || isPaused);
+  const canComplete = Boolean(onComplete) && !isDone && (isStarted || isPaused);
   const canPrint = Boolean(onPrintOrderLabel) && canPrintOrderLabel(task);
   const workflowItemSx = isInfo || isWaiting ? blockedMenuItemSx : undefined;
 
@@ -127,7 +127,7 @@ export default function EmployeeStatusButtons({
   // Готовую задачу оставляем в меню, если нужна печать наклейки.
   if (isDone && !isFuss && !canPrint) return null;
 
-  const hasWorkflow = canStart || canPause || canResume || canComplete || isInfo;
+  const hasWorkflow = canStart || canPause || canResume || canComplete || (Boolean(onStart) && isInfo);
   const hasInfo = Boolean(onSetStatus);
   const hasPriorityMark = Boolean(onTogglePriority);
   if (!hasWorkflow && !hasInfo && !hasPriorityMark && !canPrint) return null;
@@ -155,7 +155,7 @@ export default function EmployeeStatusButtons({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        {(canStart || isInfo) && (
+        {(canStart || (Boolean(onStart) && isInfo)) && (
           <MenuItem
             sx={workflowItemSx}
             onClick={runWorkflow(onStart)}

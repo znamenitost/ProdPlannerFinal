@@ -36,6 +36,7 @@ import { getSharedGroupAccentColor, getSharedGroupStripeRowSx } from '../utils/t
 import { getSplitSupplyMode } from '../utils/throughApproval';
 import { getPriorityMarkViewerEmployeeName } from '../utils/taskPriorityMark';
 import { isSameEmployeeName } from '../utils/employeeNameMatch';
+import { canPrintOrderLabel } from '../utils/printLabelPrompt';
 
 function ChildTaskRow({
   task,
@@ -132,7 +133,11 @@ function ChildTaskRow({
     return style;
   };
 
-  const showActionButtons = canUserManage() && canChangeStatus;
+  const showLifecycleMenu = canUserManage() && canChangeStatus;
+  // Дочерний split обычно не печатаем; если canPrint — меню ⋯ всё равно доступно любому сотруднику.
+  const printLabelHandler = !task.isFuss ? onPrintOrderLabel : undefined;
+  const showPrintMenu = Boolean(printLabelHandler) && canPrintOrderLabel(task) && canChangeStatus;
+  const showActionButtons = showLifecycleMenu || showPrintMenu;
   const lifecycleBusy = pendingLifecycleTaskId != null;
   const tableColSpan = taskTableColumnCount(columnVisibility, showHoursTypeColumns);
   const cdrPreviewRowHandlers = getCdrPreviewRowHandlers({
@@ -271,13 +276,13 @@ function ChildTaskRow({
               task={task}
               pending={pendingLifecycleTaskId === task.id}
               lifecycleBusy={lifecycleBusy}
-              onStart={onStart}
-              onPause={onPause}
-              onResume={onResume}
-              onComplete={onComplete}
-              onSetStatus={task.isFuss ? null : onSetStatus}
-              onTogglePriority={onTogglePriority}
-              onPrintOrderLabel={onPrintOrderLabel}
+              onStart={showLifecycleMenu ? onStart : undefined}
+              onPause={showLifecycleMenu ? onPause : undefined}
+              onResume={showLifecycleMenu ? onResume : undefined}
+              onComplete={showLifecycleMenu ? onComplete : undefined}
+              onSetStatus={showLifecycleMenu && !task.isFuss ? onSetStatus : null}
+              onTogglePriority={showLifecycleMenu ? onTogglePriority : undefined}
+              onPrintOrderLabel={printLabelHandler}
             />
           )}
         </Box>

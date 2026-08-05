@@ -61,6 +61,7 @@ import { SUPPLY_MODE_INTERNAL } from '../constants/taskStatuses';
 import { getSharedGroupStripeRowSx } from '../utils/taskBorderColor';
 import { getPriorityMarkViewerEmployeeName } from '../utils/taskPriorityMark';
 import { isSameEmployeeName } from '../utils/employeeNameMatch';
+import { canPrintOrderLabel } from '../utils/printLabelPrompt';
 
 function ParentTaskRow({
   task,
@@ -236,7 +237,11 @@ function ParentTaskRow({
     return style;
   };
 
-  const showActionButtons = canUserManage() && canChangeStatus && !hasChildren;
+  const showLifecycleMenu = canUserManage() && canChangeStatus && !hasChildren;
+  // Печать наклейки — любому сотруднику по любой печатаемой задаче (не только своей).
+  const printLabelHandler = !pickupMode && !task.isFuss ? onPrintOrderLabel : undefined;
+  const showPrintMenu = Boolean(printLabelHandler) && canPrintOrderLabel(task) && canChangeStatus;
+  const showActionButtons = showLifecycleMenu || showPrintMenu;
   const tableColSpan = taskTableColumnCount(columnVisibility, showHoursTypeColumns);
   const sharedTaskIconSx = {
     color: (theme) => task.supplyMode === SUPPLY_MODE_INTERNAL
@@ -434,13 +439,13 @@ function ParentTaskRow({
                 task={task}
                 pending={pendingLifecycleTaskId === task.id}
                 lifecycleBusy={lifecycleBusy}
-                onStart={onStart}
-                onPause={onPause}
-                onResume={onResume}
-                onComplete={onComplete}
-                onSetStatus={task.isFuss ? null : onSetStatus}
-                onTogglePriority={onTogglePriority}
-                onPrintOrderLabel={task.isFuss ? undefined : onPrintOrderLabel}
+                onStart={showLifecycleMenu ? onStart : undefined}
+                onPause={showLifecycleMenu ? onPause : undefined}
+                onResume={showLifecycleMenu ? onResume : undefined}
+                onComplete={showLifecycleMenu ? onComplete : undefined}
+                onSetStatus={showLifecycleMenu && !task.isFuss ? onSetStatus : null}
+                onTogglePriority={showLifecycleMenu ? onTogglePriority : undefined}
+                onPrintOrderLabel={printLabelHandler}
               />
             )}
           </Box>
