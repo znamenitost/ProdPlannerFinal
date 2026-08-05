@@ -268,16 +268,17 @@ function ChildTaskRow({
           )}
           {showActionButtons && (
             <EmployeeStatusButtons
-            task={task}
-            pending={pendingLifecycleTaskId === task.id}
-            lifecycleBusy={lifecycleBusy}
-            onStart={onStart}
-            onPause={onPause}
-            onResume={onResume}
-            onComplete={onComplete}
-            onSetStatus={task.isFuss ? null : onSetStatus}
-            onTogglePriority={onTogglePriority}
-          />
+              task={task}
+              pending={pendingLifecycleTaskId === task.id}
+              lifecycleBusy={lifecycleBusy}
+              onStart={onStart}
+              onPause={onPause}
+              onResume={onResume}
+              onComplete={onComplete}
+              onSetStatus={task.isFuss ? null : onSetStatus}
+              onTogglePriority={onTogglePriority}
+              onPrintOrderLabel={onPrintOrderLabel}
+            />
           )}
         </Box>
       </TableCell>

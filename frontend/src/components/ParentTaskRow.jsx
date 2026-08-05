@@ -440,6 +440,7 @@ function ParentTaskRow({
                 onComplete={onComplete}
                 onSetStatus={task.isFuss ? null : onSetStatus}
                 onTogglePriority={onTogglePriority}
+                onPrintOrderLabel={task.isFuss ? undefined : onPrintOrderLabel}
               />
             )}
           </Box>

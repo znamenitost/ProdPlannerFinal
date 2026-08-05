@@ -6,7 +6,7 @@ using ProductionPlanner.Services.LabelPrint;
 
 namespace ProductionPlanner.Controllers;
 
-[Authorize(Roles = "Admin")]
+[Authorize]
 [ApiController]
 [Route("api/customer-orders")]
 public class CustomerOrderTrackingController : ControllerBase
@@ -23,6 +23,7 @@ public class CustomerOrderTrackingController : ControllerBase
     }
 
     /// <summary>Создаёт или возвращает публичную ссылку на страницу заказов заказчика задачи.</summary>
+    [Authorize(Roles = "Admin")]
     [HttpPost("link/{taskId:int}")]
     public async Task<ActionResult<CustomerOrderLinkDto>> CreateOrGetLink(
         int taskId,
@@ -40,7 +41,8 @@ public class CustomerOrderTrackingController : ControllerBase
         }
     }
 
-    /// <summary>Ставит этикетку заказа в очередь PrintAgent.</summary>
+    /// <summary>Ставит этикетку заказа в очередь PrintAgent (админ и сотрудник).</summary>
+    [Authorize(Roles = "Admin,Employee")]
     [HttpPost("print/{taskId:int}")]
     public async Task<ActionResult<PrintJobDto>> PrintLabel(
         int taskId,
@@ -60,6 +62,7 @@ public class CustomerOrderTrackingController : ControllerBase
     }
 
     /// <summary>Поиск заказов заказчика по коду получения (для выдачи на стойке).</summary>
+    [Authorize(Roles = "Admin")]
     [HttpGet("pickup/{code}")]
     public async Task<ActionResult<PickupCustomerLookupDto>> FindByPickupCode(
         string code,
@@ -73,6 +76,7 @@ public class CustomerOrderTrackingController : ControllerBase
     }
 
     /// <summary>Отметить заказ выданным клиенту.</summary>
+    [Authorize(Roles = "Admin")]
     [HttpPost("pickup/{taskId:int}/issue")]
     public async Task<IActionResult> MarkPickedUp(
         int taskId,
@@ -90,6 +94,7 @@ public class CustomerOrderTrackingController : ControllerBase
     }
 
     /// <summary>Выдать все готовые заказы того же заказчика.</summary>
+    [Authorize(Roles = "Admin")]
     [HttpPost("pickup/{taskId:int}/issue-all")]
     public async Task<ActionResult<PickupIssueResultDto>> MarkAllReadyPickedUp(
         int taskId,

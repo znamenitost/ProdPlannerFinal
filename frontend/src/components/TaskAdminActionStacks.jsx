@@ -35,6 +35,7 @@ import {
   isFinishedStatusText,
   isInfoStatus
 } from '../constants/taskStatuses';
+import { canPrintOrderLabel } from '../utils/printLabelPrompt';
 
 const blockedMenuItemSx = { opacity: 0.45 };
 const menuDividerSx = { my: 0.75 };
@@ -320,7 +321,7 @@ export default function TaskAdminActionStacks({
       </MenuItem>
     );
   }
-  if (onPrintOrderLabel) {
+  if (onPrintOrderLabel && canPrintOrderLabel(task)) {
     metaItems.push(
       <MenuItem
         key="print-order"

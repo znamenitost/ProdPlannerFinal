@@ -16,7 +16,8 @@ import {
   FactCheck,
   Inventory2,
   TaskAlt,
-  LocalFireDepartment
+  LocalFireDepartment,
+  Print as PrintIcon
 } from '@mui/icons-material';
 import {
   ACTION_RESUME,
@@ -28,6 +29,7 @@ import {
   isFinishedStatusText,
   isInfoStatus
 } from '../constants/taskStatuses';
+import { canPrintOrderLabel } from '../utils/printLabelPrompt';
 
 const blockedMenuItemSx = { opacity: 0.45 };
 
@@ -47,7 +49,8 @@ export default function EmployeeStatusButtons({
   onResume,
   onComplete,
   onSetStatus,
-  onTogglePriority
+  onTogglePriority,
+  onPrintOrderLabel
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
@@ -67,6 +70,7 @@ export default function EmployeeStatusButtons({
   // «Готово» становится доступным только после нажатия «Начал» (либо в паузе после старта).
   // Это совпадает со спецификацией: до старта работа не считается, и завершать нечего.
   const canComplete = !isDone && (isStarted || isPaused);
+  const canPrint = Boolean(onPrintOrderLabel) && canPrintOrderLabel(task);
   const workflowItemSx = isInfo || isWaiting ? blockedMenuItemSx : undefined;
 
   const handleOpen = (event) => {
@@ -111,14 +115,25 @@ export default function EmployeeStatusButtons({
     });
   };
 
-  if (isDone && !isFuss) return null;
+  const runPrintLabel = (event) => {
+    event?.stopPropagation?.();
+    handleClose();
+    if (menuDisabled || !canPrint) return;
+    void Promise.resolve(onPrintOrderLabel(task)).catch((err) => {
+      console.error('Ошибка печати этикетки заказа:', err);
+    });
+  };
+
+  // Готовую задачу оставляем в меню, если нужна печать наклейки.
+  if (isDone && !isFuss && !canPrint) return null;
 
   const hasWorkflow = canStart || canPause || canResume || canComplete || isInfo;
   const hasInfo = Boolean(onSetStatus);
   const hasPriorityMark = Boolean(onTogglePriority);
-  if (!hasWorkflow && !hasInfo && !hasPriorityMark) return null;
+  if (!hasWorkflow && !hasInfo && !hasPriorityMark && !canPrint) return null;
 
   const infoMenuItems = getInfoMenuItems(status);
+  const showPrintDivider = canPrint && (hasWorkflow || hasInfo || hasPriorityMark);
 
   return (
     <>
@@ -197,6 +212,15 @@ export default function EmployeeStatusButtons({
               <ListItemText>{item.label}</ListItemText>
             </MenuItem>
           ))}
+        {showPrintDivider && <Divider sx={{ my: 0.5 }} />}
+        {canPrint && (
+          <MenuItem onClick={runPrintLabel}>
+            <ListItemIcon>
+              <PrintIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Распечатать наклейку</ListItemText>
+          </MenuItem>
+        )}
       </Menu>
     </>
   );
