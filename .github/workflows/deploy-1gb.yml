@@ -127,16 +127,14 @@ jobs:
           echo
           lftp_cmd "cat wwwroot/deploy-version.txt" || true
 
-          echo "=== probe via FTP host IP ==="
-          ip=$(getent ahostsv4 "$FTP_HOST" | awk '{print $1; exit}')
-          echo "FTP_HOST=$FTP_HOST ip=${ip:-unknown}"
-          if [ -n "${ip:-}" ]; then
+          echo "=== probe public sites ==="
+          for site in https://app-mainstream.ru http://app-mainstream.ru http://team-mainb6d.1gb.ru; do
             code=$(curl -sS -o /tmp/di.json -w "%{http_code}" --max-time 20 \
-              -H "Host: team-mainb6d.1gb.ru" "http://${ip}/api/deploy-info" || echo 000)
-            echo "deploy-info via ${ip}: HTTP ${code}"
-            head -c 400 /tmp/di.json || true
+              "${site}/api/deploy-info" || echo 000)
+            echo "deploy-info ${site} → HTTP ${code}"
+            head -c 200 /tmp/di.json || true
             echo
-          fi
+          done
 
   deploy:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.recover_only) }}
@@ -526,7 +524,8 @@ jobs:
           FTP_HOST: ${{ steps.ftp.outputs.server }}
           FTP_DIR: ${{ steps.ftp.outputs.server_dir }}
         run: |
-          SITE="http://team-mainb6d.1gb.ru"
+          # Публичный домен — основной; team-mainb6d часто без DNS / 503 на HTTP.sys.
+          SITES="https://app-mainstream.ru http://app-mainstream.ru http://team-mainb6d.1gb.ru"
 
           lftp_offline() {
             lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${FTP_USER}','${FTP_PASS}' ${FTP_HOST}; cd '${FTP_DIR}'; $1; bye"
@@ -539,20 +538,30 @@ jobs:
             sleep 2
           }
 
+          probe_sites() {
+            for site in $SITES; do
+              code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 "${site}/api/deploy-info" || echo "000")
+              echo "deploy-info ${site} → HTTP ${code}"
+              if [ "$code" = "200" ] || [ "$code" = "401" ]; then
+                echo "Сайт отвечает: ${site} (${code})"
+                return 0
+              fi
+            done
+            return 1
+          }
+
           for attempt in 1 2 3 4 5 6; do
-            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 "${SITE}/api/deploy-info" || echo "000")
-            echo "deploy-info HTTP ${code} (попытка ${attempt})"
-            if [ "$code" = "200" ] || [ "$code" = "401" ]; then
-              echo "Сайт отвечает (${code})"
+            echo "Проверка доступности (попытка ${attempt})…"
+            if probe_sites; then
               exit 0
             fi
-            if [ "$code" = "503" ] && [ -n "${FTP_HOST:-}" ] && [ -n "${FTP_DIR:-}" ]; then
-              echo "503 — пробуем снять app_offline.htm через FTP…"
+            if [ -n "${FTP_HOST:-}" ] && [ -n "${FTP_DIR:-}" ]; then
+              echo "Нет 200/401 — пробуем снять app_offline.htm через FTP…"
               try_remove_offline
             fi
             sleep 15
           done
-          echo "::error::Сайт не отвечает после деплоя (ожидали 200/401, не 503). БД не трогали — удалите app_offline.htm в ${FTP_DIR:-/http/} вручную или: FTP_PASSWORD=... ./scripts/recover-site-1gb.sh"
+          echo "::error::Сайт не отвечает после деплоя (ожидали 200/401 на app-mainstream.ru). БД не трогали — Actions → Deploy to 1gb.ru → recover_only, или FTP_PASSWORD=... ./scripts/recover-site-1gb.sh"
           exit 1
 
       - name: Deploy summary
@@ -568,9 +577,10 @@ jobs:
           echo "- ftp: \`$MODE\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Проверка на проде (после зелёного job):" >> "$GITHUB_STEP_SUMMARY"
-          echo "1. http://team-mainb6d.1gb.ru/wwwroot/deploy-version.txt" >> "$GITHUB_STEP_SUMMARY"
-          echo "2. http://team-mainb6d.1gb.ru/api/deploy-info" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. https://app-mainstream.ru/deploy-version.txt" >> "$GITHUB_STEP_SUMMARY"
+          echo "2. https://app-mainstream.ru/api/deploy-info" >> "$GITHUB_STEP_SUMMARY"
           echo "3. View Source главной — комментарий \`deploy-sha:${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "4. Ctrl+Shift+R; меню ⋮ — вкладка **Таблица задач** (роль Admin или своя задача)" >> "$GITHUB_STEP_SUMMARY"
+          echo "5. Агент печати: https://app-mainstream.ru/downloads/ProductionPlanner-PrintAgent-win.zip" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Если UI/DLL «залипли»: Actions → Run workflow → включите **full_sync**." >> "$GITHUB_STEP_SUMMARY"
