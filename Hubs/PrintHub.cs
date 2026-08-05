@@ -39,7 +39,10 @@ public class PrintHub : Hub
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, AgentsGroup);
-        _logger.LogInformation("PrintHub: агент отключён {ConnectionId}", Context.ConnectionId);
+        if (exception != null)
+            _logger.LogWarning(exception, "PrintHub: агент отключён {ConnectionId}", Context.ConnectionId);
+        else
+            _logger.LogInformation("PrintHub: агент отключён {ConnectionId}", Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
 }

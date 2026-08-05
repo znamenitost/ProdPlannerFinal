@@ -4,6 +4,12 @@ public sealed class BackgroundRemovalOptions
 {
     public const string SectionName = "BackgroundRemoval";
 
+    /// <summary>
+    /// When false, IS-Net is not loaded and remove-background APIs refuse work.
+    /// Keep true locally; disable on shared hosting to avoid ~170 MB RAM pressure.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>Path to the local IS-Net (isnet-general-use) ONNX model, relative to content root.</summary>
     public string ModelPath { get; set; } = "models/isnet-general-use.onnx";
 

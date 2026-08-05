@@ -49,6 +49,9 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
         Action<double, string>? reportProgress,
         CancellationToken cancellationToken = default)
     {
+        if (!_options.Enabled)
+            return new BackgroundRemovalResult(false, null, "Удаление фона временно отключено на сервере");
+
         if (imageBytes.Length == 0)
             return new BackgroundRemovalResult(false, null, "Пустое изображение");
 
@@ -83,6 +86,13 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
     public Task<BackgroundRemovalDiagnostics> DiagnoseAsync(CancellationToken cancellationToken = default)
     {
         var modelPath = ResolveModelPath();
+        if (!_options.Enabled)
+        {
+            return Task.FromResult(new BackgroundRemovalDiagnostics(
+                modelPath, false, false, null, 0, "Disabled",
+                "BackgroundRemoval:Enabled=false — модель не загружается"));
+        }
+
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         if (!File.Exists(modelPath))
@@ -276,6 +286,9 @@ public sealed class IsNetBackgroundRemovalService : IBackgroundRemovalService, I
 
     private InferenceSession? TryGetSession()
     {
+        if (!_options.Enabled)
+            return null;
+
         lock (_sessionLock)
         {
             return _session ??= CreateSession();

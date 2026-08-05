@@ -7,6 +7,7 @@ using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
 using ProductionPlanner.Services.LabelPrint;
+using ProductionPlanner.Services.TaskTable;
 using ProductionPlanner.Models.Dtos;
 
 namespace ProductionPlanner.Tests;
@@ -164,6 +165,136 @@ public class TaskSplitRemovalTests
         Assert.Equal(JobStatus.Approved, ivanChild.Status);
         Assert.Equal(TaskWorkPhase.Production, ivanChild.WorkPhase);
         Assert.Equal(testCompletedAt, ivanChild.TestPhaseCompletedAt);
+
+        var refreshedParent = await db.ProductionTasks.AsNoTracking().FirstAsync(t => t.Id == parent.Id);
+        Assert.True(refreshedParent.IsSplitTask);
+        Assert.False(refreshedParent.RequiresTestBeforeProduction);
+        Assert.Equal(0, refreshedParent.TestEstimateHours);
+        Assert.Equal(0, refreshedParent.ProductionEstimateHours);
+        Assert.Equal(TaskWorkPhase.None, refreshedParent.WorkPhase);
+    }
+
+    [Fact]
+    public async Task SplitThroughApprovalTask_without_through_test_parts_clears_parent_and_children_phase()
+    {
+        await using var provider = BuildServices();
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var splitService = scope.ServiceProvider.GetRequiredService<ITaskSplitService>();
+
+        var parent = new ProductionTask
+        {
+            DisplayOrder = 1,
+            FolderPath = "C:/clients",
+            FileName = "through.cdr",
+            Comment = "",
+            Deadline = DateTime.UtcNow.AddDays(1),
+            EstimateHours = 10,
+            Type = "Резка",
+            EmployeeName = "Иван",
+            Status = JobStatus.Assigned,
+            IsSplitTask = false,
+            RequiresTestBeforeProduction = true,
+            TestEstimateHours = 2,
+            ProductionEstimateHours = 8,
+            WorkPhase = TaskWorkPhase.Test,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.ProductionTasks.Add(parent);
+        await db.SaveChangesAsync();
+
+        await splitService.UpdateSplitAsync(
+            parent.Id,
+            [
+                new SplitPart
+                {
+                    EmployeeName = "Иван",
+                    TaskType = "Резка",
+                    AllocatedHours = 5
+                },
+                new SplitPart
+                {
+                    EmployeeName = "Петр",
+                    TaskType = "Сборка",
+                    AllocatedHours = 5
+                }
+            ],
+            SupplyMode.Cooperative);
+
+        var refreshedParent = await db.ProductionTasks.AsNoTracking().FirstAsync(t => t.Id == parent.Id);
+        Assert.True(refreshedParent.IsSplitTask);
+        Assert.Equal(10, refreshedParent.EstimateHours);
+        Assert.False(refreshedParent.RequiresTestBeforeProduction);
+        Assert.Equal(0, refreshedParent.TestEstimateHours);
+        Assert.Equal(0, refreshedParent.ProductionEstimateHours);
+        Assert.Equal(TaskWorkPhase.None, refreshedParent.WorkPhase);
+        Assert.Null(refreshedParent.TestPhaseCompletedAt);
+
+        var children = await db.ProductionTasks
+            .AsNoTracking()
+            .Where(t => t.ParentRowNumber == parent.Id)
+            .ToListAsync();
+        Assert.Equal(2, children.Count);
+        Assert.All(children, c =>
+        {
+            Assert.False(c.RequiresTestBeforeProduction);
+            Assert.Equal(0, c.TestEstimateHours);
+            Assert.Equal(0, c.ProductionEstimateHours);
+            Assert.Equal(TaskWorkPhase.None, c.WorkPhase);
+            Assert.Equal(5, c.EstimateHours);
+            Assert.Equal(5, TestPhaseWorkflow.GetActiveEstimateHours(c));
+        });
+    }
+
+    [Fact]
+    public async Task UpdateSplitAsync_turning_off_through_test_clears_child_phase()
+    {
+        await using var provider = BuildServices();
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var splitService = scope.ServiceProvider.GetRequiredService<ITaskSplitService>();
+
+        var parent = await SeedSplitParentAsync(db, "toggle-off.cdr");
+        var child = await SeedChildAsync(db, parent, "Иван", "Резка");
+        child.RequiresTestBeforeProduction = true;
+        child.TestEstimateHours = 2;
+        child.ProductionEstimateHours = 3;
+        child.EstimateHours = 5;
+        child.WorkPhase = TaskWorkPhase.Test;
+        var other = await SeedChildAsync(db, parent, "Петр", "Сборка");
+        await db.SaveChangesAsync();
+
+        await splitService.UpdateSplitAsync(
+            parent.Id,
+            [
+                new SplitPart
+                {
+                    ChildTaskId = child.Id,
+                    EmployeeName = child.EmployeeName,
+                    TaskType = child.Type,
+                    AllocatedHours = 5
+                },
+                new SplitPart
+                {
+                    ChildTaskId = other.Id,
+                    EmployeeName = other.EmployeeName,
+                    TaskType = other.Type,
+                    AllocatedHours = other.EstimateHours
+                }
+            ],
+            SupplyMode.Cooperative);
+
+        var refreshed = await db.ProductionTasks.AsNoTracking().FirstAsync(t => t.Id == child.Id);
+        Assert.False(refreshed.RequiresTestBeforeProduction);
+        Assert.Equal(0, refreshed.TestEstimateHours);
+        Assert.Equal(0, refreshed.ProductionEstimateHours);
+        Assert.Equal(TaskWorkPhase.None, refreshed.WorkPhase);
+        Assert.Equal(5, refreshed.EstimateHours);
+        Assert.Equal(5, TestPhaseWorkflow.GetActiveEstimateHours(refreshed));
+
+        var refreshedParent = await db.ProductionTasks.AsNoTracking().FirstAsync(t => t.Id == parent.Id);
+        Assert.False(refreshedParent.RequiresTestBeforeProduction);
     }
 
     private static ServiceProvider BuildServices()

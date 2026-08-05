@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using ProductionPlanner.Models.Dtos.Catalog;
 using ProductionPlanner.Services.Catalog;
 
@@ -14,17 +15,20 @@ public class PublicCatalogController : ControllerBase
     private readonly ICatalogOrderService _orders;
     private readonly IBackgroundRemovalService _backgroundRemoval;
     private readonly BackgroundRemovalJobStore _backgroundRemovalJobs;
+    private readonly BackgroundRemovalOptions _backgroundRemovalOptions;
 
     public PublicCatalogController(
         ICatalogService catalog,
         ICatalogOrderService orders,
         IBackgroundRemovalService backgroundRemoval,
-        BackgroundRemovalJobStore backgroundRemovalJobs)
+        BackgroundRemovalJobStore backgroundRemovalJobs,
+        IOptions<BackgroundRemovalOptions> backgroundRemovalOptions)
     {
         _catalog = catalog;
         _orders = orders;
         _backgroundRemoval = backgroundRemoval;
         _backgroundRemovalJobs = backgroundRemovalJobs;
+        _backgroundRemovalOptions = backgroundRemovalOptions.Value;
     }
 
     [HttpGet("products")]
@@ -79,6 +83,10 @@ public class PublicCatalogController : ControllerBase
     [RequestSizeLimit(6 * 1024 * 1024)]
     public ActionResult RemoveBackgroundStart([FromBody] CatalogRemoveBackgroundRequest request)
     {
+        if (!_backgroundRemovalOptions.Enabled)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { error = "Удаление фона временно отключено на сервере" });
+
         if (request is null || string.IsNullOrWhiteSpace(request.ImageDataUrl))
             return BadRequest(new { error = "Нет изображения" });
 

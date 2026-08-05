@@ -62,12 +62,18 @@ namespace ProductionPlanner.Services
 
             var parentStateShouldBeMigrated = ShouldCarryParentStateToChild(parentWithWork);
             var workMigratedToChild = false;
+            // parentTask и parentWithWork — один tracked-instance: фазу для миграции
+            // снимаем в снимок до ClearParentTestPhaseState.
+            var parentTestPhaseSnapshot = CaptureParentTestPhaseState(parentWithWork);
 
             var totalAllocated = parts.Sum(p => p.AllocatedHours);
             parentTask.EstimateHours = totalAllocated;
             parentTask.Type = string.Join(", ",
                 parts.Select(p => p.TaskType).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct());
             parentTask.SupplyMode = NormalizeSplitSupplyMode(supplyMode ?? parentTask.SupplyMode);
+            // Фаза «через согласование» живёт только на детях — иначе родитель
+            // продолжает показывать/считать часы теста + основной части.
+            ClearParentTestPhaseState(parentTask);
 
             foreach (var (part, index) in parts.Select((p, i) => (p, i)))
             {
@@ -81,7 +87,7 @@ namespace ProductionPlanner.Services
                 var childTask = CreateChildFromPart(parentTask, part, sequenceOrder);
                 if (migrateParentWork)
                 {
-                    CopyWorkStateFromParent(childTask, parentWithWork);
+                    CopyWorkStateFromParent(childTask, parentWithWork, parentTestPhaseSnapshot);
                     workMigratedToChild = true;
                 }
 
@@ -171,6 +177,7 @@ namespace ProductionPlanner.Services
             parentTask.EmployeeName = "";
             parentTask.SupplyMode = NormalizeSplitSupplyMode(supplyMode ?? parentTask.SupplyMode);
             parentTask.UpdatedAt = now;
+            ClearParentTestPhaseState(parentTask);
 
             foreach (var (part, index) in parts.Select((p, i) => (p, i)))
             {
@@ -319,6 +326,7 @@ namespace ProductionPlanner.Services
                 parent.TestEstimateHours = 0;
                 parent.ProductionEstimateHours = 0;
                 parent.WorkPhase = TaskWorkPhase.None;
+                parent.TestPhaseCompletedAt = null;
                 parent.EstimateHours = part.AllocatedHours;
             }
 
@@ -427,15 +435,13 @@ namespace ProductionPlanner.Services
         {
             if (!part.RequiresTestBeforeProduction)
             {
-                if (isNewChild || task.WorkPhase == TaskWorkPhase.None)
-                {
-                    task.RequiresTestBeforeProduction = false;
-                    task.TestEstimateHours = 0;
-                    task.ProductionEstimateHours = 0;
-                    task.WorkPhase = TaskWorkPhase.None;
-                    task.TestPhaseCompletedAt = null;
-                }
-
+                // Явно сняли «через согласование» — сбрасываем фазу всегда,
+                // иначе GetActiveEstimateHours продолжает ждать часы теста.
+                task.RequiresTestBeforeProduction = false;
+                task.TestEstimateHours = 0;
+                task.ProductionEstimateHours = 0;
+                task.WorkPhase = TaskWorkPhase.None;
+                task.TestPhaseCompletedAt = null;
                 task.EstimateHours = part.AllocatedHours;
                 return;
             }
@@ -530,7 +536,17 @@ namespace ProductionPlanner.Services
             return string.IsNullOrEmpty(parent.EmployeeName) && parts.IndexOf(part) == 0;
         }
 
-        private static void CopyWorkStateFromParent(ProductionTask child, ProductionTask parent)
+        private readonly record struct ParentTestPhaseState(
+            TaskWorkPhase WorkPhase,
+            DateTime? TestPhaseCompletedAt);
+
+        private static ParentTestPhaseState CaptureParentTestPhaseState(ProductionTask parent) =>
+            new(parent.WorkPhase, parent.TestPhaseCompletedAt);
+
+        private static void CopyWorkStateFromParent(
+            ProductionTask child,
+            ProductionTask parent,
+            ParentTestPhaseState parentTestPhase)
         {
             child.Status = parent.Status;
             child.Progress = parent.Progress;
@@ -538,8 +554,8 @@ namespace ProductionPlanner.Services
             child.CompletedAt = parent.CompletedAt;
             if (child.RequiresTestBeforeProduction)
             {
-                child.WorkPhase = parent.WorkPhase;
-                child.TestPhaseCompletedAt = parent.TestPhaseCompletedAt;
+                child.WorkPhase = parentTestPhase.WorkPhase;
+                child.TestPhaseCompletedAt = parentTestPhase.TestPhaseCompletedAt;
             }
         }
 
@@ -555,6 +571,18 @@ namespace ProductionPlanner.Services
             parent.Progress = 0;
             parent.ActualHours = 0;
             parent.CompletedAt = null;
+        }
+
+        /// <summary>
+        /// У split-родителя нет собственной фазы «через согласование» — только у детей.
+        /// </summary>
+        private static void ClearParentTestPhaseState(ProductionTask parent)
+        {
+            parent.RequiresTestBeforeProduction = false;
+            parent.TestEstimateHours = 0;
+            parent.ProductionEstimateHours = 0;
+            parent.WorkPhase = TaskWorkPhase.None;
+            parent.TestPhaseCompletedAt = null;
         }
 
         private async Task MigrateIntervalsToChildAsync(
@@ -656,6 +684,9 @@ namespace ProductionPlanner.Services
                     parent.CompletedAt = null;
                 }
             }
+
+            // Итоговые часы/фаза — из части назначения (могли снять «через согласование»).
+            ApplyTestPhaseFromPart(parent, part, isNewChild: false);
 
             var remainingSplits = await _context.TaskSplits
                 .Where(ts => ts.ParentRowNumber == parent.Id)

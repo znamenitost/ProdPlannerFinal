@@ -182,14 +182,12 @@ jobs:
           export ConnectionStrings__DefaultConnection="$POSTGRES_CONNECTION_STRING"
           dotnet run --project ProductionPlanner.csproj -c Release --no-launch-profile -- apply-migrations
 
-      - name: Download IS-Net ONNX model
+      # BackgroundRemoval:Enabled=false на проде — модель (170 МБ) не грузим и не публикуем.
+      # Код IS-Net остаётся в репо; локально Enabled=true.
+      - name: Skip IS-Net ONNX model (disabled on production)
         run: |
           mkdir -p models
-          if [ ! -f models/isnet-general-use.onnx ]; then
-            curl -sSL -o models/isnet-general-use.onnx \
-              "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx"
-          fi
-          echo "fc16ebd8b0c10d971d3513d564d01e29  models/isnet-general-use.onnx" | md5sum -c -
+          echo "IS-Net deploy skipped (BackgroundRemoval:Enabled=false). Local model, if any, is not required for publish."
 
       - name: Publish application
         run: |
@@ -328,13 +326,11 @@ jobs:
           print(f"Проверка: Host={host or '?'}")
           PY
 
-      - name: Verify IS-Net model bundled
+      - name: Strip IS-Net model from publish (not used on server)
         run: |
-          if [ ! -f publish/models/isnet-general-use.onnx ]; then
-            echo "::error::publish/models/isnet-general-use.onnx отсутствует — скачайте модель в models/ и закоммитьте (см. README каталога)"
-            exit 1
-          fi
-          ls -lh publish/models/isnet-general-use.onnx
+          rm -f publish/models/isnet-general-use.onnx
+          # Пустая папка models ок; onnxruntime.dll оставляем — без сессии не грузится в RAM.
+          ls -la publish/models 2>/dev/null || true
 
       - name: Bundle app-local VC++ CRT next to onnxruntime.dll
         uses: actions/download-artifact@v8
@@ -442,26 +438,14 @@ jobs:
             **/*.pdb
             app_offline.htm
 
-      # 170 МБ модели — самый хрупкий файл деплоя. Проверяем размер на сервере
-      # и при несовпадении заливаем напрямую через lftp (сайт ещё offline).
-      - name: Ensure IS-Net model on server
+      # Модель на проде отключена — снимаем 170 МБ с FTP, чтобы не занимала диск
+      # и не могла случайно подхватиться после смены Enabled.
+      - name: Remove IS-Net model from server
         run: |
-          EXPECTED=178648008
           FTP_HOST='${{ steps.ftp.outputs.server }}'
           FTP_DIR='${{ steps.ftp.outputs.server_dir }}'
-          ftp_size() {
-            lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${FTP_HOST}; cd '${FTP_DIR}'; ls -l models/isnet-general-use.onnx; bye" 2>/dev/null | awk '{print $5}' | tail -1
-          }
-          remote_size=$(ftp_size)
-          echo "Remote model size: ${remote_size:-missing} (expected ${EXPECTED})"
-          if [ "$remote_size" != "$EXPECTED" ]; then
-            echo "Заливаю модель по FTP (170 МБ, несколько минут)…"
-            lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${FTP_HOST}; cd '${FTP_DIR}'; mkdir -p models; put -c -O models/ publish/models/isnet-general-use.onnx; bye"
-            remote_size=$(ftp_size)
-            echo "Remote model size after upload: ${remote_size:-missing}"
-            [ "$remote_size" = "$EXPECTED" ] || { echo "::error::models/isnet-general-use.onnx на сервере не совпадает по размеру"; exit 1; }
-          fi
-          echo "IS-Net model OK on server"
+          lftp -e "set ftp:passive-mode on; set ssl:force off; open -u '${{ secrets.FTP_USERNAME }}','${{ secrets.FTP_PASSWORD }}' ${FTP_HOST}; cd '${FTP_DIR}'; rm -f models/isnet-general-use.onnx; bye" || true
+          echo "IS-Net model removed from server (BackgroundRemoval disabled)"
 
       - name: Start IIS (remove app_offline.htm)
         if: always()

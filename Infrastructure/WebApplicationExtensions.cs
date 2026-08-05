@@ -85,19 +85,28 @@ public static class WebApplicationExtensions
         if (!Directory.Exists(avatarsDir))
             Directory.CreateDirectory(avatarsDir);
 
-        // Eagerly load the IS-Net session so a broken model/native runtime
-        // surfaces in startup logs instead of the first customer request.
-        _ = Task.Run(async () =>
+        // Eager-load IS-Net only when enabled — on shared hosting the 170 MB
+        // session starves the app pool (HTTP/2 ping failures / site freezes).
+        var bgRemovalEnabled = app.Configuration.GetValue(
+            $"{BackgroundRemovalOptions.SectionName}:Enabled", true);
+        if (bgRemovalEnabled)
         {
-            try
+            _ = Task.Run(async () =>
             {
-                await app.Services.GetRequiredService<IBackgroundRemovalService>().DiagnoseAsync();
-            }
-            catch (Exception ex)
-            {
-                app.Logger.LogWarning(ex, "IS-Net warmup failed");
-            }
-        });
+                try
+                {
+                    await app.Services.GetRequiredService<IBackgroundRemovalService>().DiagnoseAsync();
+                }
+                catch (Exception ex)
+                {
+                    app.Logger.LogWarning(ex, "IS-Net warmup failed");
+                }
+            });
+        }
+        else
+        {
+            app.Logger.LogInformation("IS-Net background removal disabled (BackgroundRemoval:Enabled=false)");
+        }
 
         app.UseForwardedHeaders(new ForwardedHeadersOptions
         {
