@@ -116,14 +116,33 @@ internal sealed class MainForm : Form
 
         Load += async (_, _) =>
         {
-            ReloadPrinters();
-            if (_config.RunAtStartup)
-                AutostartHelper.TryEnable(Application.ExecutablePath);
-
-            if (!string.IsNullOrWhiteSpace(_config.AccessToken)
-                && !string.IsNullOrWhiteSpace(_config.PrinterName))
+            // async void: любая ошибка иначе роняет процесс без окна.
+            try
             {
-                await StartAgentAsync();
+                Show();
+                Activate();
+                ReloadPrinters();
+                if (_config.RunAtStartup)
+                    AutostartHelper.TryEnable(Application.ExecutablePath);
+
+                if (!string.IsNullOrWhiteSpace(_config.AccessToken)
+                    && !string.IsNullOrWhiteSpace(_config.PrinterName))
+                {
+                    await StartAgentAsync();
+                }
+                else
+                {
+                    SetStatus("Выберите принтер, сохраните настройки и нажмите «Подключить»");
+                }
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Ошибка запуска: " + ex.Message);
+                MessageBox.Show(
+                    ex.Message,
+                    "Print Agent — ошибка запуска",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
         };
 
@@ -150,8 +169,15 @@ internal sealed class MainForm : Form
     private void ReloadPrinters()
     {
         _printerCombo.Items.Clear();
-        foreach (string printer in PrinterSettings.InstalledPrinters)
-            _printerCombo.Items.Add(printer);
+        try
+        {
+            foreach (string printer in PrinterSettings.InstalledPrinters)
+                _printerCombo.Items.Add(printer);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("Не удалось получить список принтеров: " + ex.Message);
+        }
 
         if (!string.IsNullOrWhiteSpace(_config.PrinterName)
             && _printerCombo.Items.Contains(_config.PrinterName))

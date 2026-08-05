@@ -40,6 +40,43 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # WinForms net48 — собираем на Windows, иначе Mac/linux zip иногда «молча» не стартует у пользователей.
+  printagent:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.recover_only) }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build PrintAgent zip
+        shell: pwsh
+        run: |
+          dotnet build tools/ProductionPlanner.PrintAgent/ProductionPlanner.PrintAgent.csproj -c Release
+          $out = "tools/ProductionPlanner.PrintAgent/bin/Release/net48"
+          if (-not (Test-Path "$out/ProductionPlanner.PrintAgent.exe")) { throw "PrintAgent exe not built" }
+          New-Item -ItemType Directory -Force print-agent-out | Out-Null
+          $stage = "print-agent-stage"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item "$out/ProductionPlanner.PrintAgent.exe" $stage
+          Copy-Item "$out/ProductionPlanner.PrintAgent.exe.config" $stage
+          Copy-Item "$out/*.dll" $stage
+          Copy-Item "tools/ProductionPlanner.PrintAgent/releases/README-INSTALL.txt" $stage -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$stage\*" -DestinationPath "print-agent-out/ProductionPlanner-PrintAgent-win.zip" -Force
+          Get-Item "print-agent-out/ProductionPlanner-PrintAgent-win.zip" | Format-List FullName, Length
+
+      - name: Upload PrintAgent zip
+        uses: actions/upload-artifact@v7
+        with:
+          name: print-agent-zip
+          path: print-agent-out/ProductionPlanner-PrintAgent-win.zip
+          if-no-files-found: error
+          retention-days: 1
+
   recover:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.recover_only }}
     runs-on: ubuntu-latest
@@ -103,7 +140,7 @@ jobs:
 
   deploy:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.recover_only) }}
-    needs: vcredist
+    needs: [vcredist, printagent]
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -188,12 +225,22 @@ jobs:
           mkdir -p publish/wwwroot/downloads
           cp tools/ProductionPlanner.FileOpener/releases/ProductionPlanner-FileOpener-win-x64.zip publish/wwwroot/downloads/
 
+      - name: Download PrintAgent zip (Windows build)
+        uses: actions/download-artifact@v8
+        with:
+          name: print-agent-zip
+          path: print-agent-out
+
       - name: Bundle print agent zip
         run: |
           mkdir -p publish/wwwroot/downloads
-          PRINT_ZIP="tools/ProductionPlanner.PrintAgent/releases/ProductionPlanner-PrintAgent-win.zip"
+          PRINT_ZIP="print-agent-out/ProductionPlanner-PrintAgent-win.zip"
           if [ ! -f "$PRINT_ZIP" ]; then
-            echo "::error::Нет $PRINT_ZIP — соберите агент локально (dotnet build -c Release) и закоммитьте zip"
+            echo "::warning::Нет артефакта Windows-сборки — fallback на committed zip"
+            PRINT_ZIP="tools/ProductionPlanner.PrintAgent/releases/ProductionPlanner-PrintAgent-win.zip"
+          fi
+          if [ ! -f "$PRINT_ZIP" ]; then
+            echo "::error::Нет PrintAgent zip"
             exit 1
           fi
           cp "$PRINT_ZIP" publish/wwwroot/downloads/
