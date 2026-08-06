@@ -93,7 +93,11 @@ export function startCdrAutoSearchAfterSave({
   void (async () => {
     try {
       const agentUnavailable = await getLocalAgentUnavailableMessage();
-      if (agentUnavailable) return;
+      if (agentUnavailable) {
+        // Сервер уже мог поставить retry; дублируем schedule на случай create без серверного queue.
+        await scheduleCdrPreviewRetry(taskId).catch(() => {});
+        return;
+      }
 
       const ok = await tryBuildPreview(taskId, folderPath, fileName);
       if (ok) return;
@@ -123,7 +127,7 @@ export function startCdrAutoSearchAfterSave({
   })();
 }
 
-/** Вторая (последняя) попытка по расписанию. */
+/** Отложенная попытка по расписанию (может повторяться, пока файл не появится). */
 export async function runCdrAutoSearchSecondAttempt(item, showWarning) {
   const taskId = Number(item?.taskId);
   if (!DEV_CDR_PREVIEW_ENABLED || !Number.isFinite(taskId)) return false;
@@ -139,18 +143,32 @@ export async function runCdrAutoSearchSecondAttempt(item, showWarning) {
   notifyPreviewBuildStart(taskId);
   try {
     const agentUnavailable = await getLocalAgentUnavailableMessage();
-    if (agentUnavailable) return false;
+    if (agentUnavailable) {
+      // Агент временно недоступен — переносим попытку, не снимаем очередь.
+      await scheduleCdrPreviewRetry(taskId).catch(() => {});
+      return false;
+    }
 
     const ok = await tryBuildPreview(taskId, folderPath, fileName);
     if (ok) return true;
 
-    showWarning?.(formatAutoSearchFailedMessage(folderPath, fileName));
-    await reportCdrPreviewRetryFailed(taskId);
+    const scheduled = await scheduleCdrPreviewRetry(taskId);
+    if (!scheduled) {
+      showWarning?.(formatAutoSearchFailedMessage(folderPath, fileName));
+      await reportCdrPreviewRetryFailed(taskId);
+    }
     return false;
   } catch (err) {
     if (isCdrPreviewRetryableFailure(err?.message)) {
-      showWarning?.(formatAutoSearchFailedMessage(folderPath, fileName));
+      const scheduled = await scheduleCdrPreviewRetry(taskId).catch(() => false);
+      if (!scheduled) {
+        showWarning?.(formatAutoSearchFailedMessage(folderPath, fileName));
+        await reportCdrPreviewRetryFailed(taskId);
+      }
+      return false;
     }
+
+    showWarning?.(formatCdrPreviewPostSaveWarning(err?.message));
     await reportCdrPreviewRetryFailed(taskId);
     return false;
   } finally {

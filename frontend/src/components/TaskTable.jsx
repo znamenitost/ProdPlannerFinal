@@ -34,6 +34,7 @@ import useTaskTablePlannedProgressPreference from '../hooks/taskTable/useTaskTab
 import useTaskTablePlannedProgressPolling from '../hooks/taskTable/useTaskTablePlannedProgressPolling';
 import useTaskTableSortSettings from '../hooks/taskTable/useTaskTableSortSettings';
 import useUserPreference from '../hooks/useUserPreference';
+import useCdrPreviewAutoSearchSettings from '../hooks/useCdrPreviewAutoSearchSettings';
 import { useUiFeedback } from '../context/UiFeedbackContext';
 import { issuePickupOrder } from '../services/api';
 import { comparePickupRows, normalizePickupQuery } from '../utils/pickupMode';
@@ -135,6 +136,7 @@ export default function TaskTable({
   /** Контент над таблицей (баннер/тулбар) — только он двигает scrollMargin. */
   const aboveTableRef = useRef(null);
   const [scrollMargin, setScrollMargin] = useState(0);
+  const autoSearchSettings = useCdrPreviewAutoSearchSettings(isAdmin ? currentUser : null);
   const columnSettings = useTaskTableColumnVisibility(currentUser);
   const plannedProgressPref = useTaskTablePlannedProgressPreference(currentUser);
   const showPlannedProgress = isAdmin && plannedProgressPref.showPlannedProgress;
@@ -664,6 +666,8 @@ export default function TaskTable({
           onSearchQueryChange={handleSearchQueryChange}
           showPlannedProgress={plannedProgressPref.showPlannedProgress}
           onToggleShowPlannedProgress={plannedProgressPref.toggleShowPlannedProgress}
+          autoSearchMinutes={autoSearchSettings.minutes}
+          onAutoSearchMinutesChange={autoSearchSettings.setMinutes}
           onOpenFileOpenSettings={onOpenFileOpenSettings}
           onOpenTaskTypeStats={onOpenTaskTypeStats}
           taskTypeStatsOpen={taskTypeStatsOpen}

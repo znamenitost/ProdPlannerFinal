@@ -23,6 +23,11 @@ public interface ICdrPreviewRetryService
 
 public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
 {
+    /// <summary>
+    /// Сколько отложенных попыток допускается, пока CDR ещё не появился на шаре.
+    /// </summary>
+    public const int MaxAttempts = 5;
+
     private readonly ApplicationDbContext _db;
     private readonly IAppTimeService _timeService;
     private readonly ICdrPreviewAutoSearchSettingsService _autoSearchSettings;
@@ -54,8 +59,20 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
             return false;
         }
 
+        var compareNow = RetryDueCompareInstant();
+        // Уже ждём будущую попытку — не сбрасываем таймер повторным schedule с фронта.
+        if (task.CdrPreviewRetryAt != null
+            && task.CdrPreviewRetryAt > compareNow
+            && task.CdrPreviewRetryAttempts >= 1)
+        {
+            return true;
+        }
+
+        if (task.CdrPreviewRetryAttempts >= MaxAttempts)
+            return false;
+
         var now = _timeService.Now;
-        task.CdrPreviewRetryAttempts = 1;
+        task.CdrPreviewRetryAttempts += 1;
         task.CdrPreviewRetryAt = now.AddMinutes(autoSearchMinutes);
         task.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
@@ -78,7 +95,8 @@ public sealed class CdrPreviewRetryService : ICdrPreviewRetryService
             .Where(t =>
                 t.CdrPreviewRetryAt != null
                 && t.CdrPreviewRetryAt <= now
-                && t.CdrPreviewRetryAttempts == 1
+                && t.CdrPreviewRetryAttempts >= 1
+                && t.CdrPreviewRetryAttempts <= MaxAttempts
                 && t.FileName != "")
             .OrderBy(t => t.CdrPreviewRetryAt)
             .Take(take)

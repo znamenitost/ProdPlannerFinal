@@ -8,6 +8,7 @@ import {
   ListItemText,
   Menu,
   MenuItem,
+  TextField,
   Tooltip,
   Typography
 } from '@mui/material';
@@ -40,6 +41,8 @@ export default function TaskTableToolbar({
   onSearchQueryChange,
   showPlannedProgress,
   onToggleShowPlannedProgress,
+  autoSearchMinutes,
+  onAutoSearchMinutesChange,
   onOpenFileOpenSettings,
   onOpenTaskTypeStats,
   taskTypeStatsOpen = false,
@@ -87,6 +90,25 @@ export default function TaskTableToolbar({
             >
               <PieChart fontSize="small" />
             </IconButton>
+          </Tooltip>
+        )}
+        {isAdmin && !pickupMode && onAutoSearchMinutesChange && (
+          <Tooltip title="SAVE: минуты до повторного поиска превью CDR (0 — выкл.)">
+            <TextField
+              label="SAVE"
+              placeholder="мин"
+              type="number"
+              size="small"
+              value={autoSearchMinutes || ''}
+              onChange={(e) => onAutoSearchMinutesChange(e.target.value)}
+              slotProps={{ htmlInput: { min: 0, max: 1440, step: 1, 'aria-label': 'SAVE, минуты' } }}
+              sx={{
+                width: 78,
+                '& .MuiInputBase-root': { fontSize: '0.8125rem' },
+                '& .MuiInputBase-input': { py: 0.75, px: 0.75, textAlign: 'center' },
+                '& .MuiInputLabel-root': { fontSize: '0.8125rem' }
+              }}
+            />
           </Tooltip>
         )}
       </Box>

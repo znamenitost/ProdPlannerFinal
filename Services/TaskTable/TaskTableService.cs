@@ -17,6 +17,7 @@ public class TaskTableService : ITaskTableService
     private readonly IWorkHoursCalculator _workHours;
     private readonly IEmployeeStatsService _statsService;
     private readonly ITaskCdrPreviewService _cdrPreviewService;
+    private readonly ICdrPreviewRetryService _cdrPreviewRetry;
     private readonly ITaskCommentService _taskComments;
     private readonly ICustomerOrderTrackingService _customerOrders;
 
@@ -29,6 +30,7 @@ public class TaskTableService : ITaskTableService
         IWorkHoursCalculator workHours,
         IEmployeeStatsService statsService,
         ITaskCdrPreviewService cdrPreviewService,
+        ICdrPreviewRetryService cdrPreviewRetry,
         ITaskCommentService taskComments,
         ICustomerOrderTrackingService customerOrders)
     {
@@ -40,6 +42,7 @@ public class TaskTableService : ITaskTableService
         _workHours = workHours;
         _statsService = statsService;
         _cdrPreviewService = cdrPreviewService;
+        _cdrPreviewRetry = cdrPreviewRetry;
         _taskComments = taskComments;
         _customerOrders = customerOrders;
     }
@@ -338,6 +341,7 @@ public class TaskTableService : ITaskTableService
             }, cancellationToken);
 
             parent = await _repo.GetTaskByIdAsync(newTask.Id, cancellationToken) ?? parent ?? newTask;
+            await TryScheduleCdrPreviewRetryAsync(parent.Id, cancellationToken);
 
             return TaskTableServiceResult<ProductionTask>.Ok(parent);
         }
@@ -387,6 +391,7 @@ public class TaskTableService : ITaskTableService
         await _repo.AppendRootDisplayOrderAsync(task.Id, cancellationToken);
 
         await _notificationService.NotifyNewTaskAsync(task);
+        await TryScheduleCdrPreviewRetryAsync(task.Id, cancellationToken);
 
         return TaskTableServiceResult<ProductionTask>.Ok(task);
     }
@@ -505,9 +510,6 @@ public class TaskTableService : ITaskTableService
         var oldEmployeeName = task.EmployeeName;
         var newFolderPath = request.FolderPath ?? task.FolderPath;
         var newFileName = request.FileName ?? task.FileName;
-
-        task.CdrPreviewRetryAt = null;
-        task.CdrPreviewRetryAttempts = 0;
 
         task.FolderPath = newFolderPath;
         task.FileName = newFileName;
@@ -674,7 +676,31 @@ public class TaskTableService : ITaskTableService
         if (notifyReadyToStart)
             await _notificationService.NotifyTaskReadyToStartAsync(task, readyToStartStatus!.Value);
 
+        // После ручного сохранения — новый таймер автопоиска (как «Редактировать → Сохранить»).
+        await TryScheduleCdrPreviewRetryAsync(task.Id, cancellationToken, resetAttempts: true);
+
         return TaskTableServiceResult<ProductionTask>.Ok(task);
+    }
+
+    /// <summary>
+    /// Ставит отложенный автопоиск превью CDR (файл часто появляется на шаре через 1–2 мин).
+    /// Неудача schedule не ломает сохранение задачи.
+    /// </summary>
+    private async Task TryScheduleCdrPreviewRetryAsync(
+        int taskId,
+        CancellationToken cancellationToken,
+        bool resetAttempts = false)
+    {
+        try
+        {
+            if (resetAttempts)
+                await _cdrPreviewRetry.ClearRetryAsync(taskId, cancellationToken);
+            await _cdrPreviewRetry.ScheduleSecondAttemptAsync(taskId, cancellationToken);
+        }
+        catch
+        {
+            // best-effort: задача уже сохранена
+        }
     }
 
     public async Task<TaskTableServiceResult<List<WorkIntervalEditDto>>> GetIntervalsAsync(
