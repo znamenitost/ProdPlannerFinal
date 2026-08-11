@@ -27,10 +27,12 @@ internal sealed class MainForm : Form
         _client = new PrintAgentClient(config);
         _client.StatusChanged += msg => BeginInvoke(new Action(() => SetStatus(msg)));
         _client.JobPrinting += job => BeginInvoke(new Action(() =>
-            SetStatus($"Печать: {job.PickupCode} — {job.OrderTitle}")));
+            SetStatus(job.IsTextLabel
+                ? $"Печать 58×30: {job.Line1}"
+                : $"Печать: {job.PickupCode} — {job.OrderTitle}")));
 
         Text = "ProductionPlanner — печать этикеток";
-        Width = 520;
+        Width = 600;
         Height = 340;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
@@ -61,16 +63,19 @@ internal sealed class MainForm : Form
         _startupCheck.Text = "Запускать с Windows";
         _startupCheck.Checked = _config.RunAtStartup;
 
-        var saveButton = new Button { Text = "Сохранить", Left = 140, Top = 164, Width = 110 };
+        var saveButton = new Button { Text = "Сохранить", Left = 140, Top = 164, Width = 95 };
         saveButton.Click += (_, _) => SaveSettings();
 
-        var testButton = new Button { Text = "Тест печати", Left = 260, Top = 164, Width = 110 };
+        var testButton = new Button { Text = "Тест 75×120", Left = 243, Top = 164, Width = 105 };
         testButton.Click += (_, _) => TestPrint();
 
+        var testTextButton = new Button { Text = "Тест 58×30", Left = 356, Top = 164, Width = 105 };
+        testTextButton.Click += (_, _) => TestPrintTextLabel();
+
         _connectButton.Text = "Подключить";
-        _connectButton.Left = 380;
+        _connectButton.Left = 469;
         _connectButton.Top = 164;
-        _connectButton.Width = 100;
+        _connectButton.Width = 110;
         _connectButton.Click += async (_, _) => await ToggleConnectionAsync();
 
         _statusLabel.Left = 16;
@@ -88,6 +93,7 @@ internal sealed class MainForm : Form
         Controls.Add(_startupCheck);
         Controls.Add(saveButton);
         Controls.Add(testButton);
+        Controls.Add(testTextButton);
         Controls.Add(_connectButton);
         Controls.Add(_statusLabel);
 
@@ -231,6 +237,30 @@ internal sealed class MainForm : Form
                 "Интан",
                 "И42");
             SetStatus("Тестовая этикетка отправлена на принтер");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Ошибка печати", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void TestPrintTextLabel()
+    {
+        SaveSettings();
+        if (string.IsNullOrWhiteSpace(_config.PrinterName))
+        {
+            MessageBox.Show("Выберите принтер.", "Тест", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            LabelPrinter.PrintTextLabel(
+                _config.PrinterName,
+                "Ушаков 350*1800",
+                "Москва",
+                "слово RUCETTI");
+            SetStatus("Тестовая наклейка 58×30 отправлена на принтер");
         }
         catch (Exception ex)
         {

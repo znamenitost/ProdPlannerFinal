@@ -15,12 +15,19 @@ internal sealed class PrintJobDto
 {
     public int Id { get; set; }
     public int TaskId { get; set; }
+    /// <summary>OrderLabel (75×120) | TextLabel (58×30, строки Line1–Line3).</summary>
+    public string JobType { get; set; } = "";
     public string OrderTitle { get; set; } = "";
     public string PrimaryComment { get; set; } = "";
     public string PickupCode { get; set; } = "";
+    public string Line1 { get; set; } = "";
+    public string Line2 { get; set; } = "";
+    public string Line3 { get; set; } = "";
     public string OrderPath { get; set; } = "";
     public int Copies { get; set; } = 1;
     public string Status { get; set; } = "";
+
+    public bool IsTextLabel => string.Equals(JobType, "TextLabel", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -419,17 +426,35 @@ internal sealed class PrintAgentClient : IDisposable
             try
             {
                 var copies = job.Copies > 0 ? job.Copies : 1;
-                if (copies > 50) copies = 50;
-                LabelPrinter.Print(
-                    _config.PrinterName,
-                    job.OrderTitle,
-                    job.PickupCode,
-                    copies);
+                if (copies > 200) copies = 200;
+
+                if (job.IsTextLabel)
+                {
+                    LabelPrinter.PrintTextLabel(
+                        _config.PrinterName,
+                        job.Line1,
+                        job.Line2,
+                        job.Line3,
+                        copies);
+                }
+                else
+                {
+                    if (copies > 50) copies = 50;
+                    LabelPrinter.Print(
+                        _config.PrinterName,
+                        job.OrderTitle,
+                        job.PickupCode,
+                        copies);
+                }
+
                 await PostAsync($"jobs/{job.Id}/printed", _runToken);
+                var jobLabel = job.IsTextLabel
+                    ? (job.Line1.Length > 0 ? job.Line1 : "58×30")
+                    : job.PickupCode;
                 StatusChanged?.Invoke(
                     copies > 1
-                        ? $"Напечатано: {job.PickupCode} ×{copies}"
-                        : $"Напечатано: {job.PickupCode}");
+                        ? $"Напечатано: {jobLabel} ×{copies}"
+                        : $"Напечатано: {jobLabel}");
             }
             catch (Exception ex)
             {

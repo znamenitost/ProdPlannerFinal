@@ -597,6 +597,34 @@ public static class DatabaseInitializer
             await alter.ExecuteNonQueryAsync();
         }
 
+        if (!columns.Contains("JobType"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE PrintJobs ADD COLUMN JobType INTEGER NOT NULL DEFAULT 0";
+            await alter.ExecuteNonQueryAsync();
+        }
+
+        if (!columns.Contains("Line1"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE PrintJobs ADD COLUMN Line1 TEXT NOT NULL DEFAULT ''";
+            await alter.ExecuteNonQueryAsync();
+        }
+
+        if (!columns.Contains("Line2"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE PrintJobs ADD COLUMN Line2 TEXT NOT NULL DEFAULT ''";
+            await alter.ExecuteNonQueryAsync();
+        }
+
+        if (!columns.Contains("Line3"))
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE PrintJobs ADD COLUMN Line3 TEXT NOT NULL DEFAULT ''";
+            await alter.ExecuteNonQueryAsync();
+        }
+
         logger.LogInformation("Таблица PrintJobs проверена/создана.");
     }
 

@@ -47,7 +47,8 @@ export default function TaskTableToolbar({
   onOpenTaskTypeStats,
   taskTypeStatsOpen = false,
   pickupMode = false,
-  onSearchEnter
+  onSearchEnter,
+  onOpenCustomLabels
 }) {
   const [sortAnchorEl, setSortAnchorEl] = useState(null);
   const sortMenuOpen = Boolean(sortAnchorEl);
@@ -109,6 +110,21 @@ export default function TaskTableToolbar({
                 '& .MuiInputLabel-root': { fontSize: '0.8125rem' }
               }}
             />
+          </Tooltip>
+        )}
+        {!pickupMode && onOpenCustomLabels && (
+          <Tooltip title="Наклейки 58×30 мм: редактируемая таблица и печать">
+            <IconButton
+              variant="soft"
+              color="primary"
+              size="small"
+              onClick={onOpenCustomLabels}
+              aria-label="Наклейки 58×30 мм"
+            >
+              <Typography component="span" sx={{ fontWeight: 700, fontSize: '0.95rem', lineHeight: 1 }}>
+                M
+              </Typography>
+            </IconButton>
           </Tooltip>
         )}
       </Box>

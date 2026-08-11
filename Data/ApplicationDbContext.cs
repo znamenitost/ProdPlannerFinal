@@ -238,6 +238,9 @@ namespace ProductionPlanner.Data
                 entity.Property(j => j.OrderTitle).HasMaxLength(500);
                 entity.Property(j => j.PrimaryComment).HasMaxLength(500);
                 entity.Property(j => j.PickupCode).HasMaxLength(8);
+                entity.Property(j => j.Line1).HasMaxLength(200);
+                entity.Property(j => j.Line2).HasMaxLength(200);
+                entity.Property(j => j.Line3).HasMaxLength(200);
                 entity.Property(j => j.ErrorMessage).HasMaxLength(500);
                 entity.Property(j => j.AgentName).HasMaxLength(100);
                 entity.HasIndex(j => new { j.Status, j.CreatedAt });

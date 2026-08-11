@@ -20,6 +20,7 @@ import TaskTableToolbar from './TaskTableToolbar';
 import CommentDialog from './CommentDialog';
 import CdrPreviewDialog from './CdrPreviewDialog';
 import TaskIntervalsDialog from './taskTable/TaskIntervalsDialog';
+import CustomLabelsDialog from './taskTable/CustomLabelsDialog';
 import { DEV_CDR_PREVIEW_ENABLED, formatDevTaskFilePath } from '../utils/devCdrPreviewConfig';
 import PlanningWarningsBanner from './PlanningWarningsBanner';
 import useTaskTableController from '../hooks/taskTable/useTaskTableController';
@@ -160,6 +161,7 @@ export default function TaskTable({
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
   const prevPickupModeRef = useRef(pickupMode);
   const [issuingPickupTaskId, setIssuingPickupTaskId] = useState(null);
+  const [customLabelsOpen, setCustomLabelsOpen] = useState(false);
   const excludeCompletedFromApi = !pickupMode && hideCompletedSort && !debouncedSearchQuery.trim();
   const table = useTaskTableController({
     onCalendarRefresh,
@@ -673,6 +675,7 @@ export default function TaskTable({
           taskTypeStatsOpen={taskTypeStatsOpen}
           pickupMode={pickupMode}
           onSearchEnter={handlePickupSearchEnter}
+          onOpenCustomLabels={() => setCustomLabelsOpen(true)}
         />
       </Box>
 
@@ -794,6 +797,11 @@ export default function TaskTable({
         pending={table.intervalsPending}
         onClose={table.handleCloseIntervals}
         onSave={table.handleSaveIntervals}
+      />
+
+      <CustomLabelsDialog
+        open={customLabelsOpen}
+        onClose={() => setCustomLabelsOpen(false)}
       />
 
       <SplitTaskModal

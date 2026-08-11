@@ -13,6 +13,9 @@ public sealed class LabelPrintService : ILabelPrintService
 {
     public const int MinCopies = 1;
     public const int MaxCopies = 50;
+    /// <summary>Для произвольных наклеек тиражи больше (например 60 шт с одной строки).</summary>
+    public const int MaxTextLabelCopies = 200;
+    public const int MaxTextLabelRowsPerBatch = 100;
 
     private readonly ApplicationDbContext _db;
     private readonly ICustomerOrderTrackingService _customerOrders;
@@ -94,6 +97,73 @@ public sealed class LabelPrintService : ILabelPrintService
             job.Id, job.TaskId, job.PickupCode, job.Copies);
 
         return dto;
+    }
+
+    public async Task<PrintCustomLabelsResponseDto> EnqueueTextLabelsAsync(
+        IReadOnlyList<CustomLabelRowDto> rows,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_options.Value.AccessToken))
+            throw new InvalidOperationException("Печать этикеток не настроена на сервере");
+
+        if (rows.Count == 0)
+            throw new InvalidOperationException("Добавьте хотя бы одну строку для печати");
+
+        if (rows.Count > MaxTextLabelRowsPerBatch)
+            throw new InvalidOperationException($"За один раз можно печатать не более {MaxTextLabelRowsPerBatch} строк");
+
+        var jobs = new List<PrintJob>(rows.Count);
+        foreach (var row in rows)
+        {
+            var line1 = Truncate(row.Caption, 200) ?? "";
+            var line2 = Truncate(row.Region, 200) ?? "";
+            var line3 = Truncate(row.Note, 200) ?? "";
+            if (line1.Length == 0 && line2.Length == 0 && line3.Length == 0)
+                continue;
+
+            var copies = Math.Clamp(row.Quantity, MinCopies, MaxTextLabelCopies);
+            jobs.Add(new PrintJob
+            {
+                TaskId = 0,
+                JobType = PrintJobType.TextLabel,
+                // OrderTitle/PrimaryComment дублируют строки для понятных уведомлений о статусе.
+                OrderTitle = line1.Length > 0 ? line1 : "Наклейка 58×30",
+                PrimaryComment = line2,
+                PickupCode = "",
+                Line1 = line1,
+                Line2 = line2,
+                Line3 = line3,
+                Copies = copies,
+                Status = PrintJobStatus.Pending,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        if (jobs.Count == 0)
+            throw new InvalidOperationException("Все строки пустые — нечего печатать");
+
+        _db.PrintJobs.AddRange(jobs);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        foreach (var job in jobs)
+        {
+            var dto = ToDto(job);
+            await _printHub.Clients.Group(PrintHub.AgentsGroup).SendAsync(
+                PrintHub.JobAvailableMethod,
+                dto,
+                cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "Произвольные наклейки в очереди: {Jobs} заданий, всего {Copies} шт.",
+            jobs.Count,
+            jobs.Sum(j => j.Copies));
+
+        return new PrintCustomLabelsResponseDto
+        {
+            JobsCreated = jobs.Count,
+            TotalCopies = jobs.Sum(j => j.Copies)
+        };
     }
 
     public async Task<IReadOnlyList<PrintJobDto>> GetPendingJobsAsync(CancellationToken cancellationToken = default)
@@ -215,31 +285,41 @@ public sealed class LabelPrintService : ILabelPrintService
     private async Task<PrintJobDto> ToDtoAsync(PrintJob job, CancellationToken cancellationToken)
     {
         var orderPath = "";
-        try
+        // Текстовые наклейки не привязаны к заказу — ссылка не нужна.
+        if (job.JobType == PrintJobType.OrderLabel && job.TaskId > 0)
         {
-            var link = await _customerOrders.CreateOrGetLinkAsync(job.TaskId, "", cancellationToken);
-            var code = (job.PickupCode ?? "").Trim();
-            if (!string.IsNullOrEmpty(link.Path) && !string.IsNullOrEmpty(code))
-                orderPath = $"{link.Path}?c={Uri.EscapeDataString(code)}";
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Не удалось построить OrderPath для print job {JobId}", job.Id);
+            try
+            {
+                var link = await _customerOrders.CreateOrGetLinkAsync(job.TaskId, "", cancellationToken);
+                var code = (job.PickupCode ?? "").Trim();
+                if (!string.IsNullOrEmpty(link.Path) && !string.IsNullOrEmpty(code))
+                    orderPath = $"{link.Path}?c={Uri.EscapeDataString(code)}";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Не удалось построить OrderPath для print job {JobId}", job.Id);
+            }
         }
 
-        return new PrintJobDto
-        {
-            Id = job.Id,
-            TaskId = job.TaskId,
-            OrderTitle = job.OrderTitle,
-            PrimaryComment = job.PrimaryComment,
-            PickupCode = job.PickupCode ?? "",
-            OrderPath = orderPath,
-            Copies = Math.Max(1, job.Copies),
-            Status = job.Status.ToString(),
-            CreatedAt = job.CreatedAt
-        };
+        return ToDto(job, orderPath);
     }
+
+    private static PrintJobDto ToDto(PrintJob job, string orderPath = "") => new()
+    {
+        Id = job.Id,
+        TaskId = job.TaskId,
+        JobType = job.JobType.ToString(),
+        OrderTitle = job.OrderTitle,
+        PrimaryComment = job.PrimaryComment,
+        PickupCode = job.PickupCode ?? "",
+        Line1 = job.Line1 ?? "",
+        Line2 = job.Line2 ?? "",
+        Line3 = job.Line3 ?? "",
+        OrderPath = orderPath,
+        Copies = Math.Max(1, job.Copies),
+        Status = job.Status.ToString(),
+        CreatedAt = job.CreatedAt
+    };
 
     private static string StripFileName(string? fileName)
     {

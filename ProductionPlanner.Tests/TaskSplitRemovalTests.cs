@@ -418,6 +418,10 @@ public class TaskSplitRemovalTests
             int quantity = 1,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new PrintJobDto { TaskId = taskId, Copies = quantity });
+        public Task<PrintCustomLabelsResponseDto> EnqueueTextLabelsAsync(
+            IReadOnlyList<CustomLabelRowDto> rows,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PrintCustomLabelsResponseDto());
         public Task<IReadOnlyList<PrintJobDto>> GetPendingJobsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PrintJobDto>>([]);
         public Task<PrintJobDto?> ClaimJobAsync(int jobId, string? agentName, CancellationToken cancellationToken = default) =>

@@ -10,6 +10,11 @@ public interface ILabelPrintService
         int quantity = 1,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Пакетная печать произвольных наклеек 58×30 (по заданию на каждую строку).</summary>
+    Task<PrintCustomLabelsResponseDto> EnqueueTextLabelsAsync(
+        IReadOnlyList<CustomLabelRowDto> rows,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<PrintJobDto>> GetPendingJobsAsync(CancellationToken cancellationToken = default);
 
     Task<PrintJobDto?> ClaimJobAsync(int jobId, string? agentName, CancellationToken cancellationToken = default);

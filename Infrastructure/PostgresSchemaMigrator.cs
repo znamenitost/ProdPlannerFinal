@@ -672,6 +672,18 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE "PrintJobs"
                     ADD COLUMN IF NOT EXISTS "Copies" integer NOT NULL DEFAULT 1;
 
+                ALTER TABLE "PrintJobs"
+                    ADD COLUMN IF NOT EXISTS "JobType" integer NOT NULL DEFAULT 0;
+
+                ALTER TABLE "PrintJobs"
+                    ADD COLUMN IF NOT EXISTS "Line1" character varying(200) NOT NULL DEFAULT '';
+
+                ALTER TABLE "PrintJobs"
+                    ADD COLUMN IF NOT EXISTS "Line2" character varying(200) NOT NULL DEFAULT '';
+
+                ALTER TABLE "PrintJobs"
+                    ADD COLUMN IF NOT EXISTS "Line3" character varying(200) NOT NULL DEFAULT '';
+
                 CREATE INDEX IF NOT EXISTS "IX_PrintJobs_Status_CreatedAt"
                     ON "PrintJobs" ("Status", "CreatedAt");
 
@@ -702,6 +714,19 @@ public static class PostgresSchemaMigrator
                 AND NOT EXISTS (
                     SELECT 1 FROM "__EFMigrationsHistory"
                     WHERE "MigrationId" = '20260804123000_AddPrintJobCopies'
+                );
+                """, cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                SELECT '20260811120000_AddPrintJobTextLabels', '10.0.7'
+                WHERE EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '__EFMigrationsHistory'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM "__EFMigrationsHistory"
+                    WHERE "MigrationId" = '20260811120000_AddPrintJobTextLabels'
                 );
                 """, cancellationToken);
 

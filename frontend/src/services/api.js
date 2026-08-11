@@ -514,6 +514,41 @@ export async function printCustomerOrderLabel(taskId, quantity = 1) {
   return res.json();
 }
 
+/** Таблица произвольных наклеек 58×30: загрузить сохранённые строки. */
+export async function getCustomLabelSheet() {
+  const res = await fetch(`${API_BASE}/custom-labels`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    cache: 'no-store'
+  });
+  await throwIfNotOk(res, 'Не удалось загрузить таблицу наклеек');
+  return res.json();
+}
+
+/** Таблица произвольных наклеек 58×30: сохранить строки. */
+export async function saveCustomLabelSheet(rows) {
+  const res = await fetch(`${API_BASE}/custom-labels`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows })
+  });
+  await throwIfNotOk(res, 'Не удалось сохранить таблицу наклеек');
+  return res.json();
+}
+
+/** Таблица произвольных наклеек 58×30: сохранить и поставить в очередь PrintAgent. */
+export async function printCustomLabels(rows) {
+  const res = await fetch(`${API_BASE}/custom-labels/print`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows })
+  });
+  await throwIfNotOk(res, 'Не удалось отправить наклейки на печать');
+  return res.json();
+}
+
 /** Поиск заказа по коду получения. */
 export async function lookupPickupOrder(code) {
   const res = await fetch(

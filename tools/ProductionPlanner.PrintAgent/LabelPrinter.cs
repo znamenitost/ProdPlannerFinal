@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Printing;
 using System.Drawing.Text;
+using System.Linq;
 
 namespace ProductionPlanner.PrintAgent;
 
@@ -16,6 +17,10 @@ internal static class LabelPrinter
     private const float LabelWidthMm = 75f;
     private const float LabelHeightMm = 120f;
     private const float ColWidthMm = 30f;
+
+    /// <summary>Произвольная наклейка: 58×30 мм (X×Y), текст горизонтально в 1–3 строки.</summary>
+    private const float TextLabelWidthMm = 58f;
+    private const float TextLabelHeightMm = 30f;
 
     public static void Print(
         string printerName,
@@ -101,10 +106,114 @@ internal static class LabelPrinter
             doc.Print();
     }
 
-    private static void ApplyLabelPaper(PrintDocument doc)
+    /// <summary>
+    /// Наклейка 58×30 мм (X×Y), ориентация горизонтальная:
+    /// до трёх центрированных строк (Подпись / Регион / Примечание), шрифт подбирается по ширине.
+    /// </summary>
+    public static void PrintTextLabel(
+        string printerName,
+        string line1,
+        string line2,
+        string line3,
+        int copies = 1)
     {
-        var targetW = MmToHundredthsInch(LabelWidthMm);
-        var targetH = MmToHundredthsInch(LabelHeightMm);
+        if (string.IsNullOrWhiteSpace(printerName))
+            throw new InvalidOperationException("Не выбран принтер");
+
+        var copyCount = copies < 1 ? 1 : (copies > 200 ? 200 : copies);
+
+        using var doc = new PrintDocument();
+        doc.PrinterSettings.PrinterName = printerName;
+        if (!doc.PrinterSettings.IsValid)
+            throw new InvalidOperationException("Принтер недоступен: " + printerName);
+
+        doc.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
+        doc.OriginAtMargins = false;
+        ApplyLabelPaper(doc, TextLabelWidthMm, TextLabelHeightMm, "Label58x30");
+
+        doc.PrintPage += (_, e) =>
+        {
+            var g = e.Graphics;
+            if (g == null)
+                return;
+
+            // Рисуем в сотых дюйма — надёжнее для термодрайверов, чем PageUnit=mm.
+            g.PageUnit = GraphicsUnit.Display;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+
+            var pageW = Mm(TextLabelWidthMm);
+            var pageH = Mm(TextLabelHeightMm);
+
+            // Если драйвер подставил другой PaperSize — вписываем в доступную область.
+            var bounds = e.PageBounds;
+            if (bounds.Width > 0 && bounds.Height > 0)
+            {
+                var scale = Math.Min(bounds.Width / pageW, bounds.Height / pageH);
+                if (scale > 0f && scale < 0.999f)
+                {
+                    g.TranslateTransform(
+                        (bounds.Width - pageW * scale) / 2f,
+                        (bounds.Height - pageH * scale) / 2f);
+                    g.ScaleTransform(scale, scale);
+                }
+            }
+
+            var lines = new[] { line1, line2, line3 }
+                .Select(l => (l ?? "").Trim())
+                .Where(l => l.Length > 0)
+                .ToArray();
+            if (lines.Length == 0)
+            {
+                e.HasMorePages = false;
+                return;
+            }
+
+            var padX = Mm(1.5f);
+            var padY = Mm(1f);
+            var slotH = (pageH - padY * 2f) / lines.Length;
+
+            for (var i = 0; i < lines.Length; i++)
+            {
+                // Первая строка (Подпись) — акцентная.
+                var bold = i == 0;
+                var rect = new RectangleF(padX, padY + slotH * i, pageW - padX * 2f, slotH);
+                var fontSize = FitFontSize(
+                    g,
+                    lines[i],
+                    rect.Width,
+                    rect.Height,
+                    bold ? 16f : 13f,
+                    5f,
+                    bold ? FontStyle.Bold : FontStyle.Regular);
+
+                using var font = new Font("Arial", fontSize, bold ? FontStyle.Bold : FontStyle.Regular);
+                using var format = new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center,
+                    Trimming = StringTrimming.EllipsisCharacter,
+                    FormatFlags = StringFormatFlags.NoWrap
+                };
+                g.DrawString(lines[i], font, Brushes.Black, rect, format);
+            }
+
+            e.HasMorePages = false;
+        };
+
+        for (var i = 0; i < copyCount; i++)
+            doc.Print();
+    }
+
+    private static void ApplyLabelPaper(PrintDocument doc) =>
+        ApplyLabelPaper(doc, LabelWidthMm, LabelHeightMm, "Label75x120");
+
+    private static void ApplyLabelPaper(PrintDocument doc, float widthMm, float heightMm, string fallbackName)
+    {
+        var targetW = MmToHundredthsInch(widthMm);
+        var targetH = MmToHundredthsInch(heightMm);
 
         PaperSize? best = null;
         var bestScore = int.MaxValue;
@@ -124,7 +233,7 @@ internal static class LabelPrinter
         if (best != null && bestScore <= MmToHundredthsInch(3f) * 2)
         {
             doc.DefaultPageSettings.PaperSize = best;
-            // Если драйвер отдал 120×75, а нам нужно 75×120 — включаем landscape.
+            // Если драйвер отдал повёрнутый размер (H×W вместо W×H) — включаем landscape.
             if (Math.Abs(best.Width - targetH) + Math.Abs(best.Height - targetW)
                 < Math.Abs(best.Width - targetW) + Math.Abs(best.Height - targetH))
             {
@@ -133,7 +242,7 @@ internal static class LabelPrinter
         }
         else
         {
-            doc.DefaultPageSettings.PaperSize = new PaperSize("Label75x120", targetW, targetH);
+            doc.DefaultPageSettings.PaperSize = new PaperSize(fallbackName, targetW, targetH);
         }
     }
 
@@ -287,11 +396,12 @@ internal static class LabelPrinter
         float maxWidth,
         float maxHeight,
         float maxPt,
-        float minPt)
+        float minPt,
+        FontStyle style = FontStyle.Bold)
     {
         for (var size = maxPt; size >= minPt; size -= 1f)
         {
-            using var font = new Font("Arial", size, FontStyle.Bold);
+            using var font = new Font("Arial", size, style);
             var measured = g.MeasureString(text, font);
             if (measured.Width <= maxWidth && measured.Height <= maxHeight)
                 return size;
