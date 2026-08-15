@@ -28,7 +28,10 @@ public class TaskComment
     [MaxLength(4000)]
     public string Text { get; set; } = "";
 
-    /// <summary>null — комментарий для всех (админы + сотрудники).</summary>
+    /// <summary>
+    /// Адресат оповещения. null — без оповещения и без бейджа +N («Никому»).
+    /// «Всем» хранится как отдельные строки на каждого получателя.
+    /// </summary>
     [MaxLength(450)]
     public string? RecipientUserId { get; set; }
 

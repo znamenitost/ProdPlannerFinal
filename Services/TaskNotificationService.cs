@@ -215,22 +215,19 @@ public class TaskNotificationService : ITaskNotificationService
         var taskTitle = GetNotificationTitle(task);
         var title = $"+1 · {taskTitle}";
 
+        // Без адресата — не шлём никому (раньше null ошибочно означал «всем»).
         IReadOnlyList<string> recipientIds;
-        if (!string.IsNullOrWhiteSpace(recipientUserId))
+        if (string.IsNullOrWhiteSpace(recipientUserId))
         {
-            recipientIds = string.Equals(recipientUserId, authorUserId, StringComparison.Ordinal)
-                ? Array.Empty<string>()
-                : new[] { recipientUserId };
+            recipientIds = Array.Empty<string>();
+        }
+        else if (string.Equals(recipientUserId, authorUserId, StringComparison.Ordinal))
+        {
+            recipientIds = Array.Empty<string>();
         }
         else
         {
-            recipientIds = await _userManager.Users
-                .AsNoTracking()
-                .Where(u => u.IsActive
-                    && u.Id != authorUserId
-                    && (u.Role == "Admin" || u.Role == "Employee"))
-                .Select(u => u.Id)
-                .ToListAsync();
+            recipientIds = new[] { recipientUserId };
         }
 
         foreach (var userId in recipientIds)

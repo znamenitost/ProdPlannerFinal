@@ -283,14 +283,17 @@ public sealed class TaskCommentService : ITaskCommentService
                 if (string.Equals(c.AuthorUserId, viewerUserId, StringComparison.Ordinal))
                     continue;
 
-                // Базовый комментарий уже отфильтрован; дальше — адресат / всем / ответ мне.
-                var forEveryone = string.IsNullOrEmpty(c.RecipientUserId);
+                // null RecipientUserId = «Никому»: комментарий есть, бейджа/оповещения нет.
+                // «Всем» при создании разворачивается в отдельные строки с конкретными UserId.
+                if (string.IsNullOrEmpty(c.RecipientUserId))
+                    continue;
+
                 var forMe = string.Equals(c.RecipientUserId, viewerUserId, StringComparison.Ordinal);
                 var replyToMe = c.ReplyToCommentId is long replyId
                     && authorByCommentId.TryGetValue(replyId, out var parentAuthor)
                     && string.Equals(parentAuthor, viewerUserId, StringComparison.Ordinal);
 
-                if (forEveryone || forMe || replyToMe)
+                if (forMe || replyToMe)
                     count++;
             }
 

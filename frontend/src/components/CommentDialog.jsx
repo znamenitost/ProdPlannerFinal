@@ -118,9 +118,10 @@ function CommentItem({ comment, onReply, onDelete, deleting, hideAuthor = false 
 }
 
 const RECIPIENT_ALL = '__all__';
+const RECIPIENT_NONE = '__none__';
 
 function recipientSelectLabel(selectedIds, contacts) {
-  if (!selectedIds.length) return 'Никому (без оповещения)';
+  if (!selectedIds.length) return 'Никому';
   if (contacts.length > 0 && selectedIds.length === contacts.length) return 'Всем';
   const names = selectedIds
     .map((id) => contacts.find((c) => c.userId === id)?.fullName || id)
@@ -309,23 +310,35 @@ export default function CommentDialog({ open, task, pending = false, onChanged, 
         )}
 
         <FormControl fullWidth size="small" sx={{ mb: 1.25 }} disabled={busy}>
-          <InputLabel id="task-comment-recipient-label">Кому</InputLabel>
+          <InputLabel id="task-comment-recipient-label">
+            Кому отправить оповещение
+          </InputLabel>
           <Select
             labelId="task-comment-recipient-label"
-            label="Кому"
+            label="Кому отправить оповещение"
             multiple
             value={recipientUserIds}
             onChange={(e) => {
               const next = e.target.value;
               const values = typeof next === 'string' ? next.split(',') : next;
+              if (values.includes(RECIPIENT_NONE)) {
+                setRecipientUserIds([]);
+                return;
+              }
               if (values.includes(RECIPIENT_ALL)) {
                 setRecipientUserIds(allRecipientsSelected ? [] : allRecipientIds);
                 return;
               }
-              setRecipientUserIds(values.filter((id) => id !== RECIPIENT_ALL));
+              setRecipientUserIds(
+                values.filter((id) => id !== RECIPIENT_ALL && id !== RECIPIENT_NONE)
+              );
             }}
             renderValue={(selected) => recipientSelectLabel(selected, contacts)}
           >
+            <MenuItem value={RECIPIENT_NONE}>
+              <Checkbox checked={recipientUserIds.length === 0} size="small" />
+              <ListItemText primary="Никому" />
+            </MenuItem>
             <MenuItem value={RECIPIENT_ALL} disabled={contacts.length === 0}>
               <Checkbox
                 checked={allRecipientsSelected}
