@@ -2,6 +2,7 @@ using ProductionPlanner.Data;
 using ProductionPlanner.Infrastructure;
 using ProductionPlanner.Models;
 using ProductionPlanner.Services;
+using ProductionPlanner.Services.TaskCdrPreview;
 using ProductionPlanner.Services.TaskTable;
 
 namespace ProductionPlanner.Services.TaskLists;
@@ -11,15 +12,18 @@ public class TaskListQueryService : ITaskListQueryService
     private readonly IProductionTaskRepository _repo;
     private readonly IProductionScheduler _scheduler;
     private readonly IWorkHoursCalculator _workHours;
+    private readonly ITaskCdrPreviewService _cdrPreviewService;
 
     public TaskListQueryService(
         IProductionTaskRepository repo,
         IProductionScheduler scheduler,
-        IWorkHoursCalculator workHours)
+        IWorkHoursCalculator workHours,
+        ITaskCdrPreviewService cdrPreviewService)
     {
         _repo = repo;
         _scheduler = scheduler;
         _workHours = workHours;
+        _cdrPreviewService = cdrPreviewService;
     }
 
     public async Task<List<object>> GetActiveTasksAsync(
@@ -33,12 +37,15 @@ public class TaskListQueryService : ITaskListQueryService
             .Select(task => task.Id)
             .ToList();
         var splitMetadataByChild = await _repo.GetTaskSplitMetadataByChildTaskIdsAsync(childTaskIds, cancellationToken);
+        var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync(
+            tasks.Select(task => task.Id).ToList(),
+            cancellationToken);
 
         return tasks
             .Select(task =>
             {
                 splitMetadataByChild.TryGetValue(task.Id, out var splitMetadata);
-                return MapTaskToResult(task, now, splitMetadata);
+                return MapTaskToResult(task, now, splitMetadata, previewIds.Contains(task.Id));
             })
             .Cast<object>()
             .ToList();
@@ -192,7 +199,8 @@ public class TaskListQueryService : ITaskListQueryService
     private object MapTaskToResult(
         ProductionTask task,
         DateTime now,
-        (SupplyMode SupplyMode, int SequenceOrder) splitMetadata = default)
+        (SupplyMode SupplyMode, int SequenceOrder) splitMetadata = default,
+        bool hasCdrPreview = false)
     {
         var (riskLevel, hoursNeeded, workHoursUntilDeadline) =
             DeadlineRiskEvaluator.Evaluate(task, now, _workHours);
@@ -227,7 +235,8 @@ public class TaskListQueryService : ITaskListQueryService
             task.ProductionEstimateHours,
             WorkPhase = task.WorkPhase,
             task.IssuedWithoutReady,
-            task.IsFuss
+            task.IsFuss,
+            HasCdrPreview = hasCdrPreview
         };
     }
 }

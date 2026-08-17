@@ -6,23 +6,20 @@ export function taskFileShowsOnlineDot(task) {
   return Boolean(task?.hasCdrPreview);
 }
 
-export default function TaskFileNameCell({
-  fileName = '',
-  task = null,
-  textLimit,
-  previewBuilding = false
-}) {
-  const limit = textLimit ?? 40;
-  const name = fileName || '—';
+export function CdrPreviewFileMark({ task = null, previewBuilding = false }) {
   const showDot = task ? taskFileShowsOnlineDot(task) : false;
-  const dotSlot = previewBuilding ? (
-    <CircularProgress
-      size={12}
-      thickness={6}
-      aria-label="Построение превью"
-      sx={{ flexShrink: 0 }}
-    />
-  ) : (
+  if (previewBuilding) {
+    return (
+      <CircularProgress
+        size={12}
+        thickness={6}
+        aria-label="Построение превью"
+        sx={{ flexShrink: 0 }}
+      />
+    );
+  }
+
+  return (
     <Box
       component="span"
       title={showDot ? 'Файл найден' : undefined}
@@ -40,6 +37,17 @@ export default function TaskFileNameCell({
       }}
     />
   );
+}
+
+export default function TaskFileNameCell({
+  fileName = '',
+  task = null,
+  textLimit,
+  previewBuilding = false
+}) {
+  const limit = textLimit ?? 40;
+  const name = fileName || '—';
+  const dotSlot = <CdrPreviewFileMark task={task} previewBuilding={previewBuilding} />;
 
   return (
     <TableTruncatedTooltip fullText={fileName} limit={limit}>

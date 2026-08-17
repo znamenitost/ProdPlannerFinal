@@ -40,12 +40,15 @@ import EmptyState from './ui/EmptyState';
 import { Assignment } from '@mui/icons-material';
 import { getTaskStatusLine } from './TaskTitleTwoLines';
 import ActiveTaskCard from './ActiveTaskCard';
+import CdrPreviewDialog from './CdrPreviewDialog';
 import {
   isInfoStatus,
   isSequenceBlocked
 } from '../constants/taskStatuses';
 import { promptFussStartComment } from '../utils/fussStart';
 import { offerPrintLabelsAfterReady } from '../utils/printLabelPrompt';
+import useCdrPreview from '../hooks/useCdrPreview';
+import { DEV_CDR_PREVIEW_ENABLED } from '../utils/devCdrPreviewConfig';
 
 function getDeadlineSortValue(task) {
   if (!task?.deadline) return Number.POSITIVE_INFINITY;
@@ -77,6 +80,7 @@ export default function ActiveTasksList({
   );
   const [sortAnchorEl, setSortAnchorEl] = useState(null);
   const sortMenuOpen = Boolean(sortAnchorEl);
+  const cdrPreview = useCdrPreview();
 
   const visibleTasks = useMemo(() => {
     return tasks
@@ -231,6 +235,8 @@ export default function ActiveTasksList({
               lifecycleBusy={pendingTaskId != null}
               onAction={runGuardedAction}
               onOpenFile={openFile}
+              onShowCdrPreview={DEV_CDR_PREVIEW_ENABLED ? cdrPreview.handleShowCdrPreview : undefined}
+              cdrPreviewBuilding={cdrPreview.isCdrPreviewBuilding(task.id)}
             />
           </Fragment>
         );
@@ -238,6 +244,15 @@ export default function ActiveTasksList({
       {tasks.length === 0 && <EmptyState message="Нет активных задач" icon={Assignment} />}
     </Stack>
   );
+
+  const cdrPreviewDialog = DEV_CDR_PREVIEW_ENABLED ? (
+    <CdrPreviewDialog
+      open={cdrPreview.cdrPreviewOpen}
+      anchor={cdrPreview.cdrPreviewAnchor}
+      previewUrl={cdrPreview.cdrPreviewData?.url}
+      pending={cdrPreview.cdrPreviewPending}
+    />
+  ) : null;
 
   if (sectionTitle) {
     return (
@@ -260,6 +275,7 @@ export default function ActiveTasksList({
           {sortControls}
         </Box>
         {taskStack}
+        {cdrPreviewDialog}
       </Paper>
     );
   }
@@ -270,6 +286,7 @@ export default function ActiveTasksList({
         Активные задачи
       </Typography>
       {taskStack}
+      {cdrPreviewDialog}
     </Box>
   );
 }

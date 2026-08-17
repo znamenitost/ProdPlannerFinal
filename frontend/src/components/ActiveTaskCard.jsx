@@ -36,6 +36,8 @@ import {
 import { getTaskBorderColor } from '../utils/taskBorderColor';
 import { getTaskFileLabel, getTaskHeading, getTaskStatusLine } from './TaskTitleTwoLines';
 import TaskStatusCell from './taskTable/TaskStatusCell';
+import { CdrPreviewFileMark } from './taskTable/TaskFileNameCell';
+import { getCdrPreviewRowHandlers } from '../utils/cdrPreviewRowHandlers';
 import { taskShowsThroughApproval } from '../utils/throughApproval';
 import { ThroughApprovalMark } from './taskTable/ThroughApprovalChip';
 import { TaskPriorityMark } from './taskTable/TaskPriorityChip';
@@ -77,7 +79,15 @@ function getRiskProps(riskLevel) {
   }
 }
 
-function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOpenFile }) {
+function ActiveTaskCard({
+  task,
+  isPending,
+  lifecycleBusy = false,
+  onAction,
+  onOpenFile,
+  onShowCdrPreview,
+  cdrPreviewBuilding = false
+}) {
   const statusActionsDisabled = isPending || lifecycleBusy;
   const risk = getRiskProps(task.riskLevel);
   const statusLabel = getTaskStatusLine(task);
@@ -104,15 +114,15 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
   const PrimaryIcon = isInProgress ? Pause : PlayArrow;
   const primaryColor = isInProgress ? 'warning' : 'success';
   const primaryBlocked = sequenceBlocked || showInfoStatus;
-  const sharedTaskIconSx = {
-    color: (theme) => task.supplyMode === SUPPLY_MODE_INTERNAL
-      ? theme.palette.info.main
-      : theme.palette.success.main
-  };
+  const sharedTaskIconSx = { color: 'text.primary' };
+  const cdrPreviewRowHandlers = task.isFuss
+    ? {}
+    : getCdrPreviewRowHandlers({ task, onShowCdrPreview });
 
   return (
     <Card
       variant="nested"
+      {...cdrPreviewRowHandlers}
       sx={(theme) => ({
         borderLeft: '4px solid',
         borderLeftColor: getTaskBorderColor({ ...task, statusText: statusLabel }, theme)
@@ -177,6 +187,9 @@ function ActiveTaskCard({ task, isPending, lifecycleBusy = false, onAction, onOp
               >
                 Этап {task.sequenceOrder}
               </Typography>
+            )}
+            {!task.isFuss && (
+              <CdrPreviewFileMark task={task} previewBuilding={cdrPreviewBuilding} />
             )}
             <Typography
               variant="subtitle2"

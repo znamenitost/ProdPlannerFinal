@@ -243,11 +243,7 @@ function ParentTaskRow({
   const showPrintMenu = Boolean(printLabelHandler) && canPrintOrderLabel(task) && canChangeStatus;
   const showActionButtons = showLifecycleMenu || showPrintMenu;
   const tableColSpan = taskTableColumnCount(columnVisibility, showHoursTypeColumns);
-  const sharedTaskIconSx = {
-    color: (theme) => task.supplyMode === SUPPLY_MODE_INTERNAL
-      ? theme.palette.info.main
-      : theme.palette.success.main
-  };
+  const sharedTaskIconSx = { color: 'text.primary' };
 
   return (
     <Fragment>
