@@ -25,14 +25,28 @@ import {
   printOrderLabelWithQuantityPrompt
 } from '../../utils/printLabelPrompt';
 import { STATUS_COMPLETED } from '../../constants/taskStatuses';
+import { formatUserActionError, USER_ACTION_MESSAGES } from '../../utils/actionError';
 
-function kickOffCdrAutoSearch({ taskId, folderPath, fileName, showWarning }) {
+function kickOffCdrAutoSearch({
+  taskId,
+  folderPath,
+  fileName,
+  showWarning,
+  showLoading,
+  showSuccess,
+  showInfo,
+  progressMessage
+}) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return;
   startCdrAutoSearchAfterSave({
     taskId,
     folderPath,
     fileName,
-    showWarning
+    showWarning,
+    showLoading,
+    showSuccess,
+    showInfo,
+    progressMessage
   });
 }
 
@@ -54,11 +68,15 @@ export default function useTaskTableActions({
   showError,
   showWarning,
   showSuccess,
+  showLoading,
+  showInfo,
   confirm,
   promptInput,
   applyPlanningWarnings
 }) {
   const [pendingLifecycleTaskId, setPendingLifecycleTaskId] = useState(null);
+  const [savingNewRow, setSavingNewRow] = useState(false);
+  const [savingRowId, setSavingRowId] = useState(null);
   const pendingLifecycleTaskIdRef = useRef(null);
   const pendingPriorityTaskIdRef = useRef(null);
   const savingNewRowRef = useRef(false);
@@ -189,71 +207,83 @@ export default function useTaskTableActions({
 
   const handleSaveNewRow = useCallback(async (draft) => {
     const row = draft || newRow;
-    if (!row || savingNewRowRef.current) return;
-    savingNewRowRef.current = true;
+    if (!row) return;
+    if (savingNewRowRef.current) {
+      showInfo?.(USER_ACTION_MESSAGES.savingInProgress);
+      return;
+    }
 
-    try {
-      const isShared = row.isSharedTask && row.assigneeParts?.length >= 2;
-      const hasSingleAssignee = Boolean(row.employeeName);
+    const isShared = row.isSharedTask && row.assigneeParts?.length >= 2;
+    const hasSingleAssignee = Boolean(row.employeeName);
 
-      if (!isShared && !hasSingleAssignee) {
-        showWarning('Назначьте сотрудника и часы через иконку участников');
+    if (!isShared && !hasSingleAssignee) {
+      showWarning('Назначьте сотрудника и часы через иконку участников');
+      return;
+    }
+
+    const payload = {
+      folderPath: row.folderPath,
+      fileName: row.fileName,
+      comment: row.comment,
+      deadline: row.deadline,
+      parentRowNumber: null
+    };
+
+    if (isShared) {
+      payload.parts = row.assigneeParts;
+      payload.estimateHours = row.assigneeParts.reduce(
+        (s, p) => s + (p.allocatedHours || 0),
+        0
+      );
+      payload.supplyMode =
+        row.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL
+          ? SUPPLY_MODE_INTERNAL
+          : SUPPLY_MODE_COOPERATIVE;
+    } else if (row.requiresTestBeforeProduction) {
+      const testH = parseFloat(row.testEstimateHours);
+      const prodH = parseFloat(row.productionEstimateHours);
+      if (!testH || testH < 0.5 || !prodH || prodH < 0.5) {
+        showWarning('Укажите часы теста и основной части (от 0.5)');
         return;
       }
-
-      const payload = {
-        folderPath: row.folderPath,
-        fileName: row.fileName,
-        comment: row.comment,
-        deadline: row.deadline,
-        parentRowNumber: null
-      };
-
-      if (isShared) {
-        payload.parts = row.assigneeParts;
-        payload.estimateHours = row.assigneeParts.reduce(
-          (s, p) => s + (p.allocatedHours || 0),
-          0
-        );
-        payload.supplyMode =
-          row.taskExecutionMode === TASK_EXECUTION_SEQUENTIAL
-            ? SUPPLY_MODE_INTERNAL
-            : SUPPLY_MODE_COOPERATIVE;
-      } else if (row.requiresTestBeforeProduction) {
-        const testH = parseFloat(row.testEstimateHours);
-        const prodH = parseFloat(row.productionEstimateHours);
-        if (!testH || testH < 0.5 || !prodH || prodH < 0.5) {
-          showWarning('Укажите часы теста и основной части (от 0.5)');
-          return;
-        }
-        payload.requiresTestBeforeProduction = true;
-        payload.testEstimateHours = testH;
-        payload.productionEstimateHours = prodH;
-        payload.estimateHours = testH + prodH;
-        payload.type = (row.types || []).join(', ');
-        payload.employeeName = row.employeeName;
-      } else {
-        const hours = parseFloat(row.estimateHours);
-        if (!hours || hours < 0.5 || hours > 24) {
-          showWarning('Укажите часы в назначениях (от 0.5 до 24)');
-          return;
-        }
-        payload.estimateHours = hours;
-        payload.type = (row.types || []).join(', ');
-        payload.employeeName = row.employeeName;
+      payload.requiresTestBeforeProduction = true;
+      payload.testEstimateHours = testH;
+      payload.productionEstimateHours = prodH;
+      payload.estimateHours = testH + prodH;
+      payload.type = (row.types || []).join(', ');
+      payload.employeeName = row.employeeName;
+    } else {
+      const hours = parseFloat(row.estimateHours);
+      if (!hours || hours < 0.5 || hours > 24) {
+        showWarning('Укажите часы в назначениях (от 0.5 до 24)');
+        return;
       }
+      payload.estimateHours = hours;
+      payload.type = (row.types || []).join(', ');
+      payload.employeeName = row.employeeName;
+    }
 
+    savingNewRowRef.current = true;
+    setSavingNewRow(true);
+    showLoading?.(USER_ACTION_MESSAGES.savingTask);
+
+    try {
       const raw = await api.createRow(payload);
       const { task: created, planningWarnings } = unwrapTaskSaveResponse(raw);
       applyPlanningWarnings(planningWarnings);
       const wasShared = row.isSharedTask;
       setNewRow(null);
+      showSuccess(USER_ACTION_MESSAGES.taskCreated);
       if (created?.id) {
         kickOffCdrAutoSearch({
           taskId: created.id,
           folderPath: created.folderPath || payload.folderPath,
           fileName: created.fileName || payload.fileName,
-          showWarning
+          showWarning,
+          showLoading,
+          showSuccess,
+          showInfo,
+          progressMessage: USER_ACTION_MESSAGES.previewProgressAfterSave
         });
       }
       void refresh();
@@ -263,9 +293,12 @@ export default function useTaskTableActions({
       }
     } catch (err) {
       console.error('Ошибка сохранения:', err);
-      showError(err.message || 'Ошибка сохранения задачи');
+      showError(formatUserActionError(err, 'Не удалось сохранить задачу', {
+        hint: USER_ACTION_MESSAGES.createRetryHint
+      }));
     } finally {
       savingNewRowRef.current = false;
+      setSavingNewRow(false);
     }
   }, [
     api,
@@ -276,14 +309,21 @@ export default function useTaskTableActions({
     loadChildrenForParent,
     showError,
     showWarning,
-    applyPlanningWarnings,
-    patchRow
+    showSuccess,
+    showLoading,
+    showInfo,
+    applyPlanningWarnings
   ]);
 
   const handleUpdateRow = useCallback(async (row) => {
-    if (savingRowIdRef.current === row.id) return;
+    if (savingRowIdRef.current === row.id) {
+      showInfo?.(USER_ACTION_MESSAGES.savingInProgress);
+      return;
+    }
 
     savingRowIdRef.current = row.id;
+    setSavingRowId(row.id);
+    showLoading?.(USER_ACTION_MESSAGES.savingChanges);
     try {
       const raw = await api.updateRow(row.id, {
         folderPath: row.folderPath,
@@ -303,14 +343,20 @@ export default function useTaskTableActions({
         removeRow(replacedTaskId);
         void refresh();
         onCalendarRefresh?.();
+        showSuccess(USER_ACTION_MESSAGES.taskUpdated);
       } else {
+        setEditingId(null);
+        showSuccess(USER_ACTION_MESSAGES.taskUpdated);
         kickOffCdrAutoSearch({
           taskId: row.id,
           folderPath: row.folderPath,
           fileName: row.fileName,
-          showWarning
+          showWarning,
+          showLoading,
+          showSuccess,
+          showInfo,
+          progressMessage: USER_ACTION_MESSAGES.previewProgressAfterUpdate
         });
-        setEditingId(null);
         void syncRowFromServer(row);
       }
     } catch (err) {
@@ -318,11 +364,12 @@ export default function useTaskTableActions({
       if (err?.code === 'concurrency_conflict') {
         await syncRowFromServer(row);
       }
-      showError(err.message || 'Ошибка обновления задачи');
+      showError(formatUserActionError(err, 'Не удалось сохранить изменения'));
     } finally {
       savingRowIdRef.current = null;
+      setSavingRowId(null);
     }
-  }, [api, syncRowFromServer, setEditingId, showError, showWarning, applyPlanningWarnings, patchRow, removeRow, refresh, onCalendarRefresh]);
+  }, [api, syncRowFromServer, setEditingId, showError, showWarning, showSuccess, showLoading, showInfo, applyPlanningWarnings, removeRow, refresh, onCalendarRefresh]);
 
   const runLifecycleAction = useCallback(async (action, row) => {
     if (pendingLifecycleTaskIdRef.current != null) return false;
@@ -356,7 +403,7 @@ export default function useTaskTableActions({
       if (err?.code === 'concurrency_conflict') {
         await syncRowFromServer(row);
       }
-      showError(err.message || 'Не удалось выполнить действие с задачей');
+      showError(formatUserActionError(err, 'Не удалось выполнить действие с задачей'));
       return false;
     } finally {
       setPendingLifecycleTask(null);
@@ -423,7 +470,7 @@ export default function useTaskTableActions({
       if (err?.code === 'concurrency_conflict') {
         await syncRowFromServer(row);
       }
-      showError(err.message || 'Не удалось изменить статус задачи');
+      showError(formatUserActionError(err, 'Не удалось изменить статус задачи'));
     } finally {
       setPendingLifecycleTask(null);
     }
@@ -456,14 +503,17 @@ export default function useTaskTableActions({
       if (err?.code === 'concurrency_conflict') {
         await syncRowFromServer(row);
       }
-      showError(err.message || 'Не удалось изменить пометку задачи');
+      showError(formatUserActionError(err, 'Не удалось изменить пометку задачи'));
     } finally {
       pendingPriorityTaskIdRef.current = null;
     }
   }, [api, selectedEmployeeForHighlight, showError, syncRowFromServer]);
 
   const handleDeleteRow = useCallback(async (id) => {
-    if (deletingRowIdRef.current != null) return;
+    if (deletingRowIdRef.current != null) {
+      showInfo?.(USER_ACTION_MESSAGES.deletingInProgress);
+      return;
+    }
     if (pendingLifecycleTaskIdRef.current != null) {
       showWarning('Дождитесь завершения действия с задачей');
       return;
@@ -478,22 +528,28 @@ export default function useTaskTableActions({
     if (!confirmed) return;
 
     deletingRowIdRef.current = id;
+    setPendingLifecycleTask(id);
+    showLoading?.(USER_ACTION_MESSAGES.deletingTask);
     try {
       await api.deleteRow(id);
       removeRow(id);
       invalidateChildCache(id);
       await refresh();
       onCalendarRefresh?.();
+      showSuccess(USER_ACTION_MESSAGES.taskDeleted);
     } catch (err) {
       console.error(err);
       if (err?.code === 'concurrency_conflict') {
         await refresh();
       }
-      showError(err.message || 'Не удалось удалить задачу');
+      showError(formatUserActionError(err, 'Не удалось удалить задачу', {
+        hint: USER_ACTION_MESSAGES.deleteRetryHint
+      }));
     } finally {
       deletingRowIdRef.current = null;
+      setPendingLifecycleTask(null);
     }
-  }, [api, removeRow, refresh, invalidateChildCache, onCalendarRefresh, confirm, showError, showWarning]);
+  }, [api, removeRow, refresh, invalidateChildCache, onCalendarRefresh, confirm, showError, showWarning, showSuccess, showLoading, showInfo, setPendingLifecycleTask]);
 
   const handleAddNewRow = useCallback(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -527,7 +583,7 @@ export default function useTaskTableActions({
       const name = link.customerName ? ` (${link.customerName})` : '';
       showSuccess?.(`Ссылка на заказ${name} скопирована`);
     } catch (err) {
-      showError(err.message || 'Не удалось скопировать ссылку на заказ');
+      showError(formatUserActionError(err, 'Не удалось скопировать ссылку на заказ'));
     }
   }, [showError, showSuccess]);
 
@@ -537,6 +593,8 @@ export default function useTaskTableActions({
 
   return {
     pendingLifecycleTaskId,
+    savingNewRow,
+    savingRowId,
     handleSaveNewRow,
     handleUpdateRow,
     handleStartTask,

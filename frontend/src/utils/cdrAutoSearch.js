@@ -11,6 +11,7 @@ import {
   formatFileNotFoundByPath
 } from './cdrPreviewErrors';
 import { formatDevTaskFilePath } from './devCdrPreviewConfig';
+import { formatUserActionError, USER_ACTION_MESSAGES } from './actionError';
 
 let previewBuildHooks = { onStart: null, onEnd: null };
 const previewBuildingTaskIds = new Set();
@@ -83,33 +84,50 @@ export function startCdrAutoSearchAfterSave({
   taskId,
   folderPath,
   fileName,
-  showWarning
+  showWarning,
+  showLoading,
+  showSuccess,
+  showInfo,
+  progressMessage
 }) {
   if (!DEV_CDR_PREVIEW_ENABLED || !taskId) return;
   if (!shouldAttemptCdrPreviewOnSave(folderPath, fileName)) return;
-  if (getCdrPathValidationError(folderPath, fileName)) return;
+  const pathError = getCdrPathValidationError(folderPath, fileName);
+  if (pathError) {
+    showWarning?.(formatCdrPreviewPostSaveWarning(pathError));
+    return;
+  }
 
   notifyPreviewBuildStart(taskId);
+  showLoading?.(progressMessage || USER_ACTION_MESSAGES.previewProgress);
   void (async () => {
     try {
       const agentUnavailable = await getLocalAgentUnavailableMessage();
       if (agentUnavailable) {
         // Сервер уже мог поставить retry; дублируем schedule на случай create без серверного queue.
         await scheduleCdrPreviewRetry(taskId).catch(() => {});
+        showWarning?.(agentUnavailable);
         return;
       }
 
       const ok = await tryBuildPreview(taskId, folderPath, fileName);
-      if (ok) return;
+      if (ok) {
+        showSuccess?.(USER_ACTION_MESSAGES.previewReady);
+        return;
+      }
 
       const scheduled = await scheduleCdrPreviewRetry(taskId);
       if (!scheduled) {
         showWarning?.(formatFirstAttemptFailureMessage(folderPath, fileName));
+      } else {
+        showInfo?.(USER_ACTION_MESSAGES.previewRetryScheduled);
       }
     } catch (err) {
       const message = err?.message || '';
       if (!isCdrPreviewRetryableFailure(message)) {
-        if (message) showWarning?.(formatCdrPreviewPostSaveWarning(message));
+        showWarning?.(formatCdrPreviewPostSaveWarning(
+          formatUserActionError(err, message || 'Не удалось построить превью')
+        ));
         return;
       }
 
@@ -117,9 +135,15 @@ export function startCdrAutoSearchAfterSave({
         const scheduled = await scheduleCdrPreviewRetry(taskId);
         if (!scheduled) {
           showWarning?.(formatFirstAttemptFailureMessage(folderPath, fileName, message));
+        } else {
+          showInfo?.(USER_ACTION_MESSAGES.previewRetryScheduled);
         }
-      } catch {
-        showWarning?.(formatFirstAttemptFailureMessage(folderPath, fileName, message));
+      } catch (scheduleErr) {
+        showWarning?.(formatFirstAttemptFailureMessage(
+          folderPath,
+          fileName,
+          formatUserActionError(scheduleErr, message)
+        ));
       }
     } finally {
       notifyPreviewBuildEnd(taskId);

@@ -122,7 +122,11 @@ export function UiFeedbackProvider({ children }) {
 
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={snackbar.loading ? null : 5000}
+        autoHideDuration={
+          snackbar.loading
+            ? null
+            : (snackbar.severity === 'error' || snackbar.severity === 'warning' ? 8000 : 5000)
+        }
         onClose={handleSnackbarClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
@@ -131,6 +135,7 @@ export function UiFeedbackProvider({ children }) {
           severity={snackbar.severity}
           variant="toast"
           icon={snackbar.loading ? <CircularProgress size={18} color="inherit" /> : undefined}
+          sx={{ whiteSpace: 'pre-line' }}
         >
           {snackbar.message}
         </Alert>

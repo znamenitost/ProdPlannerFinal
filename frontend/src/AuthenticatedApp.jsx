@@ -80,6 +80,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { ruRU } from '@mui/x-date-pickers/locales';
 import 'dayjs/locale/ru';
 import { DEPLOY_MAINTENANCE_EVENT } from './utils/deployMaintenance';
+import { isTableViewTab } from './utils/hubViewSubscription';
 import './App.css';
 
 function AuthenticatedAppContent() {
@@ -159,18 +160,17 @@ function AuthenticatedAppContent() {
   }, []);
 
   const handleHubTaskEventForTab = useCallback((event) => {
-    if (activeTab !== 1 && activeTab !== 2) return false;
+    if (!isTableViewTab(activeTab)) return false;
     return handleHubTaskEvent(event);
   }, [activeTab, handleHubTaskEvent]);
 
   const handleHubTableFallbackRefresh = useCallback(() => {
-    if (activeTab === 1 || activeTab === 2) refreshTable();
+    if (isTableViewTab(activeTab)) refreshTable();
   }, [activeTab, refreshTable]);
 
   const prevActiveTabRef = useRef(activeTab);
   useEffect(() => {
-    const isTableTab = activeTab === 1 || activeTab === 2;
-    if (isTableTab && prevActiveTabRef.current !== activeTab) {
+    if (isTableViewTab(activeTab) && prevActiveTabRef.current !== activeTab) {
       refreshTable();
     }
     prevActiveTabRef.current = activeTab;
@@ -286,7 +286,7 @@ function AuthenticatedAppContent() {
     const timer = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       if (hubConnection?.state === 'Connected') return;
-      if (activeTabRef.current === 1 || activeTabRef.current === 2) dataRefreshRef.current.refreshTable();
+      if (isTableViewTab(activeTabRef.current)) dataRefreshRef.current.refreshTable();
       else dataRefreshRef.current.refreshCalendar();
     }, 45000);
     return () => clearInterval(timer);

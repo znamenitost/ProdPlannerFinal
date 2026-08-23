@@ -13,7 +13,8 @@ export default function EditTaskRow({
   onOpenAssigneeModal,
   showHoursTypeColumns = true,
   columnVisibility,
-  cdrPreviewBuilding = false
+  cdrPreviewBuilding = false,
+  saving = false
 }) {
   const isShared = task.isSplitTask;
 
@@ -111,6 +112,7 @@ export default function EditTaskRow({
           value={localTask.folderPath}
           onChange={(e) => handleFieldChange('folderPath', e.target.value)}
           placeholder="Путь к папке"
+          disabled={saving}
         />
       </TableCell>
 
@@ -129,6 +131,7 @@ export default function EditTaskRow({
             value={localTask.fileName}
             onChange={(e) => handleFieldChange('fileName', e.target.value)}
             placeholder="Имя файла"
+            disabled={saving}
             sx={withTaskTableTextFieldSx({ flex: 1, minWidth: 0 })}
           />
         </Box>
@@ -139,6 +142,7 @@ export default function EditTaskRow({
           {...TASK_TABLE_TEXT_FIELD_PROPS}
           value={localTask.comment}
           onChange={(e) => handleFieldChange('comment', e.target.value)}
+          disabled={saving}
         />
       </TableCell>
 
@@ -147,6 +151,7 @@ export default function EditTaskRow({
           value={localTask.deadline}
           onChange={(deadline) => handleFieldChange('deadline', deadline)}
           hideLabel
+          disabled={saving}
         />
       </TableCell>
 
@@ -158,6 +163,7 @@ export default function EditTaskRow({
           <IconButton
             size="small"
             onClick={() => onOpenAssigneeModal(localTask)}
+            disabled={saving}
             aria-label="Назначить сотрудников"
             sx={{ flexShrink: 0 }}
           >
@@ -173,10 +179,17 @@ export default function EditTaskRow({
 
       <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS_DUAL)}>
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', justifyContent: 'center' }}>
-          <IconButton size="small" color="primary" onClick={handleSave} aria-label="Сохранить">
-            <Save fontSize="small" />
+          <IconButton
+            size="small"
+            color="primary"
+            onClick={handleSave}
+            disabled={saving}
+            aria-label={saving ? 'Сохраняем изменения' : 'Сохранить'}
+            aria-busy={saving}
+          >
+            {saving ? <CircularProgress size={16} color="inherit" /> : <Save fontSize="small" />}
           </IconButton>
-          <IconButton size="small" color="error" onClick={onCancel} aria-label="Отмена">
+          <IconButton size="small" color="error" onClick={onCancel} disabled={saving} aria-label="Отмена">
             <Cancel fontSize="small" />
           </IconButton>
         </Box>

@@ -9,6 +9,7 @@ import useTaskTableModals from './useTaskTableModals';
 import usePlanningWarnings from './usePlanningWarnings';
 import { handleTaskTableHubEvent } from '../../utils/taskTableHubHandler';
 import useCdrPreview from '../useCdrPreview';
+import { formatUserActionError } from '../../utils/actionError';
 
 export default function useTaskTableController({
   onCalendarRefresh,
@@ -19,7 +20,7 @@ export default function useTaskTableController({
   showFuss = false,
   pickupMode = false
 }) {
-  const { showError, showWarning, showSuccess, confirm, promptInput } = useUiFeedback();
+  const { showError, showWarning, showSuccess, showLoading, showInfo, confirm, promptInput } = useUiFeedback();
   const api = useTaskTableApi();
   const {
     planningWarnings,
@@ -71,6 +72,8 @@ export default function useTaskTableController({
     showError,
     showWarning,
     showSuccess,
+    showLoading,
+    showInfo,
     confirm,
     promptInput,
     applyPlanningWarnings
@@ -101,7 +104,10 @@ export default function useTaskTableController({
     expandedRows: childrenState.expandedRows,
     api,
     selectedEmployeeForHighlight,
+    pickupMode,
+    searchQuery,
     patchRow: rowsState.patchRow,
+    upsertRow: rowsState.upsertRow,
     removeRow: rowsState.removeRow,
     patchChildInCache: childrenState.patchChildInCache,
     setChildrenForParent: childrenState.setChildrenForParent,
@@ -118,13 +124,13 @@ export default function useTaskTableController({
 
   const handleOpenFile = useCallback((row) => {
     void api.openFile(row).catch((err) => {
-      showError(err.message || 'Не удалось открыть файл');
+      showError(formatUserActionError(err, 'Не удалось открыть файл'));
     });
   }, [api, showError]);
 
   const handleOpenFolder = useCallback((row) => {
     void api.openFolder(row).catch((err) => {
-      showError(err.message || 'Не удалось открыть папку');
+      showError(formatUserActionError(err, 'Не удалось открыть папку'));
     });
   }, [api, showError]);
 
@@ -159,7 +165,7 @@ export default function useTaskTableController({
       setIntervalsRows(intervals || []);
       setIntervalsDialogOpen(true);
     } catch (err) {
-      showError(err.message || 'Не удалось загрузить интервалы');
+      showError(formatUserActionError(err, 'Не удалось загрузить интервалы'));
     }
   }, [api, showError]);
 
@@ -174,18 +180,19 @@ export default function useTaskTableController({
     if (!intervalsTask || intervalsSavingRef.current) return;
     intervalsSavingRef.current = true;
     setIntervalsPending(true);
+    showLoading('Сохраняем интервалы…');
     try {
       await api.updateIntervals(intervalsTask.id, payload);
       await refresh();
       setIntervalsDialogOpen(false);
       showSuccess('Интервалы сохранены');
     } catch (err) {
-      showError(err.message || 'Не удалось сохранить интервалы');
+      showError(formatUserActionError(err, 'Не удалось сохранить интервалы'));
     } finally {
       intervalsSavingRef.current = false;
       setIntervalsPending(false);
     }
-  }, [api, intervalsTask, refresh, showError, showSuccess]);
+  }, [api, intervalsTask, refresh, showError, showSuccess, showLoading]);
 
   return {
     api,

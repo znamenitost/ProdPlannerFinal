@@ -12,11 +12,17 @@ export async function handleTaskTableHubEvent(event, ctx) {
     childrenCache,
     expandedRows,
     api,
+    selectedEmployeeForHighlight,
+    pickupMode,
+    searchQuery,
     patchRow,
+    upsertRow,
     removeRow,
     setChildrenForParent,
     loadChildrenForParent
   } = ctx;
+
+  const employee = selectedEmployeeForHighlight || '';
 
   const isNotFound = (err) => err?.status === 404 || String(err?.message || '').includes('"status":404');
 
@@ -31,9 +37,7 @@ export async function handleTaskTableHubEvent(event, ctx) {
 
   const patchParentIfVisible = async (parentId) => {
     if (!rows.some((r) => r.id === parentId)) return false;
-    // Live table updates should not depend on the selected employee filter.
-    // Otherwise events for other employees can be dropped by backend filtering.
-    const parentDto = await api.fetchTableRow(parentId);
+    const parentDto = await api.fetchTableRow(parentId, employee);
     if (parentDto) patchRow(parentId, parentDto);
     return true;
   };
@@ -73,7 +77,7 @@ export async function handleTaskTableHubEvent(event, ctx) {
         });
       }
 
-      const updated = await api.fetchTableRow(taskId);
+      const updated = await api.fetchTableRow(taskId, employee);
       if (!updated) return false;
 
       const parentId = updated.parentRowNumber;
@@ -87,6 +91,15 @@ export async function handleTaskTableHubEvent(event, ctx) {
 
       if (rows.some((r) => r.id === taskId)) {
         patchRow(taskId, updated);
+        return true;
+      }
+
+      const canInsertRoot =
+        !parentId
+        && !pickupMode
+        && !String(searchQuery || '').trim()
+        && typeof upsertRow === 'function';
+      if (canInsertRoot && upsertRow(updated)) {
         return true;
       }
 
@@ -112,10 +125,12 @@ export async function handleTaskTableHubEvent(event, ctx) {
               throw parentErr;
             }
           }
-        } else {
-          removeRow(taskId);
+          return true;
         }
-        return true;
+
+        const wasVisible = rows.some((r) => r.id === taskId);
+        if (wasVisible) removeRow(taskId);
+        return wasVisible;
       }
       console.error('Hub table patch failed:', err);
       return false;

@@ -34,14 +34,21 @@ function createCtx(overrides = {}) {
     ...overrides.api
   };
 
+  const upsertRowCalls = [];
   const ctx = {
     rows,
     childrenCache,
     expandedRows,
     api,
     selectedEmployeeForHighlight: '',
+    pickupMode: false,
+    searchQuery: '',
     patchRow: (id, patch) => {
       patchRowCalls.push({ id, patch });
+    },
+    upsertRow: (row) => {
+      upsertRowCalls.push(row);
+      return true;
     },
     removeRow: () => {},
     setChildrenForParent: (parentId, children) => {
@@ -56,7 +63,7 @@ function createCtx(overrides = {}) {
     ...overrides.ctx
   };
 
-  return { ctx, patchRowCalls, setChildrenCalls, loadChildrenCalls };
+  return { ctx, patchRowCalls, upsertRowCalls, setChildrenCalls, loadChildrenCalls };
 }
 
 test('handleTaskTableHubEvent reloads expanded children and patches parent on child status change', async () => {
@@ -93,6 +100,27 @@ test('handleTaskTableHubEvent reloads children when parent is expanded even with
   assert.equal(loadChildrenCalls[0].parentId, 10);
 });
 
+test('handleTaskTableHubEvent returns false for 404 of a task not on the page so the table can refetch', async () => {
+  const { ctx, patchRowCalls } = createCtx({
+    rows: [{ id: 10, statusText: 'Начал' }],
+    api: {
+      fetchTableRow: async () => {
+        const err = new Error('Not found');
+        err.status = 404;
+        throw err;
+      }
+    }
+  });
+
+  const handled = await handleTaskTableHubEvent(
+    { type: 'TaskUpdated', taskId: 99 },
+    ctx
+  );
+
+  assert.equal(handled, false);
+  assert.equal(patchRowCalls.length, 0);
+});
+
 test('handleTaskTableHubEvent patches root row when task is visible', async () => {
   const { ctx, patchRowCalls, loadChildrenCalls } = createCtx({
     rows: [{ id: 55, statusText: 'Начал' }],
@@ -117,3 +145,50 @@ test('handleTaskTableHubEvent patches root row when task is visible', async () =
   assert.equal(patchRowCalls[0].id, 55);
   assert.equal(patchRowCalls[0].patch.statusText, 'Готово');
 });
+
+test('handleTaskTableHubEvent inserts a new root task into the open table', async () => {
+  const { ctx, patchRowCalls, upsertRowCalls } = createCtx({
+    rows: [{ id: 10, statusText: 'Начал' }],
+    api: {
+      fetchTableRow: async (id) => ({
+        id,
+        parentRowNumber: null,
+        statusText: 'Назначена',
+        updatedAt: '2026-06-18T12:00:00Z'
+      })
+    }
+  });
+
+  const handled = await handleTaskTableHubEvent(
+    { type: 'TaskUpdated', taskId: 77 },
+    ctx
+  );
+
+  assert.equal(handled, true);
+  assert.equal(patchRowCalls.length, 0);
+  assert.equal(upsertRowCalls.length, 1);
+  assert.equal(upsertRowCalls[0].id, 77);
+});
+
+test('handleTaskTableHubEvent does not insert during search — falls back to refetch', async () => {
+  const { ctx, upsertRowCalls } = createCtx({
+    rows: [{ id: 10, statusText: 'Начал' }],
+    api: {
+      fetchTableRow: async (id) => ({
+        id,
+        parentRowNumber: null,
+        statusText: 'Назначена'
+      })
+    },
+    ctx: { searchQuery: 'заказ' }
+  });
+
+  const handled = await handleTaskTableHubEvent(
+    { type: 'TaskUpdated', taskId: 77 },
+    ctx
+  );
+
+  assert.equal(handled, false);
+  assert.equal(upsertRowCalls.length, 0);
+});
+

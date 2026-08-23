@@ -583,6 +583,7 @@ export default function TaskTable({
         showHoursTypeColumns={table.showHoursTypeColumns}
         columnVisibility={columnSettings.visibility}
         cdrPreviewBuilding={displayPreviewBuilding}
+        saving={table.savingRowId === displayTask.id}
       />
     ) : (
       <ParentTaskRow
@@ -708,6 +709,7 @@ export default function TaskTable({
                 onOpenAssigneeModal={table.handleOpenNewSharedModal}
                 showHoursTypeColumns={table.showHoursTypeColumns}
                 columnVisibility={columnSettings.visibility}
+                saving={table.savingNewRow}
               />
             )}
             {shouldVirtualize ? (

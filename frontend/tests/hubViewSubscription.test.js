@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as signalR from '@microsoft/signalr';
 import {
   buildViewSubscriptionState,
+  isTableViewTab,
   syncHubViewGroups
 } from '../src/utils/hubViewSubscription.js';
 
@@ -81,6 +82,18 @@ describe('syncHubViewGroups calendar-viewers', () => {
       ['JoinCalendarViewers', 'Яромир']
     ]);
     assert.equal(prev.lastJoinedCalendarEmployee, 'Яромир');
+  });
+
+  it('keeps table-viewers when switching between table and pickup tabs', async () => {
+    const conn = mockConnection();
+    let prev = await syncHubViewGroups(conn, null, adminState(1, 'Дима'));
+    conn.invocations.length = 0;
+
+    prev = await syncHubViewGroups(conn, prev, adminState(2, 'Дима'));
+
+    assert.equal(isTableViewTab(2), true);
+    assert.deepEqual(conn.invocations, [['JoinTableViewers']]);
+    assert.equal(prev.lastJoinedCalendarEmployee, null);
   });
 
   it('leaves old calendar group when employee changes on table after calendar session', async () => {

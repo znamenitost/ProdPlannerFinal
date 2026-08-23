@@ -1,10 +1,16 @@
 import { useCallback, useMemo } from 'react';
 import { openFileOnClient, openFolderOnClient } from '../utils/openFileOnClient';
-import { normalizePathForOpen, normalizeFolderPathForOpen, detectClientPlatform } from '../utils/filePathForOpen';
+import { normalizePathForOpen, normalizeFolderPathForOpen } from '../utils/filePathForOpen';
 import {
   ensureFileOpenSettingsLoaded,
   getFileOpenShareName
 } from '../utils/fileOpenSettingsCache';
+import {
+  createTimeoutSignal,
+  formatHttpError,
+  formatUserActionError,
+  MUTATION_TIMEOUT_MS
+} from '../utils/actionError';
 
 export default function useTaskTableApi() {
   const handleResponse = useCallback(async (response) => {
@@ -23,7 +29,7 @@ export default function useTaskTableApi() {
       } catch (parseErr) {
         if (parseErr?.status === 409) throw parseErr;
       }
-      const err = new Error(message);
+      const err = new Error(formatHttpError(response.status, message, `Ошибка ${response.status}`));
       err.status = response.status;
       throw err;
     }
@@ -34,14 +40,35 @@ export default function useTaskTableApi() {
     return null;
   }, []);
 
+  const request = useCallback(async (url, options = {}) => {
+    const { timeoutMs, ...fetchOptions } = options;
+    const timeout = timeoutMs && !fetchOptions.signal
+      ? createTimeoutSignal(timeoutMs)
+      : null;
+    try {
+      const response = await fetch(url, {
+        ...fetchOptions,
+        signal: fetchOptions.signal || timeout?.signal
+      });
+      return await handleResponse(response);
+    } catch (err) {
+      if (err?.status != null) throw err;
+      const wrapped = new Error(formatUserActionError(err, 'Нет связи с сервером'));
+      wrapped.cause = err;
+      wrapped.code = err?.name === 'AbortError' ? 'timeout' : 'network';
+      throw wrapped;
+    } finally {
+      timeout?.clear();
+    }
+  }, [handleResponse]);
+
   const fetchTableRow = useCallback(async (id, selectedEmployee = '') => {
     let url = `/api/tasks/table/row/${id}`;
     if (selectedEmployee) {
       url += `?employee=${encodeURIComponent(selectedEmployee)}`;
     }
-    const response = await fetch(url);
-    return handleResponse(response);
-  }, [handleResponse]);
+    return request(url);
+  }, [request]);
 
   const loadRows = useCallback(async (page = 1, pageSize = 50, selectedEmployee = '', options = {}) => {
     let url = `/api/tasks/table?page=${page}&pageSize=${pageSize}`;
@@ -61,19 +88,16 @@ export default function useTaskTableApi() {
     if (search) {
       url += `&search=${encodeURIComponent(search)}`;
     }
-    const response = await fetch(url, { signal: options.signal });
-    const data = await handleResponse(response);
+    const data = await request(url, { signal: options.signal });
     if (data.items && data.totalCount !== undefined) {
       return { items: data.items, totalCount: data.totalCount, page: data.page, pageSize: data.pageSize };
     }
     return { items: data, totalCount: data.length, page: 1, pageSize: data.length };
-  }, [handleResponse]);
+  }, [request]);
 
   const loadChildren = useCallback(async (parentId) => {
-    const response = await fetch(`/api/tasks/split/children/${parentId}`);
-    const children = await handleResponse(response);
-    return children;
-  }, [handleResponse]);
+    return request(`/api/tasks/split/children/${parentId}`);
+  }, [request]);
 
   const createRow = useCallback(async (rowData) => {
     const body = {
@@ -97,16 +121,16 @@ export default function useTaskTableApi() {
       body.testEstimateHours = rowData.testEstimateHours;
       body.productionEstimateHours = rowData.productionEstimateHours;
     }
-    const response = await fetch('/api/tasks/table/row', {
+    return request('/api/tasks/table/row', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      timeoutMs: MUTATION_TIMEOUT_MS
     });
-    return await handleResponse(response);
-  }, [handleResponse]);
+  }, [request]);
 
   const updateRow = useCallback(async (id, rowData) => {
-    const response = await fetch(`/api/tasks/table/row/${id}`, {
+    return request(`/api/tasks/table/row/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -123,32 +147,38 @@ export default function useTaskTableApi() {
         sequenceOverride: rowData.sequenceOverride ?? false,
         expectedUpdatedAt: rowData.expectedUpdatedAt ?? null,
         commentEditedViaDialog: rowData.commentEditedViaDialog ?? null
-      })
+      }),
+      timeoutMs: MUTATION_TIMEOUT_MS
     });
-    return await handleResponse(response);
-  }, [handleResponse]);
+  }, [request]);
 
   const getIntervals = useCallback(async (taskId) => {
-    const response = await fetch(`/api/tasks/table/row/${taskId}/intervals`);
-    return await handleResponse(response);
-  }, [handleResponse]);
+    return request(`/api/tasks/table/row/${taskId}/intervals`);
+  }, [request]);
 
   const updateIntervals = useCallback(async (taskId, intervals) => {
-    const response = await fetch(`/api/tasks/table/row/${taskId}/intervals`, {
+    return request(`/api/tasks/table/row/${taskId}/intervals`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ intervals })
+      body: JSON.stringify({ intervals }),
+      timeoutMs: MUTATION_TIMEOUT_MS
     });
-    return await handleResponse(response);
-  }, [handleResponse]);
+  }, [request]);
 
   const deleteRow = useCallback(async (id) => {
-    let response = await fetch(`/api/tasks/table/row/${id}`, { method: 'DELETE' });
-    if (response.status === 405) {
-      response = await fetch(`/api/tasks/table/row/${id}/delete`, { method: 'POST' });
+    try {
+      await request(`/api/tasks/table/row/${id}`, {
+        method: 'DELETE',
+        timeoutMs: MUTATION_TIMEOUT_MS
+      });
+    } catch (err) {
+      if (err?.status !== 405) throw err;
+      await request(`/api/tasks/table/row/${id}/delete`, {
+        method: 'POST',
+        timeoutMs: MUTATION_TIMEOUT_MS
+      });
     }
-    await handleResponse(response);
-  }, [handleResponse]);
+  }, [request]);
 
   const lifecycleUrl = useCallback((rowId, action, selectedEmployee = '') => {
     let url = `/api/tasks/${rowId}/${action}`;
@@ -159,28 +189,34 @@ export default function useTaskTableApi() {
   }, []);
 
   const startTask = useCallback(async (rowId, selectedEmployee = '', comment = null) => {
-    const response = await fetch(lifecycleUrl(rowId, 'start', selectedEmployee), {
+    return request(lifecycleUrl(rowId, 'start', selectedEmployee), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(comment ? { comment } : {})
+      body: JSON.stringify(comment ? { comment } : {}),
+      timeoutMs: MUTATION_TIMEOUT_MS
     });
-    return await handleResponse(response);
-  }, [handleResponse, lifecycleUrl]);
+  }, [request, lifecycleUrl]);
 
   const pauseTask = useCallback(async (rowId, selectedEmployee = '') => {
-    const response = await fetch(lifecycleUrl(rowId, 'pause', selectedEmployee), { method: 'POST' });
-    return await handleResponse(response);
-  }, [handleResponse, lifecycleUrl]);
+    return request(lifecycleUrl(rowId, 'pause', selectedEmployee), {
+      method: 'POST',
+      timeoutMs: MUTATION_TIMEOUT_MS
+    });
+  }, [request, lifecycleUrl]);
 
   const resumeTask = useCallback(async (rowId, selectedEmployee = '') => {
-    const response = await fetch(lifecycleUrl(rowId, 'resume', selectedEmployee), { method: 'POST' });
-    return await handleResponse(response);
-  }, [handleResponse, lifecycleUrl]);
+    return request(lifecycleUrl(rowId, 'resume', selectedEmployee), {
+      method: 'POST',
+      timeoutMs: MUTATION_TIMEOUT_MS
+    });
+  }, [request, lifecycleUrl]);
 
   const completeTask = useCallback(async (rowId, selectedEmployee = '') => {
-    const response = await fetch(lifecycleUrl(rowId, 'complete', selectedEmployee), { method: 'POST' });
-    return await handleResponse(response);
-  }, [handleResponse, lifecycleUrl]);
+    return request(lifecycleUrl(rowId, 'complete', selectedEmployee), {
+      method: 'POST',
+      timeoutMs: MUTATION_TIMEOUT_MS
+    });
+  }, [request, lifecycleUrl]);
 
   const openFile = useCallback(async (row) => {
     await ensureFileOpenSettingsLoaded();
@@ -207,21 +243,20 @@ export default function useTaskTableApi() {
   }, []);
 
   const getTaskForSplit = useCallback(async (employeeName, taskId) => {
-    const response = await fetch(`/api/tasks/active?employee=${encodeURIComponent(employeeName)}`);
-    const tasks = await handleResponse(response);
+    const tasks = await request(`/api/tasks/active?employee=${encodeURIComponent(employeeName)}`);
     const task = tasks.find(t => t.id === taskId);
     if (!task) throw new Error('Не удалось найти задачу для разделения');
     return task;
-  }, [handleResponse]);
+  }, [request]);
 
   const splitTask = useCallback(async (parentTaskId, parts) => {
-    const response = await fetch('/api/tasks/split', {
+    return request('/api/tasks/split', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parentTaskId, parts })
+      body: JSON.stringify({ parentTaskId, parts }),
+      timeoutMs: MUTATION_TIMEOUT_MS
     });
-    return await handleResponse(response);
-  }, [handleResponse]);
+  }, [request]);
 
   const api = useMemo(() => ({
     fetchTableRow,

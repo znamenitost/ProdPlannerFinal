@@ -5,8 +5,11 @@ import { getCdrPathValidationError } from '../utils/cdrPreviewErrors';
 import { cdrPreviewCacheKey } from '../utils/cdrPreviewRowHandlers';
 import { setCdrPreviewBuildHooks, getActiveCdrPreviewBuildTaskIds } from '../utils/cdrAutoSearch';
 import { detectClientPlatform } from '../utils/filePathForOpen';
+import { useUiFeedback } from '../context/UiFeedbackContext';
+import { formatUserActionError } from '../utils/actionError';
 
 export default function useCdrPreview() {
+  const { showWarning, showError } = useUiFeedback();
   const [cdrPreviewOpen, setCdrPreviewOpen] = useState(false);
   const [cdrPreviewTask, setCdrPreviewTask] = useState(null);
   const [cdrPreviewData, setCdrPreviewData] = useState(null);
@@ -186,7 +189,9 @@ export default function useCdrPreview() {
   const handleShowCdrPreview = useCallback(async (task, anchor) => {
     if (!DEV_CDR_PREVIEW_ENABLED) return;
 
-    if (getCdrPathValidationError(task.folderPath, task.fileName)) {
+    const pathError = getCdrPathValidationError(task.folderPath, task.fileName);
+    if (pathError) {
+      showWarning(pathError);
       return;
     }
 
@@ -211,17 +216,19 @@ export default function useCdrPreview() {
       } else if (error) {
         setCdrPreviewData({ error, path: displayPath });
       } else {
-        setCdrPreviewData({ path: displayPath });
+        setCdrPreviewData({ path: displayPath, error: 'Превью пока нет' });
       }
-    } catch {
+    } catch (err) {
       if (loadId !== cdrPreviewLoadRef.current) return;
-      setCdrPreviewData({ path });
+      const message = formatUserActionError(err, 'Не удалось загрузить превью');
+      setCdrPreviewData({ path, error: message });
+      showError(message);
     } finally {
       if (loadId === cdrPreviewLoadRef.current) {
         setCdrPreviewPending(false);
       }
     }
-  }, [attachCdrPreviewRmbListeners, handleCloseCdrPreview, loadCachedCdrPreview]);
+  }, [attachCdrPreviewRmbListeners, handleCloseCdrPreview, loadCachedCdrPreview, showWarning, showError]);
 
   return {
     handleShowCdrPreview,

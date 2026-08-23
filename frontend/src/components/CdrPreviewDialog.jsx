@@ -1,4 +1,5 @@
-import { Box, CircularProgress, Paper } from '@mui/material';
+import { Box, CircularProgress, Paper, Typography } from '@mui/material';
+import { USER_ACTION_MESSAGES } from '../utils/actionError';
 
 function clampAnchor(anchor) {
   const x = Number(anchor?.x) || 0;
@@ -15,10 +16,11 @@ export default function CdrPreviewDialog({
   open,
   anchor = null,
   previewUrl,
+  previewError,
   pending = false
 }) {
   if (!open || !anchor) return null;
-  if (!pending && !previewUrl) return null;
+  if (!pending && !previewUrl && !previewError) return null;
 
   const { left, top } = clampAnchor(anchor);
 
@@ -38,13 +40,30 @@ export default function CdrPreviewDialog({
           <Box
             sx={{
               display: 'flex',
+              flexDirection: 'column',
               justifyContent: 'center',
               alignItems: 'center',
-              width: 200,
-              height: 140
+              gap: 1.25,
+              width: 220,
+              minHeight: 140,
+              px: 1.5,
+              py: 2
             }}
           >
             <CircularProgress size={28} />
+            <Typography variant="body2" color="text.secondary" textAlign="center">
+              {USER_ACTION_MESSAGES.previewLoading}
+            </Typography>
+          </Box>
+        ) : previewError ? (
+          <Box sx={{ width: 260, px: 1.5, py: 1.5 }}>
+            <Typography
+              variant="body2"
+              color="error"
+              sx={{ whiteSpace: 'pre-line' }}
+            >
+              {previewError}
+            </Typography>
           </Box>
         ) : (
           <Box

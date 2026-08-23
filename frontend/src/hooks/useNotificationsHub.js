@@ -114,7 +114,8 @@ function reconnectDelayInMs(retryContext) {
 export default function useNotificationsHub(user, handlers = {}, options = {}) {
   const { enabled = true, viewSubscription, onMaintenanceDetected } = options;
   const [notifications, setNotifications] = useState([]);
-  const refreshTimeoutRef = useRef(null);
+  const calendarRefreshTimeoutRef = useRef(null);
+  const taskEventTimeoutRef = useRef(null);
   const taskEventChainRef = useRef(Promise.resolve());
   const handlersRef = useRef(handlers);
   const displayedServerIdsRef = useRef(new Set());
@@ -188,8 +189,9 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
   ]);
 
   const scheduleCalendarRefresh = useCallback(() => {
-    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-    refreshTimeoutRef.current = setTimeout(() => {
+    if (calendarRefreshTimeoutRef.current) clearTimeout(calendarRefreshTimeoutRef.current);
+    calendarRefreshTimeoutRef.current = setTimeout(() => {
+      calendarRefreshTimeoutRef.current = null;
       handlersRef.current.onCalendarRefresh?.();
     }, 300);
   }, []);
@@ -224,16 +226,19 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
 
     const immediate = event.type === 'TaskStatusChanged' || event.type === 'TaskProgressChanged';
     if (immediate) {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-        refreshTimeoutRef.current = null;
+      if (taskEventTimeoutRef.current) {
+        clearTimeout(taskEventTimeoutRef.current);
+        taskEventTimeoutRef.current = null;
       }
       enqueueRun();
       return;
     }
 
-    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-    refreshTimeoutRef.current = setTimeout(enqueueRun, 300);
+    if (taskEventTimeoutRef.current) clearTimeout(taskEventTimeoutRef.current);
+    taskEventTimeoutRef.current = setTimeout(() => {
+      taskEventTimeoutRef.current = null;
+      enqueueRun();
+    }, 300);
   }, []);
 
   const hubTaskId = (taskId) => {
@@ -585,9 +590,13 @@ export default function useNotificationsHub(user, handlers = {}, options = {}) {
       abort.abort();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', onVisibilityChange);
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-        refreshTimeoutRef.current = null;
+      if (calendarRefreshTimeoutRef.current) {
+        clearTimeout(calendarRefreshTimeoutRef.current);
+        calendarRefreshTimeoutRef.current = null;
+      }
+      if (taskEventTimeoutRef.current) {
+        clearTimeout(taskEventTimeoutRef.current);
+        taskEventTimeoutRef.current = null;
       }
       connection.off('NewTask', handleNewTask);
       connection.off('TaskDeleted', handleTaskDeleted);

@@ -49,6 +49,7 @@ import { promptFussStartComment } from '../utils/fussStart';
 import { offerPrintLabelsAfterReady } from '../utils/printLabelPrompt';
 import useCdrPreview from '../hooks/useCdrPreview';
 import { DEV_CDR_PREVIEW_ENABLED } from '../utils/devCdrPreviewConfig';
+import { formatUserActionError } from '../utils/actionError';
 
 function getDeadlineSortValue(task) {
   if (!task?.deadline) return Number.POSITIVE_INFINITY;
@@ -152,7 +153,7 @@ export default function ActiveTasksList({
       if (err?.code === 'concurrency_conflict') {
         await onUpdate();
       }
-      showError(err.message || 'Не удалось выполнить действие');
+      showError(formatUserActionError(err, 'Не удалось выполнить действие'));
     } finally {
       setPendingTask(null);
     }
@@ -250,6 +251,7 @@ export default function ActiveTasksList({
       open={cdrPreview.cdrPreviewOpen}
       anchor={cdrPreview.cdrPreviewAnchor}
       previewUrl={cdrPreview.cdrPreviewData?.url}
+      previewError={cdrPreview.cdrPreviewData?.error}
       pending={cdrPreview.cdrPreviewPending}
     />
   ) : null;

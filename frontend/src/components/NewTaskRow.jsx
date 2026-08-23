@@ -6,7 +6,8 @@ import {
   Box,
   Chip,
   IconButton,
-  Typography
+  Typography,
+  CircularProgress
 } from '@mui/material';
 import { Save, Cancel, AutoAwesome, PeopleAlt } from '@mui/icons-material';
 import DeadlineDateTimePicker, { DEADLINE_COLUMN_SX } from './DeadlineDateTimePicker';
@@ -35,7 +36,8 @@ export default function NewTaskRow({
   onCancel,
   onOpenAssigneeModal,
   showHoursTypeColumns = true,
-  columnVisibility
+  columnVisibility,
+  saving = false
 }) {
   const [draft, setDraft] = useState(newRow);
 
@@ -98,6 +100,7 @@ export default function NewTaskRow({
           placeholder="Путь к папке"
           value={draft.folderPath || ''}
           onChange={(e) => handleFieldChange('folderPath', e.target.value)}
+          disabled={saving}
         />
       </TableCell>
 
@@ -107,6 +110,7 @@ export default function NewTaskRow({
           placeholder="Имя файла"
           value={draft.fileName || ''}
           onChange={(e) => handleFieldChange('fileName', e.target.value)}
+          disabled={saving}
         />
       </TableCell>
 
@@ -116,6 +120,7 @@ export default function NewTaskRow({
           placeholder="Комментарий"
           value={draft.comment}
           onChange={(e) => handleFieldChange('comment', e.target.value)}
+          disabled={saving}
         />
       </TableCell>
 
@@ -124,6 +129,7 @@ export default function NewTaskRow({
           value={draft.deadline}
           onChange={(deadline) => handleFieldChange('deadline', deadline)}
           hideLabel
+          disabled={saving}
         />
       </TableCell>
 
@@ -144,6 +150,7 @@ export default function NewTaskRow({
           <IconButton
             size="small"
             onClick={() => onOpenAssigneeModal(draft)}
+            disabled={saving}
             aria-label="Назначить сотрудников"
           >
             <PeopleAlt fontSize="small" color={hasAssignees ? (isShared ? 'secondary' : 'action') : 'disabled'} />
@@ -173,10 +180,17 @@ export default function NewTaskRow({
 
       <TableCell sx={columnCellSx('actions', columnVisibility, showHoursTypeColumns, COL_ACTIONS_DUAL)}>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <IconButton size="small" color="primary" onClick={() => onSave(draft)} aria-label="Сохранить">
-            <Save fontSize="small" />
+          <IconButton
+            size="small"
+            color="primary"
+            onClick={() => onSave(draft)}
+            disabled={saving}
+            aria-label={saving ? 'Сохраняем задачу' : 'Сохранить'}
+            aria-busy={saving}
+          >
+            {saving ? <CircularProgress size={16} color="inherit" /> : <Save fontSize="small" />}
           </IconButton>
-          <IconButton size="small" color="error" onClick={onCancel} aria-label="Отмена">
+          <IconButton size="small" color="error" onClick={onCancel} disabled={saving} aria-label="Отмена">
             <Cancel fontSize="small" />
           </IconButton>
         </Box>

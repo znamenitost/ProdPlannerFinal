@@ -91,6 +91,35 @@ export default function useTaskTableRows(api, {
     [queryClient]
   );
 
+  const upsertRow = useCallback(
+    (row) => {
+      const id = Number(row?.id);
+      if (!Number.isFinite(id)) return false;
+      let changed = false;
+      queryClient.setQueriesData(
+        { queryKey: queryKeys.taskTableAll(), type: 'active' },
+        (old) => {
+          if (!old?.items) return old;
+          if (old.items.some((item) => item.id === id)) {
+            changed = true;
+            return {
+              ...old,
+              items: old.items.map((item) => (item.id === id ? { ...item, ...row } : item))
+            };
+          }
+          changed = true;
+          return {
+            ...old,
+            items: [row, ...old.items],
+            totalCount: (old.totalCount ?? old.items.length) + 1
+          };
+        }
+      );
+      return changed;
+    },
+    [queryClient]
+  );
+
   const removeRow = useCallback(
     (id) => {
       queryClient.setQueriesData({ queryKey: queryKeys.taskTableAll() }, (old) => {
@@ -130,6 +159,7 @@ export default function useTaskTableRows(api, {
     handleChangeRowsPerPage,
     refresh,
     patchRow,
+    upsertRow,
     removeRow
   };
 }

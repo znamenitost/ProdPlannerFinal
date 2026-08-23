@@ -1,5 +1,10 @@
 import * as signalR from '@microsoft/signalr';
 
+/** Таблица задач (1) и выдача (2) слушают группу table-viewers. */
+export function isTableViewTab(activeTab) {
+  return activeTab === 1 || activeTab === 2;
+}
+
 /**
  * Календарь, на который подписываемся: свой для сотрудника, выбранный — для админа.
  */
@@ -38,8 +43,8 @@ export async function syncHubViewGroups(connection, previous, next) {
     };
   }
 
-  const wasTable = previous?.activeTab === 1;
-  const isTable = next.activeTab === 1;
+  const wasTable = isTableViewTab(previous?.activeTab);
+  const isTable = isTableViewTab(next.activeTab);
   const prevJoined = previous?.lastJoinedCalendarEmployee ?? null;
   const nextJoined = next.activeTab === 0 ? next.calendarEmployee : null;
   let joinFailed = false;
