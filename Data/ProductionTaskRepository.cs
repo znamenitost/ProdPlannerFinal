@@ -292,6 +292,7 @@ namespace ProductionPlanner.Data
                         .SetProperty(t => t.ParentRowNumber, task.ParentRowNumber)
                         .SetProperty(t => t.Status, task.Status)
                         .SetProperty(t => t.IsPriorityMarked, task.IsPriorityMarked)
+                        .SetProperty(t => t.PriorityRank, task.PriorityRank)
                         .SetProperty(t => t.CommentEditedViaDialog, task.CommentEditedViaDialog)
                         .SetProperty(t => t.Progress, task.Progress)
                         .SetProperty(t => t.ActualHours, task.ActualHours)
@@ -313,6 +314,7 @@ namespace ProductionPlanner.Data
                         .SetProperty(t => t.EmployeeName, task.EmployeeName)
                         .SetProperty(t => t.ParentRowNumber, task.ParentRowNumber)
                         .SetProperty(t => t.IsPriorityMarked, task.IsPriorityMarked)
+                        .SetProperty(t => t.PriorityRank, task.PriorityRank)
                         .SetProperty(t => t.CommentEditedViaDialog, task.CommentEditedViaDialog)
                         .SetProperty(t => t.UpdatedAt, updatedAt),
                     cancellationToken);
@@ -714,6 +716,61 @@ namespace ProductionPlanner.Data
                             .ThenBy(c => c.Id)
                             .ToList();
                     });
+        }
+
+        public async Task<List<ProductionTask>> GetActivePriorityRankedTasksAsync(
+            IReadOnlyList<string> employeeNames,
+            CancellationToken cancellationToken = default)
+        {
+            if (employeeNames.Count == 0)
+                return [];
+
+            return await _context.ProductionTasks
+                .AsNoTracking()
+                .Where(t => employeeNames.Contains(t.EmployeeName)
+                            && t.PriorityRank != null
+                            && t.PriorityRank > 0
+                            && !t.HiddenFromTaskTable
+                            && t.Status != JobStatus.Completed
+                            && !t.IsFuss
+                            && !(t.IsSplitTask && t.ParentRowNumber == null))
+                .OrderBy(t => t.EmployeeName)
+                .ThenBy(t => t.PriorityRank)
+                .ThenBy(t => t.Id)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task ApplyPriorityRankChangesAsync(
+            IReadOnlyDictionary<int, int?> changes,
+            CancellationToken cancellationToken = default)
+        {
+            if (changes.Count == 0)
+                return;
+
+            var ids = changes.Keys.ToList();
+            var tasks = await _context.ProductionTasks
+                .Where(t => ids.Contains(t.Id))
+                .ToListAsync(cancellationToken);
+            var now = _timeService.Now;
+
+            foreach (var task in tasks)
+            {
+                task.PriorityRank = -task.Id;
+                task.IsPriorityMarked = false;
+                task.UpdatedAt = now;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+
+            foreach (var task in tasks)
+            {
+                if (!changes.TryGetValue(task.Id, out var rank))
+                    continue;
+                task.SetPriorityRank(rank);
+                task.UpdatedAt = now;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
         }
 
         public async Task ReorderTasksAsync(List<int> orderedIds, CancellationToken cancellationToken = default)

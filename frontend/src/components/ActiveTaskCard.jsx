@@ -40,12 +40,14 @@ import { CdrPreviewFileMark } from './taskTable/TaskFileNameCell';
 import { getCdrPreviewRowHandlers } from '../utils/cdrPreviewRowHandlers';
 import { taskShowsThroughApproval } from '../utils/throughApproval';
 import { ThroughApprovalMark } from './taskTable/ThroughApprovalChip';
-import { TaskPriorityMark } from './taskTable/TaskPriorityChip';
+import { TaskPriorityRankMark } from './taskTable/TaskPriorityRankMark';
 import { IssuedWithoutReadyMark } from './taskTable/IssuedWithoutReadyChip';
 import { FussTaskMark } from './taskTable/FussTaskChip';
+import { getTaskPriorityRank } from '../utils/taskPriorityRank';
 
 const blockedButtonSx = { opacity: 0.5 };
 const PROGRESS_MARKS = [0.3, 0.6, 0.9];
+const ACTIVE_TASK_PRIORITY_RANK_SIZE = 44;
 
 function invokeTaskAction(action, ...args) {
   void Promise.resolve(action(...args)).catch((err) => {
@@ -118,6 +120,7 @@ function ActiveTaskCard({
   const cdrPreviewRowHandlers = task.isFuss
     ? {}
     : getCdrPreviewRowHandlers({ task, onShowCdrPreview });
+  const rank = getTaskPriorityRank(task);
 
   return (
     <Card
@@ -132,12 +135,14 @@ function ActiveTaskCard({
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) max-content',
+            gridTemplateColumns: rank != null
+              ? 'minmax(0, 1fr) auto minmax(0, 1fr)'
+              : 'minmax(0, 1fr) max-content',
             gap: 1,
             alignItems: 'center'
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, gridColumn: 1 }}>
             {!isFuss && (
               <IconButton
                 size="small"
@@ -159,13 +164,6 @@ function ActiveTaskCard({
               <Tooltip title="Суета" arrow>
                 <Box component="span" aria-label="Суета">
                   <FussTaskMark />
-                </Box>
-              </Tooltip>
-            )}
-            {task?.isPriorityMarked && (
-              <Tooltip title="В приоритете" arrow>
-                <Box component="span" aria-label="В приоритете">
-                  <TaskPriorityMark />
                 </Box>
               </Tooltip>
             )}
@@ -206,13 +204,32 @@ function ActiveTaskCard({
             </Typography>
           </Box>
 
+          {rank != null && (
+            <Box
+              sx={{
+                gridColumn: 2,
+                gridRow: '1 / span 2',
+                alignSelf: 'center',
+                justifySelf: 'center',
+                px: 0.75
+              }}
+            >
+              <Tooltip title={`Очередь ${rank}`} arrow>
+                <Box component="span" aria-label={`Очередь ${rank}`}>
+                  <TaskPriorityRankMark rank={rank} selected size={ACTIVE_TASK_PRIORITY_RANK_SIZE} />
+                </Box>
+              </Tooltip>
+            </Box>
+          )}
+
           <Stack
             direction="row"
             sx={{
               flexWrap: 'wrap',
               gap: 0.75,
               justifyContent: 'flex-end',
-              alignItems: 'center'
+              alignItems: 'center',
+              gridColumn: rank != null ? 3 : 2
             }}
           >
             <Chip label={task.type} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
@@ -221,7 +238,7 @@ function ActiveTaskCard({
             )}
           </Stack>
 
-          <Box sx={{ position: 'relative', display: 'inline-flex', maxWidth: '100%' }}>
+          <Box sx={{ position: 'relative', display: 'inline-flex', maxWidth: '100%', gridColumn: 1, minWidth: 0 }}>
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
             {showWorkflowButtons && (
               <>
@@ -288,7 +305,8 @@ function ActiveTaskCard({
               color: 'text.secondary',
               justifyContent: 'flex-end',
               alignItems: 'center',
-              flexWrap: 'wrap'
+              flexWrap: 'wrap',
+              gridColumn: rank != null ? 3 : 2
             }}
           >
             {risk && (

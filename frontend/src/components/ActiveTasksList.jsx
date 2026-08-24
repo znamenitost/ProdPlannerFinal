@@ -50,12 +50,7 @@ import { offerPrintLabelsAfterReady } from '../utils/printLabelPrompt';
 import useCdrPreview from '../hooks/useCdrPreview';
 import { DEV_CDR_PREVIEW_ENABLED } from '../utils/devCdrPreviewConfig';
 import { formatUserActionError } from '../utils/actionError';
-
-function getDeadlineSortValue(task) {
-  if (!task?.deadline) return Number.POSITIVE_INFINITY;
-  const value = new Date(task.deadline).getTime();
-  return Number.isNaN(value) ? Number.POSITIVE_INFINITY : value;
-}
+import { sortActiveTasksForEmployeeStack } from '../utils/taskPriorityRank';
 
 function isBlockedActiveTask(task) {
   const statusLabel = getTaskStatusLine(task);
@@ -83,20 +78,13 @@ export default function ActiveTasksList({
   const sortMenuOpen = Boolean(sortAnchorEl);
   const cdrPreview = useCdrPreview();
 
-  const visibleTasks = useMemo(() => {
-    return tasks
-      .map((task, index) => ({ task, index }))
-      .sort((a, b) => {
-        if (blockedBottomSort) {
-          const blockedDiff = Number(isBlockedActiveTask(a.task)) - Number(isBlockedActiveTask(b.task));
-          if (blockedDiff) return blockedDiff;
-        }
-
-        const deadlineDiff = getDeadlineSortValue(a.task) - getDeadlineSortValue(b.task);
-        return deadlineDiff || a.index - b.index;
-      })
-      .map(({ task }) => task);
-  }, [tasks, blockedBottomSort]);
+  const visibleTasks = useMemo(
+    () => sortActiveTasksForEmployeeStack(tasks, {
+      blockedBottomSort,
+      isBlocked: isBlockedActiveTask
+    }),
+    [tasks, blockedBottomSort]
+  );
 
   const setPendingTask = useCallback((taskId) => {
     pendingTaskIdRef.current = taskId;
@@ -126,12 +114,13 @@ export default function ActiveTasksList({
 
     setPendingTask(task.id);
 
+    let completeResult = null;
     const runApi = async () => {
       if (action === 'start') await startTask(task.id, fussComment);
       else if (action === 'pause') await pauseTask(task.id);
       else if (action === 'resume') await resumeTask(task.id);
       else if (action === 'progress') await setProgress(task.id, progress);
-      else if (action === 'complete') await completeTask(task.id);
+      else if (action === 'complete') completeResult = await completeTask(task.id);
       await onUpdate();
     };
 
@@ -146,7 +135,11 @@ export default function ActiveTasksList({
         runAction: runApi
       });
       if (ok !== false && action === 'complete') {
-        await offerPrintLabelsAfterReady(promptInput, task, { showSuccess, showError });
+        await offerPrintLabelsAfterReady(promptInput, task, {
+          showSuccess,
+          showError,
+          parentTask: completeResult?.parentRow ?? null
+        });
       }
     } catch (err) {
       console.error('Ошибка действия:', err);

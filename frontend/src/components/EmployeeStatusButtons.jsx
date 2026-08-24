@@ -16,7 +16,6 @@ import {
   FactCheck,
   Inventory2,
   TaskAlt,
-  LocalFireDepartment,
   Print as PrintIcon
 } from '@mui/icons-material';
 import {
@@ -30,6 +29,7 @@ import {
   isInfoStatus
 } from '../constants/taskStatuses';
 import { canPrintOrderLabel } from '../utils/printLabelPrompt';
+import PriorityRankMenuItem from './taskTable/PriorityRankMenuItem';
 
 const blockedMenuItemSx = { opacity: 0.45 };
 
@@ -49,7 +49,7 @@ export default function EmployeeStatusButtons({
   onResume,
   onComplete,
   onSetStatus,
-  onTogglePriority,
+  onSetPriorityRank,
   onPrintOrderLabel
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
@@ -106,12 +106,11 @@ export default function EmployeeStatusButtons({
     });
   };
 
-  const runPriorityMark = (marked) => (event) => {
-    event?.stopPropagation?.();
+  const runPriorityRank = (rank) => {
     handleClose();
-    if (menuDisabled || !onTogglePriority) return;
-    void Promise.resolve(onTogglePriority(task, marked)).catch((err) => {
-      console.error('Ошибка смены пометки задачи:', err);
+    if (menuDisabled || !onSetPriorityRank) return;
+    void Promise.resolve(onSetPriorityRank(task, rank)).catch((err) => {
+      console.error('Ошибка смены очереди задачи:', err);
     });
   };
 
@@ -129,7 +128,7 @@ export default function EmployeeStatusButtons({
 
   const hasWorkflow = canStart || canPause || canResume || canComplete || (Boolean(onStart) && isInfo);
   const hasInfo = Boolean(onSetStatus);
-  const hasPriorityMark = Boolean(onTogglePriority);
+  const hasPriorityMark = Boolean(onSetPriorityRank);
   if (!hasWorkflow && !hasInfo && !hasPriorityMark && !canPrint) return null;
 
   const infoMenuItems = getInfoMenuItems(status);
@@ -197,12 +196,12 @@ export default function EmployeeStatusButtons({
           </MenuItem>
         )}
         {hasPriorityMark && (
-          <MenuItem onClick={runPriorityMark(!task?.isPriorityMarked)}>
-            <ListItemIcon>
-              <LocalFireDepartment fontSize="small" color="warning" />
-            </ListItemIcon>
-            <ListItemText>{task?.isPriorityMarked ? 'Убрать пометку' : 'Пометить'}</ListItemText>
-          </MenuItem>
+          <PriorityRankMenuItem
+            task={task}
+            disabled={menuDisabled}
+            onSelectRank={(_, rank) => runPriorityRank(rank)}
+            onParentClose={handleClose}
+          />
         )}
         {hasWorkflow && hasInfo && infoMenuItems.length > 0 && <Divider sx={{ my: 0.5 }} />}
         {hasInfo &&

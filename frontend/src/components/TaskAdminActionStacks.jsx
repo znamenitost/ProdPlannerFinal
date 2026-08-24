@@ -19,7 +19,6 @@ import {
   Inventory2,
   TaskAlt,
   AccessTime,
-  LocalFireDepartment,
   Notifications,
   NotificationsActive,
   Link as LinkIcon,
@@ -36,6 +35,7 @@ import {
   isInfoStatus
 } from '../constants/taskStatuses';
 import { canPrintOrderLabel } from '../utils/printLabelPrompt';
+import PriorityRankMenuItem from './taskTable/PriorityRankMenuItem';
 
 const blockedMenuItemSx = { opacity: 0.45 };
 const menuDividerSx = { my: 0.75 };
@@ -61,7 +61,7 @@ export default function TaskAdminActionStacks({
   onResume,
   onComplete,
   onSetStatus,
-  onTogglePriority,
+  onSetPriorityRank,
   showEdit = true,
   showWorkflow = true,
   maxSubscribed = false,
@@ -121,12 +121,10 @@ export default function TaskAdminActionStacks({
     });
   };
 
-  const runPriorityMark = (marked) => (event) => {
-    event.stopPropagation();
-    handleClose();
-    if (priorityMarkDisabled || !onTogglePriority) return;
-    void Promise.resolve(onTogglePriority(task, marked)).catch((err) => {
-      console.error('Ошибка смены пометки задачи:', err);
+  const runPriorityRank = (rank) => {
+    if (priorityMarkDisabled || !onSetPriorityRank) return;
+    void Promise.resolve(onSetPriorityRank(task, rank)).catch((err) => {
+      console.error('Ошибка смены очереди задачи:', err);
     });
   };
 
@@ -173,20 +171,15 @@ export default function TaskAdminActionStacks({
       </MenuItem>
     );
   }
-  if (onTogglePriority) {
+  if (onSetPriorityRank) {
     editDeleteItems.push(
-      <MenuItem
+      <PriorityRankMenuItem
         key="priority"
+        task={task}
         disabled={priorityMarkDisabled}
-        onClick={runPriorityMark(!task?.isPriorityMarked)}
-      >
-        <ListItemIcon>
-          <LocalFireDepartment fontSize="small" color="warning" />
-        </ListItemIcon>
-        <ListItemText>
-          {task?.isPriorityMarked ? 'Убрать пометку' : 'Пометить'}
-        </ListItemText>
-      </MenuItem>
+        onSelectRank={(_, rank) => runPriorityRank(rank)}
+        onParentClose={handleClose}
+      />
     );
   }
   if (editDeleteItems.length > 0) sections.push(editDeleteItems);

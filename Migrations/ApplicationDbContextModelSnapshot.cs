@@ -299,6 +299,9 @@ namespace ProductionPlanner.Migrations
                     b.Property<int?>("ParentRowNumber")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("PriorityRank")
+                        .HasColumnType("integer");
+
                     b.Property<double>("ProductionEstimateHours")
                         .HasColumnType("double precision");
 

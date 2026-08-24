@@ -155,6 +155,13 @@ export async function completeTask(id) {
     headers: { 'Content-Type': 'application/json' }
   });
   if (!res.ok) await throwApiError(res, 'Ошибка завершения задачи');
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 export function buildTaskUpdatePayload(task, employeeName, statusText, extra) {

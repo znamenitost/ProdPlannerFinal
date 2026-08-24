@@ -41,4 +41,8 @@ public interface ITaskTableService
         CancellationToken cancellationToken = default);
     Task<TaskTableServiceResult<bool>> DeleteRowAsync(int id, CancellationToken cancellationToken = default);
     Task ReorderRowsAsync(List<int> orderedIds, CancellationToken cancellationToken = default);
+    Task<TaskTableServiceResult<ProductionTask>> SetPriorityRankAsync(
+        int taskId,
+        int? rank,
+        CancellationToken cancellationToken = default);
 }

@@ -38,14 +38,18 @@ public class TaskListQueryService : ITaskListQueryService
             .ToList();
         var splitMetadataByChild = await _repo.GetTaskSplitMetadataByChildTaskIdsAsync(childTaskIds, cancellationToken);
         var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync(
-            tasks.Select(task => task.Id).ToList(),
+            TaskCdrPreviewService.CollectPreviewLookupIds(tasks),
             cancellationToken);
 
         return tasks
             .Select(task =>
             {
                 splitMetadataByChild.TryGetValue(task.Id, out var splitMetadata);
-                return MapTaskToResult(task, now, splitMetadata, previewIds.Contains(task.Id));
+                return MapTaskToResult(
+                    task,
+                    now,
+                    splitMetadata,
+                    TaskCdrPreviewService.HasPreview(task.Id, task.ParentRowNumber, previewIds));
             })
             .Cast<object>()
             .ToList();
@@ -236,6 +240,8 @@ public class TaskListQueryService : ITaskListQueryService
             WorkPhase = task.WorkPhase,
             task.IssuedWithoutReady,
             task.IsFuss,
+            task.IsPriorityMarked,
+            task.PriorityRank,
             HasCdrPreview = hasCdrPreview
         };
     }

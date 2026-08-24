@@ -64,6 +64,15 @@ namespace ProductionPlanner.Models
         
         public JobStatus Status { get; set; }
         public bool IsPriorityMarked { get; set; }
+
+        /// <summary>Номер в очереди сотрудника (1, 2, 3…). null — не в очереди.</summary>
+        public int? PriorityRank { get; set; }
+
+        public void SetPriorityRank(int? rank)
+        {
+            PriorityRank = rank is > 0 ? rank : null;
+            IsPriorityMarked = PriorityRank != null;
+        }
         public double Progress { get; set; }
         public double ActualHours { get; set; }
         public DateTime? CompletedAt { get; set; }

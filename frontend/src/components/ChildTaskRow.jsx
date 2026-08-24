@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { TableRow, TableCell, Box, Typography, Chip, CircularProgress } from '@mui/material';
 import { areChildRowPropsEqual } from '../utils/taskTableRowMemo';
-import { getCdrPreviewRowHandlers } from '../utils/cdrPreviewRowHandlers';
+import { getCdrPreviewRowHandlers, resolveCdrPreviewSourceTask } from '../utils/cdrPreviewRowHandlers';
 import { alpha } from '@mui/material/styles';
 import { Person } from '@mui/icons-material';
 import { columnCellSx, hoursColumnSx, typeColumnSx } from '../utils/taskTableColumns';
@@ -49,7 +49,7 @@ function ChildTaskRow({
   onResume,
   onComplete,
   onSetStatus,
-  onTogglePriority,
+  onSetPriorityRank,
   pendingLifecycleTaskId = null,
   onEdit,
   onDelete,
@@ -142,6 +142,7 @@ function ChildTaskRow({
   const tableColSpan = taskTableColumnCount(columnVisibility, showHoursTypeColumns);
   const cdrPreviewRowHandlers = getCdrPreviewRowHandlers({
     task,
+    previewTask: resolveCdrPreviewSourceTask(task, sharedGroupParentTask),
     onShowCdrPreview,
   });
 
@@ -242,7 +243,12 @@ function ChildTaskRow({
           <TaskStatusCell statusText={task.statusText} task={task} />
           <ThroughApprovalChip task={task} />
           <FussTaskChip task={task} />
-          <TaskPriorityChip task={task} viewerEmployeeName={priorityMarkViewer} />
+          <TaskPriorityChip
+            task={task}
+            viewerEmployeeName={priorityMarkViewer}
+            onSelectRank={isAdmin ? onSetPriorityRank : undefined}
+            pending={pendingLifecycleTaskId === task.id}
+          />
           {isAdmin && <MaxSubscribeChip subscribed={maxSubscribed} />}
         </Box>
       </TableCell>
@@ -264,7 +270,7 @@ function ChildTaskRow({
               onResume={onResume}
               onComplete={onComplete}
               onSetStatus={onSetStatus}
-              onTogglePriority={onTogglePriority}
+              onSetPriorityRank={onSetPriorityRank}
               showEdit={false}
               maxSubscribed={maxSubscribed}
               maxCanSubscribe={maxCanSubscribe}
@@ -281,7 +287,7 @@ function ChildTaskRow({
               onResume={showLifecycleMenu ? onResume : undefined}
               onComplete={showLifecycleMenu ? onComplete : undefined}
               onSetStatus={showLifecycleMenu && !task.isFuss ? onSetStatus : null}
-              onTogglePriority={showLifecycleMenu ? onTogglePriority : undefined}
+              onSetPriorityRank={showLifecycleMenu ? onSetPriorityRank : undefined}
               onPrintOrderLabel={printLabelHandler}
             />
           )}

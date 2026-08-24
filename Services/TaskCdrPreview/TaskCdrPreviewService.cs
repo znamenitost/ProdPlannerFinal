@@ -25,6 +25,43 @@ public class TaskCdrPreviewService : ITaskCdrPreviewService
         int taskId,
         CancellationToken cancellationToken = default)
     {
+        var preview = await GetStoredAsync(taskId, cancellationToken);
+        if (preview != null)
+            return preview;
+
+        var parentId = await _db.ProductionTasks
+            .AsNoTracking()
+            .Where(t => t.Id == taskId && t.IsSplitTask && t.ParentRowNumber != null && t.ParentRowNumber > 0)
+            .Select(t => t.ParentRowNumber)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return parentId is int pid ? await GetStoredAsync(pid, cancellationToken) : null;
+    }
+
+    public static bool HasPreview(int taskId, int? parentRowNumber, ISet<int> previewIds)
+    {
+        if (previewIds.Contains(taskId))
+            return true;
+        return parentRowNumber is > 0 && previewIds.Contains(parentRowNumber.Value);
+    }
+
+    public static List<int> CollectPreviewLookupIds(IEnumerable<ProductionTask> tasks)
+    {
+        var ids = new HashSet<int>();
+        foreach (var task in tasks)
+        {
+            ids.Add(task.Id);
+            if (task.IsSplitTask && task.ParentRowNumber is > 0)
+                ids.Add(task.ParentRowNumber.Value);
+        }
+
+        return ids.ToList();
+    }
+
+    private async Task<(byte[] Bytes, string ContentType, DateTime UpdatedAt, string SourceKey)?> GetStoredAsync(
+        int taskId,
+        CancellationToken cancellationToken)
+    {
         var preview = await _db.TaskCdrPreviews
             .AsNoTracking()
             .Where(p => p.TaskId == taskId)

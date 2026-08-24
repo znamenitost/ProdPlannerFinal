@@ -5,6 +5,13 @@ export function isCdrPreviewSecondaryClick(event) {
   return event.button === 0 && Boolean(event.ctrlKey);
 }
 
+/** Для split-ребёнка превью лежит на родителе. */
+export function resolveCdrPreviewSourceTask(task, parentTask = null) {
+  if (parentTask?.hasCdrPreview) return parentTask;
+  if (task?.hasCdrPreview) return task;
+  return parentTask || task;
+}
+
 /** Обработчики строки таблицы: превью .cdr по ПКМ (Windows — удержание, macOS — клик). */
 export function getCdrPreviewRowHandlers({ task, previewTask = task, onShowCdrPreview }) {
   if (!onShowCdrPreview) return {};

@@ -1,14 +1,9 @@
 import { printCustomerOrderLabel } from '../services/api';
+import { canPrintOrderLabel, resolvePrintLabelTaskAfterReady } from './printLabelTask';
+
+export { canPrintOrderLabel, resolvePrintLabelTaskAfterReady };
 
 const MAX_LABEL_COPIES = 50;
-
-/** Можно ли предложить печать наклейки для этой задачи. */
-export function canPrintOrderLabel(task) {
-  if (!task || task.isFuss) return false;
-  // Этапы split не печатаем — этикетка на весь заказ (родитель).
-  if (task.isSplitTask && task.parentRowNumber != null && task.parentRowNumber !== 0) return false;
-  return true;
-}
 
 /**
  * Спросить количество наклеек.
@@ -38,8 +33,9 @@ export async function promptLabelQuantity(promptInput, options = {}) {
 }
 
 /** После статуса «Готово»: спросить, печатать ли наклейки, и сколько. */
-export async function offerPrintLabelsAfterReady(promptInput, task, { showSuccess, showError } = {}) {
-  if (!canPrintOrderLabel(task) || !promptInput) return;
+export async function offerPrintLabelsAfterReady(promptInput, task, { showSuccess, showError, parentTask } = {}) {
+  const printTask = resolvePrintLabelTaskAfterReady(task, parentTask);
+  if (!printTask || !promptInput) return;
 
   const quantity = await promptLabelQuantity(promptInput, {
     title: 'Заказ готов',
@@ -50,7 +46,7 @@ export async function offerPrintLabelsAfterReady(promptInput, task, { showSucces
   if (quantity == null) return;
 
   try {
-    const job = await printCustomerOrderLabel(task.id, quantity);
+    const job = await printCustomerOrderLabel(printTask.id, quantity);
     const code = job?.pickupCode ? ` (${job.pickupCode})` : '';
     const copies = job?.copies > 1 ? ` ×${job.copies}` : quantity > 1 ? ` ×${quantity}` : '';
     showSuccess?.(`Наклейки отправлены на печать${code}${copies}`);

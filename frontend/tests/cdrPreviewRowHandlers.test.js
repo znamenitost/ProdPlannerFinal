@@ -2,7 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getCdrPreviewRowHandlers,
-  isCdrPreviewSecondaryClick
+  isCdrPreviewSecondaryClick,
+  resolveCdrPreviewSourceTask
 } from '../src/utils/cdrPreviewRowHandlers.js';
 
 describe('cdrPreviewRowHandlers', () => {
@@ -78,6 +79,18 @@ describe('cdrPreviewRowHandlers', () => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0][0], parent);
     assert.deepEqual(calls[0][1], { x: 7, y: 8 });
+  });
+
+  it('resolves split-child preview to the parent when the parent has it', () => {
+    const child = { id: 2, hasCdrPreview: false };
+    const parent = { id: 1, hasCdrPreview: true };
+    assert.equal(resolveCdrPreviewSourceTask(child, parent), parent);
+  });
+
+  it('keeps the child as preview source when only the child has a stored preview', () => {
+    const child = { id: 2, hasCdrPreview: true };
+    const parent = { id: 1, hasCdrPreview: false };
+    assert.equal(resolveCdrPreviewSourceTask(child, parent), child);
   });
 
   it('returns empty object when preview disabled', () => {

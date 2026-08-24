@@ -87,6 +87,12 @@ namespace ProductionPlanner.Data
         Task HideTaskFromTableAsync(int taskId, CancellationToken cancellationToken = default);
         Task<Dictionary<int, List<ProductionTask>>> GetSplitChildrenByParentIdsAsync(IReadOnlyList<int> parentIds, CancellationToken cancellationToken = default);
         Task ReorderTasksAsync(List<int> orderedIds, CancellationToken cancellationToken = default);
+        Task<List<ProductionTask>> GetActivePriorityRankedTasksAsync(
+            IReadOnlyList<string> employeeNames,
+            CancellationToken cancellationToken = default);
+        Task ApplyPriorityRankChangesAsync(
+            IReadOnlyDictionary<int, int?> changes,
+            CancellationToken cancellationToken = default);
         Task<List<WorkInterval>> GetWorkIntervalsForDateRangeAsync(string employeeName, DateTime start, DateTime end, CancellationToken cancellationToken = default);
         Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);
         Task ExecuteWithTaskLifecycleLockAsync(int taskId, Func<CancellationToken, Task> action, CancellationToken cancellationToken = default);

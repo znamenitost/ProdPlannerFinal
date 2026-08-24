@@ -258,6 +258,15 @@ export default function useTaskTableApi() {
     });
   }, [request]);
 
+  const setPriorityRank = useCallback(async (id, rank) => {
+    return request(`/api/tasks/table/row/${id}/priority-rank`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rank: rank ?? null }),
+      timeoutMs: MUTATION_TIMEOUT_MS
+    });
+  }, [request]);
+
   const api = useMemo(() => ({
     fetchTableRow,
     loadRows,
@@ -274,8 +283,9 @@ export default function useTaskTableApi() {
     openFile,
     openFolder,
     getTaskForSplit,
-    splitTask
-  }), [fetchTableRow, loadRows, loadChildren, createRow, updateRow, getIntervals, updateIntervals, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, openFolder, getTaskForSplit, splitTask]);
+    splitTask,
+    setPriorityRank
+  }), [fetchTableRow, loadRows, loadChildren, createRow, updateRow, getIntervals, updateIntervals, deleteRow, startTask, pauseTask, resumeTask, completeTask, openFile, openFolder, getTaskForSplit, splitTask, setPriorityRank]);
 
   return api;
 }

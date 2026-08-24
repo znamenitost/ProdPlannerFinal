@@ -20,7 +20,6 @@ import {
 import { startCdrAutoSearchAfterSave } from '../../utils/cdrAutoSearch';
 import { promptFussStartComment } from '../../utils/fussStart';
 import {
-  canPrintOrderLabel,
   offerPrintLabelsAfterReady,
   printOrderLabelWithQuantityPrompt
 } from '../../utils/printLabelPrompt';
@@ -442,12 +441,20 @@ export default function useTaskTableActions({
   );
   const handleCompleteTask = useCallback(
     async (row) => {
-      const ok = await runLifecycleAction(api.completeTask, row);
+      let completeResult = null;
+      const ok = await runLifecycleAction(async (id, employee) => {
+        completeResult = await api.completeTask(id, employee);
+        return completeResult;
+      }, row);
       if (ok) {
-        await offerPrintLabelsAfterReady(promptInput, row, { showSuccess, showError });
+        await offerPrintLabelsAfterReady(promptInput, row, {
+          showSuccess,
+          showError,
+          parentTask: completeResult?.parentRow ?? null
+        });
       }
     },
-    [api.completeTask, runLifecycleAction, promptInput, showSuccess, showError]
+    [api, runLifecycleAction, promptInput, showSuccess, showError]
   );
 
   const handleSetStatus = useCallback(async (row, statusText, extra) => {
@@ -462,8 +469,19 @@ export default function useTaskTableActions({
         extra
       ));
       await syncRowFromServer(row);
-      if (statusText === STATUS_COMPLETED && canPrintOrderLabel(row)) {
-        await offerPrintLabelsAfterReady(promptInput, row, { showSuccess, showError });
+      if (statusText === STATUS_COMPLETED) {
+        let parentTask = null;
+        if (row.parentRowNumber) {
+          try {
+            parentTask = await api.fetchTableRow(
+              row.parentRowNumber,
+              selectedEmployeeForHighlight || row.employeeName
+            );
+          } catch {
+            parentTask = null;
+          }
+        }
+        await offerPrintLabelsAfterReady(promptInput, row, { showSuccess, showError, parentTask });
       }
     } catch (err) {
       console.error(err);
@@ -484,30 +502,26 @@ export default function useTaskTableActions({
     promptInput
   ]);
 
-  const handleTogglePriority = useCallback(async (row, marked) => {
+  const handleSetPriorityRank = useCallback(async (row, rank) => {
     if (pendingPriorityTaskIdRef.current === row.id) return;
     pendingPriorityTaskIdRef.current = row.id;
     try {
-      await api.updateRow(
-        row.id,
-        buildTaskUpdatePayload(
-          row,
-          selectedEmployeeForHighlight || row.employeeName,
-          row.statusText,
-          { priorityMarked: marked }
-        )
-      );
+      await api.setPriorityRank(row.id, rank);
       await syncRowFromServer(row);
+      await refresh();
+      if (row.parentRowNumber) {
+        await loadChildrenForParent(row.parentRowNumber, { force: true });
+      }
     } catch (err) {
       console.error(err);
       if (err?.code === 'concurrency_conflict') {
         await syncRowFromServer(row);
       }
-      showError(formatUserActionError(err, 'Не удалось изменить пометку задачи'));
+      showError(formatUserActionError(err, 'Не удалось изменить очередь задачи'));
     } finally {
       pendingPriorityTaskIdRef.current = null;
     }
-  }, [api, selectedEmployeeForHighlight, showError, syncRowFromServer]);
+  }, [api, loadChildrenForParent, refresh, showError, syncRowFromServer]);
 
   const handleDeleteRow = useCallback(async (id) => {
     if (deletingRowIdRef.current != null) {
@@ -602,7 +616,7 @@ export default function useTaskTableActions({
     handleResumeTask,
     handleCompleteTask,
     handleSetStatus,
-    handleTogglePriority,
+    handleSetPriorityRank,
     handleDeleteRow,
     handleAddNewRow,
     handleEditRow,

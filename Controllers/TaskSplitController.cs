@@ -117,7 +117,10 @@ namespace ProductionPlanner.Controllers
             var splits = await _repo.GetTaskSplitsByParentIdAsync(parentRowNumber, cancellationToken);
             var sequenceByChild = splits.ToDictionary(s => s.ChildTaskId, s => s.SequenceOrder);
             var childIds = children.Select(c => c.Id).ToList();
-            var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync(childIds, cancellationToken);
+            var previewLookupIds = childIds.ToList();
+            if (parent != null)
+                previewLookupIds.Add(parent.Id);
+            var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync(previewLookupIds, cancellationToken);
             var intervalsByTask = (await _repo.GetWorkIntervalsForTaskIdsAsync(childIds, cancellationToken))
                 .GroupBy(i => i.ProductionTaskId)
                 .ToDictionary(g => g.Key, g => g.ToList());
@@ -125,12 +128,35 @@ namespace ProductionPlanner.Controllers
                 childIds,
                 currentUser.Id,
                 cancellationToken);
+            var employeeNames = children
+                .Select(c => c.EmployeeName)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct()
+                .ToList();
+            var ranked = await _repo.GetActivePriorityRankedTasksAsync(employeeNames, cancellationToken);
+            var queuesByEmployee = ranked
+                .Where(t => t.PriorityRank is > 0)
+                .GroupBy(t => t.EmployeeName, StringComparer.Ordinal)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g
+                        .OrderBy(t => t.PriorityRank)
+                        .ThenBy(t => t.Id)
+                        .Select(t => new PriorityQueueItemDto
+                        {
+                            Rank = t.PriorityRank!.Value,
+                            TaskId = t.Id,
+                            Label = t.TaskDisplayName
+                        })
+                        .ToList(),
+                    StringComparer.Ordinal);
 
             var result = children.Select(c =>
             {
                 intervalsByTask.TryGetValue(c.Id, out var intervals);
                 intervals ??= [];
                 var workIntervals = intervals.Select(WorkIntervalDto.FromEntity).ToList();
+                queuesByEmployee.TryGetValue(c.EmployeeName ?? "", out var priorityQueue);
                 return new
                 {
                     c.Id,
@@ -143,6 +169,8 @@ namespace ProductionPlanner.Controllers
                     StatusText = TaskStatusMapper.ToText(c.Status),
                     status = (int)c.Status,
                     isPriorityMarked = c.IsPriorityMarked,
+                    priorityRank = c.PriorityRank,
+                    priorityQueue = priorityQueue ?? [],
                     c.Deadline,
                     c.EstimateHours,
                     c.ActualHours,
@@ -167,7 +195,7 @@ namespace ProductionPlanner.Controllers
                     testEstimateHours = c.TestEstimateHours,
                     productionEstimateHours = c.ProductionEstimateHours,
                     workPhase = (int)c.WorkPhase,
-                    hasCdrPreview = previewIds.Contains(c.Id)
+                    hasCdrPreview = TaskCdrPreviewService.HasPreview(c.Id, c.ParentRowNumber, previewIds)
                 };
             });
             return Ok(result);

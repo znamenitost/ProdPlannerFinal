@@ -117,6 +117,11 @@ public class UpdateTaskRequest
     public bool? CommentEditedViaDialog { get; set; }
 }
 
+public class UpdatePriorityRankRequest
+{
+    public int? Rank { get; set; }
+}
+
 public class UpdateWorkIntervalsRequest
 {
     public List<WorkIntervalUpdateItem> Intervals { get; set; } = new();

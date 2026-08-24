@@ -77,7 +77,7 @@ function ParentTaskRow({
   onResume,
   onComplete,
   onSetStatus,
-  onTogglePriority,
+  onSetPriorityRank,
   pendingLifecycleTaskId = null,
   onEdit,
   onDelete,
@@ -399,6 +399,8 @@ function ParentTaskRow({
                 task={task}
                 childrenTasks={childrenTasks}
                 viewerEmployeeName={priorityMarkViewer}
+                onSelectRank={canEdit && !hasChildren && !task.isFuss ? onSetPriorityRank : undefined}
+                pending={pendingLifecycleTaskId === task.id}
               />
               <IssuedWithoutReadyChip task={task} />
               {canEdit && <MaxSubscribeChip subscribed={maxSubscribedSet.has(task.id)} />}
@@ -423,7 +425,7 @@ function ParentTaskRow({
                 onResume={onResume}
                 onComplete={onComplete}
                 onSetStatus={hasChildren || task.isFuss ? null : onSetStatus}
-                onTogglePriority={hasChildren || task.isFuss ? null : onTogglePriority}
+                onSetPriorityRank={hasChildren || task.isFuss ? null : onSetPriorityRank}
                 showWorkflow={!hasChildren}
                 maxSubscribed={maxSubscribedSet.has(task.id)}
                 maxCanSubscribe={maxCanSubscribe}
@@ -440,7 +442,7 @@ function ParentTaskRow({
                 onResume={showLifecycleMenu ? onResume : undefined}
                 onComplete={showLifecycleMenu ? onComplete : undefined}
                 onSetStatus={showLifecycleMenu && !task.isFuss ? onSetStatus : null}
-                onTogglePriority={showLifecycleMenu ? onTogglePriority : undefined}
+                onSetPriorityRank={showLifecycleMenu ? onSetPriorityRank : undefined}
                 onPrintOrderLabel={printLabelHandler}
               />
             )}
@@ -471,7 +473,7 @@ function ParentTaskRow({
           onResume={onResume}
           onComplete={onComplete}
           onSetStatus={onSetStatus}
-          onTogglePriority={onTogglePriority}
+          onSetPriorityRank={onSetPriorityRank}
           pendingLifecycleTaskId={pendingLifecycleTaskId}
           onEdit={onEdit}
           onDelete={onDelete}
@@ -488,7 +490,7 @@ function ParentTaskRow({
           columnVisibility={columnVisibility}
           textLimit={limit}
           showPlannedProgress={showPlannedProgress}
-          cdrPreviewBuilding={isCdrPreviewBuilding(child.id)}
+          cdrPreviewBuilding={isCdrPreviewBuilding(child.id) || isCdrPreviewBuilding(task.id)}
           maxSubscribed={maxSubscribedSet.has(child.id)}
           maxCanSubscribe={maxCanSubscribe}
           onMaxSubscribeToggle={onMaxSubscribeToggle}

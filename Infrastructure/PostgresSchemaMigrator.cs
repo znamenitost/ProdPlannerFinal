@@ -88,6 +88,29 @@ public static class PostgresSchemaMigrator
                     ADD COLUMN IF NOT EXISTS "IsPriorityMarked" boolean NOT NULL DEFAULT false;
 
                 ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "PriorityRank" integer NULL;
+
+                WITH ranked AS (
+                    SELECT "Id",
+                           ROW_NUMBER() OVER (
+                               PARTITION BY "EmployeeName"
+                               ORDER BY "DisplayOrder" DESC, "Id"
+                           ) AS rn
+                    FROM "ProductionTasks"
+                    WHERE "IsPriorityMarked" = TRUE
+                      AND "PriorityRank" IS NULL
+                      AND "HiddenFromTaskTable" = FALSE
+                      AND "Status" <> 3
+                      AND "IsFuss" = FALSE
+                      AND NOT ("IsSplitTask" = TRUE AND "ParentRowNumber" IS NULL)
+                      AND COALESCE("EmployeeName", '') <> ''
+                )
+                UPDATE "ProductionTasks" AS t
+                SET "PriorityRank" = ranked.rn
+                FROM ranked
+                WHERE t."Id" = ranked."Id";
+
+                ALTER TABLE "ProductionTasks"
                     ADD COLUMN IF NOT EXISTS "CommentEditedViaDialog" boolean NOT NULL DEFAULT false;
 
                 ALTER TABLE "ProductionTasks"

@@ -182,4 +182,38 @@ public static class SplitTaskStatusAggregator
 
         return children.Any(c => c.IsPriorityMarked);
     }
+
+    /// <summary>
+    /// Номер очереди для отображения. У split-родителя админ без фильтра не видит одну цифру
+    /// (у детей разные сотрудники); сотрудник / фильтр — номер своей подзадачи.
+    /// </summary>
+    public static int? ResolvePriorityRank(
+        ProductionTask parent,
+        IReadOnlyList<ProductionTask>? children,
+        string? viewerEmployeeName = null,
+        bool restrictToViewer = false)
+    {
+        var isSplitParent = parent.IsSplitTask && parent.ParentRowNumber == null;
+
+        if (isSplitParent && children is { Count: > 0 })
+        {
+            if (!restrictToViewer || string.IsNullOrWhiteSpace(viewerEmployeeName))
+                return null;
+
+            return children
+                .FirstOrDefault(c =>
+                    string.Equals(c.EmployeeName, viewerEmployeeName, StringComparison.Ordinal)
+                    && c.PriorityRank is > 0)
+                ?.PriorityRank;
+        }
+
+        if (restrictToViewer
+            && !string.IsNullOrWhiteSpace(viewerEmployeeName)
+            && !string.Equals(parent.EmployeeName, viewerEmployeeName, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return parent.PriorityRank is > 0 ? parent.PriorityRank : null;
+    }
 }

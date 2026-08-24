@@ -419,6 +419,41 @@ public class ProductionTasksController : ControllerBase
         }
     }
 
+    [HttpPut("table/row/{id}/priority-rank")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdatePriorityRank(
+        int id,
+        [FromBody] UpdatePriorityRankRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await _tableService.SetPriorityRankAsync(id, request?.Rank, cancellationToken);
+            if (result.NotFound)
+                return NotFound();
+            if (result.Error != null)
+                return BadRequest(new { error = result.Error });
+
+            var (currentUser, targetEmployeeName) = await ResolveViewerAsync(null, cancellationToken);
+            if (currentUser == null) return Unauthorized();
+            var isAdmin = await _userManager.IsInRoleAsync(currentUser, "Admin");
+            var dto = await _tableService.GetRowDtoAsync(
+                id,
+                targetEmployeeName ?? "",
+                isAdmin,
+                currentUser.Id,
+                cancellationToken);
+            if (dto == null)
+                return Ok(result.Data);
+            return Ok(dto);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка в UpdatePriorityRank для id {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
     [HttpDelete("table/row/{id}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteTableRow(int id, CancellationToken cancellationToken = default)

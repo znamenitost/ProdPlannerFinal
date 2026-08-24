@@ -15,6 +15,12 @@ public class TaskTableRowDto
     public JobStatus Status { get; set; }
     public bool IsPriorityMarked { get; set; }
 
+    /// <summary>Номер в очереди текущего сотрудника. У split-родителя — номер зрителя, иначе null.</summary>
+    public int? PriorityRank { get; set; }
+
+    /// <summary>Очередь 1-2-3 этого исполнителя (для пикера, не только текущая страница).</summary>
+    public List<PriorityQueueItemDto> PriorityQueue { get; set; } = [];
+
     /// <summary>Выдан без статуса «Готово» — показать маркер «?».</summary>
     public bool IssuedWithoutReady { get; set; }
 
@@ -115,6 +121,11 @@ public class TaskTableRowDto
             StatusText = statusText,
             Status = parent.Status,
             IsPriorityMarked = SplitTaskStatusAggregator.AggregatePriorityMarked(
+                parent,
+                children,
+                priorityMarkViewerEmployeeName,
+                restrictPriorityMarkToViewer),
+            PriorityRank = SplitTaskStatusAggregator.ResolvePriorityRank(
                 parent,
                 children,
                 priorityMarkViewerEmployeeName,

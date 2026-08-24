@@ -163,6 +163,7 @@ public class TaskTableService : ITaskTableService
         }).ToList();
 
         await ApplyCommentBadgeCountsAsync(rows, viewerUserId, cancellationToken);
+        await ApplyPriorityQueuesAsync(rows, childrenByParent, cancellationToken);
 
         if (effectivePickupMode && rows.Count > 0)
         {
@@ -202,8 +203,11 @@ public class TaskTableService : ITaskTableService
         if (task.HiddenFromTaskTable)
             return null;
 
-        var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync([id], cancellationToken);
-        var hasCdrPreview = previewIds.Contains(id);
+        var previewLookupIds = task.ParentRowNumber is > 0
+            ? new List<int> { id, task.ParentRowNumber.Value }
+            : [id];
+        var previewIds = await _cdrPreviewService.GetExistingTaskIdsAsync(previewLookupIds, cancellationToken);
+        var hasCdrPreview = TaskCdrPreviewService.HasPreview(id, task.ParentRowNumber, previewIds);
         var now = _timeService.Now;
         var intervals = (IReadOnlyList<WorkInterval>)(task.WorkIntervals ?? []);
         var (priorityMarkViewer, restrictPriorityMark) = GetPriorityMarkScope(normalizedTargetEmployeeName, viewerIsAdmin);
@@ -228,6 +232,7 @@ public class TaskTableService : ITaskTableService
                 && task.Status == JobStatus.Waiting;
             dto.HasCdrPreview = hasCdrPreview;
             await ApplyCommentBadgeCountsAsync([dto], viewerUserId, cancellationToken);
+            await ApplyPriorityQueuesAsync([dto], childrenByParent: null, cancellationToken);
             return dto;
         }
 
@@ -261,6 +266,10 @@ public class TaskTableService : ITaskTableService
             restrictPriorityMark);
         parentDto.HasCdrPreview = hasCdrPreview;
         await ApplyCommentBadgeCountsAsync([parentDto], viewerUserId, cancellationToken);
+        Dictionary<int, List<ProductionTask>>? childrenMap = null;
+        if (children is { Count: > 0 })
+            childrenMap = new Dictionary<int, List<ProductionTask>> { [task.Id] = children.ToList() };
+        await ApplyPriorityQueuesAsync([parentDto], childrenMap, cancellationToken);
         return parentDto;
     }
 
@@ -282,6 +291,133 @@ public class TaskTableService : ITaskTableService
             if (counts.TryGetValue(row.Id, out var count))
                 row.CommentBadgeCount = count;
         }
+    }
+
+    private static Dictionary<string, List<PriorityQueueItemDto>> GroupPriorityQueues(
+        IEnumerable<ProductionTask> ranked)
+    {
+        return ranked
+            .Where(t => t.PriorityRank is > 0 && !string.IsNullOrWhiteSpace(t.EmployeeName))
+            .GroupBy(t => t.EmployeeName, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .OrderBy(t => t.PriorityRank)
+                    .ThenBy(t => t.Id)
+                    .Select(t => new PriorityQueueItemDto
+                    {
+                        Rank = t.PriorityRank!.Value,
+                        TaskId = t.Id,
+                        Label = t.TaskDisplayName
+                    })
+                    .ToList(),
+                StringComparer.Ordinal);
+    }
+
+    private async Task ApplyPriorityQueuesAsync(
+        IReadOnlyList<TaskTableRowDto> rows,
+        Dictionary<int, List<ProductionTask>>? childrenByParent,
+        CancellationToken cancellationToken)
+    {
+        if (rows.Count == 0)
+            return;
+
+        var names = rows
+            .Select(r => r.EmployeeName)
+            .Concat(childrenByParent?.Values.SelectMany(c => c.Select(t => t.EmployeeName))
+                    ?? [])
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (names.Count == 0)
+            return;
+
+        var ranked = await _repo.GetActivePriorityRankedTasksAsync(names, cancellationToken);
+        var queues = GroupPriorityQueues(ranked);
+
+        foreach (var row in rows)
+        {
+            List<ProductionTask>? children = null;
+            childrenByParent?.TryGetValue(row.Id, out children);
+            var employeeForQueue = row.EmployeeName;
+            if (row.IsSplitTask && row.ParentRowNumber == null && children is { Count: > 0 })
+            {
+                var viewerChild = children.FirstOrDefault(c =>
+                    c.PriorityRank is > 0
+                    && (row.PriorityRank == null
+                        || c.PriorityRank == row.PriorityRank)
+                    && (string.IsNullOrWhiteSpace(employeeForQueue)
+                        || string.Equals(c.EmployeeName, employeeForQueue, StringComparison.Ordinal)));
+                if (viewerChild != null)
+                    employeeForQueue = viewerChild.EmployeeName;
+            }
+
+            if (string.IsNullOrWhiteSpace(employeeForQueue))
+                continue;
+            if (queues.TryGetValue(employeeForQueue, out var queue))
+                row.PriorityQueue = queue;
+        }
+    }
+
+    public async Task<TaskTableServiceResult<ProductionTask>> SetPriorityRankAsync(
+        int taskId,
+        int? rank,
+        CancellationToken cancellationToken = default)
+    {
+        var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
+        if (task == null)
+            return TaskTableServiceResult<ProductionTask>.Missing();
+
+        var isSplitParent = task.IsSplitTask && task.ParentRowNumber == null;
+        if (isSplitParent)
+            return TaskTableServiceResult<ProductionTask>.Fail(
+                "Очередь ставится на подзадачу сотрудника, не на общую строку.");
+        if (task.IsFuss)
+            return TaskTableServiceResult<ProductionTask>.Fail("Для «Суеты» очередь не задаётся.");
+        if (task.Status == JobStatus.Completed)
+            return TaskTableServiceResult<ProductionTask>.Fail("Нельзя поставить в очередь завершённую задачу.");
+        if (string.IsNullOrWhiteSpace(task.EmployeeName))
+            return TaskTableServiceResult<ProductionTask>.Fail("Укажите сотрудника, чтобы задать очередь.");
+        if (rank is < 1 or > TaskPriorityRankPlanner.MaxRank)
+            return TaskTableServiceResult<ProductionTask>.Fail("Номер очереди должен быть от 1 до 99.");
+
+        var ranked = await _repo.GetActivePriorityRankedTasksAsync([task.EmployeeName], cancellationToken);
+        var current = ranked
+            .Select(t => new TaskPriorityRankPlanner.RankedTask(t.Id, t.PriorityRank!.Value))
+            .ToList();
+        var currentRank = task.PriorityRank is > 0 ? task.PriorityRank : null;
+        Dictionary<int, int?> changes;
+        try
+        {
+            changes = TaskPriorityRankPlanner.PlanAssign(current, task.Id, currentRank, rank);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return TaskTableServiceResult<ProductionTask>.Fail("Некорректный номер очереди.");
+        }
+
+        if (changes.Count == 0)
+            return TaskTableServiceResult<ProductionTask>.Ok(task);
+
+        await _repo.ExecuteInTransactionAsync(
+            ct => _repo.ApplyPriorityRankChangesAsync(changes, ct),
+            cancellationToken);
+
+        var changedIds = changes.Keys.ToList();
+        var changedTasks = await _repo.GetTasksByIdsAsync(changedIds, cancellationToken);
+        foreach (var changed in changedTasks)
+            await _notificationService.NotifyTaskUpdatedAsync(changed);
+
+        if (task.ParentRowNumber is int parentId)
+        {
+            var parent = await _repo.GetTaskByIdAsync(parentId, cancellationToken);
+            if (parent != null)
+                await _notificationService.NotifyTaskUpdatedAsync(parent);
+        }
+
+        var updated = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
+        return TaskTableServiceResult<ProductionTask>.Ok(updated ?? task);
     }
 
     public async Task<TaskTableServiceResult<ProductionTask>> CreateRowAsync(
@@ -534,9 +670,19 @@ public class TaskTableService : ITaskTableService
             task.Type = request.Type ?? task.Type;
         }
         if (request.PriorityMarked.HasValue)
-            task.IsPriorityMarked = request.PriorityMarked.Value;
+        {
+            if (request.PriorityMarked.Value)
+                task.IsPriorityMarked = true;
+            else
+                task.SetPriorityRank(null);
+        }
         if (!isSplitParent)
-            task.EmployeeName = request.EmployeeName ?? task.EmployeeName;
+        {
+            var newEmployee = request.EmployeeName ?? task.EmployeeName;
+            if (!string.Equals(task.EmployeeName, newEmployee, StringComparison.Ordinal))
+                task.SetPriorityRank(null);
+            task.EmployeeName = newEmployee;
+        }
         else
             task.EmployeeName = "";
         if (task.IsFuss)
@@ -1106,7 +1252,14 @@ public class TaskTableService : ITaskTableService
         original.EstimateHours = request.EstimateHours;
         original.Type = request.Type ?? original.Type;
         if (request.PriorityMarked.HasValue)
-            original.IsPriorityMarked = request.PriorityMarked.Value;
+        {
+            if (request.PriorityMarked.Value)
+                original.IsPriorityMarked = true;
+            else
+                original.SetPriorityRank(null);
+        }
+        if (!string.Equals(original.EmployeeName, newEmployeeName, StringComparison.Ordinal))
+            original.SetPriorityRank(null);
         original.EmployeeName = newEmployeeName;
         original.UpdatedAt = now;
 
@@ -1199,7 +1352,8 @@ public class TaskTableService : ITaskTableService
             Deadline = request.Deadline,
             EstimateHours = request.EstimateHours,
             Type = request.Type ?? original.Type,
-            IsPriorityMarked = request.PriorityMarked ?? original.IsPriorityMarked,
+            IsPriorityMarked = false,
+            PriorityRank = null,
             EmployeeName = request.EmployeeName!,
             Status = JobStatus.Assigned,
             Progress = 0,
@@ -1254,9 +1408,19 @@ public class TaskTableService : ITaskTableService
             task.Type = request.Type ?? task.Type;
         }
         if (request.PriorityMarked.HasValue)
-            task.IsPriorityMarked = request.PriorityMarked.Value;
+        {
+            if (request.PriorityMarked.Value)
+                task.IsPriorityMarked = true;
+            else
+                task.SetPriorityRank(null);
+        }
         if (!isSplitParent)
-            task.EmployeeName = request.EmployeeName ?? task.EmployeeName;
+        {
+            var newEmployee = request.EmployeeName ?? task.EmployeeName;
+            if (!string.Equals(task.EmployeeName, newEmployee, StringComparison.Ordinal))
+                task.SetPriorityRank(null);
+            task.EmployeeName = newEmployee;
+        }
         else
             task.EmployeeName = "";
         if (task.IsFuss)

@@ -30,6 +30,7 @@ function sameChildren(a, b) {
     if (a[i].commentEditedViaDialog !== b[i].commentEditedViaDialog) return false;
     if (a[i].commentBadgeCount !== b[i].commentBadgeCount) return false;
     if (a[i].isPriorityMarked !== b[i].isPriorityMarked) return false;
+    if (a[i].priorityRank !== b[i].priorityRank) return false;
     if (a[i].issuedWithoutReady !== b[i].issuedWithoutReady) return false;
     if (workIntervalsKey(a[i]) !== workIntervalsKey(b[i])) return false;
     if (a[i].plannedTimeProgress !== b[i].plannedTimeProgress) return false;
@@ -53,6 +54,7 @@ export function areParentRowPropsEqual(prev, next) {
   if (prev.task.updatedAt !== next.task.updatedAt) return false;
   if (prev.task.statusText !== next.task.statusText) return false;
   if (prev.task.isPriorityMarked !== next.task.isPriorityMarked) return false;
+  if (prev.task.priorityRank !== next.task.priorityRank) return false;
   if (prev.task.issuedWithoutReady !== next.task.issuedWithoutReady) return false;
   if (prev.task.pickupCode !== next.task.pickupCode) return false;
   if (prev.task.pickedUpAt !== next.task.pickedUpAt) return false;
@@ -132,6 +134,7 @@ export function areChildRowPropsEqual(prev, next) {
   if (prev.task.commentEditedViaDialog !== next.task.commentEditedViaDialog) return false;
   if (prev.task.commentBadgeCount !== next.task.commentBadgeCount) return false;
   if (prev.task.isPriorityMarked !== next.task.isPriorityMarked) return false;
+  if (prev.task.priorityRank !== next.task.priorityRank) return false;
   if (prev.task.issuedWithoutReady !== next.task.issuedWithoutReady) return false;
   if ((prev.task.workIntervals?.length ?? 0) !== (next.task.workIntervals?.length ?? 0)) return false;
   if (workIntervalsKey(prev.task) !== workIntervalsKey(next.task)) return false;
@@ -159,6 +162,8 @@ export function areChildRowPropsEqual(prev, next) {
   if (prev.sharedGroupParentTask?.id !== next.sharedGroupParentTask?.id) return false;
   if (prev.sharedGroupParentTask?.supplyMode !== next.sharedGroupParentTask?.supplyMode) return false;
   if (prev.sharedGroupParentTask?.statusText !== next.sharedGroupParentTask?.statusText) return false;
+  if (prev.sharedGroupParentTask?.hasCdrPreview !== next.sharedGroupParentTask?.hasCdrPreview) return false;
+  if (prev.task.hasCdrPreview !== next.task.hasCdrPreview) return false;
   if (prev.isLastInSharedGroup !== next.isLastInSharedGroup) return false;
   if (prev.maxSubscribed !== next.maxSubscribed) return false;
   if (prev.maxCanSubscribe !== next.maxCanSubscribe) return false;
