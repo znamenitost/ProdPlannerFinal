@@ -1,4 +1,4 @@
-import { Box, IconButton, MenuItem, ListItemText } from '@mui/material';
+import { Box, Button, IconButton } from '@mui/material';
 import { getPriorityRankOptions } from '../../utils/taskPriorityRank';
 import { TaskPriorityRankMark } from './TaskPriorityRankMark';
 
@@ -46,16 +46,18 @@ export default function PriorityRankPicker({
         })}
       </Box>
       {currentRank != null && onClear && (
-        <MenuItem
+        <Button
+          fullWidth
+          size="small"
           disabled={disabled}
           onClick={(event) => {
             event.stopPropagation();
             onClear();
           }}
-          sx={{ mt: 0.5, justifyContent: 'center' }}
+          sx={{ mt: 0.5 }}
         >
-          <ListItemText sx={{ textAlign: 'center' }}>Убрать</ListItemText>
-        </MenuItem>
+          Убрать
+        </Button>
       )}
     </Box>
   );

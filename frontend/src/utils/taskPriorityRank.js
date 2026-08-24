@@ -1,7 +1,7 @@
 const EXTRA_FREE_SLOTS = 3;
 
 export function getOccupiedPriorityRanks(queue = []) {
-  return queue
+  return (Array.isArray(queue) ? queue : [])
     .map((item) => Number(item?.rank))
     .filter((rank) => Number.isInteger(rank) && rank > 0);
 }
@@ -19,7 +19,7 @@ export function getPriorityRankOptions(queue = [], currentRank = null) {
   const occupied = new Set(getOccupiedPriorityRanks(queue));
   const current = Number(currentRank) > 0 ? Number(currentRank) : null;
   const labels = new Map(
-    (queue || [])
+    (Array.isArray(queue) ? queue : [])
       .filter((item) => Number(item?.rank) > 0)
       .map((item) => [Number(item.rank), item.label || ''])
   );

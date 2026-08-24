@@ -1,5 +1,5 @@
 import { Box, Popover } from '@mui/material';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import LazyTooltip from '../common/LazyTooltip';
 import { getTaskPriorityRank } from '../../utils/taskPriorityRank';
 import PriorityRankPicker from './PriorityRankPicker';
@@ -16,12 +16,12 @@ export default function TaskPriorityChip({
   onSelectRank,
   pending = false
 }) {
-  const [anchorEl, setAnchorEl] = useState(null);
+  const anchorRef = useRef(null);
+  const [open, setOpen] = useState(false);
   const rank = getTaskPriorityRank(task);
   if (rank == null) return null;
 
   const canEdit = typeof onSelectRank === 'function';
-  const open = Boolean(anchorEl);
 
   const mark = (
     <Box
@@ -34,7 +34,7 @@ export default function TaskPriorityChip({
           ? (event) => {
               event.stopPropagation();
               if (pending) return;
-              setAnchorEl(event.currentTarget);
+              setOpen(true);
             }
           : undefined
       }
@@ -55,14 +55,20 @@ export default function TaskPriorityChip({
 
   return (
     <>
-      <LazyTooltip title={canEdit ? `Очередь ${rank} — нажмите, чтобы изменить` : `Очередь ${rank}`} arrow>
-        {mark}
-      </LazyTooltip>
+      <Box
+        ref={anchorRef}
+        component="span"
+        sx={{ display: 'inline-flex', lineHeight: 0, verticalAlign: 'middle' }}
+      >
+        <LazyTooltip title={canEdit ? `Очередь ${rank} — нажмите, чтобы изменить` : `Очередь ${rank}`} arrow>
+          {mark}
+        </LazyTooltip>
+      </Box>
       {canEdit && (
         <Popover
           open={open}
-          anchorEl={anchorEl}
-          onClose={() => setAnchorEl(null)}
+          anchorEl={anchorRef.current}
+          onClose={() => setOpen(false)}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
           transformOrigin={{ vertical: 'top', horizontal: 'left' }}
           onClick={(event) => event.stopPropagation()}
@@ -73,11 +79,11 @@ export default function TaskPriorityChip({
             allowOccupied
             disabled={pending}
             onSelect={(nextRank) => {
-              setAnchorEl(null);
+              setOpen(false);
               onSelectRank(task, nextRank);
             }}
             onClear={() => {
-              setAnchorEl(null);
+              setOpen(false);
               onSelectRank(task, null);
             }}
           />

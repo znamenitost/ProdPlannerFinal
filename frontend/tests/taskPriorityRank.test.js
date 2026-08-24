@@ -42,6 +42,12 @@ describe('getPriorityRankOptions', () => {
     assert.equal(options.find((o) => o.rank === 5).selected, true);
     assert.equal(options.find((o) => o.rank === 5).current, true);
   });
+
+  it('treats a null queue as empty', () => {
+    const options = getPriorityRankOptions(null, 2);
+    assert.equal(options.find((o) => o.rank === 2).current, true);
+    assert.equal(options.find((o) => o.rank === 3).assignable, true);
+  });
 });
 
 describe('getTaskPriorityRank', () => {
