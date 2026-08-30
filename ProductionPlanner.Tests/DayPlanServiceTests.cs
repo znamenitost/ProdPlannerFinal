@@ -61,6 +61,69 @@ public class DayPlanServiceTests
     }
 
     [Fact]
+    public async Task GetDayPlan_compactsGappyRanks_from_2_3_4_to_1_2_3()
+    {
+        await using var db = CreateDb();
+        var now = new DateTime(2026, 8, 24, 10, 0, 0, DateTimeKind.Unspecified);
+        var service = CreateService(db, now);
+
+        db.ProductionTasks.AddRange(
+            new ProductionTask
+            {
+                DisplayOrder = 1,
+                FolderPath = "ЗаказА",
+                FileName = "a.cdr",
+                Comment = "",
+                Type = "Резка",
+                EmployeeName = "Дима",
+                Status = JobStatus.Assigned,
+                EstimateHours = 1,
+                PriorityRank = 2,
+                IsPriorityMarked = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new ProductionTask
+            {
+                DisplayOrder = 2,
+                FolderPath = "ЗаказБ",
+                FileName = "b.cdr",
+                Comment = "",
+                Type = "Резка",
+                EmployeeName = "Дима",
+                Status = JobStatus.Assigned,
+                EstimateHours = 1,
+                PriorityRank = 2,
+                IsPriorityMarked = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new ProductionTask
+            {
+                DisplayOrder = 3,
+                FolderPath = "ЗаказВ",
+                FileName = "c.cdr",
+                Comment = "",
+                Type = "Резка",
+                EmployeeName = "Дима",
+                Status = JobStatus.Assigned,
+                EstimateHours = 1,
+                PriorityRank = 4,
+                IsPriorityMarked = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        await db.SaveChangesAsync();
+
+        var plan = await service.GetDayPlanAsync("Дима", "2026-08-24", now);
+
+        Assert.Equal(new[] { 1, 2 }, plan.Waves.Select(w => w.Rank).ToArray());
+        Assert.Equal(2, plan.Waves[0].Blocks.Count);
+        Assert.Equal(1, plan.Waves[1].Blocks.Count);
+        Assert.All(db.ProductionTasks, t => Assert.True(t.PriorityRank is 1 or 2));
+    }
+
+    [Fact]
     public async Task GetDayPlan_sameRank_packsParallelLanes()
     {
         await using var db = CreateDb();

@@ -128,20 +128,26 @@ export default function PlannedBlocks({
             sx={{
               position: 'absolute',
               left: `${block.leftPercent + block.widthPercent / 2}%`,
-              top: -22,
+              top: -18,
               transform: 'translateX(-50%)',
               ...calendarBlockLayoutTransitionSx,
-              backgroundColor: (theme) => highlighted ? theme.palette.warning.main : theme.palette.grey[800],
-              color: 'white',
+              color: (theme) => {
+                const statusColor = getPlannedBlockColor(block, theme);
+                if (statusColor === theme.palette.warning.main || highlighted) {
+                  return theme.palette.warning.dark;
+                }
+                if (statusColor === theme.palette.error.main) {
+                  return theme.palette.error.dark;
+                }
+                return theme.palette.primary.dark;
+              },
               fontSize: '10px',
               fontWeight: 500,
-              padding: '2px 6px',
-              borderRadius: '12px',
+              letterSpacing: 0.1,
               whiteSpace: 'nowrap',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
               zIndex: 15,
               pointerEvents: 'none',
-              opacity: 0.9
+              opacity: 0.72
             }}
           >
             {block.hours.toFixed(1)}ч

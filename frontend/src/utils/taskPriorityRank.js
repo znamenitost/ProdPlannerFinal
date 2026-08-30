@@ -26,14 +26,24 @@ export function getPriorityRankOptions(queue = [], currentRank = null) {
 
   return getVisiblePriorityRanks(queue, current).map((rank) => {
     const selected = occupied.has(rank) || current === rank;
+    const isCurrent = current === rank;
     return {
       rank,
       selected,
-      current: current === rank,
+      current: isCurrent,
       label: labels.get(rank) || '',
-      assignable: !selected || current != null
+      assignable: !isCurrent
     };
   });
+}
+
+/** Клик по цифре: свободная — занять, занятая — встать в ту же волну параллельно. */
+export function getPriorityRankAssignment(option) {
+  if (!option || option.current) return null;
+  return {
+    rank: option.rank,
+    joinWave: Boolean(option.selected)
+  };
 }
 
 export function getTaskPriorityRank(task) {

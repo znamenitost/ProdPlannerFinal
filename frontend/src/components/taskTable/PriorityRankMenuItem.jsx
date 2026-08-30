@@ -12,12 +12,12 @@ export default function PriorityRankMenuItem({
 }) {
   const [open, setOpen] = useState(false);
   const rank = getTaskPriorityRank(task);
-  const allowOccupied = rank != null;
+  const canClear = rank != null;
 
-  const handleSelect = (nextRank) => {
+  const handleSelect = (nextRank, options) => {
     setOpen(false);
     onParentClose?.();
-    onSelectRank?.(task, nextRank);
+    onSelectRank?.(task, nextRank, options);
   };
 
   return (
@@ -43,10 +43,9 @@ export default function PriorityRankMenuItem({
           <PriorityRankPicker
             queue={task?.priorityQueue}
             currentRank={rank}
-            allowOccupied={allowOccupied}
             disabled={disabled}
             onSelect={handleSelect}
-            onClear={allowOccupied ? () => handleSelect(null) : undefined}
+            onClear={canClear ? () => handleSelect(null) : undefined}
           />
         </Box>
       )}

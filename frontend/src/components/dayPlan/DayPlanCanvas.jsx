@@ -285,7 +285,6 @@ export default function DayPlanCanvas({
       <RopeLayer ropes={ropes} color={ROPE_COLOR} />
 
       <Box
-        data-day-plan-drop={JSON.stringify({ kind: 'append' })}
         sx={{
           position: 'relative',
           zIndex: 2,
@@ -293,13 +292,33 @@ export default function DayPlanCanvas({
         }}
       >
         {waves.length === 0 && (
-          <Box sx={{ py: 6, textAlign: 'center' }}>
+          <Box
+            data-day-plan-drop={JSON.stringify({ kind: 'append' })}
+            sx={{
+              py: 6,
+              textAlign: 'center',
+              minHeight: 160,
+              borderRadius: 3,
+              bgcolor: dropTarget?.kind === 'append' || dropTarget?.kind === 'board'
+                ? alpha(ROPE_COLOR, 0.18)
+                : 'transparent'
+            }}
+          >
             <Typography variant="body2" sx={{ color: alpha(MUTED, 0.85) }}>
               {interactive
                 ? 'Перетащите задачу из «Не в плане» на доску'
                 : 'Нет задач с номером очереди на этот день'}
             </Typography>
           </Box>
+        )}
+
+        {waves.length > 0 && (
+          <DropStrip
+            payload={{ kind: 'insert', rank: 1 }}
+            label="В начало"
+            active={dropTarget?.kind === 'insert' && dropTarget.rank === 1}
+            minHeight={48}
+          />
         )}
 
         {waves.map((wave, waveIndex) => (
@@ -352,13 +371,15 @@ export default function DayPlanCanvas({
           </Box>
         ))}
 
-        <DropStrip
-          payload={{ kind: 'append' }}
-          label={interactive ? 'Новая волна' : ''}
-          active={interactive && (dropTarget?.kind === 'append' || dropTarget?.kind === 'board')}
-          showLabel={interactive}
-          minHeight={waves.length ? 48 : 12}
-        />
+        {waves.length > 0 && (
+          <DropStrip
+            payload={{ kind: 'append' }}
+            label={interactive ? 'Новая волна' : ''}
+            active={interactive && (dropTarget?.kind === 'append' || dropTarget?.kind === 'board')}
+            showLabel={interactive}
+            minHeight={48}
+          />
+        )}
       </Box>
 
       <Box

@@ -81,28 +81,78 @@ public class TaskPriorityRankPlannerTests
     }
 
     [Fact]
-    public void Move_to_free_number_leaves_others()
+    public void Move_past_the_end_stays_dense()
     {
-        var ranked = Queue((10, 1), (11, 2));
+        var ranked = Queue((10, 1), (11, 2), (12, 3));
         var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 11, 2, 5);
 
-        Assert.Equal(new Dictionary<int, int?> { [11] = 5 }, changes);
+        Assert.Equal(3, changes[11]);
+        Assert.Equal(2, changes[12]);
+        Assert.False(changes.ContainsKey(10));
     }
 
     [Fact]
-    public void Clear_only_drops_current()
+    public void Clear_first_wave_renumbers_from_1()
     {
         var ranked = Queue((10, 1), (11, 2));
         var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 10, 1, null);
 
-        Assert.Equal(new Dictionary<int, int?> { [10] = null }, changes);
+        Assert.Null(changes[10]);
+        Assert.Equal(1, changes[11]);
+    }
+
+    [Fact]
+    public void Compact_gaps_2_3_4_become_1_2_3()
+    {
+        var ranked = Queue((10, 2), (11, 2), (12, 3), (13, 3), (14, 4));
+        var changes = TaskPriorityRankPlanner.CompactRanks(ranked);
+
+        Assert.Equal(1, changes[10]);
+        Assert.Equal(1, changes[11]);
+        Assert.Equal(2, changes[12]);
+        Assert.Equal(2, changes[13]);
+        Assert.Equal(3, changes[14]);
+    }
+
+    [Fact]
+    public void Put_at_rank_1_when_waves_start_at_2()
+    {
+        var ranked = Queue((10, 2), (11, 2), (12, 3), (13, 4));
+        var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 13, 4, 1);
+
+        Assert.Equal(1, changes[13]);
+        Assert.False(changes.ContainsKey(10));
+        Assert.False(changes.ContainsKey(11));
+        Assert.False(changes.ContainsKey(12));
+    }
+
+    [Fact]
+    public void Leave_wave_1_compacts_the_rest()
+    {
+        var ranked = Queue((10, 1), (11, 2), (12, 3));
+        var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 10, 1, 2, joinWave: true);
+
+        Assert.Equal(1, changes[10]);
+        Assert.Equal(1, changes[11]);
+        Assert.Equal(2, changes[12]);
+    }
+
+    [Fact]
+    public void Same_rank_on_gappy_queue_compacts()
+    {
+        var ranked = Queue((10, 2), (11, 3), (12, 4));
+        var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 10, 2, 2);
+
+        Assert.Equal(1, changes[10]);
+        Assert.Equal(2, changes[11]);
+        Assert.Equal(3, changes[12]);
     }
 
     [Fact]
     public void Same_rank_is_noop()
     {
-        var ranked = Queue((10, 2));
-        var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 10, 2, 2);
+        var ranked = Queue((10, 1));
+        var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 10, 1, 1);
         Assert.Empty(changes);
     }
 

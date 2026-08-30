@@ -40,7 +40,10 @@ public class DayPlanService : IDayPlanService
         var dayEnd = day.Date.AddHours(WorkEndHour);
         var spanHours = (dayEnd - dayStart).TotalHours;
 
-        var tasks = await _repo.GetActiveTasksAsync(employee, cancellationToken);
+        var tasks = await CompactEmployeeRanksAsync(
+            await _repo.GetActiveTasksAsync(employee, cancellationToken),
+            employee,
+            cancellationToken);
         var childTaskIds = tasks
             .Where(t => t.IsSplitTask && t.ParentRowNumber.HasValue)
             .Select(t => t.Id)
@@ -213,6 +216,25 @@ public class DayPlanService : IDayPlanService
             Waves = waves,
             Unplanned = unplanned
         };
+    }
+
+    private async Task<List<ProductionTask>> CompactEmployeeRanksAsync(
+        List<ProductionTask> tasks,
+        string employee,
+        CancellationToken cancellationToken)
+    {
+        var ranked = tasks
+            .Where(t => !t.IsFuss && t.PriorityRank is > 0)
+            .Select(t => new TaskPriorityRankPlanner.RankedTask(t.Id, t.PriorityRank!.Value))
+            .ToList();
+        var compact = TaskPriorityRankPlanner.CompactRanks(ranked);
+        if (compact.Count == 0)
+            return tasks;
+
+        await _repo.ExecuteInTransactionAsync(
+            ct => _repo.ApplyPriorityRankChangesAsync(compact, ct),
+            cancellationToken);
+        return await _repo.GetActiveTasksAsync(employee, cancellationToken);
     }
 
     private static DateTime ResolveDay(string? date, DateTime nowMoscow)

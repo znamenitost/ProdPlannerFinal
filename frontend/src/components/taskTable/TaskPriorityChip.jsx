@@ -78,7 +78,6 @@ export default function TaskPriorityChip({
           <PriorityRankPicker
             queue={task?.priorityQueue}
             currentRank={rank}
-            allowOccupied
             disabled={pending}
             onSelect={(nextRank, options) => {
               setOpen(false);

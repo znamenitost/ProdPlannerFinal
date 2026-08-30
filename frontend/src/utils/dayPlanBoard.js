@@ -34,7 +34,8 @@ export function cardsForWave(wave) {
 /**
  * Жест доски → смена PriorityRank.
  * Перенос на карточку — встать в её волну параллельно (joinWave).
- * «Новая волна» — appendWave: сервер ставит max(все занятые)+1, не только видимые волны.
+ * «В начало» — insert rank 1: задача становится волной 1, остальные сдвигаются.
+ * «Новая волна» — appendWave: сервер ставит max(все занятые)+1, затем номера сжимаются в 1..N.
  */
 export function resolveDayPlanDrop(drag, target, maxRank = 0) {
   if (!drag || !target) return null;

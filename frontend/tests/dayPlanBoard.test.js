@@ -66,6 +66,15 @@ describe('resolveDayPlanDrop', () => {
     assert.deepEqual(change, { taskId: 8, rank: null, joinWave: false, appendWave: true });
   });
 
+  it('puts a task at the top as wave 1', () => {
+    const change = resolveDayPlanDrop(
+      { kind: 'task', taskId: 8, fromRank: 4 },
+      { kind: 'insert', rank: 1 },
+      4
+    );
+    assert.deepEqual(change, { taskId: 8, rank: 1, joinWave: false });
+  });
+
   it('inserts with a shift, not a join', () => {
     const change = resolveDayPlanDrop(
       { kind: 'task', taskId: 8, fromRank: null },

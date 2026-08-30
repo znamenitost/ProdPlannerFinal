@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  getPriorityRankAssignment,
   getPriorityRankOptions,
   getPriorityRankSortValue,
   getTaskPriorityRank,
@@ -31,10 +32,16 @@ describe('getPriorityRankOptions', () => {
     assert.equal(options.find((o) => o.rank === 5).selected, false);
   });
 
-  it('blocks occupied numbers for a new assignment', () => {
+  it('lets a new task join an occupied wave', () => {
     const options = getPriorityRankOptions([{ rank: 1 }, { rank: 2 }]);
-    assert.equal(options.find((o) => o.rank === 1).assignable, false);
+    assert.equal(options.find((o) => o.rank === 1).assignable, true);
     assert.equal(options.find((o) => o.rank === 3).assignable, true);
+  });
+
+  it('does not treat the current wave as a new assignment', () => {
+    const options = getPriorityRankOptions([{ rank: 1 }, { rank: 2 }], 1);
+    assert.equal(options.find((o) => o.rank === 1).assignable, false);
+    assert.equal(options.find((o) => o.rank === 2).assignable, true);
   });
 
   it('treats the current rank as selected even if queue is missing', () => {
@@ -47,6 +54,25 @@ describe('getPriorityRankOptions', () => {
     const options = getPriorityRankOptions(null, 2);
     assert.equal(options.find((o) => o.rank === 2).current, true);
     assert.equal(options.find((o) => o.rank === 3).assignable, true);
+  });
+});
+
+describe('getPriorityRankAssignment', () => {
+  it('joins an occupied wave and takes a free number as-is', () => {
+    const options = getPriorityRankOptions([{ rank: 1, label: 'A' }]);
+    assert.deepEqual(getPriorityRankAssignment(options.find((o) => o.rank === 1)), {
+      rank: 1,
+      joinWave: true
+    });
+    assert.deepEqual(getPriorityRankAssignment(options.find((o) => o.rank === 2)), {
+      rank: 2,
+      joinWave: false
+    });
+  });
+
+  it('skips the current wave', () => {
+    const options = getPriorityRankOptions([{ rank: 1 }], 1);
+    assert.equal(getPriorityRankAssignment(options.find((o) => o.rank === 1)), null);
   });
 });
 
