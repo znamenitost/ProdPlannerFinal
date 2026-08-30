@@ -307,7 +307,7 @@ export default function DayPlanCanvas({
             <Typography variant="body2" sx={{ color: alpha(MUTED, 0.85) }}>
               {interactive
                 ? 'Перетащите задачу из «Не в плане» на доску'
-                : 'Нет задач с номером очереди на этот день'}
+                : 'Нет задач с номером очереди'}
             </Typography>
           </Box>
         )}

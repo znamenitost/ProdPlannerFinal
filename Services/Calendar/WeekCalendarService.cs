@@ -186,7 +186,8 @@ public class WeekCalendarService : IWeekCalendarService
                     Title = slot.Task.TaskDisplayName,
                     FolderPath = slot.Task.FolderPath ?? "",
                     FileName = slot.Task.FileName ?? "",
-                    StatusText = TaskTable.TaskStatusMapper.ToDisplayText(slot.Task)
+                    StatusText = TaskTable.TaskStatusMapper.ToDisplayText(slot.Task),
+                    PriorityRank = slot.Task.PriorityRank is > 0 ? slot.Task.PriorityRank : null
                 });
             }
 

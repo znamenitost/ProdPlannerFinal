@@ -34,6 +34,7 @@ public class CalendarTaskBlockDto
     public string FolderPath { get; set; } = "";
     public string FileName { get; set; } = "";
     public string StatusText { get; set; } = "";
+    public int? PriorityRank { get; set; }
 }
 
 public class CalendarTimelineSegmentDto

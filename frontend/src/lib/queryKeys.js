@@ -28,7 +28,7 @@ export const queryKeys = {
   taskTableAll: () => ['app', 'taskTable'],
   deadlineRisks: (employee) => ['app', 'deadlineRisks', employee],
   queueOverloads: (employee) => ['app', 'queueOverloads', employee],
-  dayPlan: (employee, dateKey) => ['app', 'dayPlan', employee, dateKey || ''],
+  dayPlan: (employee) => ['app', 'dayPlan', employee],
   dayPlanAll: (employee) => ['app', 'dayPlan', employee]
 };
 

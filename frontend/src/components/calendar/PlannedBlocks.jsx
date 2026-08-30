@@ -92,6 +92,9 @@ export default function PlannedBlocks({
                 width: `${block.widthPercent}%`,
                 height: '100%',
                 top: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 backgroundColor: (theme) => {
                   const statusColor = getPlannedBlockColor(block, theme);
                   if (statusColor) return statusColor;
@@ -108,7 +111,32 @@ export default function PlannedBlocks({
                 boxShadow: (theme) => highlighted ? `0 0 8px ${alpha(theme.palette.warning.main, 0.5)}` : 'none',
                 '&:hover': { opacity: 1, filter: 'brightness(0.95)' }
               }}
-            />
+            >
+              {Number(block.priorityRank) > 0 && (
+                <Box
+                  component="span"
+                  aria-label={`Очередь ${block.priorityRank}`}
+                  sx={{
+                    color: (theme) => {
+                      const statusColor = getPlannedBlockColor(block, theme);
+                      if (statusColor === theme.palette.warning.main || highlighted) {
+                        return theme.palette.warning.dark;
+                      }
+                      if (statusColor === theme.palette.error.main) {
+                        return theme.palette.error.dark;
+                      }
+                      return theme.palette.primary.dark;
+                    },
+                    fontSize: 13,
+                    fontWeight: 600,
+                    lineHeight: 1,
+                    pointerEvents: 'none'
+                  }}
+                >
+                  {Number(block.priorityRank)}
+                </Box>
+              )}
+            </Box>
           </Tooltip>
         );
       })}

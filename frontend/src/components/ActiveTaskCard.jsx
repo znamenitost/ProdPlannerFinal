@@ -40,14 +40,12 @@ import { CdrPreviewFileMark } from './taskTable/TaskFileNameCell';
 import { getCdrPreviewRowHandlers } from '../utils/cdrPreviewRowHandlers';
 import { taskShowsThroughApproval } from '../utils/throughApproval';
 import { ThroughApprovalMark } from './taskTable/ThroughApprovalChip';
-import { TaskPriorityRankMark } from './taskTable/TaskPriorityRankMark';
 import { IssuedWithoutReadyMark } from './taskTable/IssuedWithoutReadyChip';
 import { FussTaskMark } from './taskTable/FussTaskChip';
 import { getTaskPriorityRank } from '../utils/taskPriorityRank';
 
 const blockedButtonSx = { opacity: 0.5 };
 const PROGRESS_MARKS = [0.3, 0.6, 0.9];
-const ACTIVE_TASK_PRIORITY_RANK_SIZE = 44;
 
 function invokeTaskAction(action, ...args) {
   void Promise.resolve(action(...args)).catch((err) => {
@@ -215,8 +213,20 @@ function ActiveTaskCard({
               }}
             >
               <Tooltip title={`Очередь ${rank}`} arrow>
-                <Box component="span" aria-label={`Очередь ${rank}`}>
-                  <TaskPriorityRankMark rank={rank} selected size={ACTIVE_TASK_PRIORITY_RANK_SIZE} />
+                <Box
+                  component="span"
+                  aria-label={`Очередь ${rank}`}
+                  sx={{
+                    color: 'primary.dark',
+                    fontSize: 22,
+                    fontWeight: 600,
+                    lineHeight: 1,
+                    letterSpacing: 0,
+                    userSelect: 'none',
+                    opacity: 0.8
+                  }}
+                >
+                  {rank}
                 </Box>
               </Tooltip>
             </Box>

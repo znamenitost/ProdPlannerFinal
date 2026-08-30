@@ -75,15 +75,14 @@ export async function getWeekCalendar(employee, startDate, options = {}) {
   return res.json();
 }
 
-export async function getDayPlan(employee, dateKey, options = {}) {
-  let url = `${API_BASE}/day-plan?employee=${encodeURIComponent(employee)}`;
-  if (dateKey) url += `&date=${encodeURIComponent(dateKey)}`;
+export async function getDayPlan(employee, options = {}) {
+  const url = `${API_BASE}/day-plan?employee=${encodeURIComponent(employee)}`;
   const res = await fetch(url, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     signal: options.signal
   });
-  await ensureOk(res, 'Ошибка загрузки плана дня');
+  await ensureOk(res, 'Ошибка загрузки плана');
   return res.json();
 }
 

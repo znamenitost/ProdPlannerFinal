@@ -3,10 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Box,
-  Button,
   Chip,
   Divider,
-  IconButton,
   Paper,
   Stack,
   Typography,
@@ -14,10 +12,7 @@ import {
   useTheme
 } from '@mui/material';
 import {
-  ChevronLeft,
-  ChevronRight,
   Groups,
-  Today,
   ViewTimeline
 } from '@mui/icons-material';
 import useDayPlanQuery from '../../hooks/queries/useDayPlanQuery';
@@ -34,11 +29,6 @@ import TaskTypeGlyph from './TaskTypeGlyph';
 import TaskTitleTwoLines from '../TaskTitleTwoLines';
 import TaskFileNameCell from '../taskTable/TaskFileNameCell';
 import TaskCommentCell from '../taskTable/TaskCommentCell';
-import {
-  addWorkdays,
-  formatDayPlanDateKey,
-  getPlanAnchorDate
-} from '../../utils/dayPlanDate';
 import { planableUnplanned } from '../../utils/dayPlanBoard';
 import { DEV_CDR_PREVIEW_ENABLED } from '../../utils/devCdrPreviewConfig';
 import { sectionHeaderSx, sectionTitleRowSx } from '../../theme/surfaces';
@@ -146,22 +136,21 @@ export default function DayPlanPage({ employee, isAdmin = false }) {
   const { handleOpenFolder, handleOpenFile } = useTaskFileOpen();
   const { runAction, pendingTaskId } = useDayPlanLifecycle(employee);
   const cdrPreview = useCdrPreview();
-  const [dateKey, setDateKey] = useState(() => formatDayPlanDateKey(getPlanAnchorDate(new Date())));
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [commentTask, setCommentTask] = useState(null);
   const [commentSaving, setCommentSaving] = useState(false);
 
-  const { data: plan, isPending, isError } = useDayPlanQuery(employee, dateKey);
+  const { data: plan, isPending, isError } = useDayPlanQuery(employee);
   const { assign, pending } = useDayPlanRankMutation(employee);
 
   useEffect(() => {
-    if (isError) showError('Не удалось загрузить план дня');
+    if (isError) showError('Не удалось загрузить план');
   }, [isError, showError]);
 
   useEffect(() => {
     setSelectedTaskId(null);
-  }, [employee, dateKey]);
+  }, [employee]);
 
   const tasksById = useMemo(
     () => collectSelectableTasks(plan),
@@ -196,23 +185,11 @@ export default function DayPlanPage({ employee, isAdmin = false }) {
     setCommentDialogOpen(false);
     setCommentTask(null);
   }, []);
-  const anchorDate = useMemo(() => {
-    const [y, m, d] = dateKey.split('-').map(Number);
-    return new Date(y, (m || 1) - 1, d || 1);
-  }, [dateKey]);
-  const now = plan?.currentTime ? new Date(plan.currentTime) : new Date();
-  const isToday = dateKey === formatDayPlanDateKey(getPlanAnchorDate(now));
-
-  const headerTitle = anchorDate.toLocaleDateString('ru-RU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long'
-  });
 
   if (!employee) {
     return (
       <Paper variant="section">
-        <EmptyState message="Выберите сотрудника в шапке, чтобы увидеть план дня" />
+        <EmptyState message="Выберите сотрудника в шапке, чтобы увидеть план" />
       </Paper>
     );
   }
@@ -230,37 +207,7 @@ export default function DayPlanPage({ employee, isAdmin = false }) {
       <Box sx={sectionHeaderSx}>
         <Box sx={sectionTitleRowSx}>
           <ViewTimeline color="primary" />
-          <Typography variant="h2">План дня</Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <IconButton
-            variant="soft"
-            color="primary"
-            onClick={() => setDateKey(formatDayPlanDateKey(addWorkdays(anchorDate, -1)))}
-            aria-label="Предыдущий рабочий день"
-          >
-            <ChevronLeft />
-          </IconButton>
-          <Typography variant="subtitle1" sx={{ textTransform: 'capitalize', minWidth: 180, textAlign: 'center' }}>
-            {headerTitle}
-          </Typography>
-          <IconButton
-            variant="soft"
-            color="primary"
-            onClick={() => setDateKey(formatDayPlanDateKey(addWorkdays(anchorDate, 1)))}
-            aria-label="Следующий рабочий день"
-          >
-            <ChevronRight />
-          </IconButton>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<Today />}
-            disabled={isToday}
-            onClick={() => setDateKey(formatDayPlanDateKey(getPlanAnchorDate(new Date())))}
-          >
-            Сегодня
-          </Button>
+          <Typography variant="h2">План</Typography>
         </Box>
       </Box>
 
@@ -276,7 +223,7 @@ export default function DayPlanPage({ employee, isAdmin = false }) {
 
       {plan.tailHours > 0 && (
         <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
-          Очередь не влезает в этот день. Ещё {Number(plan.tailHours).toFixed(1)} ч
+          Очередь не влезает в оставшееся рабочее время. Ещё {Number(plan.tailHours).toFixed(1)} ч
           {plan.tailUntil
             ? ` — до ${new Date(plan.tailUntil).toLocaleString('ru-RU', {
               day: '2-digit',
