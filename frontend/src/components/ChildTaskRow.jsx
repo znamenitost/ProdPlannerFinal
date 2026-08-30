@@ -92,7 +92,7 @@ function ChildTaskRow({
     return isSameEmployeeName(task.employeeName, currentUser.fullName) && !isFinishedStatusText(task.statusText);
   };
 
-  const priorityMarkViewer = getPriorityMarkViewerEmployeeName(currentUser);
+  const priorityMarkViewer = getPriorityMarkViewerEmployeeName(currentUser, selectedEmployeeForHighlight);
 
   const getRowStyle = (theme) => {
     let style = {

@@ -15,7 +15,9 @@ public class TaskTableRowDto
     public JobStatus Status { get; set; }
     public bool IsPriorityMarked { get; set; }
 
-    /// <summary>Номер в очереди текущего сотрудника. У split-родителя — номер зрителя, иначе null.</summary>
+    /// <summary>
+    /// Номер очереди зрителя. У общей задачи — цифра с его подзадачи, если есть хотя бы одна его с номером.
+    /// </summary>
     public int? PriorityRank { get; set; }
 
     /// <summary>Очередь 1-2-3 этого исполнителя (для пикера, не только текущая страница).</summary>

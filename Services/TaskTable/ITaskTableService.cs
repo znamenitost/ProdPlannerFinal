@@ -44,5 +44,7 @@ public interface ITaskTableService
     Task<TaskTableServiceResult<ProductionTask>> SetPriorityRankAsync(
         int taskId,
         int? rank,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool joinWave = false,
+        bool appendWave = false);
 }

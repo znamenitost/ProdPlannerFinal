@@ -60,12 +60,20 @@ public class TaskTableService : ITaskTableService
         (task.WorkIntervals?.Count ?? 0) > 0
         || task.Status is not (JobStatus.Assigned or JobStatus.Waiting);
 
+    /// <summary>
+    /// Очередь 1-2-3 персональная. И сотрудник, и админ с выбранным исполнителем
+    /// видят только его номера — иначе на таблице повторяются чужие «1».
+    /// </summary>
     private static (string? ViewerEmployeeName, bool RestrictToViewer) GetPriorityMarkScope(
         string targetEmployeeName,
-        bool viewerIsAdmin) =>
-        viewerIsAdmin
-            ? (null, false)
-            : (targetEmployeeName, true);
+        bool viewerIsAdmin)
+    {
+        _ = viewerIsAdmin;
+        if (string.IsNullOrWhiteSpace(targetEmployeeName))
+            return (null, false);
+
+        return (targetEmployeeName.Trim(), true);
+    }
 
     public async Task<PaginatedResult<TaskTableRowDto>> GetRowsAsync(
         int page,
@@ -363,7 +371,9 @@ public class TaskTableService : ITaskTableService
     public async Task<TaskTableServiceResult<ProductionTask>> SetPriorityRankAsync(
         int taskId,
         int? rank,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool joinWave = false,
+        bool appendWave = false)
     {
         var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null)
@@ -379,18 +389,23 @@ public class TaskTableService : ITaskTableService
             return TaskTableServiceResult<ProductionTask>.Fail("Нельзя поставить в очередь завершённую задачу.");
         if (string.IsNullOrWhiteSpace(task.EmployeeName))
             return TaskTableServiceResult<ProductionTask>.Fail("Укажите сотрудника, чтобы задать очередь.");
-        if (rank is < 1 or > TaskPriorityRankPlanner.MaxRank)
+        if (!appendWave && rank is < 1 or > TaskPriorityRankPlanner.MaxRank)
             return TaskTableServiceResult<ProductionTask>.Fail("Номер очереди должен быть от 1 до 99.");
 
         var ranked = await _repo.GetActivePriorityRankedTasksAsync([task.EmployeeName], cancellationToken);
         var current = ranked
             .Select(t => new TaskPriorityRankPlanner.RankedTask(t.Id, t.PriorityRank!.Value))
             .ToList();
+        if (appendWave)
+        {
+            rank = TaskPriorityRankPlanner.NextAppendRank(current);
+            joinWave = false;
+        }
         var currentRank = task.PriorityRank is > 0 ? task.PriorityRank : null;
         Dictionary<int, int?> changes;
         try
         {
-            changes = TaskPriorityRankPlanner.PlanAssign(current, task.Id, currentRank, rank);
+            changes = TaskPriorityRankPlanner.PlanAssign(current, task.Id, currentRank, rank, joinWave);
         }
         catch (ArgumentOutOfRangeException)
         {

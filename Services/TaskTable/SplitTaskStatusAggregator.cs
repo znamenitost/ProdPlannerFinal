@@ -184,8 +184,9 @@ public static class SplitTaskStatusAggregator
     }
 
     /// <summary>
-    /// Номер очереди для отображения. У split-родителя админ без фильтра не видит одну цифру
-    /// (у детей разные сотрудники); сотрудник / фильтр — номер своей подзадачи.
+    /// Номер очереди для отображения. У split-родителя цифра зрителя мигрирует
+    /// с его подзадачи, если есть хотя бы одна его с номером.
+    /// Без зрителя (админ без выбранного сотрудника) цифру не ставим.
     /// </summary>
     public static int? ResolvePriorityRank(
         ProductionTask parent,
@@ -197,14 +198,18 @@ public static class SplitTaskStatusAggregator
 
         if (isSplitParent && children is { Count: > 0 })
         {
+            // Общая строка: цифра зрителя поднимается с его подзадачи (любая его с номером).
+            // Без зрителя не показываем — иначе смешаются чужие «1».
             if (!restrictToViewer || string.IsNullOrWhiteSpace(viewerEmployeeName))
                 return null;
 
-            return children
-                .FirstOrDefault(c =>
+            var ownRanks = children
+                .Where(c =>
                     string.Equals(c.EmployeeName, viewerEmployeeName, StringComparison.Ordinal)
                     && c.PriorityRank is > 0)
-                ?.PriorityRank;
+                .Select(c => c.PriorityRank!.Value)
+                .ToList();
+            return ownRanks.Count == 0 ? null : ownRanks.Min();
         }
 
         if (restrictToViewer

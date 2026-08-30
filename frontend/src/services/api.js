@@ -75,6 +75,37 @@ export async function getWeekCalendar(employee, startDate, options = {}) {
   return res.json();
 }
 
+export async function getDayPlan(employee, dateKey, options = {}) {
+  let url = `${API_BASE}/day-plan?employee=${encodeURIComponent(employee)}`;
+  if (dateKey) url += `&date=${encodeURIComponent(dateKey)}`;
+  const res = await fetch(url, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    signal: options.signal
+  });
+  await ensureOk(res, 'Ошибка загрузки плана дня');
+  return res.json();
+}
+
+/** rank с клиента — если не appendWave. */
+export async function setPriorityRank(id, rank, options = {}) {
+  const res = await fetch(`${API_BASE}/tasks/table/row/${id}/priority-rank`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      rank: options.appendWave ? null : (rank ?? null),
+      joinWave: Boolean(options.joinWave),
+      appendWave: Boolean(options.appendWave)
+    }),
+    signal: options.signal
+  });
+  await ensureOk(res, 'Не удалось изменить очередь задачи');
+  const contentType = res.headers.get('content-type');
+  if (contentType?.includes('application/json')) return res.json();
+  return null;
+}
+
 // Получить список выполненных задач (пагинация) и агрегированную статистику
 export async function getCompletedTasks(employee, page = 1, pageSize = 25, statsPeriod = 'week', options = {}) {
   const params = new URLSearchParams({

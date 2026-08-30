@@ -121,9 +121,9 @@ export default function TaskAdminActionStacks({
     });
   };
 
-  const runPriorityRank = (rank) => {
+  const runPriorityRank = (rank, options) => {
     if (priorityMarkDisabled || !onSetPriorityRank) return;
-    void Promise.resolve(onSetPriorityRank(task, rank)).catch((err) => {
+    void Promise.resolve(onSetPriorityRank(task, rank, options)).catch((err) => {
       console.error('Ошибка смены очереди задачи:', err);
     });
   };
@@ -177,7 +177,7 @@ export default function TaskAdminActionStacks({
         key="priority"
         task={task}
         disabled={priorityMarkDisabled}
-        onSelectRank={(_, rank) => runPriorityRank(rank)}
+        onSelectRank={(_, rank, options) => runPriorityRank(rank, options)}
         onParentClose={handleClose}
       />
     );

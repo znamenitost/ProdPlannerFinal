@@ -502,11 +502,11 @@ export default function useTaskTableActions({
     promptInput
   ]);
 
-  const handleSetPriorityRank = useCallback(async (row, rank) => {
+  const handleSetPriorityRank = useCallback(async (row, rank, options = {}) => {
     if (pendingPriorityTaskIdRef.current === row.id) return;
     pendingPriorityTaskIdRef.current = row.id;
     try {
-      await api.setPriorityRank(row.id, rank);
+      await api.setPriorityRank(row.id, rank, options);
       await syncRowFromServer(row);
       await refresh();
       if (row.parentRowNumber) {

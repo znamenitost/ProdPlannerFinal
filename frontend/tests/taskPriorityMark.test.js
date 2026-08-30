@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getPriorityMarkViewerEmployeeName,
+  getVisiblePriorityRank,
   taskShowsPriorityMark
 } from '../src/utils/taskPriorityMark.js';
 
@@ -80,8 +81,15 @@ describe('taskShowsPriorityMark', () => {
 });
 
 describe('getPriorityMarkViewerEmployeeName', () => {
-  it('returns null for admin', () => {
+  it('returns null for admin without a selected employee', () => {
     assert.equal(getPriorityMarkViewerEmployeeName({ role: 'Admin', fullName: 'Админ' }), null);
+  });
+
+  it('returns the selected employee for admin', () => {
+    assert.equal(
+      getPriorityMarkViewerEmployeeName({ role: 'Admin', fullName: 'Админ' }, 'Дима'),
+      'Дима'
+    );
   });
 
   it('returns full name for employee', () => {
@@ -89,5 +97,76 @@ describe('getPriorityMarkViewerEmployeeName', () => {
       getPriorityMarkViewerEmployeeName({ role: 'Employee', fullName: 'Дима' }),
       'Дима'
     );
+  });
+});
+
+describe('getVisiblePriorityRank', () => {
+  it('hides a colleague number from the current employee', () => {
+    assert.equal(
+      getVisiblePriorityRank(
+        { employeeName: 'Павел', priorityRank: 1 },
+        null,
+        { viewerEmployeeName: 'Дима' }
+      ),
+      null
+    );
+  });
+
+  it('shows own number on own task', () => {
+    assert.equal(
+      getVisiblePriorityRank(
+        { employeeName: 'Дима', priorityRank: 2 },
+        null,
+        { viewerEmployeeName: 'Дима' }
+      ),
+      2
+    );
+  });
+
+  it('shows only own child number on a split parent', () => {
+    const parent = { id: 1, isSplitTask: true, parentRowNumber: null, priorityRank: 1 };
+    const children = [
+      { employeeName: 'Павел', priorityRank: 1 },
+      { employeeName: 'Дима', priorityRank: 3 }
+    ];
+    assert.equal(
+      getVisiblePriorityRank(parent, children, { viewerEmployeeName: 'Дима' }),
+      3
+    );
+  });
+
+  it('hides split parent number when only a colleague is ranked', () => {
+    const parent = { id: 1, isSplitTask: true, parentRowNumber: null, priorityRank: 1 };
+    const children = [{ employeeName: 'Павел', priorityRank: 1 }];
+    assert.equal(
+      getVisiblePriorityRank(parent, children, { viewerEmployeeName: 'Дима' }),
+      null
+    );
+  });
+
+  it('migrates the own child number onto the parent when children are not loaded', () => {
+    const parent = { id: 1, isSplitTask: true, parentRowNumber: null, priorityRank: 2 };
+    assert.equal(
+      getVisiblePriorityRank(parent, [], { viewerEmployeeName: 'Дима' }),
+      2
+    );
+  });
+
+  it('uses a ranked own child even if another own child has no number', () => {
+    const parent = { id: 1, isSplitTask: true, parentRowNumber: null };
+    const children = [
+      { employeeName: 'Дима', priorityRank: null },
+      { employeeName: 'Павел', priorityRank: 1 },
+      { employeeName: 'Дима', priorityRank: 4 }
+    ];
+    assert.equal(
+      getVisiblePriorityRank(parent, children, { viewerEmployeeName: 'Дима' }),
+      4
+    );
+  });
+
+  it('hides a number on a split parent without a viewer', () => {
+    const parent = { id: 1, isSplitTask: true, parentRowNumber: null, priorityRank: 1 };
+    assert.equal(getVisiblePriorityRank(parent, [{ employeeName: 'Павел', priorityRank: 1 }]), null);
   });
 });

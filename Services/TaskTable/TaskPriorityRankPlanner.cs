@@ -3,6 +3,7 @@ namespace ProductionPlanner.Services.TaskTable;
 /// <summary>
 /// Очередь 1-2-3 у сотрудника: свободный номер — просто запись,
 /// занятый — сдвиг остальных (5→1 поднимает эту задачу, прежние 1–4 едут вниз).
+/// JoinWave: занять тот же номер без сдвига (параллельная волна на доске плана).
 /// </summary>
 public static class TaskPriorityRankPlanner
 {
@@ -10,6 +11,14 @@ public static class TaskPriorityRankPlanner
     public const int MaxRank = 99;
 
     public readonly record struct RankedTask(int Id, int Rank);
+
+    /// <summary>Следующий свободный номер после самой большой занятой очереди.</summary>
+    public static int NextAppendRank(IReadOnlyList<RankedTask> ranked)
+    {
+        if (ranked == null || ranked.Count == 0) return 1;
+        var max = ranked.Max(t => t.Rank);
+        return Math.Min(max + 1, MaxRank);
+    }
 
     public static List<int> GetVisibleRanks(IReadOnlyCollection<int> occupiedRanks)
     {
@@ -24,7 +33,8 @@ public static class TaskPriorityRankPlanner
         IReadOnlyList<RankedTask> ranked,
         int taskId,
         int? currentRank,
-        int? targetRank)
+        int? targetRank,
+        bool joinWave = false)
     {
         var changes = new Dictionary<int, int?>();
 
@@ -35,6 +45,13 @@ public static class TaskPriorityRankPlanner
         {
             if (currentRank is not null)
                 changes[taskId] = null;
+            return changes;
+        }
+
+        if (joinWave)
+        {
+            if (currentRank != targetRank)
+                changes[taskId] = targetRank;
             return changes;
         }
 

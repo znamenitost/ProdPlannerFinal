@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import * as signalR from '@microsoft/signalr';
 import {
   buildViewSubscriptionState,
+  isCalendarViewTab,
   isTableViewTab,
   syncHubViewGroups
 } from '../src/utils/hubViewSubscription.js';
+import { APP_TAB_DAY_PLAN, APP_TAB_TABLE } from '../src/constants/appTabs.js';
 
 function mockConnection() {
   const invocations = [];
@@ -111,5 +113,20 @@ describe('syncHubViewGroups calendar-viewers', () => {
       ['LeaveTableViewers'],
       ['JoinCalendarViewers', 'Яромир']
     ]);
+  });
+
+  it('joins calendar viewers on day plan tab', async () => {
+    const conn = mockConnection();
+    let prev = await syncHubViewGroups(conn, null, adminState(APP_TAB_TABLE, 'Дима'));
+    conn.invocations.length = 0;
+
+    prev = await syncHubViewGroups(conn, prev, adminState(APP_TAB_DAY_PLAN, 'Дима'));
+
+    assert.equal(isCalendarViewTab(APP_TAB_DAY_PLAN), true);
+    assert.deepEqual(conn.invocations, [
+      ['LeaveTableViewers'],
+      ['JoinCalendarViewers', 'Дима']
+    ]);
+    assert.equal(prev.lastJoinedCalendarEmployee, 'Дима');
   });
 });

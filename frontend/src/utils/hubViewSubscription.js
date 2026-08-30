@@ -1,15 +1,26 @@
 import * as signalR from '@microsoft/signalr';
+import {
+  APP_TAB_CALENDAR,
+  APP_TAB_DAY_PLAN,
+  APP_TAB_PICKUP,
+  APP_TAB_TABLE
+} from '../constants/appTabs.js';
 
-/** Таблица задач (1) и выдача (2) слушают группу table-viewers. */
+/** Таблица задач и выдача слушают группу table-viewers. */
 export function isTableViewTab(activeTab) {
-  return activeTab === 1 || activeTab === 2;
+  return activeTab === APP_TAB_TABLE || activeTab === APP_TAB_PICKUP;
+}
+
+/** Календарь и план дня слушают calendar-viewers:{сотрудник}. */
+export function isCalendarViewTab(activeTab) {
+  return activeTab === APP_TAB_CALENDAR || activeTab === APP_TAB_DAY_PLAN;
 }
 
 /**
  * Календарь, на который подписываемся: свой для сотрудника, выбранный — для админа.
  */
 export function resolveCalendarEmployee({ activeTab, employee, userFullName, isAdmin }) {
-  if (activeTab !== 0) return null;
+  if (!isCalendarViewTab(activeTab)) return null;
   if (isAdmin) {
     const selected = String(employee || '').trim();
     return selected || null;
@@ -46,7 +57,7 @@ export async function syncHubViewGroups(connection, previous, next) {
   const wasTable = isTableViewTab(previous?.activeTab);
   const isTable = isTableViewTab(next.activeTab);
   const prevJoined = previous?.lastJoinedCalendarEmployee ?? null;
-  const nextJoined = next.activeTab === 0 ? next.calendarEmployee : null;
+  const nextJoined = isCalendarViewTab(next.activeTab) ? next.calendarEmployee : null;
   let joinFailed = false;
 
   if (wasTable && !isTable) {

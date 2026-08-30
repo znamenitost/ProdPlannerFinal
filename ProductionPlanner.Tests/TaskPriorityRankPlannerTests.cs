@@ -23,6 +23,19 @@ public class TaskPriorityRankPlannerTests
     }
 
     [Fact]
+    public void NextAppendRank_uses_highest_occupied_even_if_there_is_a_gap()
+    {
+        var ranked = Queue((10, 1), (11, 3), (12, 4));
+        Assert.Equal(5, TaskPriorityRankPlanner.NextAppendRank(ranked));
+    }
+
+    [Fact]
+    public void NextAppendRank_empty_is_1()
+    {
+        Assert.Equal(1, TaskPriorityRankPlanner.NextAppendRank([]));
+    }
+
+    [Fact]
     public void Assign_free_number_to_new_task()
     {
         var ranked = Queue((10, 1), (11, 2));
@@ -90,6 +103,32 @@ public class TaskPriorityRankPlannerTests
     {
         var ranked = Queue((10, 2));
         var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 10, 2, 2);
+        Assert.Empty(changes);
+    }
+
+    [Fact]
+    public void Join_occupied_does_not_shift_others()
+    {
+        var ranked = Queue((10, 1), (11, 2));
+        var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 12, null, 1, joinWave: true);
+
+        Assert.Equal(new Dictionary<int, int?> { [12] = 1 }, changes);
+    }
+
+    [Fact]
+    public void Join_move_keeps_the_old_wave()
+    {
+        var ranked = Queue((10, 1), (11, 2), (12, 3));
+        var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 12, 3, 1, joinWave: true);
+
+        Assert.Equal(new Dictionary<int, int?> { [12] = 1 }, changes);
+    }
+
+    [Fact]
+    public void Join_same_rank_is_noop()
+    {
+        var ranked = Queue((10, 1), (11, 1));
+        var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 11, 1, 1, joinWave: true);
         Assert.Empty(changes);
     }
 }

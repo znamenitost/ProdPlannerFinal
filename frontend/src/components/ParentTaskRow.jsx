@@ -184,7 +184,7 @@ function ParentTaskRow({
   };
 
   const childCount = childrenTasks?.length ?? 0;
-  const priorityMarkViewer = getPriorityMarkViewerEmployeeName(currentUser);
+  const priorityMarkViewer = getPriorityMarkViewerEmployeeName(currentUser, selectedEmployeeForHighlight);
   const showSharedGroupStripe = hasChildren && isExpanded;
   const sharedGroupExpanded = showSharedGroupStripe && childCount > 0;
 

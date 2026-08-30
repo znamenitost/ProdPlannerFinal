@@ -7,6 +7,7 @@ using ProductionPlanner.Hubs;
 using ProductionPlanner.Services;
 using ProductionPlanner.Services.Auth;
 using ProductionPlanner.Services.Calendar;
+using ProductionPlanner.Services.DayPlan;
 using ProductionPlanner.Services.TaskLists;
 using ProductionPlanner.Services.AppSettings;
 using ProductionPlanner.Services.TaskCdrPreview;
@@ -53,6 +54,7 @@ public static class WebApplicationExtensions
         services.AddScoped<ITaskListQueryService, TaskListQueryService>();
         services.AddScoped<IEmployeeAssignmentLoadService, EmployeeAssignmentLoadService>();
         services.AddScoped<IWeekCalendarService, WeekCalendarService>();
+        services.AddScoped<IDayPlanService, DayPlanService>();
         services.AddScoped<IUserProvisioningService, UserProvisioningService>();
         services.AddMemoryCache();
         services.AddScoped<IAvatarService, AvatarService>();

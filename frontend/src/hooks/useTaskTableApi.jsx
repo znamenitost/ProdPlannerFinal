@@ -1,10 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { openFileOnClient, openFolderOnClient } from '../utils/openFileOnClient';
-import { normalizePathForOpen, normalizeFolderPathForOpen } from '../utils/filePathForOpen';
-import {
-  ensureFileOpenSettingsLoaded,
-  getFileOpenShareName
-} from '../utils/fileOpenSettingsCache';
+import { openTaskFile, openTaskFolder } from '../utils/taskFileOpen';
 import {
   createTimeoutSignal,
   formatHttpError,
@@ -218,29 +213,9 @@ export default function useTaskTableApi() {
     });
   }, [request, lifecycleUrl]);
 
-  const openFile = useCallback(async (row) => {
-    await ensureFileOpenSettingsLoaded();
-    const relativePath = normalizePathForOpen(row.folderPath, row.fileName, getFileOpenShareName());
-    if (!relativePath || relativePath === '/') {
-      throw new Error('Путь к файлу не указан');
-    }
-    const result = await openFileOnClient(relativePath);
-    if (!result.ok) {
-      throw new Error(result.reason || 'Не удалось открыть файл');
-    }
-  }, []);
+  const openFile = useCallback((row) => openTaskFile(row), []);
 
-  const openFolder = useCallback(async (row) => {
-    await ensureFileOpenSettingsLoaded();
-    const relativePath = normalizeFolderPathForOpen(row.folderPath, getFileOpenShareName());
-    if (!relativePath || relativePath === '/') {
-      throw new Error('Путь к папке не указан');
-    }
-    const result = await openFolderOnClient(relativePath);
-    if (!result.ok) {
-      throw new Error(result.reason || 'Не удалось открыть папку');
-    }
-  }, []);
+  const openFolder = useCallback((row) => openTaskFolder(row), []);
 
   const getTaskForSplit = useCallback(async (employeeName, taskId) => {
     const tasks = await request(`/api/tasks/active?employee=${encodeURIComponent(employeeName)}`);
@@ -258,11 +233,14 @@ export default function useTaskTableApi() {
     });
   }, [request]);
 
-  const setPriorityRank = useCallback(async (id, rank) => {
+  const setPriorityRank = useCallback(async (id, rank, options = {}) => {
     return request(`/api/tasks/table/row/${id}/priority-rank`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rank: rank ?? null }),
+      body: JSON.stringify({
+        rank: rank ?? null,
+        joinWave: Boolean(options.joinWave)
+      }),
       timeoutMs: MUTATION_TIMEOUT_MS
     });
   }, [request]);

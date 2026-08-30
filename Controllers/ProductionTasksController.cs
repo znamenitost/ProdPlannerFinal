@@ -428,7 +428,12 @@ public class ProductionTasksController : ControllerBase
     {
         try
         {
-            var result = await _tableService.SetPriorityRankAsync(id, request?.Rank, cancellationToken);
+            var result = await _tableService.SetPriorityRankAsync(
+                id,
+                request?.Rank,
+                cancellationToken,
+                request?.JoinWave ?? false,
+                request?.AppendWave ?? false);
             if (result.NotFound)
                 return NotFound();
             if (result.Error != null)

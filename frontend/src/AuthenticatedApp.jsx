@@ -38,6 +38,7 @@ import {
   Notifications,
   LinkOff,
   AssignmentTurnedIn,
+  ViewTimeline,
 } from '@mui/icons-material';
 import CurrentDateTime from './components/CurrentDateTime';
 import DeadlineWarnings from './components/DeadlineWarnings';
@@ -51,6 +52,7 @@ import ChatHeaderButton from './components/chat/ChatHeaderButton';
 import { LoadingState } from './components/LoadingState';
 
 const WeekCalendar = lazy(() => import('./components/WeekCalendar'));
+const DayPlanPage = lazy(() => import('./components/dayPlan/DayPlanPage'));
 const CompletedTasksSection = lazy(() => import('./components/CompletedTasksSection'));
 const TaskTable = lazy(() => import('./components/TaskTable'));
 const ChatDrawer = lazy(() => import('./components/chat/ChatDrawer'));
@@ -80,7 +82,14 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { ruRU } from '@mui/x-date-pickers/locales';
 import 'dayjs/locale/ru';
 import { DEPLOY_MAINTENANCE_EVENT } from './utils/deployMaintenance';
-import { isTableViewTab } from './utils/hubViewSubscription';
+import { isCalendarViewTab, isTableViewTab } from './utils/hubViewSubscription';
+import {
+  APP_TAB_CALENDAR,
+  APP_TAB_DAY_PLAN,
+  APP_TAB_PICKUP,
+  APP_TAB_PICKUP_VISIBLE,
+  APP_TAB_TABLE
+} from './constants/appTabs';
 import './App.css';
 
 function AuthenticatedAppContent() {
@@ -106,8 +115,10 @@ function AuthenticatedAppContent() {
   }, []);
 
   useEffect(() => {
-    const maxTab = user?.role === 'Admin' ? 2 : 1;
-    if (activeTab > maxTab) setActiveTab(0);
+    const allowed = user?.role === 'Admin' && APP_TAB_PICKUP_VISIBLE
+      ? [APP_TAB_CALENDAR, APP_TAB_TABLE, APP_TAB_PICKUP, APP_TAB_DAY_PLAN]
+      : [APP_TAB_CALENDAR, APP_TAB_TABLE, APP_TAB_DAY_PLAN];
+    if (!allowed.includes(activeTab)) setActiveTab(APP_TAB_CALENDAR);
   }, [activeTab, setActiveTab, user?.role]);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [lunchPending, setLunchPending] = useState(false);
@@ -177,11 +188,11 @@ function AuthenticatedAppContent() {
   }, [activeTab, refreshTable]);
 
   const handleHubActiveTasksRefresh = useCallback(() => {
-    if (activeTab === 0) refreshActiveTasks();
+    if (isCalendarViewTab(activeTab)) refreshActiveTasks();
   }, [activeTab, refreshActiveTasks]);
 
   const handleHubCalendarRefresh = useCallback(() => {
-    if (activeTab === 0) refreshCalendar();
+    if (isCalendarViewTab(activeTab)) refreshCalendar();
   }, [activeTab, refreshCalendar]);
 
   const handleHubLunchStateChanged = useCallback(({ employeeName, interval }) => {
@@ -190,7 +201,7 @@ function AuthenticatedAppContent() {
 
     setCurrentLunch(interval?.endTime ? null : interval);
 
-    if (activeTab === 0 && String(employee || '').trim() === employeeName) {
+    if (isCalendarViewTab(activeTab) && String(employee || '').trim() === employeeName) {
       refreshCalendar();
     }
   }, [user?.fullName, employee, activeTab, refreshCalendar]);
@@ -659,14 +670,17 @@ function AuthenticatedAppContent() {
 
           <Paper sx={{ mb: 3, borderRadius: 2.5, overflow: 'hidden' }}>
             <Tabs value={activeTab} onChange={handleTabChange} centered variant="fullWidth">
-              <Tab icon={<CalendarMonth />} iconPosition="start" label="Календарь" />
-              <Tab icon={<TableChart />} iconPosition="start" label="Таблица задач" />
-              {isAdmin && <Tab icon={<AssignmentTurnedIn />} iconPosition="start" label="Выдача" />}
+              <Tab value={APP_TAB_CALENDAR} icon={<CalendarMonth />} iconPosition="start" label="Календарь" />
+              <Tab value={APP_TAB_DAY_PLAN} icon={<ViewTimeline />} iconPosition="start" label="План" />
+              <Tab value={APP_TAB_TABLE} icon={<TableChart />} iconPosition="start" label="Таблица задач" />
+              {isAdmin && APP_TAB_PICKUP_VISIBLE && (
+                <Tab value={APP_TAB_PICKUP} icon={<AssignmentTurnedIn />} iconPosition="start" label="Выдача" />
+              )}
             </Tabs>
           </Paper>
 
           <MotionSwitch transitionKey={activeTab}>
-            {activeTab === 0 && (
+            {activeTab === APP_TAB_CALENDAR && (
               <Suspense fallback={<LoadingState />}>
                 <WeekCalendar employee={employee} />
                 {!isAdmin && <DeadlineWarnings employee={employee} />}
@@ -682,7 +696,12 @@ function AuthenticatedAppContent() {
                 <CompletedTasksSection employee={employee} />
               </Suspense>
             )}
-            {activeTab === 1 && (
+            {activeTab === APP_TAB_DAY_PLAN && (
+              <Suspense fallback={<LoadingState />}>
+                <DayPlanPage employee={employee} isAdmin={isAdmin} />
+              </Suspense>
+            )}
+            {activeTab === APP_TAB_TABLE && (
               <Suspense fallback={<LoadingState />}>
                 <TaskTable
                   onCalendarRefresh={refreshCalendar}
@@ -701,7 +720,7 @@ function AuthenticatedAppContent() {
                 />
               </Suspense>
             )}
-            {activeTab === 2 && isAdmin && (
+            {activeTab === APP_TAB_PICKUP && isAdmin && APP_TAB_PICKUP_VISIBLE && (
               <Suspense fallback={<LoadingState />}>
                 <TaskTable
                   mode="pickup"

@@ -12,7 +12,8 @@ export default function TaskCommentCell({
   onOpenComment,
   iconButtonColor = 'primary',
   forceTooltipOpen = false,
-  onForceTooltipClose
+  onForceTooltipClose,
+  framed = false
 }) {
   const limit = useTextLimit();
   const rootRef = useRef(null);
@@ -63,7 +64,23 @@ export default function TaskCommentCell({
     <Box
       ref={rootRef}
       data-task-comment-cell={task.id}
-      sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0, gap: 0.5 }}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        width: '100%',
+        minWidth: 0,
+        gap: 0.5,
+        ...(framed
+          ? {
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              px: 1,
+              py: 0.5,
+              bgcolor: 'background.paper'
+            }
+          : {})
+      }}
     >
       <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
         {showTooltip ? (

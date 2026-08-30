@@ -14,6 +14,7 @@ export default function useAppDataRefresh(employee) {
     queryClient.invalidateQueries({ queryKey: queryKeys.weekCalendarAll(employee) });
     queryClient.invalidateQueries({ queryKey: queryKeys.completedAll(employee) });
     queryClient.invalidateQueries({ queryKey: queryKeys.dailyReportAll(employee) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.dayPlanAll(employee) });
     refreshActiveTasks();
   }, [queryClient, employee, refreshActiveTasks]);
 

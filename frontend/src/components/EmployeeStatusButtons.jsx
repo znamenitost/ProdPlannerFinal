@@ -106,10 +106,10 @@ export default function EmployeeStatusButtons({
     });
   };
 
-  const runPriorityRank = (rank) => {
+  const runPriorityRank = (rank, options) => {
     handleClose();
     if (menuDisabled || !onSetPriorityRank) return;
-    void Promise.resolve(onSetPriorityRank(task, rank)).catch((err) => {
+    void Promise.resolve(onSetPriorityRank(task, rank, options)).catch((err) => {
       console.error('Ошибка смены очереди задачи:', err);
     });
   };
@@ -199,7 +199,7 @@ export default function EmployeeStatusButtons({
           <PriorityRankMenuItem
             task={task}
             disabled={menuDisabled}
-            onSelectRank={(_, rank) => runPriorityRank(rank)}
+            onSelectRank={(_, rank, options) => runPriorityRank(rank, options)}
             onParentClose={handleClose}
           />
         )}

@@ -120,6 +120,17 @@ public class UpdateTaskRequest
 public class UpdatePriorityRankRequest
 {
     public int? Rank { get; set; }
+
+    /// <summary>
+    /// true — занять тот же номер, что у другой задачи (параллельная волна).
+    /// false — занятый номер вставляет и сдвигает очередь (пикер в таблице).
+    /// </summary>
+    public bool JoinWave { get; set; }
+
+    /// <summary>
+    /// true — новая волна в конец очереди (max занятых + 1), номер с клиента не используется.
+    /// </summary>
+    public bool AppendWave { get; set; }
 }
 
 public class UpdateWorkIntervalsRequest

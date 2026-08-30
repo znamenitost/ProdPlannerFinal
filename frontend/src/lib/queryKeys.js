@@ -27,7 +27,9 @@ export const queryKeys = {
   ],
   taskTableAll: () => ['app', 'taskTable'],
   deadlineRisks: (employee) => ['app', 'deadlineRisks', employee],
-  queueOverloads: (employee) => ['app', 'queueOverloads', employee]
+  queueOverloads: (employee) => ['app', 'queueOverloads', employee],
+  dayPlan: (employee, dateKey) => ['app', 'dayPlan', employee, dateKey || ''],
+  dayPlanAll: (employee) => ['app', 'dayPlan', employee]
 };
 
 export function weekStartIso(date) {

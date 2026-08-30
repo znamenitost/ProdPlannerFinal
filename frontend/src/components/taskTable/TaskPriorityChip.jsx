@@ -1,7 +1,7 @@
 import { Box, Popover } from '@mui/material';
 import { useRef, useState } from 'react';
 import LazyTooltip from '../common/LazyTooltip';
-import { getTaskPriorityRank } from '../../utils/taskPriorityRank';
+import { getVisiblePriorityRank } from '../../utils/taskPriorityMark';
 import PriorityRankPicker from './PriorityRankPicker';
 import { TaskPriorityRankMark } from './TaskPriorityRankMark';
 
@@ -13,12 +13,14 @@ export function TaskPriorityMark({ size = 22 }) {
 
 export default function TaskPriorityChip({
   task,
+  childrenTasks = null,
+  viewerEmployeeName = null,
   onSelectRank,
   pending = false
 }) {
   const anchorRef = useRef(null);
   const [open, setOpen] = useState(false);
-  const rank = getTaskPriorityRank(task);
+  const rank = getVisiblePriorityRank(task, childrenTasks, { viewerEmployeeName });
   if (rank == null) return null;
 
   const canEdit = typeof onSelectRank === 'function';
@@ -78,9 +80,9 @@ export default function TaskPriorityChip({
             currentRank={rank}
             allowOccupied
             disabled={pending}
-            onSelect={(nextRank) => {
+            onSelect={(nextRank, options) => {
               setOpen(false);
-              onSelectRank(task, nextRank);
+              onSelectRank(task, nextRank, options);
             }}
             onClear={() => {
               setOpen(false);

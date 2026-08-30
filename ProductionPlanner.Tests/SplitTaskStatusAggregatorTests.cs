@@ -385,6 +385,24 @@ public class SplitTaskStatusAggregatorTests
     }
 
     [Fact]
+    public void ResolvePriorityRank_parent_takes_lowest_own_child_number()
+    {
+        var parent = Parent();
+        var children = new List<ProductionTask>
+        {
+            Child("Дима", JobStatus.Assigned),
+            Child("Дима", JobStatus.Paused),
+            Child("Яромир", JobStatus.InProgress)
+        };
+        children[0].PriorityRank = null;
+        children[1].PriorityRank = 4;
+        children[2].PriorityRank = 1;
+
+        Assert.Equal(4, SplitTaskStatusAggregator.ResolvePriorityRank(
+            parent, children, "Дима", restrictToViewer: true));
+    }
+
+    [Fact]
     public void ResolvePriorityRank_standalone_uses_task_rank()
     {
         var task = Parent(isSplit: false);
@@ -392,5 +410,18 @@ public class SplitTaskStatusAggregatorTests
         task.PriorityRank = 3;
 
         Assert.Equal(3, SplitTaskStatusAggregator.ResolvePriorityRank(task, null));
+    }
+
+    [Fact]
+    public void ResolvePriorityRank_standalone_hides_colleague_when_restricted()
+    {
+        var task = Parent(isSplit: false);
+        task.EmployeeName = "Павел";
+        task.PriorityRank = 1;
+
+        Assert.Null(SplitTaskStatusAggregator.ResolvePriorityRank(
+            task, null, "Дима", restrictToViewer: true));
+        Assert.Equal(1, SplitTaskStatusAggregator.ResolvePriorityRank(
+            task, null, "Павел", restrictToViewer: true));
     }
 }
