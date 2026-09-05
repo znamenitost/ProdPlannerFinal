@@ -433,7 +433,9 @@ public class ProductionTasksController : ControllerBase
                 request?.Rank,
                 cancellationToken,
                 request?.JoinWave ?? false,
-                request?.AppendWave ?? false);
+                request?.AppendWave ?? false,
+                request?.BeforeTaskId,
+                request?.AfterTaskId);
             if (result.NotFound)
                 return NotFound();
             if (result.Error != null)

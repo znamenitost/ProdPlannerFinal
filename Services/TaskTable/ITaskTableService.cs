@@ -46,5 +46,7 @@ public interface ITaskTableService
         int? rank,
         CancellationToken cancellationToken = default,
         bool joinWave = false,
-        bool appendWave = false);
+        bool appendWave = false,
+        int? beforeTaskId = null,
+        int? afterTaskId = null);
 }

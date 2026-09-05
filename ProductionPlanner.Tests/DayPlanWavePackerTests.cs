@@ -59,6 +59,23 @@ public class DayPlanWavePackerTests
     }
 
     [Fact]
+    public void SameRank_orderControlsLane()
+    {
+        var packed = DayPlanWavePacker.Pack(
+            [
+                new DayPlanWavePacker.InputTask(1, 1, 1, 1),
+                new DayPlanWavePacker.InputTask(2, 1, 1, 0)
+            ],
+            MondayTen,
+            new WorkHoursCalculator());
+
+        var first = Assert.Single(packed, p => p.Lane == 0);
+        var second = Assert.Single(packed, p => p.Lane == 1);
+        Assert.Equal(2, first.TaskId);
+        Assert.Equal(1, second.TaskId);
+    }
+
+    [Fact]
     public void SkipsZeroRemaining()
     {
         var packed = DayPlanWavePacker.Pack(

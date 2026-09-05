@@ -1,6 +1,6 @@
 import { Box, Typography } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { tokens } from '../../theme/paletteTokens';
 import {
   cardsForWave,
@@ -10,6 +10,7 @@ import {
   pointerMovedEnough,
   resolveDayPlanDrop
 } from '../../utils/dayPlanBoard';
+import { shouldDimDayPlanCard } from '../../utils/dayPlanCardIdentity';
 import { buildWaveRopes } from '../../utils/dayPlanRopes';
 import { isTwinGroupHighlighted } from '../../utils/dayPlanTwinLinks';
 import DayPlanCard from './DayPlanCard';
@@ -80,6 +81,30 @@ function DropStrip({ payload, label, active, minHeight = 36, showLabel = false }
   );
 }
 
+function PlaceSlot({ payload, active, width = 32 }) {
+  return (
+    <Box
+      data-day-plan-drop={JSON.stringify(payload)}
+      sx={{
+        flex: `0 0 ${width}px`,
+        alignSelf: 'stretch',
+        minHeight: 48,
+        borderRadius: 1.5,
+        bgcolor: active ? alpha(ROPE_COLOR, 0.28) : 'transparent',
+        border: active ? `1.5px dashed ${ROPE_COLOR}` : '1.5px solid transparent',
+        pointerEvents: 'auto'
+      }}
+    />
+  );
+}
+
+function isPlaceActive(dropTarget, payload) {
+  if (dropTarget?.kind !== 'place') return false;
+  return dropTarget.rank === payload.rank
+    && (dropTarget.beforeTaskId ?? null) === (payload.beforeTaskId ?? null)
+    && (dropTarget.afterTaskId ?? null) === (payload.afterTaskId ?? null);
+}
+
 export default function DayPlanCanvas({
   plan,
   unplanned = [],
@@ -89,6 +114,10 @@ export default function DayPlanCanvas({
   onAssign,
   onOpenFolder,
   onOpenFile,
+  onOpenComment,
+  onOpenAssignees,
+  employee = '',
+  isAdmin = false,
   onHoverBlock,
   onAction,
   showActions = false,
@@ -110,6 +139,7 @@ export default function DayPlanCanvas({
   const onSelectRef = useRef(onSelectBlock);
   const [ropes, setRopes] = useState(null);
   const [drag, setDrag] = useState(null);
+  const [pinnedTaskId, setPinnedTaskId] = useState(null);
 
   const waves = useMemo(
     () => (plan?.waves || [])
@@ -124,7 +154,21 @@ export default function DayPlanCanvas({
   const interactive = canEdit && !pending;
   maxRankRef.current = maxRank;
   onAssignRef.current = onAssign;
-  onSelectRef.current = onSelectBlock;
+
+  const handleSelectCard = useCallback((card) => {
+    if (!card?.taskId) return;
+    setPinnedTaskId((prev) => (prev === card.taskId ? null : card.taskId));
+    onSelectBlock?.(card);
+  }, [onSelectBlock]);
+  onSelectRef.current = handleSelectCard;
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'Escape') setPinnedTaskId(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -154,7 +198,7 @@ export default function DayPlanCanvas({
     const observer = new ResizeObserver(measure);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [waves, selectedTaskId, unplanned.length]);
+  }, [waves, selectedTaskId, pinnedTaskId, unplanned.length]);
 
   const setCardRef = (key) => (node) => {
     if (node) cardRefs.current.set(key, node);
@@ -265,11 +309,17 @@ export default function DayPlanCanvas({
 
   const dropTarget = drag?.target || null;
 
+  const handleBoardClick = (event) => {
+    if (event.target.closest('[data-day-plan-card], [data-day-plan-card-details]')) return;
+    setPinnedTaskId(null);
+  };
+
   return (
     <Box
       ref={containerRef}
       data-day-plan-board={boardId}
       onDragEnd={() => setDrag(null)}
+      onClick={handleBoardClick}
       sx={{
         position: 'relative',
         px: { xs: 1.5, sm: 3 },
@@ -293,7 +343,7 @@ export default function DayPlanCanvas({
       >
         {waves.length === 0 && (
           <Box
-            data-day-plan-drop={JSON.stringify({ kind: 'append' })}
+            data-day-plan-drop={interactive ? JSON.stringify({ kind: 'append' }) : undefined}
             sx={{
               py: 6,
               textAlign: 'center',
@@ -312,7 +362,7 @@ export default function DayPlanCanvas({
           </Box>
         )}
 
-        {waves.length > 0 && (
+        {waves.length > 0 && interactive && (
           <DropStrip
             payload={{ kind: 'insert', rank: 1 }}
             label="В начало"
@@ -330,37 +380,72 @@ export default function DayPlanCanvas({
                 display: 'flex',
                 justifyContent: 'center',
                 flexWrap: 'nowrap',
-                gap: 'var(--day-plan-gap)',
+                gap: interactive ? 0 : 'var(--day-plan-gap)',
                 px: 1,
                 py: 1.5,
                 overflowX: 'auto'
               }}
             >
-              {wave.cards.map((card) => (
-                <DayPlanCard
-                  key={`card-${wave.rank}-${card.taskId}`}
-                  card={card}
-                  selected={selectedTaskId === card.taskId}
-                  canEdit={interactive}
-                  dragging={drag?.kind === 'task' && drag.taskId === card.taskId && drag.active}
-                  dropTarget={dropTarget}
-                  onSelect={interactive ? undefined : onSelectBlock}
-                  onPointerDown={(event, item) => startTaskDrag(event, item, item.rank)}
-                  onHtmlDragStart={onHtmlDragStart}
-                  onOpenFolder={onOpenFolder}
-                  onOpenFile={onOpenFile}
-                  onHover={onHoverBlock}
-                  onAction={onAction}
-                  showActions={showActions}
-                  actionPending={pending || pendingTaskId === card.taskId}
-                  onShowCdrPreview={onShowCdrPreview}
-                  cdrPreviewBuilding={Boolean(isCdrPreviewBuilding?.(card.taskId))}
-                  groupHighlighted={isGroupHighlighted(card, highlightedGroupId, twinGroupIds, showAllTwins)}
-                  cardRef={setCardRef(`${wave.rank}-${card.taskId}`)}
+              {wave.cards.map((card, cardIndex) => {
+                const beforePayload = { kind: 'place', rank: wave.rank, beforeTaskId: card.taskId };
+                return (
+                  <Fragment key={`card-${wave.rank}-${card.taskId}`}>
+                    {interactive && (
+                      <PlaceSlot
+                        payload={beforePayload}
+                        active={isPlaceActive(dropTarget, beforePayload)}
+                        width={cardIndex === 0 ? 28 : 40}
+                      />
+                    )}
+                    <DayPlanCard
+                      card={card}
+                      selected={selectedTaskId === card.taskId}
+                      canEdit={interactive}
+                      dragging={drag?.kind === 'task' && drag.taskId === card.taskId && drag.active}
+                      dropTarget={dropTarget}
+                      onSelect={interactive ? undefined : handleSelectCard}
+                      onPointerDown={(event, item) => startTaskDrag(event, item, item.rank)}
+                      onHtmlDragStart={onHtmlDragStart}
+                      onOpenFolder={onOpenFolder}
+                      onOpenFile={onOpenFile}
+                      onOpenComment={onOpenComment}
+                      onOpenAssignees={onOpenAssignees}
+                      employee={employee}
+                      isAdmin={isAdmin}
+                      onHover={onHoverBlock}
+                      onAction={onAction}
+                      showActions={showActions}
+                      actionPending={pending || pendingTaskId === card.taskId}
+                      onShowCdrPreview={onShowCdrPreview}
+                      cdrPreviewBuilding={Boolean(isCdrPreviewBuilding?.(card.taskId))}
+                      groupHighlighted={isGroupHighlighted(card, highlightedGroupId, twinGroupIds, showAllTwins)}
+                      cardRef={setCardRef(`${wave.rank}-${card.taskId}`)}
+                      dimmed={shouldDimDayPlanCard({
+                        taskId: card.taskId,
+                        focusedTaskId: pinnedTaskId
+                      })}
+                      detailsOpen={pinnedTaskId === card.taskId}
+                    />
+                  </Fragment>
+                );
+              })}
+              {interactive && wave.cards.length > 0 && (
+                <PlaceSlot
+                  payload={{
+                    kind: 'place',
+                    rank: wave.rank,
+                    afterTaskId: wave.cards[wave.cards.length - 1].taskId
+                  }}
+                  active={isPlaceActive(dropTarget, {
+                    kind: 'place',
+                    rank: wave.rank,
+                    afterTaskId: wave.cards[wave.cards.length - 1].taskId
+                  })}
+                  width={28}
                 />
-              ))}
+              )}
             </Box>
-            {waveIndex < waves.length - 1 && (
+            {waveIndex < waves.length - 1 && interactive && (
               <DropStrip
                 payload={{ kind: 'insert', rank: waves[waveIndex + 1].rank }}
                 label="Вставить волну"
@@ -371,17 +456,18 @@ export default function DayPlanCanvas({
           </Box>
         ))}
 
-        {waves.length > 0 && (
+        {waves.length > 0 && interactive && (
           <DropStrip
             payload={{ kind: 'append' }}
-            label={interactive ? 'Новая волна' : ''}
-            active={interactive && (dropTarget?.kind === 'append' || dropTarget?.kind === 'board')}
-            showLabel={interactive}
+            label="Новая волна"
+            active={dropTarget?.kind === 'append' || dropTarget?.kind === 'board'}
+            showLabel
             minHeight={48}
           />
         )}
       </Box>
 
+      {canEdit && (
       <Box
         data-day-plan-drop={JSON.stringify({ kind: 'unplanned' })}
         sx={{
@@ -428,21 +514,31 @@ export default function DayPlanCanvas({
                   canEdit={interactive}
                   dragging={drag?.kind === 'task' && drag.taskId === task.id && drag.active}
                   dropTarget={null}
-                  onSelect={interactive ? undefined : onSelectBlock}
+                  onSelect={interactive ? undefined : handleSelectCard}
                   onPointerDown={(event, item) => startTaskDrag(event, item, null)}
                   onHtmlDragStart={onHtmlDragStart}
                   onOpenFolder={onOpenFolder}
                   onOpenFile={onOpenFile}
+                  onOpenComment={onOpenComment}
+                  onOpenAssignees={onOpenAssignees}
+                  employee={employee}
+                  isAdmin={isAdmin}
                   onHover={onHoverBlock}
                   onShowCdrPreview={onShowCdrPreview}
                   cdrPreviewBuilding={Boolean(isCdrPreviewBuilding?.(task.id))}
                   groupHighlighted={isGroupHighlighted(card, highlightedGroupId, twinGroupIds, showAllTwins)}
+                  dimmed={shouldDimDayPlanCard({
+                    taskId: task.id,
+                    focusedTaskId: pinnedTaskId
+                  })}
+                  detailsOpen={pinnedTaskId === task.id}
                 />
               );
             })}
           </Box>
         )}
       </Box>
+      )}
 
       {drag?.active && drag.kind === 'task' && (
         <Box

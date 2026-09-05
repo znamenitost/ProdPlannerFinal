@@ -11,7 +11,7 @@ public static class TaskPriorityRankPlanner
     public const int ExtraFreeSlots = 3;
     public const int MaxRank = 99;
 
-    public readonly record struct RankedTask(int Id, int Rank);
+    public readonly record struct RankedTask(int Id, int Rank, int Order = 0);
 
     /// <summary>Следующий свободный номер после самой большой занятой очереди.</summary>
     public static int NextAppendRank(IReadOnlyList<RankedTask> ranked)
@@ -146,6 +146,138 @@ public static class TaskPriorityRankPlanner
 
         foreach (var compact in CompactRanks(remaining))
             changes[compact.Key] = compact.Value;
+
+        return changes;
+    }
+
+    public static List<RankedTask> ProjectRanks(
+        IReadOnlyList<RankedTask> ranked,
+        IReadOnlyDictionary<int, int?> rankChanges,
+        int taskId,
+        int? fallbackRank)
+    {
+        var byId = new Dictionary<int, RankedTask>();
+        if (ranked != null)
+        {
+            foreach (var task in ranked)
+                byId[task.Id] = task;
+        }
+
+        if (rankChanges != null)
+        {
+            foreach (var change in rankChanges)
+            {
+                if (change.Value is > 0)
+                {
+                    var order = byId.TryGetValue(change.Key, out var prev) ? prev.Order : int.MaxValue;
+                    byId[change.Key] = new RankedTask(change.Key, change.Value.Value, order);
+                }
+                else
+                {
+                    byId.Remove(change.Key);
+                }
+            }
+        }
+
+        if (!byId.ContainsKey(taskId) && fallbackRank is > 0)
+            byId[taskId] = new RankedTask(taskId, fallbackRank.Value, int.MaxValue);
+
+        return byId.Values.ToList();
+    }
+
+    /// <summary>
+    /// Поставить задачу сразу до/после целевой в её волне.
+    /// Rank целевой волны уже должен быть проставлен в <paramref name="ranked"/>.
+    /// </summary>
+    public static Dictionary<int, int> PlanPlaceInWave(
+        IReadOnlyList<RankedTask> ranked,
+        int taskId,
+        int targetTaskId,
+        bool before)
+    {
+        var changes = new Dictionary<int, int>();
+        if (taskId == targetTaskId) return changes;
+
+        var list = ranked ?? [];
+        RankedTask? target = null;
+        RankedTask? moving = null;
+        foreach (var task in list)
+        {
+            if (task.Id == targetTaskId) target = task;
+            if (task.Id == taskId) moving = task;
+        }
+
+        if (target is null) return changes;
+
+        var rank = target.Value.Rank;
+        var wave = list
+            .Where(t => t.Rank == rank && t.Id != taskId)
+            .OrderBy(t => t.Order)
+            .ThenBy(t => t.Id)
+            .ToList();
+        var targetIndex = wave.FindIndex(t => t.Id == targetTaskId);
+        if (targetIndex < 0) return changes;
+
+        var insertAt = before ? targetIndex : targetIndex + 1;
+        var movingTask = moving is { } current
+            ? new RankedTask(taskId, rank, current.Order)
+            : new RankedTask(taskId, rank, int.MaxValue);
+        wave.Insert(insertAt, movingTask);
+
+        for (var i = 0; i < wave.Count; i++)
+        {
+            if (wave[i].Order != i)
+                changes[wave[i].Id] = i;
+        }
+
+        if (moving is { } left && left.Rank != rank)
+        {
+            foreach (var pair in CompactWaveOrders(list, left.Rank, taskId))
+                changes[pair.Key] = pair.Value;
+        }
+
+        return changes;
+    }
+
+    public static Dictionary<int, int> PlanAppendToWave(
+        IReadOnlyList<RankedTask> ranked,
+        int taskId,
+        int rank)
+    {
+        var wave = (ranked ?? [])
+            .Where(t => t.Rank == rank && t.Id != taskId)
+            .OrderBy(t => t.Order)
+            .ThenBy(t => t.Id)
+            .ToList();
+        var changes = new Dictionary<int, int>();
+        for (var i = 0; i < wave.Count; i++)
+        {
+            if (wave[i].Order != i)
+                changes[wave[i].Id] = i;
+        }
+
+        var next = wave.Count;
+        changes[taskId] = next;
+
+        return changes;
+    }
+
+    public static Dictionary<int, int> CompactWaveOrders(
+        IReadOnlyList<RankedTask> ranked,
+        int rank,
+        int? excludeTaskId = null)
+    {
+        var wave = (ranked ?? [])
+            .Where(t => t.Rank == rank && t.Id != excludeTaskId)
+            .OrderBy(t => t.Order)
+            .ThenBy(t => t.Id)
+            .ToList();
+        var changes = new Dictionary<int, int>();
+        for (var i = 0; i < wave.Count; i++)
+        {
+            if (wave[i].Order != i)
+                changes[wave[i].Id] = i;
+        }
 
         return changes;
     }

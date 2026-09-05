@@ -86,6 +86,28 @@ export async function getDayPlan(employee, options = {}) {
   return res.json();
 }
 
+export async function getTableRow(id, employee = '', options = {}) {
+  let url = `${API_BASE}/tasks/table/row/${id}`;
+  if (employee) url += `?employee=${encodeURIComponent(employee)}`;
+  const res = await fetch(url, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    signal: options.signal
+  });
+  await throwIfNotOk(res, 'Не удалось загрузить задачу');
+  return res.json();
+}
+
+export async function getSplitChildren(parentId, options = {}) {
+  const res = await fetch(`${API_BASE}/tasks/split/children/${parentId}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    signal: options.signal
+  });
+  await throwIfNotOk(res, 'Не удалось загрузить назначения');
+  return res.json();
+}
+
 /** rank с клиента — если не appendWave. */
 export async function setPriorityRank(id, rank, options = {}) {
   const res = await fetch(`${API_BASE}/tasks/table/row/${id}/priority-rank`, {
@@ -95,7 +117,9 @@ export async function setPriorityRank(id, rank, options = {}) {
     body: JSON.stringify({
       rank: options.appendWave ? null : (rank ?? null),
       joinWave: Boolean(options.joinWave),
-      appendWave: Boolean(options.appendWave)
+      appendWave: Boolean(options.appendWave),
+      beforeTaskId: options.beforeTaskId ?? null,
+      afterTaskId: options.afterTaskId ?? null
     }),
     signal: options.signal
   });

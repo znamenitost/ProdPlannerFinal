@@ -90,6 +90,9 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE "ProductionTasks"
                     ADD COLUMN IF NOT EXISTS "PriorityRank" integer NULL;
 
+                ALTER TABLE "ProductionTasks"
+                    ADD COLUMN IF NOT EXISTS "PriorityOrder" integer NOT NULL DEFAULT 0;
+
                 WITH ranked AS (
                     SELECT "Id",
                            ROW_NUMBER() OVER (

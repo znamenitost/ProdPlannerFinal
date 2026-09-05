@@ -34,6 +34,7 @@ export function cardsForWave(wave) {
 /**
  * Жест доски → смена PriorityRank.
  * Перенос на карточку — встать в её волну параллельно (joinWave).
+ * Край карточки / слот слева-справа — позиция внутри волны (календарь сверху вниз).
  * «В начало» — insert rank 1: задача становится волной 1, остальные сдвигаются.
  * «Новая волна» — appendWave: сервер ставит max(все занятые)+1, затем номера сжимаются в 1..N.
  */
@@ -60,10 +61,35 @@ export function resolveDayPlanDrop(drag, target, maxRank = 0) {
     return { taskId, rank, joinWave: false };
   }
 
+  if (target.kind === 'place') {
+    const rank = Number(target.rank);
+    if (!Number.isInteger(rank) || rank < 1) return null;
+    const beforeTaskId = target.beforeTaskId ?? null;
+    const afterTaskId = target.afterTaskId ?? null;
+    if (beforeTaskId == null && afterTaskId == null) return null;
+    if (beforeTaskId === taskId || afterTaskId === taskId) return null;
+    return {
+      taskId,
+      rank,
+      joinWave: true,
+      beforeTaskId,
+      afterTaskId
+    };
+  }
+
   if (target.kind === 'card') {
     if (target.taskId === taskId) return null;
     const rank = Number(target.rank);
     if (!Number.isInteger(rank) || rank < 1) return null;
+    if (target.edge === 'before' || target.edge === 'after') {
+      return {
+        taskId,
+        rank,
+        joinWave: true,
+        beforeTaskId: target.edge === 'before' ? target.taskId : null,
+        afterTaskId: target.edge === 'after' ? target.taskId : null
+      };
+    }
     if (drag.fromRank === rank) return null;
     return { taskId, rank, joinWave: true };
   }
@@ -96,6 +122,11 @@ export function isUsableDayPlanDrop(parsed) {
     const rank = Number(parsed.rank);
     return Number.isInteger(rank) && rank > 0;
   }
+  if (parsed.kind === 'place') {
+    const rank = Number(parsed.rank);
+    return Number.isInteger(rank) && rank > 0
+      && (parsed.beforeTaskId != null || parsed.afterTaskId != null);
+  }
   return true;
 }
 
@@ -110,7 +141,13 @@ export function findDropTarget(clientX, clientY) {
     while (node) {
       if (node.closest?.('[data-day-plan-ghost]')) break;
       const parsed = parseDropPayload(node.getAttribute('data-day-plan-drop'));
-      if (isUsableDayPlanDrop(parsed)) return parsed;
+      if (isUsableDayPlanDrop(parsed)) {
+        if (parsed.kind === 'card') {
+          const rect = node.getBoundingClientRect();
+          parsed.edge = clientX < rect.left + rect.width / 2 ? 'before' : 'after';
+        }
+        return parsed;
+      }
       const parent = node.parentElement;
       node = parent?.closest?.('[data-day-plan-drop]') ?? null;
     }

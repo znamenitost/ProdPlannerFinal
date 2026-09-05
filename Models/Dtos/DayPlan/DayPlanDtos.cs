@@ -69,5 +69,8 @@ public class DayPlanTaskDto
     public bool IsFuss { get; set; }
     public bool HasCdrPreview { get; set; }
     public string Comment { get; set; } = "";
+    public int CommentBadgeCount { get; set; }
+    /// <summary>Куда открывать диалог комментариев: своя задача или родитель, если непрочитанное там.</summary>
+    public int CommentTaskId { get; set; }
     public List<string> PartnerNames { get; set; } = [];
 }

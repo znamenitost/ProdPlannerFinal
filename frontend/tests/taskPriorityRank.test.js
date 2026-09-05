@@ -116,12 +116,20 @@ describe('sortActiveTasksForEmployeeStack', () => {
     assert.deepEqual(sorted.map((task) => task.id), ['ranked', 'blocked']);
   });
 
-  it('uses original order when ranks and deadlines match', () => {
+  it('uses original order when ranks, order and deadlines match', () => {
     const sorted = sortActiveTasksForEmployeeStack([
       { id: 'first', priorityRank: 1, deadline: '2026-08-20T10:00:00' },
       { id: 'second', priorityRank: 1, deadline: '2026-08-20T10:00:00' }
     ]);
     assert.deepEqual(sorted.map((task) => task.id), ['first', 'second']);
+  });
+
+  it('orders same-rank tasks by priorityOrder left to right', () => {
+    const sorted = sortActiveTasksForEmployeeStack([
+      { id: 'right', priorityRank: 1, priorityOrder: 2, deadline: '2026-08-20T10:00:00' },
+      { id: 'left', priorityRank: 1, priorityOrder: 0, deadline: '2026-08-20T10:00:00' }
+    ]);
+    assert.deepEqual(sorted.map((task) => task.id), ['left', 'right']);
   });
 });
 

@@ -311,6 +311,7 @@ public class TaskTableService : ITaskTableService
                 g => g.Key,
                 g => g
                     .OrderBy(t => t.PriorityRank)
+                    .ThenBy(t => t.PriorityOrder)
                     .ThenBy(t => t.Id)
                     .Select(t => new PriorityQueueItemDto
                     {
@@ -373,7 +374,9 @@ public class TaskTableService : ITaskTableService
         int? rank,
         CancellationToken cancellationToken = default,
         bool joinWave = false,
-        bool appendWave = false)
+        bool appendWave = false,
+        int? beforeTaskId = null,
+        int? afterTaskId = null)
     {
         var task = await _repo.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null)
@@ -389,37 +392,97 @@ public class TaskTableService : ITaskTableService
             return TaskTableServiceResult<ProductionTask>.Fail("Нельзя поставить в очередь завершённую задачу.");
         if (string.IsNullOrWhiteSpace(task.EmployeeName))
             return TaskTableServiceResult<ProductionTask>.Fail("Укажите сотрудника, чтобы задать очередь.");
-        if (!appendWave && rank is < 1 or > TaskPriorityRankPlanner.MaxRank)
-            return TaskTableServiceResult<ProductionTask>.Fail("Номер очереди должен быть от 1 до 99.");
 
         var ranked = await _repo.GetActivePriorityRankedTasksAsync([task.EmployeeName], cancellationToken);
         var current = ranked
-            .Select(t => new TaskPriorityRankPlanner.RankedTask(t.Id, t.PriorityRank!.Value))
+            .Select(t => new TaskPriorityRankPlanner.RankedTask(
+                t.Id, t.PriorityRank!.Value, t.PriorityOrder))
             .ToList();
+
+        var placeTargetId = beforeTaskId ?? afterTaskId;
+        var placeBefore = beforeTaskId != null;
+        if (placeTargetId is int placeId)
+        {
+            if (placeId == taskId)
+                return TaskTableServiceResult<ProductionTask>.Ok(task);
+            var target = ranked.FirstOrDefault(t => t.Id == placeId);
+            if (target == null || target.PriorityRank is not > 0)
+                return TaskTableServiceResult<ProductionTask>.Fail("Нельзя встать рядом с этой задачей.");
+            rank = target.PriorityRank;
+            joinWave = true;
+            appendWave = false;
+        }
+
         if (appendWave)
         {
             rank = TaskPriorityRankPlanner.NextAppendRank(current);
             joinWave = false;
         }
+
+        if (rank is not null && rank is < 1 or > TaskPriorityRankPlanner.MaxRank)
+            return TaskTableServiceResult<ProductionTask>.Fail("Номер очереди должен быть от 1 до 99.");
+
         var currentRank = task.PriorityRank is > 0 ? task.PriorityRank : null;
-        Dictionary<int, int?> changes;
+        Dictionary<int, int?> rankChanges;
         try
         {
-            changes = TaskPriorityRankPlanner.PlanAssign(current, task.Id, currentRank, rank, joinWave);
+            rankChanges = TaskPriorityRankPlanner.PlanAssign(current, task.Id, currentRank, rank, joinWave);
         }
         catch (ArgumentOutOfRangeException)
         {
             return TaskTableServiceResult<ProductionTask>.Fail("Некорректный номер очереди.");
         }
 
-        if (changes.Count == 0)
+        var projected = TaskPriorityRankPlanner.ProjectRanks(current, rankChanges, task.Id, rank);
+        Dictionary<int, int> orderChanges;
+        if (placeTargetId is int placeAt)
+        {
+            orderChanges = TaskPriorityRankPlanner.PlanPlaceInWave(
+                projected, task.Id, placeAt, placeBefore);
+            if (currentRank is > 0 && currentRank != rank)
+            {
+                foreach (var pair in TaskPriorityRankPlanner.CompactWaveOrders(
+                    projected, currentRank.Value, task.Id))
+                    orderChanges[pair.Key] = pair.Value;
+            }
+        }
+        else if (rank is > 0 && joinWave)
+        {
+            orderChanges = TaskPriorityRankPlanner.PlanAppendToWave(projected, task.Id, rank.Value);
+        }
+        else if (rank is > 0)
+        {
+            orderChanges = new Dictionary<int, int>();
+            if (task.PriorityOrder != 0)
+                orderChanges[task.Id] = 0;
+            if (currentRank is > 0 && currentRank != rank)
+            {
+                foreach (var pair in TaskPriorityRankPlanner.CompactWaveOrders(
+                    projected, currentRank.Value, task.Id))
+                    orderChanges[pair.Key] = pair.Value;
+            }
+        }
+        else
+        {
+            orderChanges = currentRank is > 0
+                ? TaskPriorityRankPlanner.CompactWaveOrders(projected, currentRank.Value, task.Id)
+                : [];
+        }
+
+        if (rankChanges.Count == 0 && orderChanges.Count == 0)
             return TaskTableServiceResult<ProductionTask>.Ok(task);
 
         await _repo.ExecuteInTransactionAsync(
-            ct => _repo.ApplyPriorityRankChangesAsync(changes, ct),
+            async ct =>
+            {
+                if (rankChanges.Count > 0)
+                    await _repo.ApplyPriorityRankChangesAsync(rankChanges, ct);
+                if (orderChanges.Count > 0)
+                    await _repo.ApplyPriorityOrderChangesAsync(orderChanges, ct);
+            },
             cancellationToken);
 
-        var changedIds = changes.Keys.ToList();
+        var changedIds = rankChanges.Keys.Concat(orderChanges.Keys).Distinct().ToList();
         var changedTasks = await _repo.GetTasksByIdsAsync(changedIds, cancellationToken);
         foreach (var changed in changedTasks)
             await _notificationService.NotifyTaskUpdatedAsync(changed);

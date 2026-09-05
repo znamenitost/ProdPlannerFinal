@@ -181,4 +181,51 @@ public class TaskPriorityRankPlannerTests
         var changes = TaskPriorityRankPlanner.PlanAssign(ranked, 11, 1, 1, joinWave: true);
         Assert.Empty(changes);
     }
+
+    [Fact]
+    public void Place_in_wave_moves_task_left()
+    {
+        var ranked = Queue((10, 1, 0), (11, 1, 1), (12, 1, 2));
+        var changes = TaskPriorityRankPlanner.PlanPlaceInWave(ranked, 12, 10, before: true);
+
+        Assert.Equal(0, changes[12]);
+        Assert.Equal(1, changes[10]);
+        Assert.Equal(2, changes[11]);
+    }
+
+    [Fact]
+    public void Place_after_neighbor_is_noop()
+    {
+        var ranked = Queue((10, 1, 0), (11, 1, 1));
+        var changes = TaskPriorityRankPlanner.PlanPlaceInWave(ranked, 11, 10, before: false);
+        Assert.Empty(changes);
+    }
+
+    [Fact]
+    public void Place_from_another_wave_compacts_the_old_one()
+    {
+        var ranked = Queue((10, 1, 0), (11, 1, 1), (12, 2, 0));
+        var projected = TaskPriorityRankPlanner.ProjectRanks(
+            ranked, new Dictionary<int, int?> { [12] = 1 }, 12, 1);
+        var changes = TaskPriorityRankPlanner.PlanPlaceInWave(projected, 12, 10, before: true);
+
+        Assert.Equal(1, changes[10]);
+        Assert.Equal(2, changes[11]);
+        Assert.True(!changes.ContainsKey(12) || changes[12] == 0);
+    }
+
+    [Fact]
+    public void Append_to_wave_puts_task_last()
+    {
+        var ranked = Queue((10, 1, 0), (11, 1, 1));
+        var projected = TaskPriorityRankPlanner.ProjectRanks(
+            ranked, new Dictionary<int, int?> { [12] = 1 }, 12, 1);
+        var changes = TaskPriorityRankPlanner.PlanAppendToWave(projected, 12, 1);
+
+        Assert.Equal(2, changes[12]);
+    }
+
+    private static List<TaskPriorityRankPlanner.RankedTask> Queue(
+        params (int Id, int Rank, int Order)[] items) =>
+        items.Select(i => new TaskPriorityRankPlanner.RankedTask(i.Id, i.Rank, i.Order)).ToList();
 }

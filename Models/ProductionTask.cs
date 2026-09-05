@@ -68,10 +68,18 @@ namespace ProductionPlanner.Models
         /// <summary>Номер в очереди сотрудника (1, 2, 3…). null — не в очереди.</summary>
         public int? PriorityRank { get; set; }
 
+        /// <summary>
+        /// Позиция внутри волны (слева направо на доске = сверху вниз в календаре).
+        /// Сравнивается только среди задач с тем же <see cref="PriorityRank"/>.
+        /// </summary>
+        public int PriorityOrder { get; set; }
+
         public void SetPriorityRank(int? rank)
         {
             PriorityRank = rank is > 0 ? rank : null;
             IsPriorityMarked = PriorityRank != null;
+            if (PriorityRank is null)
+                PriorityOrder = 0;
         }
         public double Progress { get; set; }
         public double ActualHours { get; set; }

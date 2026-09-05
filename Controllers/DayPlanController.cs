@@ -46,6 +46,7 @@ public class DayPlanController : ControllerBase
             employee.Trim(),
             date,
             _timeService.Now,
+            currentUser.Id,
             cancellationToken);
         return Ok(result);
     }

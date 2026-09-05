@@ -110,6 +110,8 @@ public static class DatabaseInitializer
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN IsPriorityMarked INTEGER NOT NULL DEFAULT 0");
             if (!columns.Contains("PriorityRank"))
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN PriorityRank INTEGER NULL");
+            if (!columns.Contains("PriorityOrder"))
+                alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN PriorityOrder INTEGER NOT NULL DEFAULT 0");
             if (!columns.Contains("CommentEditedViaDialog"))
                 alterCommands.Add("ALTER TABLE ProductionTasks ADD COLUMN CommentEditedViaDialog INTEGER NOT NULL DEFAULT 0");
             if (!columns.Contains("PickupCode"))

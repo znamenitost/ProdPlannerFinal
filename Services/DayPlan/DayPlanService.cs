@@ -17,21 +17,25 @@ public class DayPlanService : IDayPlanService
     private readonly IProductionTaskRepository _repo;
     private readonly IWorkHoursCalculator _workHours;
     private readonly ITaskCdrPreviewService _cdrPreviewService;
+    private readonly ITaskCommentService? _taskComments;
 
     public DayPlanService(
         IProductionTaskRepository repo,
         IWorkHoursCalculator workHours,
-        ITaskCdrPreviewService cdrPreviewService)
+        ITaskCdrPreviewService cdrPreviewService,
+        ITaskCommentService? taskComments = null)
     {
         _repo = repo;
         _workHours = workHours;
         _cdrPreviewService = cdrPreviewService;
+        _taskComments = taskComments;
     }
 
     public async Task<DayPlanResponseDto> GetDayPlanAsync(
         string employee,
         string? date,
         DateTime currentTime,
+        string? viewerUserId = null,
         CancellationToken cancellationToken = default)
     {
         var nowMoscow = AppDateTime.ToMoscowWallClockFromApp(currentTime);
@@ -75,7 +79,8 @@ public class DayPlanService : IDayPlanService
             .Select(t => new DayPlanWavePacker.InputTask(
                 t.Id,
                 t.PriorityRank!.Value,
-                RemainingHours(t)))
+                RemainingHours(t),
+                t.PriorityOrder))
             .ToList();
 
         var packed = DayPlanWavePacker.Pack(packable, nowMoscow, _workHours);
@@ -90,7 +95,7 @@ public class DayPlanService : IDayPlanService
         foreach (var group in rankedGroups)
         {
             var rank = group.Key;
-            var waveTasks = group.OrderBy(t => t.Id).ToList();
+            var waveTasks = group.OrderBy(t => t.PriorityOrder).ThenBy(t => t.Id).ToList();
             var blocked = waveTasks
                 .Where(t => IsBlocked(t, splitMetadata))
                 .Select(t => taskDtos[t.Id])
@@ -187,6 +192,8 @@ public class DayPlanService : IDayPlanService
             .Select(t => taskDtos[t.Id])
             .ToList();
 
+        await ApplyCommentBadgeCountsAsync(taskDtos.Values, viewerUserId, cancellationToken);
+
         var lastPackedEnd = packed
             .SelectMany(p => p.Segments)
             .Select(s => s.End)
@@ -225,7 +232,8 @@ public class DayPlanService : IDayPlanService
     {
         var ranked = tasks
             .Where(t => !t.IsFuss && t.PriorityRank is > 0)
-            .Select(t => new TaskPriorityRankPlanner.RankedTask(t.Id, t.PriorityRank!.Value))
+            .Select(t => new TaskPriorityRankPlanner.RankedTask(
+                t.Id, t.PriorityRank!.Value, t.PriorityOrder))
             .ToList();
         var compact = TaskPriorityRankPlanner.CompactRanks(ranked);
         if (compact.Count == 0)
@@ -235,6 +243,37 @@ public class DayPlanService : IDayPlanService
             ct => _repo.ApplyPriorityRankChangesAsync(compact, ct),
             cancellationToken);
         return await _repo.GetActiveTasksAsync(employee, cancellationToken);
+    }
+
+    private async Task ApplyCommentBadgeCountsAsync(
+        IEnumerable<DayPlanTaskDto> tasks,
+        string? viewerUserId,
+        CancellationToken cancellationToken)
+    {
+        var list = tasks as IList<DayPlanTaskDto> ?? tasks.ToList();
+        if (list.Count == 0 || string.IsNullOrWhiteSpace(viewerUserId) || _taskComments == null)
+            return;
+
+        var ids = list.Select(t => t.Id).ToList();
+        foreach (var task in list)
+        {
+            if (task.ParentRowNumber is > 0)
+                ids.Add(task.ParentRowNumber.Value);
+        }
+
+        var counts = await _taskComments.GetUnreadBadgeCountsAsync(ids, viewerUserId, cancellationToken);
+
+        foreach (var task in list)
+        {
+            counts.TryGetValue(task.Id, out var own);
+            var parent = 0;
+            if (task.ParentRowNumber is > 0)
+                counts.TryGetValue(task.ParentRowNumber.Value, out parent);
+            task.CommentBadgeCount = own + parent;
+            task.CommentTaskId = own > 0 || parent <= 0 || task.ParentRowNumber is not > 0
+                ? task.Id
+                : task.ParentRowNumber.Value;
+        }
     }
 
     private static DateTime ResolveDay(string? date, DateTime nowMoscow)
@@ -296,6 +335,7 @@ public class DayPlanService : IDayPlanService
             IsFuss = task.IsFuss,
             HasCdrPreview = TaskCdrPreviewService.HasPreview(task.Id, task.ParentRowNumber, previewIds),
             Comment = task.Comment ?? "",
+            CommentTaskId = task.Id,
             PartnerNames = partners
         };
     }

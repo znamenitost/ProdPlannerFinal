@@ -56,6 +56,11 @@ export function getPriorityRankSortValue(task) {
   return rank == null ? Number.POSITIVE_INFINITY : rank;
 }
 
+export function getPriorityOrderSortValue(task) {
+  const order = Number(task?.priorityOrder);
+  return Number.isFinite(order) ? order : 0;
+}
+
 function getDeadlineSortValue(task) {
   if (!task?.deadline) return Number.POSITIVE_INFINITY;
   const value = new Date(task.deadline).getTime();
@@ -71,6 +76,9 @@ export function sortActiveTasksForEmployeeStack(
     .sort((a, b) => {
       const rankDiff = getPriorityRankSortValue(a.task) - getPriorityRankSortValue(b.task);
       if (rankDiff) return rankDiff;
+
+      const orderDiff = getPriorityOrderSortValue(a.task) - getPriorityOrderSortValue(b.task);
+      if (orderDiff) return orderDiff;
 
       if (blockedBottomSort) {
         const blockedDiff = Number(Boolean(isBlocked(a.task))) - Number(Boolean(isBlocked(b.task)));

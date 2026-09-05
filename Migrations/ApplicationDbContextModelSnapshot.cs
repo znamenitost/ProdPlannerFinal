@@ -302,6 +302,9 @@ namespace ProductionPlanner.Migrations
                     b.Property<int?>("PriorityRank")
                         .HasColumnType("integer");
 
+                    b.Property<int>("PriorityOrder")
+                        .HasColumnType("integer");
+
                     b.Property<double>("ProductionEstimateHours")
                         .HasColumnType("double precision");
 

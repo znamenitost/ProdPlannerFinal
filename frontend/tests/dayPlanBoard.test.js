@@ -125,6 +125,36 @@ describe('resolveDayPlanDrop', () => {
       null
     );
   });
+
+  it('places a task to the left of another card in the same wave', () => {
+    const change = resolveDayPlanDrop(
+      { kind: 'task', taskId: 8, fromRank: 1 },
+      { kind: 'card', taskId: 3, rank: 1, edge: 'before' },
+      1
+    );
+    assert.deepEqual(change, {
+      taskId: 8,
+      rank: 1,
+      joinWave: true,
+      beforeTaskId: 3,
+      afterTaskId: null
+    });
+  });
+
+  it('places a task into a slot after the last card', () => {
+    const change = resolveDayPlanDrop(
+      { kind: 'task', taskId: 8, fromRank: 1 },
+      { kind: 'place', rank: 1, afterTaskId: 3 },
+      1
+    );
+    assert.deepEqual(change, {
+      taskId: 8,
+      rank: 1,
+      joinWave: true,
+      beforeTaskId: null,
+      afterTaskId: 3
+    });
+  });
 });
 
 describe('isUsableDayPlanDrop', () => {
@@ -133,6 +163,8 @@ describe('isUsableDayPlanDrop', () => {
     assert.equal(isUsableDayPlanDrop({ kind: 'append' }), true);
     assert.equal(isUsableDayPlanDrop({ kind: 'unplanned' }), true);
     assert.equal(isUsableDayPlanDrop({ kind: 'card', taskId: 3, rank: 2 }), true);
+    assert.equal(isUsableDayPlanDrop({ kind: 'place', rank: 1, beforeTaskId: 3 }), true);
+    assert.equal(isUsableDayPlanDrop({ kind: 'place', rank: null }), false);
   });
 });
 

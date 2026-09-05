@@ -131,6 +131,12 @@ public class UpdatePriorityRankRequest
     /// true — новая волна в конец очереди (max занятых + 1), номер с клиента не используется.
     /// </summary>
     public bool AppendWave { get; set; }
+
+    /// <summary>Поставить сразу перед этой задачей в её волне (слева на доске).</summary>
+    public int? BeforeTaskId { get; set; }
+
+    /// <summary>Поставить сразу после этой задачи в её волне (справа на доске).</summary>
+    public int? AfterTaskId { get; set; }
 }
 
 public class UpdateWorkIntervalsRequest

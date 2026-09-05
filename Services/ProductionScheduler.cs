@@ -16,7 +16,11 @@ namespace ProductionPlanner.Services
         {
             var tasks = activeTasks
                 .Where(t => t.Status != JobStatus.Completed && !t.IsFuss)
-                .OrderBy(t => t.Deadline ?? DateTime.MaxValue)
+                .OrderBy(t => t.PriorityRank is > 0 ? 0 : 1)
+                .ThenBy(t => t.PriorityRank ?? int.MaxValue)
+                .ThenBy(t => t.PriorityOrder)
+                .ThenBy(t => t.Deadline ?? DateTime.MaxValue)
+                .ThenBy(t => t.Id)
                 .ToList();
 
             var result = new List<ScheduledSlot>();

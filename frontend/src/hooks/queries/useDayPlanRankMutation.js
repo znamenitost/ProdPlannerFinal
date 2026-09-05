@@ -19,7 +19,9 @@ export default function useDayPlanRankMutation(employee) {
     try {
       await setPriorityRank(change.taskId, change.rank, {
         joinWave: Boolean(change.joinWave),
-        appendWave: Boolean(change.appendWave)
+        appendWave: Boolean(change.appendWave),
+        beforeTaskId: change.beforeTaskId ?? null,
+        afterTaskId: change.afterTaskId ?? null
       });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.dayPlanAll(employee) }),

@@ -9,7 +9,7 @@ public static class DayPlanWavePacker
 {
     public const double MinRemainingHours = 0.01;
 
-    public readonly record struct InputTask(int Id, int Rank, double RemainingHours);
+    public readonly record struct InputTask(int Id, int Rank, double RemainingHours, int Order = 0);
 
     public sealed class PackedTask
     {
@@ -30,7 +30,7 @@ public static class DayPlanWavePacker
             .Where(t => t.Rank > 0 && t.RemainingHours >= MinRemainingHours)
             .GroupBy(t => t.Rank)
             .OrderBy(g => g.Key)
-            .Select(g => g.OrderBy(t => t.Id).ToList())
+            .Select(g => g.OrderBy(t => t.Order).ThenBy(t => t.Id).ToList())
             .ToList();
 
         var cursor = workHours.GetNextWorkStart(cursorStart);

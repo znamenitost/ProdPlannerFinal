@@ -8,5 +8,6 @@ public interface IDayPlanService
         string employee,
         string? date,
         DateTime currentTime,
+        string? viewerUserId = null,
         CancellationToken cancellationToken = default);
 }

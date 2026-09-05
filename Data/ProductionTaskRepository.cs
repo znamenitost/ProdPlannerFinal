@@ -736,6 +736,7 @@ namespace ProductionPlanner.Data
                             && !(t.IsSplitTask && t.ParentRowNumber == null))
                 .OrderBy(t => t.EmployeeName)
                 .ThenBy(t => t.PriorityRank)
+                .ThenBy(t => t.PriorityOrder)
                 .ThenBy(t => t.Id)
                 .ToListAsync(cancellationToken);
         }
@@ -767,6 +768,30 @@ namespace ProductionPlanner.Data
                 if (!changes.TryGetValue(task.Id, out var rank))
                     continue;
                 task.SetPriorityRank(rank);
+                task.UpdatedAt = now;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        public async Task ApplyPriorityOrderChangesAsync(
+            IReadOnlyDictionary<int, int> changes,
+            CancellationToken cancellationToken = default)
+        {
+            if (changes.Count == 0)
+                return;
+
+            var ids = changes.Keys.ToList();
+            var tasks = await _context.ProductionTasks
+                .Where(t => ids.Contains(t.Id))
+                .ToListAsync(cancellationToken);
+            var now = _timeService.Now;
+
+            foreach (var task in tasks)
+            {
+                if (!changes.TryGetValue(task.Id, out var order))
+                    continue;
+                task.PriorityOrder = order;
                 task.UpdatedAt = now;
             }
 
